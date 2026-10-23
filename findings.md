@@ -33,6 +33,7 @@
 - 上游采用 Electron 桌面、本地 Host、profile 与 Cordis 插件；Agent Teams 为实验功能。具体 SDK 与发行包可用性没有执行验证。
 - 已核查 GitHub 官方分支保护与 CODEOWNERS 说明：两人团队采用至少一位非作者审批；CODEOWNERS 不赋予仓库写权限，私有库保护能力受套餐影响。
 - 本地 main / develop 空起点 6240da3 已建立；当前 feature/project-standards，origin 为用户提供的 SSH 地址。
+- 用户后续授权后，远程 main / develop / feature/project-standards 均推送成功；首次推送 refs 已核验分别为 6240da3 / 6240da3 / c31755f，远程 HEAD 为 main。
 
 新增参考：
 

@@ -15,6 +15,7 @@
 3. Git 协作规范、评审和测试发布标准：完成。
 4. 本地协作模板、规范检查与一致性验证：完成。
 5. 文档入口与实际配置/待配置事项说明：完成。
+6. 按用户后续授权创建远程 develop 并推送初始化/文档分支，核验远程状态：完成。
 
 ## 约束
 
@@ -35,4 +36,4 @@
 
 - 首发 Windows 11 x64、Electron/React/TypeScript、本地 Host + Harness 适配层为建议基线，待 D00/D01 确认。
 - D00-D13 按两人职责及依赖拆分，每项独立 feature 分支，另一人审查。
-- 本次仅建立本地分支与提交；未推送远程、创建 Issue/PR 或设置 GitHub 保护。
+- 初稿阶段仅建立本地分支；用户后续授权推送后，已创建远程 main / develop / feature/project-standards。未合并、创建 Issue/PR 或设置 GitHub 保护。

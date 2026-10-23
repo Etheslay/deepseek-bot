@@ -10,23 +10,25 @@
 
 | 项目 | 状态 |
 | --- | --- |
-| 产品、架构、接口、分工、测试、发布文档 | 本地已编写，待双方评审 |
-| README / CONTRIBUTING / AGENTS | 本地已编写 |
-| CODEOWNERS / PR / Issue 模板 | 本地已编写，尚未在目标分支生效 |
-| .editorconfig / .gitattributes / .gitignore | 本地已编写 |
+| 产品、架构、接口、分工、测试、发布文档 | 已推送到 feature/project-standards，待双方评审 |
+| README / CONTRIBUTING / AGENTS | 已推送到 feature/project-standards |
+| CODEOWNERS / PR / Issue 模板 | 已推送到 feature/project-standards，尚未合入目标分支生效 |
+| .editorconfig / .gitattributes / .gitignore | 已推送到 feature/project-standards |
 | 本地 main / develop / feature/project-standards | 已建立；main/develop 指向空起点 6240da3，文档位于独立 feature 分支 |
 | origin 与 SSH | 已配置 git@github.com:Etheslay/deepseek-bot.git；SSH 只读访问已验证 |
-| 远程推送、Issue 分派、PR 审查 | 未执行 |
-| GitHub 默认分支、合并选项、成员权限、保护规则 | 未设置/未核实 |
+| 远程分支与首次推送 | main、develop、feature/project-standards 已创建，初始文档提交 c31755f 已核验 |
+| Issue 分派、PR 创建与审查 | 未执行 |
+| GitHub 默认分支 | 远程 HEAD 已核验为 main；未改为 develop |
+| GitHub 合并选项、成员权限、保护规则 | 未设置/未核实 |
 | 产品 CI、应用测试、安装包和版本 tag | 未建立/未生成 |
 
-本地规范文件不能代替 GitHub 服务器设置。本次只完成规范准备，不把远程保护或人类审查标记成已完成。
+规范文件不能代替 GitHub 服务器设置。本次已按用户后续授权推送三个分支，但未合并规范到 develop/main，不把远程保护或人类审查标记成已完成。
 
 ## 3. 仓库管理员设置清单
 
 由 Etheslay 作为预期仓库维护者执行；实际管理员身份需 GitHub 验证。Destinyian 至少需要明确的 Write 权限。不要默认 CODEOWNERS 已赋予协作者权限。
 
-1. 首次推送 main/develop 的初始化锚点及 feature/project-standards；确认没有覆盖远程历史。
+1. 已完成：首次推送 main/develop 的初始化锚点及 feature/project-standards，已核实未覆盖既有远程历史。
 2. 邀请/核实 Destinyian 的协作者写权限，设置开发阶段默认分支为 develop。
 3. 打开 Create a merge commit；关闭 Squash merging / Rebase merging；不要启用 linear history。
 4. 规范 PR 由 Destinyian 审查，合入 develop 后 CODEOWNERS 和模板才存在于该目标分支。第一次引导 PR 需要手动指定审查人。
