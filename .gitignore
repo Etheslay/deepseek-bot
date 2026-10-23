@@ -1,0 +1,32 @@
+# Dependencies and build output
+node_modules/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+
+# Local credentials and runtime data
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+.runtime/
+.local/
+artifacts/
+backups/
+logs/
+*.log
+
+# Isolated checkouts and editor state
+.worktrees/
+worktrees/
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
