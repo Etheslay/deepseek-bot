@@ -17,7 +17,7 @@ main                         生产版本
 
 | 类型 | 基线 | PR 目标 | 约束 |
 | --- | --- | --- | --- |
-| feature/* | 最新已通过检查的 develop | develop | 一个任务；至少另一位开发者批准；相关测试通过 |
+| feature/* | 最新已通过检查的 develop | develop | 一个任务；负责人完成自审记录；相关测试通过 |
 | release/vX.Y.Z | 已达到发布范围的 develop | main；合入后回合 develop | 冻结新需求，仅修复/版本/文档；完整发布验收 |
 | hotfix/vX.Y.Z | main 或对应生产 tag | main；合入后回合 develop/活跃 release | 同样审查与打包验证，不能以紧急为由绕过 |
 | develop | 初始化基线 | 仅通过 release 进入 main | 不直接推送日常开发代码 |
@@ -27,9 +27,9 @@ main                         生产版本
 
 ## 2. 空仓库初始化
 
-空仓库允许建立**不含文件的初始空提交**，作为 main、develop 的共同分支锚点。这是 Git 初始化元数据，不是已发布生产版本，不打版本 tag。规范文档和协作模板放在 `feature/project-standards`，经交叉审查后合入 develop。
+空仓库允许建立**不含文件的初始空提交**，作为 main、develop 的共同分支锚点。这是 Git 初始化元数据，不是已发布生产版本，不打版本 tag。规范文档和协作模板放在 `feature/project-standards`，经负责人自行审查及相关检查后通过 PR 合入 develop。
 
-main 在首次 release 验收前保持空锚点；禁止为了让首页显示 README 把开发文档/功能先行合到 main。GitHub 默认分支建议在开发阶段设为 develop，并在发起 PR 时始终检查目标分支。没有审查权限时先保留本地 feature，不伪造批准记录。
+main 在首次 release 验收前保持空锚点；禁止为了让首页显示 README 把开发文档/功能先行合到 main。GitHub 默认分支建议在开发阶段设为 develop，并在发起 PR 时始终检查目标分支。缺少合并权限时保留 feature 并记录阻碍，不伪造自审记录或绕过保护。
 
 ## 3. 开发操作示例
 
@@ -44,7 +44,7 @@ git switch -c feature/workflow-engine
 git push -u origin feature/workflow-engine
 ```
 
-创建 PR：base=`develop`，head=`feature/workflow-engine`；填写任务、行为变化、验证证据和风险，由另一人 review。不同开发者分别使用真实个人 Git 身份，不能互相冒用 author 或代点批准。
+创建 PR：base=`develop`，head=`feature/workflow-engine`；填写任务、行为变化、验证证据和风险，由作者自行审查。不同开发者分别使用真实个人 Git 身份，不能互相冒用 author 或伪造审查记录。
 
 同一台电脑并行开发时，每个任务使用独立 worktree/clone，不在同一工作目录来回切分支。临时 `.worktrees/` 不进仓库。独占本人的尚未共享分支可 rebase；共享分支优先 merge develop，不能强推覆盖对方历史。
 
@@ -52,21 +52,23 @@ git push -u origin feature/workflow-engine
 
 - 长期分支和 release/hotfix 使用 `--no-ff` / GitHub Create a merge commit，保留来源；关闭 Squash / Rebase merge 以统一策略。
 - 不启用 Require linear history，因为它与保留 merge commit 冲突。
-- PR 至少 1 位具有写入权限的非作者批准；两人团队由另一人审查，不能要求 2 位非作者导致流程永远不可完成。
-- 新提交使旧批准失效；必须解决讨论、通过必需检查、同步基线后才合并。
+- 每项任务由负责人自行审查，PR 不要求他人批准；作者完成最新提交的自审记录后，可在全部门槛通过时合并自己的 PR。
+- 新提交后更新自审 SHA、检查证据和结论；必须解决讨论、通过必需检查、同步基线后才合并。
 - 不允许强推/删除 main、develop；禁止普通直推；管理员也适用规则，正式应急操作留记录。
 - feature 合并后删除；release/hotfix 在 main 合并及开发线回合完成后删除。tag 和发布记录保留。
 
-CODEOWNERS 同时列出两人用于评审路由；它不会自动授予权限，也不能单独阻止错误分支合并。来源限制还需要 CI / ruleset，详见[仓库设置](REPOSITORY_SETUP.md)。
+GitHub 不允许作者批准自己的 PR，因此自审采用 PR 描述/评论中的记录，不要求自己提交 Approve。记录至少包含自审人、提交 SHA、日期、差异检查结果、测试证据、遗留问题和结论；新增提交后旧记录不代表最新内容已检查。[GitHub 官方说明](https://docs.github.com/en/pull-requests/how-tos/review-pull-requests/approving-a-pull-request-with-required-reviews)。
+
+CODEOWNERS 保留说明但不配置活动匹配规则，避免自动请求另一人审查。保护规范设置必需批准数为 0，关闭 code-owner 审批和最后推送需他人批准；保留 PR、状态检查、讨论解决和禁止强推。自审记录的真实性由负责人负责，当前没有 CI 强制验证该记录；来源限制还需要 CI / ruleset，详见[仓库设置](REPOSITORY_SETUP.md)。
 
 ## 5. 提交信息
 
 采用 Conventional Commits：`feat`、`fix`、`docs`、`test`、`refactor`、`perf`、`build`、`ci`、`chore`、`revert`。标题建议不超过 72 字符，描述单一意图；破坏性变更用 `!` 和正文 `BREAKING CHANGE`。涉及迁移、权限或回滚必须说明影响和原因。
 
-示例：`feat(runtime): add workflow cancellation`、`docs: define two-developer workflow`。提交只使用实际操作者已配置身份；任务负责人、协作者与审查人分别记录，不伪造 Co-authored-by。
+示例：`feat(runtime): add workflow cancellation`、`docs: define two-developer workflow`。提交只使用实际操作者已配置身份；记录任务负责人及其自审结论，协作者按实际贡献记录，不伪造 Co-authored-by。
 
 ## 6. 发布与热修复
 
-release 从 develop 冻结，最终候选通过[发布标准](RELEASE.md)后 PR 到 main，合并后打对应 tag。将合并后的 main 通过回合 PR 合入 develop（以及需要修复的活跃 release）；回合是同一补丁的同步，不是新功能。每次回合仍需回归和另一人审查。
+release 从 develop 冻结，最终候选通过[发布标准](RELEASE.md)后 PR 到 main，合并后打对应 tag。将合并后的 main 通过回合 PR 合入 develop（以及需要修复的活跃 release）；回合是同一补丁的同步，不是新功能。每次回合仍需回归和该 PR 负责人的自审。
 
 hotfix 从生产 main/tag 开始；修复、回归、打包和审批后进入 main 并发布补丁版本，再同样回合。禁止只修 main 而遗漏开发线。

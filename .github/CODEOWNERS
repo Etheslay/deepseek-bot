@@ -1,7 +1,5 @@
-# Both developers can route review; the PR author cannot approve their own PR.
-# GitHub requires each owner to have explicit repository write access.
-# Primary implementation ownership is defined in docs/DEVELOPMENT_PLAN.md.
-* @Etheslay @Destinyian
-/.github/ @Etheslay @Destinyian
-/docs/ @Etheslay @Destinyian
-/packages/contracts/ @Etheslay @Destinyian
+# Intentionally no active ownership patterns or automatic review requests.
+# Each task owner develops, tests, and reviews their own changes.
+# Implementation ownership is defined in docs/DEVELOPMENT_PLAN.md.
+# Branch protection must not require code-owner approvals.
+# Keep pull requests, required status checks, and release gates.

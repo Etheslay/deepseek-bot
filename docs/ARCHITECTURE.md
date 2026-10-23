@@ -29,7 +29,7 @@ flowchart LR
 | --- | --- | --- | --- |
 | `apps/desktop/` | 窗口、托盘、安装与更新入口、受限 IPC 桥 | 模型循环、业务数据库直写 | Destinyian |
 | `apps/desktop/src/renderer/` | 机器人、聊天、工作流、审批、设置界面 | 读取密钥、任意 shell 或 Node API | Destinyian |
-| `packages/contracts/` | 版本化数据结构、输入校验、事件/错误契约 | 业务状态和副作用 | Etheslay 主责，双方评审 |
+| `packages/contracts/` | 版本化数据结构、输入校验、事件/错误契约 | 业务状态和副作用 | Etheslay 主责并自审 |
 | `packages/runtime/` | Host 生命周期、会话与工作流编排、调度 | 绘制 UI | Etheslay |
 | `packages/harness-adapter/` | 固定版本 Harness 的进程/SDK/插件适配 | 向 UI 暴露上游内部对象 | Etheslay |
 | `packages/storage/` | 应用数据库、迁移、备份、查询 | 自定义修改 Harness 日志格式 | Etheslay |

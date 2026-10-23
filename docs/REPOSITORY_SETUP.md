@@ -10,9 +10,9 @@
 
 | 项目 | 状态 |
 | --- | --- |
-| 产品、架构、接口、分工、测试、发布文档 | 已推送到 feature/project-standards，待双方评审 |
+| 产品、架构、接口、分工、测试、发布文档 | 已推送到 feature/project-standards，合并前由负责人自行审查 |
 | README / CONTRIBUTING / AGENTS | 已推送到 feature/project-standards |
-| CODEOWNERS / PR / Issue 模板 | 已推送到 feature/project-standards，尚未合入目标分支生效 |
+| CODEOWNERS / PR / Issue 模板 | 当前规范改为负责人自审；CODEOWNERS 无活动规则，模板尚未合入目标分支生效 |
 | .editorconfig / .gitattributes / .gitignore | 已推送到 feature/project-standards |
 | 本地 main / develop / feature/project-standards | 已建立；main/develop 指向空起点 6240da3，文档位于独立 feature 分支 |
 | origin 与 SSH | 已配置 git@github.com:Etheslay/deepseek-bot.git；SSH 只读访问已验证 |
@@ -22,7 +22,7 @@
 | GitHub 合并选项、成员权限、保护规则 | 未设置/未核实 |
 | 产品 CI、应用测试、安装包和版本 tag | 未建立/未生成 |
 
-规范文件不能代替 GitHub 服务器设置。本次已按用户后续授权推送三个分支，但未合并规范到 develop/main，不把远程保护或人类审查标记成已完成。
+规范文件不能代替 GitHub 服务器设置。本次已按用户后续授权推送三个分支，但未合并规范到 develop/main，不把远程保护或负责人的自审标记成已完成。用户随后将审查机制改为每个人独立自审，以下是更新后的配置要求；GitHub 保护规则仍未实际启用或修改。
 
 ## 3. 仓库管理员设置清单
 
@@ -31,17 +31,20 @@
 1. 已完成：首次推送 main/develop 的初始化锚点及 feature/project-standards，已核实未覆盖既有远程历史。
 2. 邀请/核实 Destinyian 的协作者写权限，设置开发阶段默认分支为 develop。
 3. 打开 Create a merge commit；关闭 Squash merging / Rebase merging；不要启用 linear history。
-4. 规范 PR 由 Destinyian 审查，合入 develop 后 CODEOWNERS 和模板才存在于该目标分支。第一次引导 PR 需要手动指定审查人。
+4. 规范 PR 由负责人 Etheslay 自行审查，记录最新 SHA 和检查结论，检查通过后可自行合入 develop。模板只有合入该目标分支后才生效；不需要指定另一位审查人。
 5. 为 main、develop、release/*、hotfix/* 建立保护规则；不能只保存处于 disabled/evaluate 状态的 ruleset。
-6. main 还没有 CODEOWNERS 文件时，依靠明确的非作者审查与管理员规则；首个合格 release 后 CODEOWNERS 才进入 main。
+6. 将必需批准数设为 0，关闭 code-owner 审批、最后推送需他人批准及旧批准撤销选项。保留 PR、必要状态检查、讨论解决与禁止强推，不依赖 CODEOWNERS 作为合并门槛。
 
 ## 4. 保护要求
 
 | 设置 | main | develop | release/* / hotfix/* |
 | --- | --- | --- | --- |
 | 修改必须通过 PR | 是 | 是 | 是，创建分支后保护后续更新 |
-| 非作者批准 | 至少 1 位 | 至少 1 位 | 至少 1 位 |
-| 新提交撤销旧批准 | 是 | 是 | 是 |
+| 必需批准数 | 0 | 0 | 0 |
+| Require review from Code Owners | 关闭 | 关闭 | 关闭 |
+| Require approval of most recent reviewable push | 关闭 | 关闭 | 关闭 |
+| Dismiss stale approvals | 关闭 | 关闭 | 关闭 |
+| 负责人自审记录（流程约定） | 最新候选 SHA、证据与结论 | 最新提交 SHA、证据与结论 | 最新提交 SHA、证据与结论 |
 | 解决全部讨论 | 是 | 是 | 是 |
 | 必需状态检查 | 完整质量 + release-ready | 当前阶段质量检查 | 相关回归，进入 main 前完整发行检查 |
 | 强推/删除 | 禁止 | 禁止 | 禁止；同步完成后由维护者按流程清理 |
@@ -50,7 +53,9 @@
 
 来源限制不是 CODEOWNERS 的功能，需显式 CI 检查 PR head/base 和发行证据。release 修复例外见 RELEASE.md；来源应验证仓库身份，不能仅凭同名分支放行。
 
-双人流程只要求 1 个非作者批准。两人都共同写过复杂 release 时，最终作者以外的另一人审查最终差异并记录职责。不要机械要求 2 个非作者批准；“最后推送人之外批准”需结合实际两人操作验证，以免形成无法解除的审批闭环。
+每位任务负责人自行审查，不要求交叉批准。GitHub 不允许作者批准自己的 PR，所以自审用 PR 描述/评论记录，不能依赖作者提交 Approve。建议使用分支 ruleset，保留“Require a pull request before merging”，将 Required approvals 设为 0；如已有其他规则叠加要求他人批准，也需同步调整审批项，不能通过关闭 PR 或质量检查要求来替代。其他独立质量门槛继续启用。
+
+当前尚无 CI 自动核验自审记录，记录完整性与真实性属于负责人执行的流程约定；不能声称 GitHub 原生强制验证了自审。新增提交后负责人更新 SHA、证据与结论，旧记录不能覆盖新内容。[GitHub 官方说明](https://docs.github.com/en/pull-requests/how-tos/review-pull-requests/approving-a-pull-request-with-required-reviews)。
 
 ## 5. CI 分阶段建立（当前未配置）
 
@@ -67,7 +72,7 @@
 
 ## 6. 设置验收
 
-用临时 feature 和 PR 验证：错误来源到 main 被拒绝；未经审查不能合并；新提交使旧批准失效；失败/缺失的必要检查阻止合并；main/develop 强推被拒绝；合格 feature 能按正常路径进入 develop。不要通过真实 main 破坏性强推测试规则，应使用规则检查/拒绝结果与受控测试仓库验证。
+用临时 feature 和 PR 验证：错误来源到 main 被拒绝；没有他人 Approve 时，已完成负责人自审且所有必需检查通过的 PR 可正常合并；失败/缺失的必要检查仍阻止合并；main/develop 强推被拒绝。人工核对自审记录覆盖最新 SHA；新增提交后重新运行相关检查并更新自审结论。不要通过真实 main 破坏性强推测试规则，应使用规则检查/拒绝结果与受控测试仓库验证。
 
 记录规则截图或导出、检查链接、操作者和日期。在这些证据存在前保持本文件“未设置/未核实”状态。
 

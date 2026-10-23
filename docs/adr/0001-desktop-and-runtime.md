@@ -1,6 +1,6 @@
 # ADR-0001：桌面载体与 Harness 接入
 
-日期：2026-10-22。状态：建议，待 D00 双方评审及 D01 验证后接受。决策负责人：Etheslay、Destinyian。
+日期：2026-10-22。状态：建议，待 D00 负责人自审及 D01 验证后接受。决策负责人：Etheslay；桌面验证由 Destinyian 提供本模块结果，无需交叉批准。
 
 ## 背景
 
@@ -24,6 +24,6 @@
 
 D01 必须提交：固定上游提交与发行包版本、会话与取消验证、工具审批验证、干净 Windows 安装试验、进程树内存/启动/包体基线。D02 同时验证界面壳与 IPC。
 
-如预算不满足，由两人对相同功能闭环进行 Electron/Tauri 比较；新决策记录数据、取舍与迁移影响，不仅比较空壳安装体积。未完成验证时，本 ADR 保持“建议”。
+如预算不满足，相关模块负责人分别对相同功能闭环提供 Electron/Tauri 比较数据，由决策负责人自审并记录取舍与迁移影响，不仅比较空壳安装体积。未完成验证时，本 ADR 保持“建议”。
 
 参考：[上游架构](https://github.com/deepseek-ai/deepseek-harness/blob/687f282e8625c6b8d11ff58211a90524be2e4317/docs/architecture.zh.md)、[上游桌面包](https://github.com/deepseek-ai/deepseek-harness/blob/687f282e8625c6b8d11ff58211a90524be2e4317/apps/desktop/package.json)。

@@ -25,18 +25,21 @@
 - 当前工作仅做项目规范化与开发文档。
 - 允许 DeepSeek API；本地保存和本地执行不意味着请求内容完全不离开电脑。
 - 两名开发者为 Etheslay 与 Destinyian。
+- 用户后续明确调整开发审查机制：每个人独立完成自己任务的自审，无需交叉批准；测试、分支和发布门槛继续执行。
 
 ## 后续核查结果
 
 - 使用用户已有 SSH 配置，在获得沙箱外读访问后访问成功；`git ls-remote` 返回成功且没有 refs，远程为空仓库。
 - 上游源码 SHA：687f282e8625c6b8d11ff58211a90524be2e4317；根与桌面包声明 0.2.1-rc.2，Node ^22.19.0 || >=24.0.0，pnpm 11.28.5。
 - 上游采用 Electron 桌面、本地 Host、profile 与 Cordis 插件；Agent Teams 为实验功能。具体 SDK 与发行包可用性没有执行验证。
-- 已核查 GitHub 官方分支保护与 CODEOWNERS 说明：两人团队采用至少一位非作者审批；CODEOWNERS 不赋予仓库写权限，私有库保护能力受套餐影响。
+- 已核查 GitHub 官方分支保护与 CODEOWNERS 说明：CODEOWNERS 不赋予仓库写权限，私有库保护能力受套餐影响。用户调整后采用负责人自审，配置规范取消必需他人批准。
 - 本地 main / develop 空起点 6240da3 已建立；当前 feature/project-standards，origin 为用户提供的 SSH 地址。
 - 用户后续授权后，远程 main / develop / feature/project-standards 均推送成功；首次推送 refs 已核验分别为 6240da3 / 6240da3 / c31755f，远程 HEAD 为 main。
+- 已核查 GitHub 官方自审限制：PR 作者不能对自己的 PR 提交 Approve；项目采用 PR 自审记录，配置要求为 0 个必需批准，不使用 self-Approve 作为门槛。远程保护配置尚未启用/修改。
 
 新增参考：
 
 - https://github.com/deepseek-ai/deepseek-harness/blob/687f282e8625c6b8d11ff58211a90524be2e4317/docs/architecture.zh.md
 - https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches
 - https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+- https://docs.github.com/en/pull-requests/how-tos/review-pull-requests/approving-a-pull-request-with-required-reviews

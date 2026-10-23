@@ -29,4 +29,4 @@ assignees: ''
 
 ## 修复跟踪
 
-负责人、审查人、feature/hotfix 分支、回归场景与 PR。
+负责人（同时承担自审）、feature/hotfix 分支、回归场景、自审结论与 PR。
