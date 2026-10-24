@@ -118,6 +118,8 @@ D2-1～D2-8、D2-10、D2-11 已完成并有本地证据；D2-9（CI）因按指�
 6. 选中 Bot 显示问候语气泡：「hello，我是 {名字}，有什么可以为你服务的吗」。
 7. 交流规则（UI 层演示）：不同分组的 Bot 发起交流被拒绝并提示分组名；同分组允许（占位会话）。脚本验证：跨分组输出 `无法发起：不同分组的 Bot 无法主动交流（未分组 ↔ 测试组）`；移入同组后输出 `同分组，允许交流（占位会话，无后端）`。
 8. 相关截图：`d02-07-modal.png`（弹窗）、`d02-08-modal-picked.png`（已选形状颜色）、`d02-09-created.png`（创建结果）、`d02-10-context-menu.png`（右键菜单）、`d02-11-submenu.png`（移至子菜单）、`d02-12-group-created.png`（创建分组）、`d02-13-blocked.png`（跨分组拒绝）、`d02-14-allowed.png`（同分组放行）、`d02-15-greeting.png`（问候语）。
+9. 去掉头部「隐藏到托盘」按钮：关闭窗口（×）即隐藏到托盘（原有行为，与常规应用一致）；脚本以 IPC 桥验证 hide/show 路径不受影响。
+10. 设置弹窗（点击左下角账户按钮进入）：左侧分类 通用（可用）/ 电脑 / 保险库 / 用量与账单 / 更新（占位禁用，后续提供）；「通用」页实现：账户改名字（会话内生效）、退出登录（占位：重置名称与主题并提示）、主题深色/浅色（CSS 变量切换，`data-theme` 实测生效）；强调色、语言、麦克风、硬件加速按「较难完成不做」原则标为后续提供，其中麦克风如实显示「已全部拒绝（安全策略）」。截图：`d02-16-settings.png`、`d02-17-renamed.png`、`d02-18-settings-light.png`、`d02-19-logout.png`。
 
 范围判断：任务书红线「不做机器人 CRUD」针对真实功能与数据；以上为纯视觉/会话内占位，无持久化、无后端、无 Harness 触达。涉及真实实现的部分已列入第 11 节待办，不由本任务声称完成。
 
@@ -227,6 +229,9 @@ git branch -D feature/desktop-shell
 5. 对话 ID 真实语义、复制通道与剪贴板权限策略（D05）。
 6. 自定义标题栏（无框窗口）与 `window:minimize/toggleMaximize/close` IPC 的 UI 绑定（D05，通道已就绪）。
 7. 安装包、签名、自动更新（D11）。
+8. 账号系统与多账户：真实登录/退出登录/添加账户语义（依赖产品账号决策；当前退出登录仅为占位重置）。
+9. 设置持久化（主题、账户名、语言等；当前均为会话内状态）。
+10. 设置其余分类（电脑 / 保险库 / 用量与账单 / 更新）与强调色、语言、硬件加速实现。
 
 ## 12. 提交记录
 
@@ -235,6 +240,7 @@ git branch -D feature/desktop-shell
 - 验收代码提交（B2/B7/B8 验收对应）：
   - `build(desktop): add electron toolchain and workspace config`
   - `feat(desktop): add desktop shell with tray, navigation and restricted ipc`
+  - `feat(desktop): add settings modal and remove redundant hide button`
 - 报告-only 提交：`docs: record desktop shell` 及后续 docs 提交（不改变代码；最终 PR head 的 CI 由 Approver 在合并前确认）
 
 各提交的完整 SHA 以 `git log feature/desktop-shell` 为准；本报告不自我引用 tip SHA。
