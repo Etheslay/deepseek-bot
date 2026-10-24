@@ -120,6 +120,9 @@ D2-1～D2-8、D2-10、D2-11 已完成并有本地证据；D2-9（CI）因按指�
 8. 相关截图：`d02-07-modal.png`（弹窗）、`d02-08-modal-picked.png`（已选形状颜色）、`d02-09-created.png`（创建结果）、`d02-10-context-menu.png`（右键菜单）、`d02-11-submenu.png`（移至子菜单）、`d02-12-group-created.png`（创建分组）、`d02-13-blocked.png`（跨分组拒绝）、`d02-14-allowed.png`（同分组放行）、`d02-15-greeting.png`（问候语）。
 9. 去掉头部「隐藏到托盘」按钮：关闭窗口（×）即隐藏到托盘（原有行为，与常规应用一致）；脚本以 IPC 桥验证 hide/show 路径不受影响。
 10. 设置弹窗（点击左下角账户按钮进入）：左侧分类 通用（可用）/ 电脑 / 保险库 / 用量与账单 / 更新（占位禁用，后续提供）；「通用」页实现：账户改名字（会话内生效）、退出登录（占位：重置名称与主题并提示）、主题深色/浅色（CSS 变量切换，`data-theme` 实测生效）；强调色、语言、麦克风、硬件加速按「较难完成不做」原则标为后续提供，其中麦克风如实显示「已全部拒绝（安全策略）」。截图：`d02-16-settings.png`、`d02-17-renamed.png`、`d02-18-settings-light.png`、`d02-19-logout.png`。
+11. Bot 面板升级为会话视图：问候语成为首条消息；底部输入框「给 {名字} 发消息（占位，无真实模型）」，发送后出现用户气泡（右侧、品牌绿）与 Bot 占位回复。
+12. 消息 hover 操作条：悬停气泡右下浮现 👍 👎 ❤️ 😂 🎉 与 ↩（引用）；点击表情即在消息上计入反应（再次点击取消，气泡下方显示计数 chip，自己的反应高亮）；点击 ↩ 后输入框上方出现引用 chip，发送的消息携带嵌套引用展示。实测：发送「你好呀」得到占位回复、👍 计数 `👍 1`、引用发送后消息显示 `引用 我：你好呀`。截图：`d02-20-chat-reply.png`、`d02-21-hover-actions.png`、`d02-22-reactions.png`、`d02-23-quoted.png`。
+13. 侧边栏 Bot 拖拽换组：Bot 条目可拖动（拖起时头像 blob 作为拖拽影像跟随光标），分组区域为放置目标（拖拽经过时虚线高亮，空分组显示「拖到这里移入」提示）；放下即换组并弹 toast。实测：将「第二号」从测试组拖回未分组，toast `已将「第二号」拖至「未分组」`，计数随之变化；同组放置提示「已在该分组」。截图：`d02-24-drag-over.png`、`d02-25-dropped.png`。
 
 范围判断：任务书红线「不做机器人 CRUD」针对真实功能与数据；以上为纯视觉/会话内占位，无持久化、无后端、无 Harness 触达。涉及真实实现的部分已列入第 11 节待办，不由本任务声称完成。
 
@@ -232,6 +235,8 @@ git branch -D feature/desktop-shell
 8. 账号系统与多账户：真实登录/退出登录/添加账户语义（依赖产品账号决策；当前退出登录仅为占位重置）。
 9. 设置持久化（主题、账户名、语言等；当前均为会话内状态）。
 10. 设置其余分类（电脑 / 保险库 / 用量与账单 / 更新）与强调色、语言、硬件加速实现。
+11. 会话消息与反应/引用的持久化（当前全部会话内）；真实模型回复接入后，表情回应与引用需映射到契约层（D03/D05）。
+12. 拖拽换组的持久化与跨分组拖拽时的交流边界确认（当前拖拽仅改会话内分组归属）。
 
 ## 12. 提交记录
 
@@ -241,6 +246,7 @@ git branch -D feature/desktop-shell
   - `build(desktop): add electron toolchain and workspace config`
   - `feat(desktop): add desktop shell with tray, navigation and restricted ipc`
   - `feat(desktop): add settings modal and remove redundant hide button`
+  - `feat(desktop): add bot drag-drop between groups and message reactions with quoting`
 - 报告-only 提交：`docs: record desktop shell` 及后续 docs 提交（不改变代码；最终 PR head 的 CI 由 Approver 在合并前确认）
 
 各提交的完整 SHA 以 `git log feature/desktop-shell` 为准；本报告不自我引用 tip SHA。
