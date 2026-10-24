@@ -1,0 +1,26 @@
+/**
+ * @deepseek-bot/storage — local storage backend for DeepSeekBot.
+ *
+ * Owns: SQLite metadata (schema + migrations + repositories), the data root
+ * layout including the dedicated Harness home, the credential blob store
+ * (opaque encrypted blobs; encryption lives in the desktop main process) and
+ * backup/restore. Does NOT own: Harness log formats, the workflow runtime,
+ * or any plaintext API key.
+ */
+export * from "./version.js";
+export * from "./errors.js";
+export * from "./layout.js";
+export * from "./harness-home.js";
+export * from "./database.js";
+export * from "./credentials.js";
+export * from "./backup.js";
+export * from "./repos/shared.js";
+export * from "./repos/bots.js";
+export * from "./repos/profiles.js";
+export * from "./repos/workflows.js";
+export * from "./repos/schedules.js";
+export * from "./repos/runs.js";
+export * from "./repos/events.js";
+export * from "./repos/approvals.js";
+export * from "./repos/artifacts.js";
+export * from "./repos/settings.js";

@@ -45,7 +45,7 @@ pnpm test
 | --- | --- |
 | `pnpm lint` | ESLint 9 flat config（含 typescript-eslint） |
 | `pnpm typecheck` | 对各 workspace 包执行 `tsc --noEmit` |
-| `pnpm test` | 跑各包测试：`@deepseek-bot/shared`（脱敏用例）、`apps/desktop`（IPC 白名单）、`@deepseek-bot/contracts`（契约 schema、夹具场景与 D01 样本校验，含覆盖率门槛） |
+| `pnpm test` | 跑各包测试：`@deepseek-bot/shared`（脱敏用例）、`apps/desktop`（IPC 白名单）、`@deepseek-bot/contracts`（契约 schema、夹具场景与 D01 样本校验，含覆盖率门槛）、`@deepseek-bot/storage`（存储、备份恢复与凭据仓，含覆盖率门槛） |
 
 ## 桌面壳命令（D02 起可用）
 
@@ -72,6 +72,7 @@ package.json              # 私有根包；脚本与共享开发依赖
 pnpm-workspace.yaml       # packages/*、apps/*
 packages/shared/          # 最小共享包（密钥脱敏）
 packages/contracts/       # 契约 schema、场景夹具与契约测试（D03 起存在）
+packages/storage/         # 本地存储后端：SQLite、数据目录、凭据 blob、备份恢复（D04 起存在）
 apps/desktop/             # Electron 桌面壳（D02 起存在）
 .github/workflows/ci.yml  # windows-latest + Node 24
 ```
@@ -85,7 +86,8 @@ apps/desktop/             # Electron 桌面壳（D02 起存在）
 - **锁文件**：单一 `pnpm-lock.yaml` 是依赖图的唯一事实来源，随依赖变更同提交；CI 使用 `pnpm install --frozen-lockfile`，锁文件与 manifest 不一致直接失败。解决冲突时以 develop 为基线重新安装，不手工编辑锁文件。
 - **安装脚本**：`pnpm-workspace.yaml` 的 `allowBuilds` 仅批准 `esbuild` 与 `electron`；新增需要 install/postinstall 脚本的依赖（如 D01 记录的 koffi / node-pty）必须在受控环境单独评估后再批准。
 - **上游 Harness 依赖**：`@deepseek-ai/dsh` 固定 `0.2.1-rc.2`（源码提交 `687f282e`，见 D01 记录）。它在首个消费方任务（runtime/适配层）中以精确版本进入锁文件；届时全量导出传递依赖许可清单（承接 D01 §3 待办）。在此之前不把上游依赖预先装进仓库。
-- **workspace 包版本**：均为 private、不发 npm。`@deepseek-bot/shared` `0.0.0`；`@deepseek-bot/contracts` 跟随契约版本（当前 `0.1.0`）；`@deepseek-bot/desktop` `0.1.0`。
+- **workspace 包版本**：均为 private、不发 npm。`@deepseek-bot/shared` `0.0.0`；`@deepseek-bot/contracts` 跟随契约版本（当前 `0.1.0`）；`@deepseek-bot/storage` `0.1.0`；`@deepseek-bot/desktop` `0.1.0`。
+- **运行时 API 依赖**：`@deepseek-bot/storage` 依赖 Node ≥ 24 内置的 `node:sqlite`（D04 实测 24.15.0），不引入 SQLite 原生依赖；Electron 38 主进程内置 Node 22 无该模块，storage 只能在独立 Host 进程运行（见 [packages/storage/README.md](../packages/storage/README.md)）。
 
 ## Windows 注意事项
 
