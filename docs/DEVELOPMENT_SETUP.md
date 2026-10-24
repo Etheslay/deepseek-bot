@@ -45,7 +45,7 @@ pnpm test
 | --- | --- |
 | `pnpm lint` | ESLint 9 flat config（含 typescript-eslint） |
 | `pnpm typecheck` | 对各 workspace 包执行 `tsc --noEmit` |
-| `pnpm test` | 跑各包测试；当前包含 `@deepseek-bot/shared` 的 `redactSecrets` 用例与覆盖率门槛 |
+| `pnpm test` | 跑各包测试：`@deepseek-bot/shared`（脱敏用例）、`apps/desktop`（IPC 白名单）、`@deepseek-bot/contracts`（契约 schema、夹具场景与 D01 样本校验，含覆盖率门槛） |
 
 ## 桌面壳命令（D02 起可用）
 
@@ -71,11 +71,21 @@ pnpm --filter @deepseek-bot/desktop pack:dir   # 构建 + electron-builder --dir
 package.json              # 私有根包；脚本与共享开发依赖
 pnpm-workspace.yaml       # packages/*、apps/*
 packages/shared/          # 最小共享包（密钥脱敏）
+packages/contracts/       # 契约 schema、场景夹具与契约测试（D03 起存在）
 apps/desktop/             # Electron 桌面壳（D02 起存在）
 .github/workflows/ci.yml  # windows-latest + Node 24
 ```
 
-后续 D01（Harness）与 D02（桌面壳）应从 `develop` 拉分支，不再改根配置。
+新任务一律从最新 develop 拉 feature 分支；根配置（`packageManager`、`engines`、workspace 列表、`allowBuilds`）变更走小型独立 PR 并连带锁文件。
+
+## 依赖与版本策略（D03 落盘）
+
+- 包管理器：根 `package.json` 的 `packageManager` 固定为 `pnpm@11.28.5`（与上游 Harness 源码固定一致），经 Corepack 驱动；Node `engines` 为 `>=24`。
+- **精确版本**：所有 `dependencies` / `devDependencies` 只写确切版本，不使用 `^` / `~` / `latest`；升级必须是显式 diff 并经该任务负责人自审。
+- **锁文件**：单一 `pnpm-lock.yaml` 是依赖图的唯一事实来源，随依赖变更同提交；CI 使用 `pnpm install --frozen-lockfile`，锁文件与 manifest 不一致直接失败。解决冲突时以 develop 为基线重新安装，不手工编辑锁文件。
+- **安装脚本**：`pnpm-workspace.yaml` 的 `allowBuilds` 仅批准 `esbuild` 与 `electron`；新增需要 install/postinstall 脚本的依赖（如 D01 记录的 koffi / node-pty）必须在受控环境单独评估后再批准。
+- **上游 Harness 依赖**：`@deepseek-ai/dsh` 固定 `0.2.1-rc.2`（源码提交 `687f282e`，见 D01 记录）。它在首个消费方任务（runtime/适配层）中以精确版本进入锁文件；届时全量导出传递依赖许可清单（承接 D01 §3 待办）。在此之前不把上游依赖预先装进仓库。
+- **workspace 包版本**：均为 private、不发 npm。`@deepseek-bot/shared` `0.0.0`；`@deepseek-bot/contracts` 跟随契约版本（当前 `0.1.0`）；`@deepseek-bot/desktop` `0.1.0`。
 
 ## Windows 注意事项
 

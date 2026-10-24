@@ -1,0 +1,99 @@
+{
+  "scenario": "approval-denied",
+  "covers": "CONTRACTS §3 approval.decide；§4 approval.requested/resolved；§5 stop-descendants；§7 审批拒绝",
+  "notes": "操作者拒绝审批。批准只能消费一次、决定不可重复执行；拒绝后节点转入 failed，按 stop-descendants 策略后继 skipped，Run 进入 failed。approval.resolved 事件记录决定本身；run.failed 的 errorCode 使用稳定码 APPROVAL_REQUIRED 表示因审批门槛终止，拒绝详情在 reason 中。",
+  "interactions": [
+    {
+      "method": "approval.decide",
+      "envelope": {
+        "protocolVersion": "0.1",
+        "requestId": "10000000-0000-4000-8000-000000000006",
+        "method": "approval.decide",
+        "payload": {
+          "approvalId": "12341234-1234-4123-8123-123412341234",
+          "decision": "denied",
+          "expectedActionDigest": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+        }
+      },
+      "expectedResponse": {
+        "id": "12341234-1234-4123-8123-123412341234",
+        "runId": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+        "nodeRunId": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "actionDigest": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+        "resource": "D:\\workspaces\\demo\\report.md",
+        "expiresAt": "2026-10-24T10:10:00Z",
+        "status": "denied"
+      }
+    }
+  ],
+  "events": [
+    {
+      "eventId": "20000000-0000-4000-8000-00000000000d",
+      "runId": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+      "sequence": 12,
+      "timestamp": "2026-10-24T10:05:00Z",
+      "type": "approval.requested",
+      "payload": {
+        "approval": {
+          "id": "12341234-1234-4123-8123-123412341234",
+          "runId": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "nodeRunId": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "actionDigest": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+          "resource": "D:\\workspaces\\demo\\report.md",
+          "expiresAt": "2026-10-24T10:10:00Z",
+          "status": "pending"
+        }
+      }
+    },
+    {
+      "eventId": "20000000-0000-4000-8000-00000000000e",
+      "runId": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+      "sequence": 13,
+      "timestamp": "2026-10-24T10:06:00Z",
+      "type": "approval.resolved",
+      "payload": {
+        "approvalId": "12341234-1234-4123-8123-123412341234",
+        "decision": "denied",
+        "resolvedAt": "2026-10-24T10:06:00Z"
+      }
+    },
+    {
+      "eventId": "20000000-0000-4000-8000-00000000000f",
+      "runId": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+      "sequence": 14,
+      "timestamp": "2026-10-24T10:06:00Z",
+      "type": "node.statusChanged",
+      "payload": {
+        "nodeRunId": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "nodeId": "n1",
+        "attempt": 1,
+        "from": "waiting_approval",
+        "to": "failed",
+        "reason": "operator denied the requested action"
+      }
+    },
+    {
+      "eventId": "20000000-0000-4000-8000-000000000010",
+      "runId": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+      "sequence": 15,
+      "timestamp": "2026-10-24T10:06:00Z",
+      "type": "run.statusChanged",
+      "payload": {
+        "from": "running",
+        "to": "failed",
+        "reason": "node n1 failed: approval denied; stop-descendants applied"
+      }
+    },
+    {
+      "eventId": "20000000-0000-4000-8000-000000000011",
+      "runId": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+      "sequence": 16,
+      "timestamp": "2026-10-24T10:06:00Z",
+      "type": "run.failed",
+      "payload": {
+        "reason": "node n1 failed: approval denied; stop-descendants applied",
+        "errorCode": "APPROVAL_REQUIRED"
+      }
+    }
+  ]
+}
