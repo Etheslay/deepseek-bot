@@ -1,0 +1,57 @@
+{
+  "scenario": "path-escape",
+  "covers": "CONTRACTS §1 授权以规范路径与操作范围表示；§2 Workspace grants；§6 UNAUTHORIZED_PATH；§7 路径越界",
+  "notes": "请求目标路径超出 Workspace grants 的规范路径范围（含 .. 或符号链接/junction 变体时同理）。Host 在执行前拒绝，返回 UNAUTHORIZED_PATH（retryable=false），details 只含脱敏后的目标路径与缺失的操作范围。路径字符串或 UI 开关不能构成授权。",
+  "interactions": [
+    {
+      "method": "run.start",
+      "envelope": {
+        "protocolVersion": "0.1",
+        "requestId": "10000000-0000-4000-8000-00000000000e",
+        "method": "run.start",
+        "payload": {
+          "workflowId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          "expectedRevision": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "idempotencyKey": "10000000-0000-4000-8000-00000000000f"
+        }
+      },
+      "expectedError": {
+        "code": "UNAUTHORIZED_PATH",
+        "message": "target path is outside the workspace grants of this run",
+        "retryable": false,
+        "requestId": "10000000-0000-4000-8000-00000000000e",
+        "details": {
+          "path": "D:\\other\\secrets.txt",
+          "requiredOperation": "write"
+        }
+      }
+    }
+  ],
+  "events": [
+    {
+      "eventId": "20000000-0000-4000-8000-000000000016",
+      "runId": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+      "sequence": 17,
+      "timestamp": "2026-10-24T10:07:00Z",
+      "type": "tool.requested",
+      "payload": {
+        "nodeRunId": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "callId": "call-001",
+        "toolName": "edit",
+        "arguments": { "path": "D:\\other\\secrets.txt" },
+        "resource": "D:\\other\\secrets.txt"
+      }
+    },
+    {
+      "eventId": "20000000-0000-4000-8000-000000000017",
+      "runId": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+      "sequence": 18,
+      "timestamp": "2026-10-24T10:07:00Z",
+      "type": "run.failed",
+      "payload": {
+        "reason": "tool target outside authorized workspace grants",
+        "errorCode": "UNAUTHORIZED_PATH"
+      }
+    }
+  ]
+}

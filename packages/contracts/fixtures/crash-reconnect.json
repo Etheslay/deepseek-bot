@@ -1,0 +1,88 @@
+{
+  "scenario": "crash-reconnect",
+  "covers": "CONTRACTS §3 events.subscribe；§4 持久事件可重放/snapshotRequired；§5 interrupted 与恢复；§7 崩溃重连",
+  "notes": "Host 进程崩溃使未终结运行进入 interrupted。重连后按 runId + afterSequence 订阅：持久事件可重放且 sequence 跨重启连续（不重置、不重放历史）。序列 4-6 在重启后发出，与 0-3 保持严格递增。若请求的 afterSequence 早于保留范围，无法补齐时返回 snapshotRequired=true，消费者应以快照重建。",
+  "interactions": [
+    {
+      "method": "events.subscribe",
+      "envelope": {
+        "protocolVersion": "0.1",
+        "requestId": "10000000-0000-4000-8000-00000000000a",
+        "method": "events.subscribe",
+        "payload": {
+          "runId": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "afterSequence": 3
+        }
+      },
+      "expectedResponse": {
+        "events": [
+          {
+            "eventId": "20000000-0000-4000-8000-000000000012",
+            "runId": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "sequence": 4,
+            "timestamp": "2026-10-24T10:03:00Z",
+            "type": "run.interrupted",
+            "payload": { "reason": "host process exited during a running turn" }
+          },
+          {
+            "eventId": "20000000-0000-4000-8000-000000000013",
+            "runId": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "sequence": 5,
+            "timestamp": "2026-10-24T10:04:00Z",
+            "type": "node.statusChanged",
+            "payload": {
+              "nodeRunId": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+              "nodeId": "n1",
+              "attempt": 1,
+              "from": "running",
+              "to": "interrupted",
+              "reason": "host process exited"
+            }
+          },
+          {
+            "eventId": "20000000-0000-4000-8000-000000000014",
+            "runId": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "sequence": 6,
+            "timestamp": "2026-10-24T10:04:00Z",
+            "type": "run.statusChanged",
+            "payload": {
+              "from": "running",
+              "to": "interrupted",
+              "reason": "host crash; recovery creates a new run via resumedFromRunId"
+            }
+          }
+        ],
+        "snapshotRequired": false
+      }
+    },
+    {
+      "method": "events.subscribe",
+      "envelope": {
+        "protocolVersion": "0.1",
+        "requestId": "10000000-0000-4000-8000-00000000000b",
+        "method": "events.subscribe",
+        "payload": {
+          "runId": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "afterSequence": 0
+        }
+      },
+      "expectedResponse": {
+        "events": [],
+        "snapshotRequired": true
+      }
+    }
+  ],
+  "events": [
+    {
+      "eventId": "20000000-0000-4000-8000-000000000015",
+      "runId": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+      "sequence": 0,
+      "timestamp": "2026-10-24T10:04:30Z",
+      "type": "run.created",
+      "payload": {
+        "workflowId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "triggerKind": "manual"
+      }
+    }
+  ]
+}
