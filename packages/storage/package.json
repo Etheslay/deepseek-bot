@@ -1,0 +1,24 @@
+{
+  "name": "@deepseek-bot/storage",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local storage backend: SQLite metadata, data root layout, credential blob store, backup and restore",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --coverage"
+  },
+  "dependencies": {
+    "@deepseek-bot/contracts": "workspace:*",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "@vitest/coverage-v8": "3.2.4",
+    "typescript": "5.9.3",
+    "vitest": "3.2.4"
+  }
+}
