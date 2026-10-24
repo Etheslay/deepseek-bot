@@ -4,7 +4,7 @@
 
 ## 当前阶段
 
-目前只有规范与设计，没有应用源码、依赖安装或构建脚本。不要尝试执行尚未定义的启动/测试命令，也不要将文档检查结果描述为应用已通过验收。
+D00 已建立共享工程基线（workspace、lint/typecheck/test、Windows CI）。仍无应用产品功能与 Electron 壳；不要将文档检查或基线测试结果描述为产品已通过验收。可运行命令见 [开发环境基线](docs/DEVELOPMENT_SETUP.md)。
 
 ## 开始一个任务
 
@@ -19,11 +19,12 @@
 
 检查项必须如实标记；未执行写明原因。自审记录包含最新提交 SHA、日期、检查证据、遗留问题和结论；新增提交后重新检查并更新记录。可以使用自动化或 AI 辅助检查，但负责人对最终自审结论负责。
 
-## 开发环境基线（待 D01/D02 固定）
+## 开发环境基线
 
-建议 TypeScript 严格类型检查、pnpm 单一锁文件、Electron/React 桌面。上游工具链要求见 [Harness 接入](docs/HARNESS_INTEGRATION.md)；选定确切版本后记录在项目配置与锁文件，禁止两人各自漂移。
+工程底座（pnpm workspace、TypeScript 严格模式、ESLint/Prettier、Windows CI）已由 D00 落地。安装、日常命令与 Windows 注意事项见 [开发环境基线](docs/DEVELOPMENT_SETUP.md)。
 
-后续在本节补充经干净环境实际验证的安装、启动、lint、typecheck、test、e2e、package 命令和平台依赖。没有对应脚本前，不把计划命令写成可运行说明。
+上游 Harness 工具链要求仍见 [Harness 接入](docs/HARNESS_INTEGRATION.md)。应用启动、e2e、打包命令将在 D01/D02 落地后补充到该文档；在对应脚本存在前，不要把计划命令写成可运行说明。
+
 
 ## 评审与集成
 

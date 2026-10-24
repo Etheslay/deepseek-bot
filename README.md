@@ -28,6 +28,7 @@
 | [本地数据与权限](docs/SECURITY_DATA.md) | 数据目录、密钥、工具权限、备份与删除 |
 | [仓库设置清单](docs/REPOSITORY_SETUP.md) | GitHub 权限、保护规则和当前配置状态 |
 | [开发启动清单](docs/KICKOFF_CHECKLIST.md) | 阶段 0 清障、D01 接入验证与后续任务链的执行顺序 |
+| [开发环境基线](docs/DEVELOPMENT_SETUP.md) | 实测的 Node/pnpm 安装与 lint/typecheck/test/CI 命令 |
 | [贡献指南](CONTRIBUTING.md) | 每次开发开始和结束时的操作步骤 |
 
 ## 合作约定
