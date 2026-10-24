@@ -2,11 +2,11 @@
 
 - 任务：D00 协作区 / 共享工程基线
 - 分支：`feature/engineering-baseline`
-- 最新 tip SHA：以分支 `git rev-parse HEAD` 为准（本文件更新时为 `f996108d47c2f19d2373188344ae157d52ea1c70` / `f996108`）；接管点曾为 `fbe96eef605bb215b1e0c937babd04116c24bf9a`
+- 权威 tip SHA：以分支 `git rev-parse HEAD` 为准。本报告内容对齐证据 tip `b5ab7bcf20e5dd575d9f94f1522054eda8e9d4d6` / `b5ab7bc`；本提交后勿再 amend 追 HEAD。
 - executor profile：`zcode-desktop`（ZCode Desktop 3.16.3；临时；产品运行时仍为 DeepSeek Harness）
 - 执行器交接：由 DeepSeek Harness Desktop 切换为 ZCode Desktop；接管本机既有分支 `feature/engineering-baseline` @ `fbe96eef605bb215b1e0c937babd04116c24bf9a`；只追加提交，未改写历史、未 force push
 - 最新 SHA：以本分支 tip 为准（验收时执行 `git rev-parse HEAD`）。文档内容提交短 SHA 见第 9 节。
-- PR：草稿 https://github.com/Etheslay/deepseek-bot/pull/7（base=`develop`，head=`feature/engineering-baseline` @ `443eee4976bb4e05f430fb09be56594a6edc04f7`）
+- PR：草稿 https://github.com/Etheslay/deepseek-bot/pull/7（base=`develop`，head=`feature/engineering-baseline` @ `b5ab7bcf20e5dd575d9f94f1522054eda8e9d4d6`）
 - 环境：Windows 11 x64；Node v24.16.0；pnpm 11.28.5（corepack prepare）；执行时区 America/Los_Angeles
 - 基线：开工时 `origin/develop` = `7ecbbba69de5c44225bc55169c0dd0947d64dec2`（短 SHA `7ecbbba`）
 - `feature/parallel-decision`：已合并，PR #5（`7ecbbba`）
@@ -30,12 +30,12 @@
 - 退出码：0
 - 关键输出：
 
-`	ext
+```text
 Scope: all 2 workspace projects
 Lockfile is up to date, resolution step is skipped
 Already up to date
 Done in 365ms using pnpm v11.28.5
-`
+```
 
 - 说明：`corepack enable` 对本机 `C:\Program Files\nodejs\` 写权限 EPERM；改用 `corepack prepare … --activate` 后 `pnpm --version` = 11.28.5。pnpm 11 需在 `pnpm-workspace.yaml` 声明 `allowBuilds.esbuild: true`（仅 esbuild 官方 postinstall）。锁文件无改动。
 
@@ -60,23 +60,22 @@ Done in 365ms using pnpm v11.28.5
 - 退出码：0
 - 关键输出：
 
-`	ext
+```text
 RUN  v3.2.4 D:/PersonProgram/deepseek-bot/packages/shared
 ✓ src/redact.test.ts (6 tests)
 Test Files  1 passed (1)
 Tests  6 passed (6)
 redact.ts coverage: Stmts/Branch/Funcs/Lines 100%
-`
+```
 
 ### B5 CI
 
 - 状态：**PASS**
-- 时间：2026-10-24 00:37:33–00:38:23 America/Los_Angeles（run created/completed UTC 07:37:33–07:38:23）
-- Run：https://github.com/Etheslay/deepseek-bot/actions/runs/40074875515
-- Job：`quality` @ `windows-latest` — conclusion **success**（https://github.com/Etheslay/deepseek-bot/actions/runs/40074875515/job/120815977685）
-- head SHA：`443eee4976bb4e05f430fb09be56594a6edc04f7`（与远程 tip / PR #7 head 一致）
-- 步骤：Checkout → Setup Node.js → Enable Corepack → Install → Lint → Typecheck → Test 均为 success
-- 说明：草稿 PR #7 触发 `pull_request` 事件；workflow `.github/workflows/ci.yml`；未 merge
+- 证据 tip：`b5ab7bcf20e5dd575d9f94f1522054eda8e9d4d6`（与当时远程 tip / PR #7 head 一致）
+- PR 事件 run：https://github.com/Etheslay/deepseek-bot/actions/runs/40075299486 （conclusion **success**）
+- push 事件 run：https://github.com/Etheslay/deepseek-bot/actions/runs/40075296281 （conclusion **success**）
+- Job：`quality` @ `windows-latest` — lint / typecheck / test 均为 success
+- 说明：草稿 PR #7；workflow `.github/workflows/ci.yml`；未 merge。（更早 tip `443eee4` 的 PASS run 40074875515 仅作历史参考，本报告 B5 以证据 tip b5ab7bc 为准。）
 
 ### B6 安全与卫生
 
@@ -139,7 +138,7 @@ Untracked `handoff/` present locally; not staged/committed.
 
 | 项 | 原因 | 最高可能判定 |
 | --- | --- | --- |
-| 远程 CI 结果 | 已在 PR #7 验证为 success（run 40074875515 @ windows-latest / job quality） | 无（已关闭） |
+| 远程 CI 结果 | 已在 PR #7 验证为 success（证据 tip `b5ab7bc`；PR run 40075299486 / push run 40075296281） | 无（已关闭） |
 | 跨盘符全新 clone 路径 | 本机验证在 `D:\PersonProgram\deepseek-bot`；pnpm 因跨盘无法硬链而改用 `D:\PersonProgram\.pnpm-store` | 记录事实；不影响功能 |
 
 ## 5. 已知问题与风险
@@ -147,15 +146,15 @@ Untracked `handoff/` present locally; not staged/committed.
 1. `corepack enable` 在无管理员写权限时 EPERM；文档已写 `prepare --activate` 绕过。
 2. pnpm 提示 store 跨盘符无法硬链，使用项目旁 store；可接受。
 3. `eslint@9.37.0` 安装时标记 deprecated（上游提示有更新）；按任务要求固定确切版本，不顺手升级。
-4. 远程 CI 已在草稿 PR #7 跑通（run 40074875515，conclusion success）；合并前仍以最新 tip 的 Actions 为准。
+4. 远程 CI 已在草稿 PR #7 对证据 tip `b5ab7bc` 跑通（PR run 40075299486、push run 40075296281，均为 success）；合并前仍以最新 tip 的 Actions 为准。
 
 ## 6. 回退方式
 
-`powershell
+```powershell
 git checkout develop
 git branch -D feature/engineering-baseline
 # 若已推送：关闭草稿 PR，删除远程 feature 分支（由负责人/Push 执行）
-`
+```
 
 根配置与 `packages/shared` 整包随分支删除即可；无数据迁移。
 
@@ -185,9 +184,9 @@ D01（Harness）与 D02（桌面壳）应从合并后的 `develop` 拉分支，�
 | 检查 | 提交 SHA / 日期 | 关键结果 | 本地证据 |
 | --- | --- | --- | --- |
 | lint / typecheck / test | （Push 后填最新 SHA） / 2026-10-24 | 本地均 exit 0；coverage 100% | 本报告 B2–B4 |
-| CI windows-latest | `443eee4976bb4e05f430fb09be56594a6edc04f7` / run 40074875515 | job `quality` success（lint/typecheck/test） | [Actions run](https://github.com/Etheslay/deepseek-bot/actions/runs/40074875515) |
+| CI windows-latest | `b5ab7bcf20e5dd575d9f94f1522054eda8e9d4d6` / PR run 40075299486 + push run 40075296281 | job `quality` success（lint/typecheck/test）；与证据 tip 一致 | [PR CI](https://github.com/Etheslay/deepseek-bot/actions/runs/40075299486) · [push CI](https://github.com/Etheslay/deepseek-bot/actions/runs/40075296281) |
 
-未执行或未验证的检查及原因：无（远程 CI 已在 PR #7 验证为 success）。
+未执行或未验证的检查及原因：无（远程 CI 已在证据 tip `b5ab7bc` 验证为 success）。
 
 ### 负责人自审记录
 
@@ -224,6 +223,7 @@ D01（Harness）与 D02（桌面壳）应从合并后的 `develop` 拉分支，�
 | `2c95b32c8ed7f7a170d715b237c1aa7e489fda5e` | `docs: record final tip SHA after zcode-desktop wrap-up` |
 | `f996108d47c2f19d2373188344ae157d52ea1c70` | `docs: sync report tip SHA to HEAD` |
 | `443eee4976bb4e05f430fb09be56594a6edc04f7` | `docs: note authoritative tip via git rev-parse` |
+| `b5ab7bcf20e5dd575d9f94f1522054eda8e9d4d6` | `docs: fix baseline report branch name, PR and CI evidence` |
 ## 10. 执行器切换与接管
 
 - 原执行器：DeepSeek Harness Desktop（deepseek-harness-desktop，standby）
