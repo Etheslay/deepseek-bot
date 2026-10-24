@@ -28,10 +28,12 @@ export type FieldErrors = Partial<Record<keyof BotDraft, string>>;
 
 /** Common tone presets (UI-only; merged into instructions on submit). */
 export const TONE_PRESETS: readonly string[] = [
-  "凶悍",
-  "严肃",
+  "傲娇",
+  "撒娇",
   "可爱",
   "呆萌",
+  "严肃",
+  "凶悍",
   "幽默",
   "温柔",
   "毒舌",
@@ -85,8 +87,6 @@ export function BotForm(
   );
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [selectedTones, setSelectedTones] = useState<string[]>([]);
-  const [customTones, setCustomTones] = useState<string[]>([]);
-  const [customOpen, setCustomOpen] = useState(false);
   const [customDraft, setCustomDraft] = useState("");
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -103,23 +103,16 @@ export function BotForm(
     );
   };
 
-  const addCustomTone = (): void => {
-    const tone = customDraft.trim();
-    if (!tone) {
-      return;
-    }
-    if (!customTones.includes(tone)) {
-      setCustomTones((prev) => [...prev, tone]);
-    }
-    setSelectedTones((prev) => (prev.includes(tone) ? prev : [...prev, tone]));
-    setCustomDraft("");
-  };
 
   const instructionsWithTones = (instructions: string): string => {
-    if (selectedTones.length === 0) {
+    const custom = customDraft.trim();
+    const tones = selectedTones
+      .filter((t) => t !== "自定义" || custom.length > 0)
+      .map((t) => (t === "自定义" ? custom : t));
+    if (tones.length === 0) {
       return instructions;
     }
-    const suffix = `（语气：${selectedTones.join("、")}）`;
+    const suffix = `（语气：${tones.join("、")}）`;
     return instructions.includes(suffix) ? instructions : instructions + suffix;
   };
 
@@ -194,43 +187,24 @@ export function BotForm(
             {tone}
           </button>
         ))}
-        {customTones.map((tone) => (
-          <button
-            key={tone}
-            type="button"
-            className={"tone-chip custom" + (selectedTones.includes(tone) ? " selected" : "")}
-            aria-pressed={selectedTones.includes(tone)}
-            onClick={() => toggleTone(tone)}
-          >
-            {tone}
-          </button>
-        ))}
         <button
           type="button"
-          className="tone-chip add"
-          aria-expanded={customOpen}
-          onClick={() => setCustomOpen((v) => !v)}
+          className={"tone-chip" + (selectedTones.includes("自定义") ? " selected" : "")}
+          aria-pressed={selectedTones.includes("自定义")}
+          onClick={() => toggleTone("自定义")}
         >
-          ＋ 自定义
+          自定义
         </button>
       </div>
-      {customOpen && (
+      {selectedTones.includes("自定义") && (
         <div className="tone-custom">
           <input
             value={customDraft}
             maxLength={12}
-            placeholder="输入自定义语气，如：中二"
+            placeholder="输入你的自定义语气"
             aria-label="自定义语气"
             onChange={(e) => setCustomDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                addCustomTone();
-              }
-            }}
           />
-          <button type="button" className="pill-btn" disabled={customDraft.trim().length === 0} onClick={addCustomTone}>
-            添加
-          </button>
         </div>
       )}
 
