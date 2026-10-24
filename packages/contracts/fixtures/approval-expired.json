@@ -1,0 +1,56 @@
+{
+  "scenario": "approval-expired",
+  "covers": "CONTRACTS §2 Approval 默认有效期 10 分钟、一次消费；§6 APPROVAL_EXPIRED；§7 过期审批",
+  "notes": "审批在 expiresAt 之后才被决定：返回 APPROVAL_EXPIRED（retryable=false），审批状态由 Host 标记为 expired 并广播 approval.resolved(decision=expired)。过期审批不能被消费，节点等待审批失败时按 stop-descendants 处理。",
+  "interactions": [
+    {
+      "method": "approval.decide",
+      "envelope": {
+        "protocolVersion": "0.1",
+        "requestId": "10000000-0000-4000-8000-000000000010",
+        "method": "approval.decide",
+        "payload": {
+          "approvalId": "12341234-1234-4123-8123-123412341234",
+          "decision": "approved",
+          "expectedActionDigest": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+        }
+      },
+      "expectedError": {
+        "code": "APPROVAL_EXPIRED",
+        "message": "approval expired before a decision was recorded",
+        "retryable": false,
+        "requestId": "10000000-0000-4000-8000-000000000010",
+        "details": { "expiresAt": "2026-10-24T10:10:00Z" }
+      }
+    }
+  ],
+  "events": [
+    {
+      "eventId": "20000000-0000-4000-8000-000000000018",
+      "runId": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+      "sequence": 19,
+      "timestamp": "2026-10-24T10:10:01Z",
+      "type": "approval.resolved",
+      "payload": {
+        "approvalId": "12341234-1234-4123-8123-123412341234",
+        "decision": "expired",
+        "resolvedAt": "2026-10-24T10:10:01Z"
+      }
+    },
+    {
+      "eventId": "20000000-0000-4000-8000-000000000019",
+      "runId": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+      "sequence": 20,
+      "timestamp": "2026-10-24T10:10:01Z",
+      "type": "node.statusChanged",
+      "payload": {
+        "nodeRunId": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "nodeId": "n1",
+        "attempt": 1,
+        "from": "waiting_approval",
+        "to": "failed",
+        "reason": "approval expired at 2026-10-24T10:10:00Z"
+      }
+    }
+  ]
+}
