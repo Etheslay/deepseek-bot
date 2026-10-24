@@ -30,3 +30,6 @@ worktrees/
 .vscode/
 .DS_Store
 Thumbs.db
+# Desktop local outputs
+apps/desktop/out/
+apps/desktop/release/
