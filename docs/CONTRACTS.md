@@ -1,6 +1,6 @@
 # 接口与数据契约 v0.1
 
-本文件定义本项目前后端契约，不是 DeepSeek Harness 官方 API。状态：已冻结（2026-10-23，D00 验收记录见 D00 Issue）；后续变更按 §7 提升版本并由变更负责人自审同步使用方。D03 将其实现为可执行 schema 和契约测试。所有字段均需后端校验，TypeScript 类型不能替代运行时校验。
+本文件定义本项目前后端契约，不是 DeepSeek Harness 官方 API。状态：已冻结（2026-10-23，D00 验收记录见 D00 Issue）；后续变更按 §7 提升版本并由变更负责人自审同步使用方。可执行实现位于 `packages/contracts/`（D03 起）：schema、§7 夹具与双方共用契约测试见 [packages/contracts/README.md](../packages/contracts/README.md)。所有字段均需后端校验，TypeScript 类型不能替代运行时校验。
 
 ## 1. 通用规则
 

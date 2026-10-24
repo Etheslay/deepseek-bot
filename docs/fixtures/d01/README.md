@@ -9,7 +9,7 @@
 
 ## 事件词汇（与会话日志一致）
 
-`session`（头部，仅首行）、`permission/preset`、`sandbox/mode`、`approval/policy`、`agent/inbox/spliced`、`turn/start`、`turn/end`（含 `reason.kind`: `completed` / `interrupted`）、`step/start`、`step/end`、`system/message`、`user/message`、`assistant/message`（`data.stream` 内嵌逐 chunk 的 compact 流：文本、reasoning、工具调用增量）、`request/header`（模型路由、maxTokens、工具 schema）、`request/context`、`tool/call`（`callId`、`name`、`arguments`）、`tool/result`（`message.isError`、`meta.operation/path`、`sourceEventSeqs` 溯源）、`session/title`、`session-log-deepseek/delivery-accepted`、`session/end-seed`（resume 播种）。
+`session`（头部，仅首行）、`permission/preset`、`sandbox/mode`、`approval/policy`、`agent/inbox/spliced`、`turn/start`、`turn/end`（含 `reason.kind`: `completed` / `interrupted`）、`step/start`、`step/end`、`system/message`、`user/message`、`assistant/message`（`data.stream` 内嵌逐 chunk 的 compact 流：文本、reasoning、工具调用增量）、`request/header`（模型路由、maxTokens、工具 schema）、`request/context`、`tool/call`（`callId`、`name`、`arguments`）、`tool/result`（`message.isError`、`meta.operation/path`、`sourceEventSeqs` 溯源）、`session/title`、`session/title-llm-request`（仅 headless 样本出现，与 §8.1 的 headless 标题生成记录一致）、`session-log-deepseek/delivery-accepted`、`session/end-seed`（resume 播种）。
 
 ## 与本项目契约的对应（供 D03 参考）
 
