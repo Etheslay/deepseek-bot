@@ -47,13 +47,31 @@ pnpm test
 | `pnpm typecheck` | 对各 workspace 包执行 `tsc --noEmit` |
 | `pnpm test` | 跑各包测试；当前包含 `@deepseek-bot/shared` 的 `redactSecrets` 用例与覆盖率门槛 |
 
+## 桌面壳命令（D02 起可用）
+
+`apps/desktop`（Electron + React + TypeScript）已纳入 workspace，命令均在仓库根目录执行：
+
+```powershell
+pnpm --filter @deepseek-bot/desktop dev        # 开发模式
+pnpm --filter @deepseek-bot/desktop build      # 构建到 apps/desktop/out/
+pnpm --filter @deepseek-bot/desktop test       # 桌面壳单元测试
+pnpm --filter @deepseek-bot/desktop pack:dir   # 构建 + electron-builder --dir（unpacked）
+```
+
+- 根 `pnpm lint` / `pnpm typecheck` / `pnpm test` 已覆盖桌面包，无需额外步骤。
+- `electron-vite` 将 main / preload 构建为 CJS（`.cjs`，沙箱 preload 要求）；renderer 为普通 Vite 构建。
+- 打包输出 `apps/desktop/release/win-unpacked/`，中间产物 `out/`，均已 gitignore；不要提交。
+- electron-builder 需要缓存 Electron 发行包；默认缓存目录不可写时设置 `ELECTRON_CACHE` / `ELECTRON_BUILDER_CACHE` 指向可写目录。
+- `pnpm-workspace.yaml` 的 `allowBuilds` 批准了 `esbuild` 与 `electron` 的官方安装脚本；干净克隆后 `--frozen-lockfile` 安装无需交互。
+- 结构、IPC 白名单、安全设置与占位范围见 [桌面壳](DESKTOP_SHELL.md)。
+
 ## Workspace 布局
 
 ```text
 package.json              # 私有根包；脚本与共享开发依赖
 pnpm-workspace.yaml       # packages/*、apps/*
 packages/shared/          # 最小共享包（密钥脱敏）
-apps/                     # 预留给后续桌面壳等（本基线不创建应用）
+apps/desktop/             # Electron 桌面壳（D02 起存在）
 .github/workflows/ci.yml  # windows-latest + Node 24
 ```
 
