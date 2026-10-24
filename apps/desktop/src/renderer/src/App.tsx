@@ -1,8 +1,20 @@
-import { useEffect, useLayoutEffect, useRef, useState, type JSX } from "react";
+import { Fragment, useEffect, useLayoutEffect, useRef, useState, type JSX } from "react";
 import { createPortal } from "react-dom";
 import { useBots, type UiBot } from "./features/bots/use-bots.js";
 import { BotForm } from "./features/bots/bot-form.js";
 import type { BotDraft } from "./services/desktop-service.js";
+import { useService } from "./services/service-context.jsx";
+import {
+  applyCancelled,
+  applyDelta,
+  applyFailure,
+  applyTool,
+  emptyStream,
+  failureMessage,
+  type StreamState,
+} from "./features/chat/chat-reducer.js";
+import type { StreamHandle } from "./services/desktop-service.js";
+import { SessionHistory } from "./features/chat/session-history.jsx";
 
 const SHAPES: { radius: string }[] = [
   { radius: "50%" },
@@ -47,23 +59,21 @@ type Msg = {
   speakerKey?: number;
   /** System notices (e.g. blocked cross-group requests) render as a centered muted line. */
   system?: boolean;
+  /** Bot-to-bot interaction record; rendered as a centered line with the other bot's blob. */
+  notice: { label: string; otherKey: number } | null;
+  /** Set on bot-to-bot records: groups them into a per-peer summary line. */
+  peerKey?: number;
 };
 
 type ChatState = Record<number, Msg[]>;
 
-function formatTime(t: number): string {
-  const d = new Date(t);
-  const hm = `${d.getHours()}:${String(d.getMinutes()).padStart(2, "0")}`;
-  const now = new Date();
-  const sameDay =
-    d.getFullYear() === now.getFullYear() &&
-    d.getMonth() === now.getMonth() &&
-    d.getDate() === now.getDate();
-  return sameDay ? hm : `${d.getMonth() + 1}/${d.getDate()} ${hm}`;
-}
 
 type MenuState = { x: number; y: number; botKey: number };
 type DialogState = { type: "newGroup"; moveBot: number | null };
+
+function pairKeyOf(a: number, b: number): string {
+  return a < b ? `${a}|${b}` : `${b}|${a}`;
+}
 
 function BlobMark(): JSX.Element {
   return (
@@ -140,10 +150,15 @@ export function App(): JSX.Element {
   const [quoteDraft, setQuoteDraft] = useState<{ name: string; text: string } | null>(null);
   const [dragging, setDragging] = useState(false);
   const [dragOverGroup, setDragOverGroup] = useState<number | null>(null);
+  const desktop = useService();
   const [collapsedGroups, setCollapsedGroups] = useState<number[]>([]);
   const [groupMenu, setGroupMenu] = useState<{ x: number; y: number; groupKey: number } | null>(
     null,
   );
+  /** Bot-to-bot transcripts keyed by "minKey|maxKey"; only notice lines show in timelines. */
+  const [pairTranscripts, setPairTranscripts] = useState<
+    Record<string, { id: number; speakerKey: number; text: string; time: number }[]>
+  >({});
 
   const toggleGroupCollapsed = (groupKey: number): void => {
     setCollapsedGroups((prev) =>
@@ -202,6 +217,10 @@ export function App(): JSX.Element {
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [accountName, setAccountName] = useState("本地用户");
   const [editingName, setEditingName] = useState(false);
+  const [keyDraft, setKeyDraft] = useState("");
+  const [testResult, setTestResult] = useState<
+    { result: "success" | "failure" | "unverified"; ok: boolean; errorCode?: string } | null
+  >(null);
   const [nameDraft, setNameDraft] = useState("");
 
   useEffect(() => {
@@ -345,6 +364,169 @@ export function App(): JSX.Element {
     setMenu(null);
   };
 
+  /** Bot-to-bot transcripts keyed by "minKey|maxKey"; the main timeline only
+   * shows notice lines, the full conversation lives in the pair detail view. */
+  const pairKeyOf = (a: number, b: number): string =>
+    a < b ? `${a}|${b}` : `${b}|${a}`;
+
+    const sendUserMessage = (botKey: number, text: string): void => {
+    const t = text.trim();
+    if (!t) {
+      return;
+    }
+    setChats((prev) => {
+      const list = prev[botKey] ?? [];
+      return {
+        ...prev,
+        [botKey]: [
+          ...list,
+          {
+            id: Date.now(),
+            from: "user",
+            text: t,
+            quote: quoteDraft ? { ...quoteDraft } : null,
+            reactions: {},
+            mine: [],
+            time: Date.now(),
+            system: false,
+            notice: null,
+          },
+        ],
+      };
+    });
+    setQuoteDraft(null);
+    const reply = `（占位回复）已收到：「${t.slice(0, 24)}」。真实模型会话将在后续里程碑接入。`;
+    setTimeout(() => {
+      setChats((prev) => {
+        const list = prev[botKey] ?? [];
+        return {
+          ...prev,
+          [botKey]: [
+            ...list,
+            {
+              id: Date.now() + 1,
+              from: "bot",
+              text: reply,
+              quote: null,
+              reactions: {},
+              mine: [],
+              time: Date.now(),
+              system: false,
+              speakerKey: botKey,
+              notice: null,
+            },
+          ],
+        };
+      });
+    }, 450);
+  };
+
+  const toggleReaction = (botKey: number, msgId: number, emoji: Emoji): void => {
+    setChats((prev) => ({
+      ...prev,
+      [botKey]: (prev[botKey] ?? []).map((m) => {
+        if (m.id !== msgId) {
+          return m;
+        }
+        const had = m.mine.includes(emoji);
+        const count = (m.reactions[emoji] ?? 0) + (had ? -1 : 1);
+        const reactions = { ...m.reactions, [emoji]: count };
+        return {
+          ...m,
+          reactions,
+          mine: had ? m.mine.filter((x) => x !== emoji) : [...m.mine, emoji],
+        };
+      }),
+    }));
+  };
+  const talkTo = (fromKey: number, toKey: number): void => {
+    const from = bots.find((b) => b.key === fromKey);
+    const to = bots.find((b) => b.key === toKey);
+    if (!from || !to) {
+      return;
+    }
+    const now = Date.now();
+    if (from.group !== to.group) {
+      const g1 = groups.find((g) => g.key === from.group)?.name ?? "?";
+      const g2 = groups.find((g) => g.key === to.group)?.name ?? "?";
+      setChats((prev) => ({
+        ...prev,
+        [fromKey]: [
+          ...(prev[fromKey] ?? []),
+          {
+            id: now + 2,
+            from: "bot",
+            text: `无法发起：不同分组的 Bot 无法主动交流（${g1} ↔ ${g2}）。`,
+            quote: null,
+            reactions: {},
+            mine: [],
+            time: now,
+            system: true,
+            notice: null,
+          },
+        ],
+      }));
+      return;
+    }
+    // Bot-to-bot dialogue: the transcript lives in the pair store; both main
+    // timelines only get a one-line notice (Grok style).
+    const turns: { speaker: number; text: string }[] = [
+      { speaker: fromKey, text: `${to.bot.name}，在吗？我是 ${from.bot.name}。` },
+      { speaker: toKey, text: `在的 ${from.bot.name}，什么事？` },
+      {
+        speaker: fromKey,
+        text: "先占个位——等真实模型接入后，我们就能这样面对面聊天了。",
+      },
+      { speaker: toKey, text: "好啊，到时候聊个痛快。" },
+    ];
+    const pairKey = pairKeyOf(fromKey, toKey);
+    setPairTranscripts((prev) => ({
+      ...prev,
+      [pairKey]: [
+        ...(prev[pairKey] ?? []),
+        ...turns.map((t) => ({
+          id: now + 1 + t.speaker,
+          speakerKey: t.speaker,
+          text: t.text,
+          time: now,
+        })),
+      ],
+    }));
+    setChats((prev) => ({
+      ...prev,
+      [fromKey]: [
+        ...(prev[fromKey] ?? []),
+        {
+          id: now + 9,
+          from: "bot",
+          text: "",
+          quote: null,
+          reactions: {},
+          mine: [],
+          time: now,
+          system: true,
+          notice: { label: "已发消息给", otherKey: toKey },
+          peerKey: toKey,
+        },
+      ],
+      [toKey]: [
+        ...(prev[toKey] ?? []),
+        {
+          id: now + 10,
+          from: "bot",
+          text: "",
+          quote: null,
+          reactions: {},
+          mine: [],
+          time: now,
+          system: true,
+          notice: { label: "消息来自", otherKey: fromKey },
+          peerKey: fromKey,
+        },
+      ],
+    }));
+  };
+
   const submitDialog = (): void => {
     if (!menuDialog) {
       return;
@@ -371,87 +553,22 @@ export function App(): JSX.Element {
       }
       return {
         ...prev,
-      [bot.key]: [
-        {
-          id: bot.key,
-          from: "bot",
-          text: `hello，我是 ${bot.bot.name}，有什么可以为你服务的吗`,
-          quote: null,
-          reactions: {},
-          mine: [],
-          time: Date.now(),
-          speakerKey: bot.key,
-        },
-      ],
-      };
-    });
-  };
-
-  const sendUserMessage = (botKey: number, text: string): void => {
-    const t = text.trim();
-    if (!t) {
-      return;
-    }
-    setChats((prev) => {
-      const list = prev[botKey] ?? [];
-      return {
-        ...prev,
-        [botKey]: [
-          ...list,
+        [bot.key]: [
           {
-            id: Date.now(),
-            from: "user",
-            text: t,
-            quote: quoteDraft ? { ...quoteDraft } : null,
+            id: bot.key,
+            from: "bot",
+            text: `hello，我是 ${bot.bot.name}，有什么可以为你服务的吗`,
+            quote: null,
             reactions: {},
             mine: [],
             time: Date.now(),
+            system: false,
+            speakerKey: bot.key,
+            notice: null,
           },
         ],
       };
     });
-    setQuoteDraft(null);
-    const reply = `(占位) 已收到：「${t.slice(0, 24)}」。真实模型会话将在后续里程碑接入。`;
-    setTimeout(() => {
-      setChats((prev) => {
-        const list = prev[botKey] ?? [];
-        return {
-          ...prev,
-          [botKey]: [
-            ...list,
-            {
-              id: Date.now() + 1,
-              from: "bot",
-              text: reply,
-              quote: null,
-              reactions: {},
-              mine: [],
-              time: Date.now(),
-              speakerKey: botKey,
-            },
-          ],
-        };
-      });
-    }, 450);
-  };
-
-  const toggleReaction = (botKey: number, msgId: number, emoji: Emoji): void => {
-    setChats((prev) => ({
-      ...prev,
-      [botKey]: (prev[botKey] ?? []).map((m) => {
-        if (m.id !== msgId) {
-          return m;
-        }
-        const had = m.mine.includes(emoji);
-        const count = (m.reactions[emoji] ?? 0) + (had ? -1 : 1);
-        const reactions = { ...m.reactions, [emoji]: count };
-        return {
-          ...m,
-          reactions,
-          mine: had ? m.mine.filter((x) => x !== emoji) : [...m.mine, emoji],
-        };
-      }),
-    }));
   };
 
   const dropBotToGroup = (botKey: number, groupKey: number): void => {
@@ -483,61 +600,6 @@ export function App(): JSX.Element {
     setCollapsedGroups((prev) => prev.filter((k) => k !== groupKey));
     setToast(`已删除分组「${g.name}」`);
     setGroupMenu(null);
-  };
-
-  const talkTo = (fromKey: number, toKey: number): void => {
-    const from = bots.find((b) => b.key === fromKey);
-    const to = bots.find((b) => b.key === toKey);
-    if (!from || !to) {
-      return;
-    }
-    const now = Date.now();
-    if (from.group !== to.group) {
-      const g1 = groups.find((g) => g.key === from.group)?.name ?? "?";
-      const g2 = groups.find((g) => g.key === to.group)?.name ?? "?";
-      setChats((prev) => ({
-        ...prev,
-        [fromKey]: [
-          ...(prev[fromKey] ?? []),
-          {
-            id: now + 2,
-            from: "bot",
-            text: `无法发起：不同分组的 Bot 无法主动交流（${g1} ↔ ${g2}）。`,
-            quote: null,
-            reactions: {},
-            mine: [],
-            time: now,
-            system: true,
-          },
-        ],
-      }));
-      return;
-    }
-    // Bot-to-bot dialogue: both sides keep the same transcript, rendered as a real conversation.
-    const turns: { speaker: number; text: string }[] = [
-      { speaker: fromKey, text: `${to.bot.name}，在吗？我是 ${from.bot.name}。` },
-      { speaker: toKey, text: `在的 ${from.bot.name}，什么事？` },
-      {
-        speaker: fromKey,
-        text: "先占个位——等真实模型接入后，我们就能这样面对面聊天了。",
-      },
-      { speaker: toKey, text: "好啊，到时候聊个痛快。" },
-    ];
-    const transcript = turns.map((t, i) => ({
-      id: now + 1 + i,
-      from: "bot" as const,
-      text: t.text,
-      quote: null,
-      reactions: {},
-      mine: [] as Emoji[],
-      time: now + i,
-      speakerKey: t.speaker,
-    }));
-    setChats((prev) => ({
-      ...prev,
-      [fromKey]: [...(prev[fromKey] ?? []), ...transcript],
-      [toKey]: [...(prev[toKey] ?? []), ...transcript.map((m) => ({ ...m }))],
-    }));
   };
 
 const logout = (): void => {
@@ -736,6 +798,7 @@ const logout = (): void => {
               selectedBot={selectedBot}
               msgs={chats[selectedBot] ?? []}
               quoteDraft={quoteDraft}
+              pairTranscripts={pairTranscripts}
               onQuote={(m) => {
                 const sender =
                   m.from === "bot"
@@ -745,6 +808,26 @@ const logout = (): void => {
               }}
               onCancelQuote={() => setQuoteDraft(null)}
               onSend={(t) => sendUserMessage(selectedBot, t)}
+              onAssistant={(t) =>
+                setChats((prev) => ({
+                  ...prev,
+                  [selectedBot]: [
+                    ...(prev[selectedBot] ?? []),
+                    {
+                      id: Date.now() + 1,
+                      from: "bot",
+                      text: t,
+                      quote: null,
+                      reactions: {},
+                      mine: [],
+                      time: Date.now(),
+                      system: false,
+                      speakerKey: selectedBot,
+                      notice: null,
+                    },
+                  ],
+                }))
+              }
               onReact={(msgId, emoji) => toggleReaction(selectedBot, msgId, emoji)}
               onTalkTo={(otherKey) => talkTo(selectedBot, otherKey)}
               onCopy={(t) => void copyText(t)}
@@ -1117,6 +1200,61 @@ const logout = (): void => {
                     </button>
                   </div>
                 </div>
+                <div className="settings-section-title">接入（占位：Key 加密与真实连接由 D04/D08 负责）</div>
+                <div className="settings-card">
+                  <div className="settings-row">
+                    <span>API Key（只写不读）</span>
+                    <span className="key-input-wrap">
+                      <input
+                        type="password"
+                        className="settings-select key-input"
+                        placeholder={desktop.settings.keyConfigured() ? "已配置（输入新值覆盖）" : "未配置"}
+                        value={keyDraft}
+                        onChange={(e) => setKeyDraft(e.target.value)}
+                        aria-label="API Key"
+                      />
+                      <button
+                        type="button"
+                        className="pill-btn"
+                        disabled={keyDraft.length === 0}
+                        onClick={() => {
+                          void desktop.settings.saveKey(keyDraft).then(() => {
+                            setKeyDraft("");
+                            setToast("已保存（不回显）");
+                          });
+                        }}
+                      >
+                        保存
+                      </button>
+                    </span>
+                  </div>
+                  <div className="settings-row">
+                    <span>测试连接</span>
+                    <span className="key-input-wrap">
+                      {testResult ? (
+                        testResult.result === "unverified" ? (
+                          <span className="settings-soon">UNVERIFIED（无真实网络，占位）</span>
+                        ) : (
+                          <span className={testResult.ok ? "settings-ok" : "form-error"}>
+                            {testResult.ok ? "连接成功" : testResult.errorCode}
+                          </span>
+                        )
+                      ) : (
+                        <button
+                          type="button"
+                          className="pill-btn"
+                          onClick={() => {
+                            void desktop.settings
+                              .testConnection({ model: "deepseek-chat", endpoint: "https://api.deepseek.com" })
+                              .then(setTestResult);
+                          }}
+                        >
+                          测试连接
+                        </button>
+                      )}
+                    </span>
+                  </div>
+                </div>
                 <div className="settings-section-title">外观</div>
                 <div className="settings-card">
                   <div className="settings-row">
@@ -1168,19 +1306,16 @@ const logout = (): void => {
 
 function MessageBubble({
   msg,
-  speaker,
   onReact,
   onQuote,
   onCopy,
 }: {
   msg: Msg;
-  speaker: UiBot | null;
   onReact: (msgId: number, emoji: Emoji) => void;
   onQuote: (msg: Msg) => void;
   onCopy: (text: string) => void;
 }): JSX.Element {
   const isUser = msg.from === "user";
-  const timeLabel = formatTime(msg.time);
   const [pickerOpen, setPickerOpen] = useState(false);
   const emojiBtnRef = useRef<HTMLButtonElement | null>(null);
   const pickerRef = useRef<HTMLDivElement | null>(null);
@@ -1220,20 +1355,7 @@ function MessageBubble({
 
   return (
     <div className={"msg-row" + (isUser ? " user" : " bot")}>
-      {!isUser && speaker && (
-        <BlobFace shape={speaker.shape} color={PALETTE[speaker.color]!} size={34} />
-      )}
       <div className="hover-wrap">
-        {!isUser && speaker ? (
-          <div className="sender-line">
-            <span className="sender-name" style={{ color: PALETTE[speaker.color]! }}>
-              {speaker.bot.name}
-            </span>
-            <span className="msg-stamp">{timeLabel}</span>
-          </div>
-        ) : (
-          <div className="msg-stamp user-stamp">{timeLabel}</div>
-        )}
         <div className={"msg-bubble" + (isUser ? " user" : "")}>
           {msg.quote && (
             <div className="msg-quote">
@@ -1345,6 +1467,7 @@ function BotsPlaceholder({
   selectedBot,
   msgs,
   quoteDraft,
+  pairTranscripts,
   onQuote,
   onCancelQuote,
   onSend,
@@ -1352,12 +1475,14 @@ function BotsPlaceholder({
   onTalkTo,
   onCopy,
   onAttach,
+  onAssistant,
 }: {
   bots: UiBot[];
   groups: Group[];
   selectedBot: number;
   msgs: Msg[];
   quoteDraft: { name: string; text: string } | null;
+  pairTranscripts: Record<string, { id: number; speakerKey: number; text: string; time: number }[]>;
   onQuote: (msg: Msg) => void;
   onCancelQuote: () => void;
   onSend: (text: string) => void;
@@ -1365,9 +1490,15 @@ function BotsPlaceholder({
   onTalkTo: (otherKey: number) => void;
   onCopy: (text: string) => void;
   onAttach: () => void;
+  onAssistant: (text: string) => void;
 }): JSX.Element {
+  const service = useService();
   const [draft, setDraft] = useState("");
   const [plusOpen, setPlusOpen] = useState(false);
+  const [detailOther, setDetailOther] = useState<number | null>(null);
+  const [stream, setStream] = useState<(StreamState & { forKey: number }) | null>(null);
+  const [failedText, setFailedText] = useState("");
+  const streamRef = useRef<StreamHandle | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
   const me = bots.find((b) => b.key === selectedBot);
 
@@ -1387,12 +1518,130 @@ function BotsPlaceholder({
   const archived = me.bot.archivedAt !== null;
 
   const send = (): void => {
-    if (!draft.trim()) {
+    const text = draft.trim();
+    if (!text || archived) {
       return;
     }
-    onSend(draft);
+    onSend(text);
+    setFailedText(text);
     setDraft("");
+    if (streamRef.current) {
+      streamRef.current.cancel();
+    }
+    const forKey = me.key;
+    setStream({ ...emptyStream(), forKey });
+    let acc = "";
+    const handle = service.chat.stream(me.bot.id, text, {
+      onDelta: (chunk) => {
+        acc += chunk;
+        setStream((prev) =>
+          prev && prev.forKey === forKey ? { ...applyDelta(prev, chunk), forKey } : prev,
+        );
+      },
+      onTool: (tool) => {
+        setStream((prev) =>
+          prev && prev.forKey === forKey ? { ...applyTool(prev, tool), forKey } : prev,
+        );
+      },
+    });
+    streamRef.current = handle;
+    void handle.finish().then((result) => {
+      streamRef.current = null;
+      setStream((prev) => {
+        if (!prev || prev.forKey !== forKey) {
+          return prev;
+        }
+        if (result.cancelled) {
+          return { ...applyCancelled(prev), forKey };
+        }
+        if (result.failure) {
+          return { ...applyFailure(prev, result.failure), forKey };
+        }
+        onAssistant(acc);
+        return null;
+      });
+    });
   };
+
+  const retryStream = (): void => {
+    if (failedText.trim()) {
+      const text = failedText;
+      setFailedText("");
+      onSend(text);
+      const forKey = me.key;
+      setStream({ ...emptyStream(), forKey });
+      let acc = "";
+      const handle = service.chat.stream(me.bot.id, text, {
+        onDelta: (chunk) => {
+          acc += chunk;
+          setStream((prev) =>
+            prev && prev.forKey === forKey ? { ...applyDelta(prev, chunk), forKey } : prev,
+          );
+        },
+        onTool: (tool) => {
+          setStream((prev) =>
+            prev && prev.forKey === forKey ? { ...applyTool(prev, tool), forKey } : prev,
+          );
+        },
+      });
+      streamRef.current = handle;
+      void handle.finish().then((result) => {
+        streamRef.current = null;
+        setStream((prev) => {
+          if (!prev || prev.forKey !== forKey) {
+            return prev;
+          }
+          if (result.cancelled) {
+            return { ...applyCancelled(prev), forKey };
+          }
+          if (result.failure) {
+            return { ...applyFailure(prev, result.failure), forKey };
+          }
+          onAssistant(acc);
+          return null;
+        });
+      });
+    }
+  };
+
+  if (detailOther !== null) {
+    const peer = bots.find((b) => b.key === detailOther);
+    const turns = pairTranscripts[pairKeyOf(me.key, detailOther)] ?? [];
+    return (
+      <div className="pair-view">
+        <header className="pair-head">
+          <span className="page-chip">
+            <BlobFace shape={me.shape} color={PALETTE[me.color]!} size={26} />
+            <span className="detail-arrow">⇄</span>
+            <BlobFace shape={peer?.shape ?? me.shape} color={PALETTE[peer?.color ?? 0]!} size={26} />
+            {peer?.bot.name ?? "?"}
+          </span>
+        </header>
+        <div className="pair-body">
+          {turns.map((turn) => {
+            const sp = bots.find((b) => b.key === turn.speakerKey);
+            return (
+              <div className="pair-turn" key={turn.id}>
+                <BlobFace shape={sp?.shape ?? me.shape} color={PALETTE[sp?.color ?? 0]!} size={30} />
+                <div className="pair-turn-main">
+                  <span className="pair-speaker" style={{ color: PALETTE[sp?.color ?? 0]! }}>
+                    {sp?.bot.name ?? "?"}
+                  </span>
+                  <div className="msg-bubble">{turn.text}</div>
+                </div>
+              </div>
+            );
+          })}
+          {turns.length === 0 && <div className="sys-line">暂无消息往来。</div>}
+        </div>
+        <div className="pair-foot">
+          <button type="button" className="pill-btn" onClick={() => setDetailOther(null)}>
+            关闭聊天
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="chat-page">
@@ -1401,10 +1650,47 @@ function BotsPlaceholder({
       </p>
       <div className="chat" ref={listRef}>
         {msgs.map((m) => {
-          const speaker =
-            m.from === "bot"
-              ? bots.find((b) => b.key === (m.speakerKey ?? me.key)) ?? me
-              : null;
+          if (m.system && m.notice) {
+            const other = bots.find((b) => b.key === m.notice?.otherKey);
+            const count =
+              pairTranscripts[pairKeyOf(me.key, m.notice.otherKey)]?.length ?? 0;
+            return (
+              <Fragment key={m.id}>
+                <div className="msg-notice">
+                  {m.notice.label}
+                  <button
+                    type="button"
+                    className="notice-bot"
+                    title="查看消息往来详情"
+                    onClick={() => setDetailOther(m.notice!.otherKey)}
+                  >
+                    <BlobFace
+                      shape={other?.shape ?? me.shape}
+                      color={PALETTE[other?.color ?? 0]!}
+                      size={16}
+                    />
+                    {other?.bot.name ?? "?"}
+                  </button>
+                </div>
+                {count >= 2 && (
+                  <button
+                    type="button"
+                    className="chat-summary"
+                    title="查看消息往来详情"
+                    onClick={() => setDetailOther(m.notice!.otherKey)}
+                  >
+                    {count} 条消息往来：
+                    <BlobFace
+                      shape={other?.shape ?? me.shape}
+                      color={PALETTE[other?.color ?? 0]!}
+                      size={16}
+                    />
+                    {other?.bot.name ?? "?"}
+                  </button>
+                )}
+              </Fragment>
+            );
+          }
           return m.system ? (
             <div className="sys-line" key={m.id}>
               {m.text}
@@ -1413,7 +1699,6 @@ function BotsPlaceholder({
             <MessageBubble
               key={m.id}
               msg={m}
-              speaker={speaker}
               onReact={onReact}
               onQuote={onQuote}
               onCopy={onCopy}
@@ -1421,7 +1706,58 @@ function BotsPlaceholder({
           );
         })}
         {msgs.length === 0 && <div className="sys-line">会话为空。</div>}
+        {stream && stream.forKey === me.key && (
+          <>
+            {stream.tools.map((tool) => (
+              <div className="tool-card" key={tool.toolName}>
+                <span className={"tool-state tool-" + tool.state}>
+                  {tool.state === "requested"
+                    ? "请求中"
+                    : tool.state === "running"
+                      ? "执行中"
+                      : tool.state === "succeeded"
+                        ? "已完成"
+                        : "失败"}
+                </span>
+                <span className="tool-name">{tool.toolName}</span>
+                {tool.summary && <span className="tool-summary">{tool.summary}</span>}
+              </div>
+            ))}
+            {(stream.text || (!stream.failure && !stream.cancelled)) && (
+              <div className="msg-row bot streaming">
+                <div className="hover-wrap">
+                  <div className="msg-bubble">
+                    {stream.text || "…"}
+                    {!stream.failure && !stream.cancelled && (
+                      <button
+                        type="button"
+                        className="stream-cancel"
+                        title="取消"
+                        onClick={() => streamRef.current?.cancel()}
+                      >
+                        取消
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+            {stream.failure && (
+              <div className="chat-failure" role="alert">
+                <span className="failure-code">{stream.failure.code}</span>
+                {failureMessage(stream.failure.code)}
+                {stream.failure.retryable && (
+                  <button type="button" className="pill-btn" onClick={retryStream}>
+                    重试
+                  </button>
+                )}
+              </div>
+            )}
+          </>
+        )}
+        {msgs.length === 0 && <div className="sys-line">会话为空。</div>}
       </div>
+      <SessionHistory service={service} botId={me.bot.id} />
       {quoteDraft && (
         <div className="quote-chip">
           <span>
@@ -1533,6 +1869,7 @@ function BotsPlaceholder({
           ↑
         </button>
       </div>
+      
     </div>
   );
 }

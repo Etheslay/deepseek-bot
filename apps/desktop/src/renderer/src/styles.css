@@ -1534,3 +1534,372 @@ body {
 .menu-item.disabled-hint {
   opacity: 0.55;
 }
+
+/* ---------- Grok-style timeline (notices centered, plain bubbles) ---------- */
+
+.chat > .msg-notice {
+  align-self: center;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
+.chat > .msg-notice .blob-face {
+  flex: 0 0 auto;
+  padding: 0;
+}
+
+.notice-bot {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: none;
+  padding: 2px 6px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.notice-bot:hover {
+  background: var(--item-hover);
+  color: var(--text);
+}
+
+.notice-bot:focus-visible {
+  outline: 2px solid #8ab4ff;
+}
+
+.chat > .chat-summary {
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: inherit;
+  font-size: 0.82rem;
+  color: var(--muted);
+  background: transparent;
+  border: none;
+  border-radius: 999px;
+  padding: 0.3rem 0.8rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.chat > .chat-summary:hover {
+  background: var(--item-hover);
+  color: var(--text);
+}
+
+.chat > .chat-summary:focus-visible {
+  outline: 2px solid #8ab4ff;
+}
+
+.chat > .chat-summary .blob-face,
+.chat > .msg-notice .blob-face {
+  width: 16px;
+  height: 16px;
+}
+
+.chat > .msg-time {
+  align-self: center;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.chat > .msg-row {
+  align-self: stretch;
+}
+
+.chat > .msg-row .hover-wrap {
+  max-width: 72%;
+}
+
+/* ---------- pair detail: solid full-screen view ---------- */
+
+.chat-detail-backdrop {
+  position: fixed;
+  inset: 0;
+  background: var(--bg);
+  z-index: 40;
+}
+
+.chat-detail-backdrop .chat-detail {
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  border-radius: 0;
+  box-shadow: none;
+  background: var(--bg);
+}
+
+/* ---------- pair view (in content area, sidebar stays) ---------- */
+
+.pair-view {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.pair-head {
+  display: flex;
+  justify-content: center;
+  padding: 0.55rem 1rem;
+}
+
+.pair-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  padding: 0.6rem 1.6rem 1rem;
+}
+
+.pair-turn {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+}
+
+.pair-turn > .blob-face {
+  flex: 0 0 30px;
+  width: 30px;
+  height: 30px;
+  margin-top: 2px;
+  padding: 0;
+}
+
+.pair-turn-main {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+  min-width: 0;
+  max-width: 68%;
+}
+
+.pair-speaker {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.pair-turn-main .msg-bubble {
+  width: fit-content;
+  max-width: 100%;
+  padding: 0.7rem 1rem;
+  font-size: 0.93rem;
+}
+
+.pair-foot {
+  display: flex;
+  justify-content: center;
+  padding: 0.55rem 0 0.9rem;
+}
+
+/* ---------- subtle scrollbars (dim, no arrows) ---------- */
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #232329 transparent;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #232329;
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #2f2f36;
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+/* ---------- streaming, tool cards, failure, history ---------- */
+
+.msg-row.streaming .msg-bubble {
+  opacity: 0.85;
+}
+
+.stream-cancel {
+  margin-left: 10px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-size: 0.72rem;
+  cursor: pointer;
+}
+
+.stream-cancel:hover {
+  color: var(--text);
+  background: var(--item-hover);
+}
+
+.tool-card {
+  align-self: flex-start;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.4rem 0.8rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.tool-state {
+  font-weight: 600;
+}
+
+.tool-succeeded {
+  color: var(--bots);
+}
+
+.chat-failure {
+  align-self: center;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  color: #f87171;
+}
+
+.failure-code {
+  font-weight: 600;
+}
+
+.session-history {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0 1.6rem 0.6rem;
+}
+
+.history-toggle {
+  position: static;
+  transform: none;
+  align-self: flex-start;
+}
+
+.session-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.session-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  font: inherit;
+  font-size: 0.85rem;
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.45rem 0.7rem;
+  cursor: pointer;
+  text-align: left;
+}
+
+.session-item:hover,
+.session-item.active {
+  background: var(--item-hover);
+}
+
+.session-meta {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.replay-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.6rem 0.9rem;
+}
+
+.replay-title {
+  color: var(--muted);
+  font-size: 0.78rem;
+  margin-top: 0.2rem;
+}
+
+.artifact-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.artifact-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  background: var(--item);
+  border-radius: 10px;
+  padding: 0.4rem 0.7rem;
+}
+
+.artifact-meta {
+  min-width: 0;
+}
+
+.artifact-preview {
+  background: var(--input-bg);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.6rem 0.8rem;
+  font-size: 0.8rem;
+  white-space: pre-wrap;
+  color: var(--text);
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.key-input-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.key-input {
+  width: 180px;
+  text-align: left;
+}
+
+.settings-ok {
+  color: var(--bots);
+  font-size: 0.85rem;
+}
