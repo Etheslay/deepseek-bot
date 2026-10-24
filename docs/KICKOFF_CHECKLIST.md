@@ -40,7 +40,7 @@
 
 前置：0.2 完成。从最新 develop 创建分支，目标 develop。验收细节见 [DEVELOPMENT_PLAN](DEVELOPMENT_PLAN.md) 任务表与 [HARNESS_INTEGRATION](HARNESS_INTEGRATION.md) §4。
 
-> 注：是否切换为 STAGE_PLAN 提出的 S1–S14 串行执行正在讨论中（方案内容本地存档于 archive/stage-plan-proposal，暂未入库）；结论落地前按本清单与 DEVELOPMENT_PLAN 执行。
+> 决策（2026-10-23）：维持双人并行开发（DEVELOPMENT_PLAN 与本清单），不采纳 STAGE_PLAN 提出的 S1–S14 串行方案。该方案两版提案存档于本地分支 archive/stage-plan-proposal 与 archive/stage-plan-push2，未入库；其中 npm 发行包事实已独立核验并合入 HARNESS_INTEGRATION。
 
 ### 版本固定与环境基线
 
