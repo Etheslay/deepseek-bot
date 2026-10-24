@@ -4,7 +4,7 @@
 
 ## 当前阶段
 
-D00 已建立共享工程基线（workspace、lint/typecheck/test、Windows CI）。仍无应用产品功能与 Electron 壳；不要将文档检查或基线测试结果描述为产品已通过验收。可运行命令见 [开发环境基线](docs/DEVELOPMENT_SETUP.md)。
+D00 已建立共享工程基线（workspace、lint/typecheck/test、Windows CI）；D01 完成 Harness 适配验证；D02 落地 Electron 桌面壳（窗口/托盘/受限 IPC/打包）。产品功能仍为占位，不要将壳的可启动或占位界面描述为产品已通过验收。可运行命令见 [开发环境基线](docs/DEVELOPMENT_SETUP.md)与[桌面壳](docs/DESKTOP_SHELL.md)。
 
 ## 开始一个任务
 

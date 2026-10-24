@@ -263,3 +263,13 @@ git branch -D feature/desktop-shell
 - D2-1–D2-11：除 D2-9 UNVERIFIED、两个人工项外全部有证据，结论与证据一致。
 - 应用可启动、托盘行为可验证、导航可用、IPC 仅白名单、renderer 无 Node/fs/ipcRenderer、安全设置未降级、unpacked 产物可启动（中性路径）。
 - 报告对应分支验收代码提交；分支可作为 D05/D07/D09 容器基线。
+
+## 15. 负责人收尾清单（合并前需人工完成）
+
+1. **实机验收**：双击 `apps/desktop/release/win-unpacked/DeepSeek Bot.exe`，确认启动、四页导航、托盘（图标/菜单 Show-Hide-Quit/双击）、关闭进托盘。若在工作区路径下复现 STATUS_BREAKPOINT 崩溃，先停并升级（见第 7 节 #1）；任何实机结果（含截图）补进本报告。
+2. **自审**：以负责人身份对验收代码提交（`7f7cdac` / `db00475` / `39dac09` / `f96c573`，docs 提交不改变代码）完成差异检查，把 SHA、日期、检查证据与结论填入第 10 节「负责人自审记录」。
+3. **推送**：`git push -u origin feature/desktop-shell`（或交 Push 角色执行；不改写历史、不 force push）。
+4. **草稿 PR**：目标 `develop`，描述直接采用第 10 节草稿；`gh` 可用则 `gh pr create --draft --base develop`，否则在 GitHub 网页创建并粘贴。
+5. **CI**：等分支 `windows-latest` 的 lint/typecheck/test 跑绿，把 run 链接补进第 3 节 D2-9（消除 UNVERIFIED）与 PR 描述。
+6. **合并**：核对第 10 节「合并前」清单全部勾选后，由负责人自行用 merge commit 合并（禁 squash/rebase），合并后删除 feature 分支。
+7. **交接**：合并后的 `develop` 即 D05/D07/D09 的容器基线；第 11 节待办（持久化、账号系统、设置扩展等）交规划侧排期。
