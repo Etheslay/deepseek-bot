@@ -71,6 +71,20 @@ type Bot = {
 
 const UNGROUPED = 1;
 
+const EMOJIS = ["👍", "👎", "❤️", "😂", "🎉"] as const;
+type Emoji = (typeof EMOJIS)[number];
+
+type Msg = {
+  id: number;
+  from: "bot" | "user";
+  text: string;
+  quote: { name: string; text: string } | null;
+  reactions: Partial<Record<Emoji, number>>;
+  mine: Emoji[];
+};
+
+type ChatState = Record<number, Msg[]>;
+
 type MenuState = { x: number; y: number; botKey: number };
 type DialogState =
   | { type: "newGroup"; moveBot: number | null }
@@ -140,6 +154,11 @@ export function App(): JSX.Element {
   const [chatTarget, setChatTarget] = useState<string>("");
   const [chatResult, setChatResult] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+
+  const [chats, setChats] = useState<ChatState>({});
+  const [quoteDraft, setQuoteDraft] = useState<{ name: string; text: string } | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const [dragOverGroup, setDragOverGroup] = useState<number | null>(null);
 
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [theme, setTheme] = useState<"dark" | "light">("dark");
@@ -298,6 +317,98 @@ export function App(): JSX.Element {
     setMenuDialog(null);
   };
 
+  const ensureChat = (bot: Bot): void => {
+    setChats((prev) => {
+      if (prev[bot.key]) {
+        return prev;
+      }
+      return {
+        ...prev,
+        [bot.key]: [
+          {
+            id: bot.key,
+            from: "bot",
+            text: `hello，我是 ${bot.name}，有什么可以为你服务的吗`,
+            quote: null,
+            reactions: {},
+            mine: [],
+          },
+        ],
+      };
+    });
+  };
+
+  const sendUserMessage = (botKey: number, text: string): void => {
+    const t = text.trim();
+    if (!t) {
+      return;
+    }
+    setChats((prev) => {
+      const list = prev[botKey] ?? [];
+      return {
+        ...prev,
+        [botKey]: [
+          ...list,
+          {
+            id: Date.now(),
+            from: "user",
+            text: t,
+            quote: quoteDraft ? { ...quoteDraft } : null,
+            reactions: {},
+            mine: [],
+          },
+        ],
+      };
+    });
+    setQuoteDraft(null);
+    const reply = `(占位) 已收到：「${t.slice(0, 24)}」。真实模型会话将在后续里程碑接入。`;
+    setTimeout(() => {
+      setChats((prev) => {
+        const list = prev[botKey] ?? [];
+        return {
+          ...prev,
+          [botKey]: [
+            ...list,
+            { id: Date.now() + 1, from: "bot", text: reply, quote: null, reactions: {}, mine: [] },
+          ],
+        };
+      });
+    }, 450);
+  };
+
+  const toggleReaction = (botKey: number, msgId: number, emoji: Emoji): void => {
+    setChats((prev) => ({
+      ...prev,
+      [botKey]: (prev[botKey] ?? []).map((m) => {
+        if (m.id !== msgId) {
+          return m;
+        }
+        const had = m.mine.includes(emoji);
+        const count = (m.reactions[emoji] ?? 0) + (had ? -1 : 1);
+        const reactions = { ...m.reactions, [emoji]: count };
+        return {
+          ...m,
+          reactions,
+          mine: had ? m.mine.filter((x) => x !== emoji) : [...m.mine, emoji],
+        };
+      }),
+    }));
+  };
+
+  const dropBotToGroup = (botKey: number, groupKey: number): void => {
+    const b = bots.find((x) => x.key === botKey);
+    const g = groups.find((x) => x.key === groupKey);
+    if (!b || !g) {
+      return;
+    }
+    if (b.group === groupKey) {
+      setToast("已在该分组");
+      return;
+    }
+    withBot(botKey, (x) => ({ ...x, group: groupKey }));
+    setToast(`已将「${b.name}」拖至「${g.name}」`);
+  };
+
   const startTalk = (): void => {
     const from = bots.find((b) => b.key === selectedBot);
     const to = bots.find((b) => b.key === Number(chatTarget));
@@ -386,7 +497,32 @@ export function App(): JSX.Element {
         {groups.map((g) => {
           const members = bots.filter((b) => b.group === g.key);
           return (
-            <div key={g.key} className="group-section">
+            <div
+              key={g.key}
+              className={"group-section" + (dragOverGroup === g.key ? " drag-over" : "")}
+              onDragOver={(e) => {
+                if (!dragging) {
+                  return;
+                }
+                e.preventDefault();
+                e.dataTransfer.dropEffect = "move";
+                setDragOverGroup(g.key);
+              }}
+              onDragLeave={() => {
+                if (dragOverGroup === g.key) {
+                  setDragOverGroup(null);
+                }
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                const k = Number(e.dataTransfer.getData("text/plain"));
+                if (Number.isFinite(k) && k > 0) {
+                  dropBotToGroup(k, g.key);
+                }
+                setDragOverGroup(null);
+                setDragging(false);
+              }}
+            >
               <div className="group-label">
                 {g.name}
                 {members.length > 0 && <span className="group-count">{members.length}</span>}
@@ -396,11 +532,40 @@ export function App(): JSX.Element {
                   <button
                     key={b.key}
                     type="button"
+                    draggable
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData("text/plain", String(b.key));
+                      e.dataTransfer.effectAllowed = "move";
+                      setDragging(true);
+                      const ghost = document.createElement("div");
+                      ghost.className = "drag-ghost";
+                      const face = document.createElement("span");
+                      face.className = "blob-face";
+                      face.style.background = PALETTE[b.color]!;
+                      face.style.borderRadius = (SHAPES[b.shape] ?? SHAPES[0]!).radius;
+                      face.style.width = "52px";
+                      face.style.height = "52px";
+                      const e1 = document.createElement("span");
+                      e1.className = "eye";
+                      const e2 = document.createElement("span");
+                      e2.className = "eye";
+                      face.append(e1, e2);
+                      ghost.append(face);
+                      document.body.append(ghost);
+                      e.dataTransfer.setDragImage(ghost, 26, 26);
+                      setTimeout(() => ghost.remove(), 0);
+                    }}
+                    onDragEnd={() => {
+                      setDragging(false);
+                      setDragOverGroup(null);
+                    }}
                     className={selectedBot === b.key && page === "bots" ? "tab active" : "tab"}
                     onClick={() => {
                       setSelectedBot(b.key);
                       setChatResult(null);
                       setChatTarget("");
+                      setQuoteDraft(null);
+                      ensureChat(b);
                       setPage("bots");
                     }}
                     onContextMenu={(e) => {
@@ -418,6 +583,9 @@ export function App(): JSX.Element {
                     </span>
                   </button>
                 ))}
+                {dragging && members.length === 0 && (
+                  <div className="drop-hint">拖到这里移入「{g.name}」</div>
+                )}
               </div>
             </div>
           );
@@ -447,11 +615,24 @@ export function App(): JSX.Element {
         <main className="panel" role="tabpanel" aria-label={current.label}>
           {page === "bots" && selectedBot !== null ? (
             <BotsPlaceholder
+              key={selectedBot}
               bots={bots}
               groups={groups}
               selectedBot={selectedBot}
+              msgs={chats[selectedBot] ?? []}
+              quoteDraft={quoteDraft}
               chatTarget={chatTarget}
               chatResult={chatResult}
+              onQuote={(m) => {
+                const sender =
+                  m.from === "bot"
+                    ? bots.find((b) => b.key === selectedBot)?.name ?? "Bot"
+                    : "我";
+                setQuoteDraft({ name: sender, text: m.text.slice(0, 60) });
+              }}
+              onCancelQuote={() => setQuoteDraft(null)}
+              onSend={(t) => sendUserMessage(selectedBot, t)}
+              onReact={(msgId, emoji) => toggleReaction(selectedBot, msgId, emoji)}
               onSelect={setChatTarget}
               onTalk={startTalk}
             />
@@ -806,23 +987,105 @@ export function App(): JSX.Element {
   );
 }
 
+function MessageBubble({
+  msg,
+  shape,
+  color,
+  onReact,
+  onQuote,
+}: {
+  msg: Msg;
+  shape: number;
+  color: string;
+  onReact: (msgId: number, emoji: Emoji) => void;
+  onQuote: (msg: Msg) => void;
+}): JSX.Element {
+  const isUser = msg.from === "user";
+  return (
+    <div className={"msg-row" + (isUser ? " user" : "")}>
+      {!isUser && <BlobFace shape={shape} color={color} size={34} />}
+      <div className="hover-wrap">
+        <div className={"msg-bubble" + (isUser ? " user" : "")}>
+          {msg.quote && (
+            <div className="msg-quote">
+              引用 {msg.quote.name}：{msg.quote.text}
+            </div>
+          )}
+          {msg.text}
+          {(EMOJIS.some((e) => (msg.reactions[e] ?? 0) > 0)) && (
+            <div className="reaction-chips">
+              {EMOJIS.filter((e) => (msg.reactions[e] ?? 0) > 0).map((e) => (
+                <button
+                  key={e}
+                  type="button"
+                  className={"reaction-chip" + (msg.mine.includes(e) ? " mine" : "")}
+                  title={msg.mine.includes(e) ? "取消我的回应" : "回应"}
+                  onClick={() => onReact(msg.id, e)}
+                >
+                  {e} {msg.reactions[e]}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="hover-actions" role="toolbar" aria-label="消息操作">
+          {EMOJIS.map((e) => (
+            <button
+              key={e}
+              type="button"
+              className="react-btn"
+              data-emoji={e}
+              title={`回应 ${e}`}
+              onClick={() => onReact(msg.id, e)}
+            >
+              {e}
+            </button>
+          ))}
+          <button
+            type="button"
+            className="react-btn"
+            data-action="quote"
+            title="引用"
+            onClick={() => onQuote(msg)}
+          >
+            ↩
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function BotsPlaceholder({
   bots,
   groups,
   selectedBot,
+  msgs,
+  quoteDraft,
   chatTarget,
   chatResult,
+  onQuote,
+  onCancelQuote,
+  onSend,
+  onReact,
   onSelect,
   onTalk,
 }: {
   bots: Bot[];
   groups: Group[];
   selectedBot: number;
+  msgs: Msg[];
+  quoteDraft: { name: string; text: string } | null;
   chatTarget: string;
   chatResult: string | null;
+  onQuote: (msg: Msg) => void;
+  onCancelQuote: () => void;
+  onSend: (text: string) => void;
+  onReact: (msgId: number, emoji: Emoji) => void;
   onSelect: (v: string) => void;
   onTalk: () => void;
 }): JSX.Element {
+  const [draft, setDraft] = useState("");
   const me = bots.find((b) => b.key === selectedBot);
   if (!me) {
     return (
@@ -834,16 +1097,66 @@ function BotsPlaceholder({
   }
   const others = bots.filter((b) => b.key !== me.key);
   const myGroup = groups.find((g) => g.key === me.group)?.name ?? "?";
+
+  const send = (): void => {
+    if (!draft.trim()) {
+      return;
+    }
+    onSend(draft);
+    setDraft("");
+  };
+
   return (
     <>
       <p className="sys-line" aria-live="polite">
         静态占位 · 无网络请求 · 不读取本地数据
       </p>
-      <div className="msg-row">
-        <BlobFace shape={me.shape} color={PALETTE[me.color]!} size={34} />
-        <div className="msg-bubble">
-          hello，我是 {me.name}，有什么可以为你服务的吗
+      <div className="chat">
+        {msgs.map((m) => (
+          <MessageBubble
+            key={m.id}
+            msg={m}
+            shape={me.shape}
+            color={PALETTE[me.color]!}
+            onReact={onReact}
+            onQuote={onQuote}
+          />
+        ))}
+        {msgs.length === 0 && <div className="sys-line">会话为空。</div>}
+      </div>
+      {quoteDraft && (
+        <div className="quote-chip">
+          <span>
+            引用 {quoteDraft.name}：{quoteDraft.text}
+          </span>
+          <button type="button" className="quote-cancel" aria-label="取消引用" onClick={onCancelQuote}>
+            ×
+          </button>
         </div>
+      )}
+      <div className="composer">
+        <input
+          className="composer-input"
+          placeholder={`给 ${me.name} 发消息（占位，无真实模型）`}
+          value={draft}
+          maxLength={200}
+          aria-label={`给 ${me.name} 发消息`}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              send();
+            }
+          }}
+        />
+        <button
+          type="button"
+          className="send-btn"
+          aria-label="发送"
+          disabled={!draft.trim()}
+          onClick={send}
+        >
+          ↑
+        </button>
       </div>
       <div className="bubble">
         <h2>{me.name}</h2>
