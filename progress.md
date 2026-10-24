@@ -53,3 +53,11 @@
 - GitHub 连接器仍无法访问仓库，本次采用本地 no-ff 合并并通过 SSH 普通推送，不创建虚假 PR。
 - 合并无冲突，保留两个父提交；仅补充集成状态记录，main 不变。具体合并 SHA 与推送结果以 Git 历史及本次会话最终核验为准。
 - 本次是文档集成，不代表已执行应用构建、产品测试或发布验收。
+
+## 2026-10-23：仓库设置、PR 流程验证与提交身份事件
+
+- GitHub 默认分支已核验切换为 develop；合并选项仅保留 merge commit，PR #2（启动清单）与 PR #3（契约冻结）均以双父 merge commit 合入，Squash/Rebase 在合并界面不可用。
+- 规则集 protected-branches 已建立（main、develop、release/**、hotfix/**，0 必需批准、禁强推、禁删除、无 bypass）；因私有免费套餐 GitHub 明示不强制执行，探针 B 推送被接受证实。保护要求标注为"流程约定，服务端未强制"，规则集保留待套餐/可见性变化后自动生效。
+- 探针 C 通过：契约冻结 PR 以 0 必需批准 + 负责人自审记录 + merge commit 合并；探针 A/B（预期拒绝）暂缓至强制生效后重跑。
+- 发现 feature/project-standards 两个误署名提交（署名 Destinyian，非本人操作），违反身份约束；已从远程回退至已合并基线 bd2946b，内容本地存档 archive/stage-plan-proposal 待讨论，身份来源待内部核实。
+- 提交 950a8d4（启动清单）与 c4d8eca（契约冻结）由 Etheslay 授权会话内 AI 辅助准备、以其配置身份提交、本人经 PR 确认合并。
