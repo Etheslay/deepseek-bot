@@ -1,11 +1,14 @@
 # 工程基线报告（D00）
 
 - 任务：D00 协作区 / 共享工程基线
-- 分支：`feature/engineering-baseline`
+- 分支：`ffeature/engineering-baseline`
+- 最新 tip SHA（接管时）：`fbe96eef605bb215b1e0c937babd04116c24bf9a`（短 SHA `fbe96ee`）；本收尾提交后以第 9 节最新行为准
+- executor profile：`zcode-desktop`（ZCode Desktop 3.16.3；临时；产品运行时仍为 DeepSeek Harness）
+- 执行器交接：由 DeepSeek Harness Desktop 切换为 ZCode Desktop；接管本机既有分支 `ffeature/engineering-baseline` @ `fbe96eef605bb215b1e0c937babd04116c24bf9a`；只追加提交，未改写历史、未 force push
 - 最新 SHA：以本分支 tip 为准（验收时执行 `git rev-parse HEAD`）。文档内容提交短 SHA 见第 9 节。
 - PR：未创建（本机执行；由 Push 推远程并开草稿 PR → `develop`）
 - 环境：Windows 11 x64；Node v24.16.0；pnpm 11.28.5（corepack prepare）；执行时区 America/Los_Angeles
-- 基线：开工时 `origin/develop` = `fba1844`
+- 基线：开工时 `origin/develop` = `7ecbbba69de5c44225bc55169c0dd0947d64dec2`（短 SHA `7ecbbba`）
 - `feature/parallel-decision`：已合并，PR #5（`7ecbbba`）
 
 ## 1. 开工门禁
@@ -15,7 +18,7 @@
 | `origin/develop` 含 DEVELOPMENT_PLAN / KICKOFF_CHECKLIST / CONTRACTS | 通过 |
 | `origin/develop` 无 `package.json` / `pnpm-workspace.yaml` | 通过 |
 | 工作区干净（仅未跟踪 `handoff/`，不提交） | 通过 |
-| 从最新 `origin/develop` 创建 `feature/engineering-baseline` | 通过 |
+| 从最新 `origin/develop` 创建 `ffeature/engineering-baseline` | 通过 |
 | 未从 `feature/project-standards` 开工 | 通过 |
 
 ## 2. B1–B8 验收证据
@@ -72,6 +75,30 @@ redact.ts coverage: Stmts/Branch/Funcs/Lines 100%
 
 ### B6 安全与卫生
 
+### B6 scan (zcode-desktop wrap-up)
+
+- time: 2026-10-24 00:34:52 America/Los_Angeles
+- cwd: D:\PersonProgram\deepseek-bot
+- tip before wrap-up: fbe96eef605bb215b1e0c937babd04116c24bf9a
+
+`git status --porcelain`:
+```
+?? handoff/
+```
+
+Tracked sensitive-looking paths:
+```
+(none)
+```
+
+Content scan for live-looking secrets (excluding redact tests/docs):
+```
+(no hits)
+```
+
+Untracked `handoff/` present locally; not staged/committed.
+
+
 - 无 Key / `.env` / 用户数据 / 构建产物入库意图
 - `node_modules` / `coverage` / `dist` 由 `.gitignore` 覆盖
 - `handoff/` 保持未跟踪，不提交
@@ -122,7 +149,7 @@ redact.ts coverage: Stmts/Branch/Funcs/Lines 100%
 
 `powershell
 git checkout develop
-git branch -D feature/engineering-baseline
+git branch -D ffeature/engineering-baseline
 # 若已推送：关闭草稿 PR，删除远程 feature 分支（由负责人/Push 执行）
 `
 
@@ -140,7 +167,7 @@ D01（Harness）与 D02（桌面壳）应从合并后的 `develop` 拉分支，�
 
 - 关联 Issue / Dxx：D00 工程基线
 - 作者 / 负责人：（负责人本人）
-- 来源分支 → 目标分支：`feature/engineering-baseline` → `develop`
+- 来源分支 → 目标分支：`ffeature/engineering-baseline` → `develop`
 - 可观察行为变化：仓库具备 pnpm workspace、lint/typecheck/test 与 Windows CI；新增 `packages/shared` 密钥脱敏与文档
 
 ### 范围与接口
@@ -188,4 +215,12 @@ D01（Harness）与 D02（桌面壳）应从合并后的 `develop` 拉分支，�
 | `a3748d6` | `ci: add windows quality workflow` |
 | `0ff63e7` | `feat(shared): add secret redaction helper` |
 | `fba1844` | `docs: record development setup and baseline report` |
+| `fbe96eef605bb215b1e0c937babd04116c24bf9a` | `docs: make baseline report tip SHA authoritative` |
 
+## 10. 执行器切换与接管
+
+- 原执行器：DeepSeek Harness Desktop（deepseek-harness-desktop，standby）
+- 现执行器：ZCode Desktop（zcode-desktop，active 临时）；本机探测 DisplayVersion **3.16.3**
+- 接管点：本机 `D:\PersonProgram\deepseek-bot` 分支 `feature/engineering-baseline` tip `fbe96eef605bb215b1e0c937babd04116c24bf9a`（相对 `origin/develop` ahead 5，当时未推远程）
+- 纪律：只追加提交；不改写历史；不 force push；不合并；不推 develop/main；不与 Deepseek-CL 共用工作目录
+- 烟雾测试（2026-10-24 America/Los_Angeles）：Node v24.16.0；pnpm 11.28.5；pnpm lint/typecheck/test 均为 exit 0（test 6/6，coverage 100%）
