@@ -1,12 +1,12 @@
 # 工程基线报告（D00）
 
 - 任务：D00 协作区 / 共享工程基线
-- 分支：`ffeature/engineering-baseline`
+- 分支：`feature/engineering-baseline`
 - 最新 tip SHA：以分支 `git rev-parse HEAD` 为准（本文件更新时为 `f996108d47c2f19d2373188344ae157d52ea1c70` / `f996108`）；接管点曾为 `fbe96eef605bb215b1e0c937babd04116c24bf9a`
 - executor profile：`zcode-desktop`（ZCode Desktop 3.16.3；临时；产品运行时仍为 DeepSeek Harness）
-- 执行器交接：由 DeepSeek Harness Desktop 切换为 ZCode Desktop；接管本机既有分支 `ffeature/engineering-baseline` @ `fbe96eef605bb215b1e0c937babd04116c24bf9a`；只追加提交，未改写历史、未 force push
+- 执行器交接：由 DeepSeek Harness Desktop 切换为 ZCode Desktop；接管本机既有分支 `feature/engineering-baseline` @ `fbe96eef605bb215b1e0c937babd04116c24bf9a`；只追加提交，未改写历史、未 force push
 - 最新 SHA：以本分支 tip 为准（验收时执行 `git rev-parse HEAD`）。文档内容提交短 SHA 见第 9 节。
-- PR：未创建（本机执行；由 Push 推远程并开草稿 PR → `develop`）
+- PR：草稿 https://github.com/Etheslay/deepseek-bot/pull/7（base=`develop`，head=`feature/engineering-baseline` @ `443eee4976bb4e05f430fb09be56594a6edc04f7`）
 - 环境：Windows 11 x64；Node v24.16.0；pnpm 11.28.5（corepack prepare）；执行时区 America/Los_Angeles
 - 基线：开工时 `origin/develop` = `7ecbbba69de5c44225bc55169c0dd0947d64dec2`（短 SHA `7ecbbba`）
 - `feature/parallel-decision`：已合并，PR #5（`7ecbbba`）
@@ -18,7 +18,7 @@
 | `origin/develop` 含 DEVELOPMENT_PLAN / KICKOFF_CHECKLIST / CONTRACTS | 通过 |
 | `origin/develop` 无 `package.json` / `pnpm-workspace.yaml` | 通过 |
 | 工作区干净（仅未跟踪 `handoff/`，不提交） | 通过 |
-| 从最新 `origin/develop` 创建 `ffeature/engineering-baseline` | 通过 |
+| 从最新 `origin/develop` 创建 `feature/engineering-baseline` | 通过 |
 | 未从 `feature/project-standards` 开工 | 通过 |
 
 ## 2. B1–B8 验收证据
@@ -70,13 +70,17 @@ redact.ts coverage: Stmts/Branch/Funcs/Lines 100%
 
 ### B5 CI
 
-- 状态：**UNVERIFIED**
-- 原因：分支尚未推送，无 GitHub Actions 运行。工作流已添加：`.github/workflows/ci.yml`（`windows-latest`、Node 24、corepack、lint/typecheck/test）。Push 开草稿 PR 后应以真实运行结果为准，不得伪造通过。
+- 状态：**PASS**
+- 时间：2026-10-24 00:37:33–00:38:23 America/Los_Angeles（run created/completed UTC 07:37:33–07:38:23）
+- Run：https://github.com/Etheslay/deepseek-bot/actions/runs/40074875515
+- Job：`quality` @ `windows-latest` — conclusion **success**（https://github.com/Etheslay/deepseek-bot/actions/runs/40074875515/job/120815977685）
+- head SHA：`443eee4976bb4e05f430fb09be56594a6edc04f7`（与远程 tip / PR #7 head 一致）
+- 步骤：Checkout → Setup Node.js → Enable Corepack → Install → Lint → Typecheck → Test 均为 success
+- 说明：草稿 PR #7 触发 `pull_request` 事件；workflow `.github/workflows/ci.yml`；未 merge
 
 ### B6 安全与卫生
 
-### B6 scan (zcode-desktop wrap-up)
-
+#### B6 scan (zcode-desktop wrap-up)
 - time: 2026-10-24 00:34:52 America/Los_Angeles
 - cwd: D:\PersonProgram\deepseek-bot
 - tip before wrap-up: fbe96eef605bb215b1e0c937babd04116c24bf9a
@@ -135,7 +139,7 @@ Untracked `handoff/` present locally; not staged/committed.
 
 | 项 | 原因 | 最高可能判定 |
 | --- | --- | --- |
-| 远程 CI 绿 | 分支未推送 / 无 PR | PASS-WITH-FIXES（待 Push 后补证据） |
+| 远程 CI 结果 | 已在 PR #7 验证为 success（run 40074875515 @ windows-latest / job quality） | 无（已关闭） |
 | 跨盘符全新 clone 路径 | 本机验证在 `D:\PersonProgram\deepseek-bot`；pnpm 因跨盘无法硬链而改用 `D:\PersonProgram\.pnpm-store` | 记录事实；不影响功能 |
 
 ## 5. 已知问题与风险
@@ -143,13 +147,13 @@ Untracked `handoff/` present locally; not staged/committed.
 1. `corepack enable` 在无管理员写权限时 EPERM；文档已写 `prepare --activate` 绕过。
 2. pnpm 提示 store 跨盘符无法硬链，使用项目旁 store；可接受。
 3. `eslint@9.37.0` 安装时标记 deprecated（上游提示有更新）；按任务要求固定确切版本，不顺手升级。
-4. CI 未跑；合并前必须有真实 Actions 结果。
+4. 远程 CI 已在草稿 PR #7 跑通（run 40074875515，conclusion success）；合并前仍以最新 tip 的 Actions 为准。
 
 ## 6. 回退方式
 
 `powershell
 git checkout develop
-git branch -D ffeature/engineering-baseline
+git branch -D feature/engineering-baseline
 # 若已推送：关闭草稿 PR，删除远程 feature 分支（由负责人/Push 执行）
 `
 
@@ -167,7 +171,7 @@ D01（Harness）与 D02（桌面壳）应从合并后的 `develop` 拉分支，�
 
 - 关联 Issue / Dxx：D00 工程基线
 - 作者 / 负责人：（负责人本人）
-- 来源分支 → 目标分支：`ffeature/engineering-baseline` → `develop`
+- 来源分支 → 目标分支：`feature/engineering-baseline` → `develop`
 - 可观察行为变化：仓库具备 pnpm workspace、lint/typecheck/test 与 Windows CI；新增 `packages/shared` 密钥脱敏与文档
 
 ### 范围与接口
@@ -181,9 +185,9 @@ D01（Harness）与 D02（桌面壳）应从合并后的 `develop` 拉分支，�
 | 检查 | 提交 SHA / 日期 | 关键结果 | 本地证据 |
 | --- | --- | --- | --- |
 | lint / typecheck / test | （Push 后填最新 SHA） / 2026-10-24 | 本地均 exit 0；coverage 100% | 本报告 B2–B4 |
-| CI windows-latest | — | UNVERIFIED（待 PR） | workflow 已添加 |
+| CI windows-latest | `443eee4976bb4e05f430fb09be56594a6edc04f7` / run 40074875515 | job `quality` success（lint/typecheck/test） | [Actions run](https://github.com/Etheslay/deepseek-bot/actions/runs/40074875515) |
 
-未执行或未验证的检查及原因：远程 CI（分支未推送）。
+未执行或未验证的检查及原因：无（远程 CI 已在 PR #7 验证为 success）。
 
 ### 负责人自审记录
 
@@ -211,16 +215,15 @@ D01（Harness）与 D02（桌面壳）应从合并后的 `develop` 拉分支，�
 
 | SHA | 说明 |
 | --- | --- |
-| `9052062` | `build: add pnpm workspace baseline` |
-| `a3748d6` | `ci: add windows quality workflow` |
-| `0ff63e7` | `feat(shared): add secret redaction helper` |
-| `fba1844` | `docs: record development setup and baseline report` |
+| `905206229cd95ec1ac15d7385ca70a736accf17d` | `build: add pnpm workspace baseline` |
+| `a3748d6b308325b60e159d77a7927c7df01619ba` | `ci: add windows quality workflow` |
+| `0ff63e740e284050952b8721888fd1b98ecd021f` | `feat(shared): add secret redaction helper` |
+| `fba1844bc4722ece1761e01db66666f64686b7e7` | `docs: record development setup and baseline report` |
 | `fbe96eef605bb215b1e0c937babd04116c24bf9a` | `docs: make baseline report tip SHA authoritative` |
 | `66f39b85958890c3366806f4f98ae3e58d03605b` | `docs: finalize D00 report for zcode-desktop takeover` |
-| `9701492560907dc05e64163e463ed2185286c5e3` | `docs: record final tip SHA after zcode-desktop wrap-up` |
-| `2c95b32c8ed7f7a170d715b237c1aa7e489fda5e` | `docs: sync report tip SHA to HEAD` |
+| `2c95b32c8ed7f7a170d715b237c1aa7e489fda5e` | `docs: record final tip SHA after zcode-desktop wrap-up` |
 | `f996108d47c2f19d2373188344ae157d52ea1c70` | `docs: sync report tip SHA to HEAD` |
-
+| `443eee4976bb4e05f430fb09be56594a6edc04f7` | `docs: note authoritative tip via git rev-parse` |
 ## 10. 执行器切换与接管
 
 - 原执行器：DeepSeek Harness Desktop（deepseek-harness-desktop，standby）
