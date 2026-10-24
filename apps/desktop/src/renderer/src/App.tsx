@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useLayoutEffect, useRef, useState, type JSX } from "react";
+import { createPortal } from "react-dom";
 
 const SHAPES: { radius: string }[] = [
   { radius: "50%" },
@@ -48,7 +49,10 @@ type Msg = {
   reactions: Partial<Record<Emoji, number>>;
   mine: Emoji[];
   time: number;
-  notice: boolean;
+  /** Bot-to-bot interaction record; rendered as a centered line with the other bot's blob. */
+  notice: { label: string; otherKey: number } | null;
+  /** Set on bot-to-bot records: groups them into a per-peer "N 条消息往来" summary. */
+  peerKey?: number;
 };
 
 type ChatState = Record<number, Msg[]>;
@@ -304,14 +308,30 @@ export function App(): JSX.Element {
     setMenuDialog(null);
   };
 
+  const copyText = async (text: string): Promise<void> => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setToast("已复制");
+    } catch {
+      try {
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        ta.style.position = "fixed";
+        ta.style.opacity = "0";
+        document.body.append(ta);
+        ta.select();
+        const ok = document.execCommand("copy");
+        ta.remove();
+        setToast(ok ? "已复制" : "复制失败（占位环境限制）");
+      } catch {
+        setToast("复制失败（占位环境限制）");
+      }
+    }
+  };
+
   const copyBotId = async (botKey: number): Promise<void> => {
     const id = `bot-${botKey}`;
-    try {
-      await navigator.clipboard.writeText(id);
-      setToast(`已复制 ${id}`);
-    } catch {
-      setToast("复制失败（占位环境限制）");
-    }
+    await copyText(id);
     setMenu(null);
   };
 
@@ -365,7 +385,7 @@ export function App(): JSX.Element {
             reactions: {},
             mine: [],
             time: Date.now(),
-            notice: false,
+            notice: null,
           },
         ],
       };
@@ -391,7 +411,7 @@ export function App(): JSX.Element {
             reactions: {},
             mine: [],
             time: Date.now(),
-            notice: false,
+            notice: null,
           },
         ],
       };
@@ -413,7 +433,7 @@ export function App(): JSX.Element {
               reactions: {},
               mine: [],
               time: Date.now(),
-              notice: true,
+              notice: null,
             },
           ],
         };
@@ -471,42 +491,80 @@ export function App(): JSX.Element {
     setGroupMenu(null);
   };
 
-  const talkTo = (fromKey: number, toKey: number): void => {
+    const talkTo = (fromKey: number, toKey: number): void => {
     const from = bots.find((b) => b.key === fromKey);
     const to = bots.find((b) => b.key === toKey);
     if (!from || !to) {
       return;
     }
-    let text: string;
+    const now = Date.now();
     if (from.group !== to.group) {
       const g1 = groups.find((g) => g.key === from.group)?.name ?? "?";
       const g2 = groups.find((g) => g.key === to.group)?.name ?? "?";
-      text = `无法发起：不同分组的 Bot 无法主动交流（${g1} ↔ ${g2}）。`;
-    } else {
-      text = `已与「${to.name}」建立会话（占位，无后端）。`;
-    }
-    setChats((prev) => {
-      const list = prev[fromKey] ?? [];
-      return {
+      setChats((prev) => ({
         ...prev,
         [fromKey]: [
-          ...list,
+          ...(prev[fromKey] ?? []),
           {
-            id: Date.now() + 2,
+            id: now + 2,
             from: "bot",
-            text,
+            text: `无法发起：不同分组的 Bot 无法主动交流（${g1} ↔ ${g2}）。`,
             quote: null,
             reactions: {},
             mine: [],
-            time: Date.now(),
-            notice: true,
+            time: now,
+            notice: null,
           },
         ],
-      };
-    });
+      }));
+      return;
+    }
+    // Bot-to-bot pass: record it on both sides, Grok style.
+    setChats((prev) => ({
+      ...prev,
+      [fromKey]: [
+        ...(prev[fromKey] ?? []),
+        {
+          id: now + 2,
+          from: "bot",
+          text: "",
+          quote: null,
+          reactions: {},
+          mine: [],
+          time: now,
+          notice: { label: "已发消息给", otherKey: toKey },
+          peerKey: toKey,
+        },
+      ],
+      [toKey]: [
+        ...(prev[toKey] ?? []),
+        {
+          id: now + 3,
+          from: "bot",
+          text: "",
+          quote: null,
+          reactions: {},
+          mine: [],
+          time: now,
+          notice: { label: "消息来自", otherKey: fromKey },
+          peerKey: fromKey,
+        },
+        {
+          id: now + 4,
+          from: "bot",
+          text: `（占位）收到来自「${from.name}」的交流请求。`,
+          quote: null,
+          reactions: {},
+          mine: [],
+          time: now + 1,
+          peerKey: fromKey,
+          notice: null,
+        },
+      ],
+    }));
   };
 
-  const logout = (): void => {
+const logout = (): void => {
     setAccountName("本地用户");
     setTheme("dark");
     setEditingName(false);
@@ -710,6 +768,8 @@ export function App(): JSX.Element {
               onSend={(t) => sendUserMessage(selectedBot, t)}
               onReact={(msgId, emoji) => toggleReaction(selectedBot, msgId, emoji)}
               onTalkTo={(otherKey) => talkTo(selectedBot, otherKey)}
+              onCopy={(t) => void copyText(t)}
+              onAttach={() => setToast("添加附件（后续提供）")}
             />
           ) : (
             <div className="empty-state">
@@ -1102,21 +1162,55 @@ export function App(): JSX.Element {
 
 function MessageBubble({
   msg,
-  shape,
-  color,
   onReact,
   onQuote,
+  onCopy,
 }: {
   msg: Msg;
-  shape: number;
-  color: string;
   onReact: (msgId: number, emoji: Emoji) => void;
   onQuote: (msg: Msg) => void;
+  onCopy: (text: string) => void;
 }): JSX.Element {
   const isUser = msg.from === "user";
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const emojiBtnRef = useRef<HTMLButtonElement | null>(null);
+  const pickerRef = useRef<HTMLDivElement | null>(null);
+  const [pickerPos, setPickerPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+
+  useLayoutEffect(() => {
+    if (!pickerOpen || !pickerRef.current || !emojiBtnRef.current) {
+      return;
+    }
+    const btn = emojiBtnRef.current.getBoundingClientRect();
+    const r = pickerRef.current.getBoundingClientRect();
+    const margin = 8;
+    let x = btn.right - r.width;
+    let y = btn.top - r.height - 6;
+    if (y < margin) {
+      y = btn.bottom + 6;
+    }
+    x = Math.min(Math.max(margin, x), Math.max(margin, window.innerWidth - r.width - margin));
+    y = Math.min(Math.max(margin, y), Math.max(margin, window.innerHeight - r.height - margin));
+    setPickerPos({ x, y });
+  }, [pickerOpen]);
+
+  useEffect(() => {
+    if (!pickerOpen) {
+      return;
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setPickerOpen(false);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [pickerOpen]);
+
   return (
     <div className={"msg-row" + (isUser ? " user" : "")}>
-      {!isUser && <BlobFace shape={shape} color={color} size={34} />}
       <div className="hover-wrap">
         <div className={"msg-bubble" + (isUser ? " user" : "")}>
           {msg.quote && (
@@ -1141,29 +1235,83 @@ function MessageBubble({
             </div>
           )}
         </div>
-        <div className="hover-actions" role="toolbar" aria-label="消息操作">
-          {EMOJIS.map((e) => (
-            <button
-              key={e}
-              type="button"
-              className="react-btn"
-              data-emoji={e}
-              title={`回应 ${e}`}
-              onClick={() => onReact(msg.id, e)}
-            >
-              {e}
-            </button>
-          ))}
-          <button
-            type="button"
-            className="react-btn"
-            data-action="quote"
-            title="引用"
-            onClick={() => onQuote(msg)}
-          >
-            ↩
-          </button>
-        </div>
+        {pickerOpen &&
+          createPortal(
+            <>
+              <div className="menu-overlay" onClick={() => setPickerOpen(false)} />
+              <div
+                ref={pickerRef}
+                className="emoji-picker"
+                role="menu"
+                aria-label="选择表情"
+                style={{ left: pickerPos.x, top: pickerPos.y }}
+              >
+                {EMOJIS.map((e) => (
+                  <button
+                    key={e}
+                    type="button"
+                    className="react-btn"
+                    data-emoji={e}
+                    title={`回应 ${e}`}
+                    onClick={() => {
+                      onReact(msg.id, e);
+                      setPickerOpen(false);
+                    }}
+                  >
+                    {e}
+                  </button>
+                ))}
+              </div>
+            </>,
+            document.body,
+          )}
+      </div>
+      <div className="msg-actions" role="toolbar" aria-label="消息操作">
+        <button
+          type="button"
+          className={"msg-icon-btn" + (pickerOpen ? " active" : "")}
+          data-action="emoji"
+          title="回应"
+          ref={emojiBtnRef}
+          onClick={() => setPickerOpen((v) => !v)}
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
+            <circle cx="9.2" cy="10" r="1" fill="currentColor" />
+            <circle cx="14.8" cy="10" r="1" fill="currentColor" />
+            <path d="M8.6 14a4.2 4.2 0 0 0 6.8 0" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          className="msg-icon-btn"
+          data-action="quote"
+          title="引用"
+          onClick={() => onQuote(msg)}
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M9.5 14.5 4 9l5.5-5.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M4 9h10a6 6 0 0 1 6 6v5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          className="msg-icon-btn"
+          data-action="copy"
+          title="复制"
+          onClick={() => onCopy(msg.text)}
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="9" y="9" width="11" height="11" rx="2.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
+            <path
+              d="M5 15H4.5A1.5 1.5 0 0 1 3 13.5v-9A1.5 1.5 0 0 1 4.5 3h9A1.5 1.5 0 0 1 15 4.5V5"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              strokeLinecap="round"
+            />
+          </svg>
+        </button>
       </div>
     </div>
   );
@@ -1180,6 +1328,8 @@ function BotsPlaceholder({
   onSend,
   onReact,
   onTalkTo,
+  onCopy,
+  onAttach,
 }: {
   bots: Bot[];
   groups: Group[];
@@ -1191,9 +1341,12 @@ function BotsPlaceholder({
   onSend: (text: string) => void;
   onReact: (msgId: number, emoji: Emoji) => void;
   onTalkTo: (otherKey: number) => void;
+  onCopy: (text: string) => void;
+  onAttach: () => void;
 }): JSX.Element {
   const [draft, setDraft] = useState("");
   const [plusOpen, setPlusOpen] = useState(false);
+  const [detailPeer, setDetailPeer] = useState<number | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
   const me = bots.find((b) => b.key === selectedBot);
 
@@ -1227,38 +1380,74 @@ function BotsPlaceholder({
         静态占位 · 无网络请求 · 不同分组的 Bot 无法主动交流
       </p>
       <div className="chat" ref={listRef}>
-        {msgs.map((m) => {
-          const showTime = lastShownTime === 0 || m.time - lastShownTime >= FIVE_MINUTES;
-          if (showTime) {
-            lastShownTime = m.time;
-          }
-          return (
-            <Fragment key={m.id}>
-              {showTime && <div className="msg-time">{formatTime(m.time)}</div>}
-              {m.from === "bot" && m.notice && (
-                <div className="msg-notice">
-                  消息来自
-                  <BlobFace shape={me.shape} color={PALETTE[me.color]!} size={14} />
-                  {me.name}
-                </div>
-              )}
-              <MessageBubble
-                msg={m}
-                shape={me.shape}
-                color={PALETTE[me.color]!}
-                onReact={onReact}
-                onQuote={onQuote}
-              />
-              {m.from === "user" && (
-                <div className="msg-notice">
-                  已发消息给
-                  <BlobFace shape={me.shape} color={PALETTE[me.color]!} size={14} />
-                  {me.name}
-                </div>
-              )}
-            </Fragment>
-          );
-        })}
+        {(() => {
+          const peerCounts = new Map<number, number>();
+          const peerLastIdx = new Map<number, number>();
+          msgs.forEach((m, idx) => {
+            if (m.peerKey !== undefined) {
+              peerCounts.set(m.peerKey, (peerCounts.get(m.peerKey) ?? 0) + 1);
+              peerLastIdx.set(m.peerKey, idx);
+            }
+          });
+          return msgs.map((m, idx) => {
+            const showTime = lastShownTime === 0 || m.time - lastShownTime >= FIVE_MINUTES;
+            if (showTime) {
+              lastShownTime = m.time;
+            }
+            if (m.peerKey !== undefined) {
+              if (peerLastIdx.get(m.peerKey) !== idx) {
+                return <Fragment key={m.id} />;
+              }
+              const count = peerCounts.get(m.peerKey) ?? 0;
+              const peer = bots.find((b) => b.key === m.peerKey);
+              return (
+                <Fragment key={m.id}>
+                  {showTime && <div className="msg-time">{formatTime(m.time)}</div>}
+                  <button
+                    type="button"
+                    className="chat-summary"
+                    title="查看消息往来详情"
+                    onClick={() => setDetailPeer(m.peerKey!)}
+                  >
+                    {count} 条消息往来：
+                    <BlobFace
+                      shape={peer?.shape ?? me.shape}
+                      color={PALETTE[peer?.color ?? 0]!}
+                      size={16}
+                    />
+                    {peer?.name ?? "?"}
+                  </button>
+                </Fragment>
+              );
+            }
+            return (
+              <Fragment key={m.id}>
+                {showTime && <div className="msg-time">{formatTime(m.time)}</div>}
+                {m.notice && (
+                  <div className="msg-notice">
+                    {m.notice.label}
+                    <BlobFace
+                      shape={bots.find((b) => b.key === m.notice?.otherKey)?.shape ?? me.shape}
+                      color={
+                        PALETTE[bots.find((b) => b.key === m.notice?.otherKey)?.color ?? me.color]!
+                      }
+                      size={16}
+                    />
+                    {bots.find((b) => b.key === m.notice?.otherKey)?.name ?? "?"}
+                  </div>
+                )}
+                {!m.notice && (
+                  <MessageBubble
+                    msg={m}
+                    onReact={onReact}
+                    onQuote={onQuote}
+                    onCopy={onCopy}
+                  />
+                )}
+              </Fragment>
+            );
+          });
+        })()}
         {msgs.length === 0 && <div className="sys-line">会话为空。</div>}
       </div>
       {quoteDraft && (
@@ -1285,29 +1474,55 @@ function BotsPlaceholder({
           {plusOpen && (
             <>
               <div className="menu-overlay" onClick={() => setPlusOpen(false)} />
-              <div className="composer-menu" role="menu" aria-label="发起交流">
-                <div className="composer-menu-title">发起交流</div>
-                {others.length === 0 && (
-                  <div className="composer-menu-empty">还没有其他 Bot。</div>
-                )}
-                {others.map((b) => (
+              <div className="composer-menu" role="menu" aria-label="更多">
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="menu-item"
+                  onClick={() => {
+                    setPlusOpen(false);
+                    onAttach();
+                  }}
+                >
+                  <MenuIcon d="M21 12.5 12.5 21a5 5 0 0 1-7-7l8-8a3.5 3.5 0 0 1 5 5l-8 8a1.8 1.8 0 0 1-2.5-2.5L15 4.5" />
+                  添加附件
+                </button>
+                <div className="menu-sep" />
+                <div className="menu-sub-wrap">
                   <button
-                    key={b.key}
                     type="button"
                     role="menuitem"
                     className="menu-item"
-                    onClick={() => {
-                      onTalkTo(b.key);
-                      setPlusOpen(false);
-                    }}
+                    onClick={(e) => e.currentTarget.focus()}
                   >
-                    <BlobFace shape={b.shape} color={PALETTE[b.color]!} size={26} />
-                    <span className="tab-title">{b.name}</span>
-                    <span className="composer-menu-hint">
-                      {groups.find((g) => g.key === b.group)?.name ?? "?"}
-                    </span>
+                    <MenuIcon d="M8 12h8m-8 0a3 3 0 1 1 3-3m-3 3a3 3 0 0 0 3 3m5-6h3a3 3 0 0 1 0 6h-3m-2 0a3 3 0 1 0 3 3" />
+                    发起交流
+                    <span className="menu-arrow">›</span>
                   </button>
-                ))}
+                  <div className="submenu" role="menu" aria-label="选择 Bot">
+                    {others.length === 0 && (
+                      <div className="composer-menu-empty">还没有其他 Bot。</div>
+                    )}
+                    {others.map((b) => (
+                      <button
+                        key={b.key}
+                        type="button"
+                        role="menuitem"
+                        className="menu-item"
+                        onClick={() => {
+                          onTalkTo(b.key);
+                          setPlusOpen(false);
+                        }}
+                      >
+                        <BlobFace shape={b.shape} color={PALETTE[b.color]!} size={22} />
+                        <span className="tab-title">{b.name}</span>
+                        <span className="composer-menu-hint">
+                          {groups.find((g) => g.key === b.group)?.name ?? "?"}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
             </>
           )}
@@ -1341,6 +1556,75 @@ function BotsPlaceholder({
           ↑
         </button>
       </div>
+      {detailPeer !== null &&
+        createPortal(
+          <div className="modal-backdrop" onClick={() => setDetailPeer(null)}>
+            <div
+              className="chat-detail"
+              role="dialog"
+              aria-modal="true"
+              aria-label="消息往来详情"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <header className="detail-head">
+                <span className="page-chip">
+                  <BlobFace shape={me.shape} color={PALETTE[me.color]!} size={26} />
+                  <span className="detail-arrow">⇄</span>
+                  <BlobFace
+                    shape={bots.find((b) => b.key === detailPeer)?.shape ?? me.shape}
+                    color={PALETTE[bots.find((b) => b.key === detailPeer)?.color ?? 0]!}
+                    size={26}
+                  />
+                  {bots.find((b) => b.key === detailPeer)?.name ?? "?"}
+                </span>
+                <button type="button" className="pill-btn" onClick={() => setDetailPeer(null)}>
+                  关闭聊天
+                </button>
+              </header>
+              <div className="detail-body">
+                {msgs
+                  .filter((m) => m.peerKey === detailPeer)
+                  .map((m) => (
+                    <Fragment key={m.id}>
+                      <div className="msg-time">{formatTime(m.time)}</div>
+                      {m.notice ? (
+                        <div className="msg-notice">
+                          {m.notice.label}
+                          <BlobFace
+                            shape={
+                              bots.find((b) => b.key === m.notice?.otherKey)?.shape ?? me.shape
+                            }
+                            color={
+                              PALETTE[
+                                bots.find((b) => b.key === m.notice?.otherKey)?.color ?? 0
+                              ]!
+                            }
+                            size={16}
+                          />
+                          {bots.find((b) => b.key === m.notice?.otherKey)?.name ?? "?"}
+                        </div>
+                      ) : (
+                        <div className="detail-row">
+                          <BlobFace
+                            shape={bots.find((b) => b.key === detailPeer)?.shape ?? me.shape}
+                            color={
+                              PALETTE[bots.find((b) => b.key === detailPeer)?.color ?? 0]!
+                            }
+                            size={26}
+                          />
+                          <div className="msg-bubble">{m.text}</div>
+                        </div>
+                      )}
+                    </Fragment>
+                  ))}
+                {msgs.filter((m) => m.peerKey === detailPeer).length === 0 && (
+                  <div className="sys-line">暂无记录。</div>
+                )}
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }
