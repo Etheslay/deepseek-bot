@@ -1,6 +1,6 @@
 # 开发启动清单
 
-日期：2026-10-23。执行负责人：Etheslay。状态：阶段 0 进行中；0.1 完成 4/7（服务端强制受免费套餐限制暂缓）、0.2 完成 6/7（余对齐估时）、0.3 未开始。
+日期：2026-10-23。执行负责人：Etheslay。状态：阶段 0 进行中；0.1 完成 4/7（服务端强制受免费套餐限制暂缓）、0.2 完成 6/7（余对齐估时）、0.3 进行中（worktree 纪律已执行）。阶段 1 进行中：版本固定与环境基线完成，无 Key 冒烟通过，真实模型验证待 0.3 测试 Key（证据见 [D01_TECHNICAL_VERIFICATION](D01_TECHNICAL_VERIFICATION.md)）。
 
 本文是执行清单，只记录顺序与勾选状态；规则、验收标准和任务详情以各权威文档为准，冲突时以权威文档为准。勾选仅表示对应负责人已实际完成并留证，本文不构成完成声明。桌面侧（D02 / D05 / D07 / D09 / D11 / D13）条目由 Destinyian 认领后补充勾选。
 
@@ -32,9 +32,9 @@
 
 ### 0.3 资源准备
 
-- [ ] 准备专用低额度 DeepSeek 测试 Key 与费用预算；不复用个人主力 Key，不放入仓库。
-- [ ] 建立独立 clone/worktree 纪律：同一台机器多任务并行时不共用工作目录（[GIT_WORKFLOW](GIT_WORKFLOW.md) §3）。
-- [ ] 确认许可证义务：采用上游代码时保留其许可与第三方声明；本项目许可证在首次对外发布前由维护者决定（[README](../README.md)）。
+- [ ] 准备专用低额度 DeepSeek 测试 Key 与费用预算；不复用个人主力 Key，不放入仓库。（阻塞阶段 1 真实验证项）
+- [x] 建立独立 clone/worktree 纪律：同一台机器多任务并行时不共用工作目录（[GIT_WORKFLOW](GIT_WORKFLOW.md) §3）。（2026-10-23：D01 以 `.worktrees/harness-adapter` 独立工作树执行，主工作目录保留另一并行任务分支）
+- [ ] 确认许可证义务：采用上游代码时保留其许可与第三方声明；本项目许可证在首次对外发布前由维护者决定（[README](../README.md)）。（上游 MIT 与 THIRD_PARTY_NOTICES.md 已核实，见 D01_TECHNICAL_VERIFICATION §3；项目自身许可证未定）
 
 ## 阶段 1：D01 `feature/harness-adapter`（Etheslay）
 
@@ -44,13 +44,13 @@
 
 ### 版本固定与环境基线
 
-- [ ] 核实上游 `0.2.1-rc.2` / 提交 `687f282e` 对应的 npm 发行包可用性与完整性，记录固定版本映射。
-- [ ] 本机核对 Node `^22.19.0 || >=24`、pnpm 11.28.5；不执行来源未知的安装脚本。
-- [ ] 产出依赖许可清单。
+- [x] 核实上游 `0.2.1-rc.2` / 提交 `687f282e` 对应的 npm 发行包可用性与完整性，记录固定版本映射。（2026-10-23：双注册表 dist-tags 一致；tarball sha512/sha1 校验通过；源码浅检出核对 86 项依赖映射无增减；见 D01_TECHNICAL_VERIFICATION §1）
+- [x] 本机核对 Node `^22.19.0 || >=24`、pnpm 11.28.5；不执行来源未知的安装脚本。（Node v24.15.0 满足；pnpm 本机 11.7.0 与上游固定 11.28.5 不一致，消费发行包实测不受影响，处置见 D01_TECHNICAL_VERIFICATION §2；安装全程 `--ignore-scripts`，跳过脚本与原生预编译清单见 §4）
+- [x] 产出依赖许可清单。（86 项直接依赖全部 MIT，逐项 registry 元数据核对，见 D01_TECHNICAL_VERIFICATION §3 / §7；传递依赖清单待 D03 锁文件）
 
 ### 真实接入验证（临时独立数据根 + 测试 Key）
 
-- [ ] 最小 profile 配置启动真实 Harness。
+- [x] 最小 profile 配置启动真实 Harness。（2026-10-23 无 Key 预验证：web profile 启动、127.0.0.1 回环绑定、token 401、强制终止后端口释放均通过，见 D01_TECHNICAL_VERIFICATION §4；不含模型调用，含 Key 的完整验证仍待执行）
 - [ ] 验证流式消息与工具开始/结束事件。
 - [ ] 验证审批允许/拒绝、取消、超时。
 - [ ] 确定接入方式（SDK / headless / 受支持插件桥）并记录取舍。
@@ -59,8 +59,8 @@
 ### 稳定性与 Windows 专项
 
 - [ ] 重启 Host：会话历史可读、失败/中断状态准确、孤儿进程回收。
-- [ ] Windows 工具进程回收与原生依赖兼容。
-- [ ] 记录额外外联、默认 telemetry、profile 数据位置；关闭不符合本地设计的能力。
+- [ ] Windows 工具进程回收与原生依赖兼容。（部分：原生预编译清单与 `--ignore-scripts` 启动通过，PTY 未验证，见 D01_TECHNICAL_VERIFICATION §4）
+- [ ] 记录额外外联、默认 telemetry、profile 数据位置；关闭不符合本地设计的能力。（记录完成：DSH_HOME 数据位置、默认遥测端点、外联面检索、DISABLED patch 实测生效，见 D01_TECHNICAL_VERIFICATION §5；Host 内固定关闭待实现）
 
 ### 指标与产出
 
