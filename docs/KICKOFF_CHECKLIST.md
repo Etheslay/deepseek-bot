@@ -1,6 +1,6 @@
 # 开发启动清单
 
-日期：2026-10-23。执行负责人：Etheslay。状态：阶段 0 进行中；0.1 完成 4/7（服务端强制受免费套餐限制暂缓）、0.2 完成 6/7（余对齐估时）、0.3 进行中（worktree 纪律已执行）。阶段 1 进行中：版本固定与环境基线完成，无 Key 冒烟通过，真实模型验证待 0.3 测试 Key（证据见 [D01_TECHNICAL_VERIFICATION](D01_TECHNICAL_VERIFICATION.md)）。
+日期：2026-10-23。执行负责人：Etheslay。状态：阶段 0 进行中；0.1 完成 4/7（服务端强制受免费套餐限制暂缓）、0.2 完成 6/7（余对齐估时）、0.3 进行中（worktree 纪律已执行）。阶段 1 进行中：版本固定、无 Key 冒烟与真实接入验证（测试 Key）完成，余审批端到端、PTY、正式性能基线（证据见 [D01_TECHNICAL_VERIFICATION](D01_TECHNICAL_VERIFICATION.md)）。
 
 本文是执行清单，只记录顺序与勾选状态；规则、验收标准和任务详情以各权威文档为准，冲突时以权威文档为准。勾选仅表示对应负责人已实际完成并留证，本文不构成完成声明。桌面侧（D02 / D05 / D07 / D09 / D11 / D13）条目由 Destinyian 认领后补充勾选。
 
@@ -50,23 +50,23 @@
 
 ### 真实接入验证（临时独立数据根 + 测试 Key）
 
-- [x] 最小 profile 配置启动真实 Harness。（2026-10-23 无 Key 预验证：web profile 启动、127.0.0.1 回环绑定、token 401、强制终止后端口释放均通过，见 D01_TECHNICAL_VERIFICATION §4；不含模型调用，含 Key 的完整验证仍待执行）
-- [ ] 验证流式消息与工具开始/结束事件。
-- [ ] 验证审批允许/拒绝、取消、超时。
-- [ ] 确定接入方式（SDK / headless / 受支持插件桥）并记录取舍。
-- [ ] 未提供 Key 时如实记录"真实验证未执行"，不以桩替代结论。
+- [x] 最小 profile 配置启动真实 Harness。（无 Key 预验证见 D01_TECHNICAL_VERIFICATION §4；2026-10-24 含 Key 真实轮次完成，见 §8.1）
+- [x] 验证流式消息与工具开始/结束事件。（2026-10-24：SDK wire 每轮 18 条 `session.event` 实时推送；`tool/call`/`tool/result` 含 isError 与 sourceEventSeqs 溯源；样本存 docs/fixtures/d01/）
+- [ ] 验证审批允许/拒绝、取消、超时。（部分：取消/中断=终止+`session/resume` 修复已实测，`turn/end reason=interrupted`、seq 跨重启延续；审批协议缺口已记录——SDK server→client 请求上游未启用，需插件桥/web API 决策；超时无上游 API，需 Host 层；见 D01_TECHNICAL_VERIFICATION §8.2/§8.3）
+- [x] 确定接入方式（SDK / headless / 受支持插件桥）并记录取舍。（2026-10-24：首选 `dsh --profile sdk` JSON-RPC stdio，方法签名自固定版本 types 核验并实测；headless 作单任务冒烟（默认 deepseek-flash+high 推理，成本偏高）；审批需插件桥或 web API，见 §6/§8）
+- [x] 未提供 Key 时如实记录"真实验证未执行"，不以桩替代结论。（2026-10-23 无 Key 阶段如实记录；Key 到位后完成 §8 真实验证）
 
 ### 稳定性与 Windows 专项
 
-- [ ] 重启 Host：会话历史可读、失败/中断状态准确、孤儿进程回收。
-- [ ] Windows 工具进程回收与原生依赖兼容。（部分：原生预编译清单与 `--ignore-scripts` 启动通过，PTY 未验证，见 D01_TECHNICAL_VERIFICATION §4）
+- [x] 重启 Host：会话历史可读、失败/中断状态准确、孤儿进程回收。（2026-10-24：SIGKILL 中断后新进程 `session/resume` 修复成功，历史保留、`reason=interrupted` 准确记录、seq 连续；强杀 web 服务后端口释放无孤儿，见 D01_TECHNICAL_VERIFICATION §8.2）
+- [ ] Windows 工具进程回收与原生依赖兼容。（部分：fs 工具真实调用正常、预编译清单齐全；PTY 与 koffi/node-pty 安装脚本未启用验证）
 - [ ] 记录额外外联、默认 telemetry、profile 数据位置；关闭不符合本地设计的能力。（记录完成：DSH_HOME 数据位置、默认遥测端点、外联面检索、DISABLED patch 实测生效，见 D01_TECHNICAL_VERIFICATION §5；Host 内固定关闭待实现）
 
 ### 指标与产出
 
-- [ ] 实测进程树内存、冷启动、包体基线，回填 ADR-0001 接受条件；超预算时提 ADR。
-- [ ] 原始事件样本脱敏后存为契约测试夹具。
-- [ ] 输出不支持能力列表。
+- [ ] 实测进程树内存、冷启动、包体基线，回填 ADR-0001 接受条件；超预算时提 ADR。（粗测已有：SDK 冷启动 4.1–5.1s/暖 4.0s、web 首启 15–25s、RSS ~187MB、node_modules 535MB，见 D01_TECHNICAL_VERIFICATION §8.5；正式基线与回填待做）
+- [x] 原始事件样本脱敏后存为契约测试夹具。（docs/fixtures/d01/：34+29 事件，路径与身份已脱敏、无 Key 形态字符串，契约映射见其 README）
+- [x] 输出不支持能力列表。（D01_TECHNICAL_VERIFICATION §8.4：无取消方法、无审批通道、无超时 API、desktop profile 保留、headless 默认高推理档等）
 - [ ] PR 记录针对最新提交的自审（SHA、证据、结论）后合并。
 
 阶段 1 与 D02（Destinyian）并行；M0 退出条件为接入方式、平台、预算与桌面边界可评审。

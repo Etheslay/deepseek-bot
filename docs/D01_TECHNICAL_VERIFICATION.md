@@ -4,7 +4,7 @@
 
 执行环境：Windows 11 x64（本机内核 10.0.26100）、Node v24.15.0、pnpm 11.7.0、npm 11.12.1。所有安装与运行均在仓库外的临时隔离目录完成，未触碰仓库与个人数据。
 
-**状态：版本固定、完整性与无 Key 冒烟已完成并留证；真实模型调用验证未执行（专用测试 Key 未就绪，见 §6），本文不以桩替代该项结论。**
+**状态：版本固定、完整性与无 Key 冒烟（2026-10-23，§1–§5）与真实接入验证（2026-10-24，测试 Key，§8）已完成并留证；审批端到端、PTY/原生脚本、正式性能基线仍未执行（§6），本文对未验证项如实标注。**
 
 ## 1. 版本固定与映射
 
@@ -71,24 +71,22 @@
 - CLI 拒绝 `desktop` profile（保留给 Electron 宿主），与 [ADR-0001](adr/0001-desktop-and-runtime.md) 的参考关系一致。
 - 配置 dump 全文 URL 检索仅命中遥测收集端点一处；未发现默认更新检查或其他遥测外联。运行时级的外联观测（含模型 API）列入 §6 受控网络项。
 
-## 6. 接入方式初步结论与未执行清单
+## 6. 接入方式结论与未执行清单
 
-### 初步结论（待真实联调确认）
+### 结论（2026-10-24 经真实验证确认，证据见 §8）
 
-- 首选接入：`dsh --profile sdk`——JSON-RPC over stdio；stdout 专用于换行分隔 JSON-RPC 帧；stdin EOF 触发启动器有界关闭；模型提供方、模型与工作区 cwd 经 SDK 初始化请求传入；SDK 组合包禁用模型生成会话标题（不发起辅助模型请求，利于预算控制）。
-- 辅助：`dsh web`（本地 UI，可用于调试与验收对照）；`dsh --profile headless` 可作单任务冒烟。
-- 以上依据为固定版本随附 README 与类型入口（`@deepseek-ai/dsh-sdk-app`）。JSON-RPC 方法级签名必须从固定版本 `dsh-sdk-jsonrpc-server` 的文档与类型核验后才能写入本项目契约（遵守 [HARNESS_INTEGRATION](HARNESS_INTEGRATION.md) §3，不臆测官方方法名）。
+- **首选接入：`dsh --profile sdk`**（JSON-RPC over stdio）。方法面自固定版本源码 `packages/sdk/protocol/src/types.ts` 核验，并经真实客户端实测：`initialize {cwd, provider, model, reasoningEffort?, maxTokens?}` → `{serverInfo:{name:"deepseek-harness-sdk-runtime"}}`；`session/prompt {sessionId, contentBlocks}` → `{messageId}` 持久入队回执；`session/resume {sessionId}` 修复中断轮次；`session/wait` 等待空闲；`shutdown` 优雅退出（exit 0）。通知：`session.event`（每会话持久事件，不过滤）、`session.status`（agent running/idle 转换）、`subagent.started/finished`。
+- 辅助：`dsh web`（本地 UI）；`dsh --profile headless` 单任务冒烟可用（注意其默认模型为 `deepseek-flash` 且 `reasoningEffort: high`，并有标题生成 LLM 请求，成本高于 SDK 路径；SDK 组合包禁用标题 LLM，已实测确认）。
+- 会话按客户端指定的 sessionId + 工作目录分桶持久化；事件 `seq` 全局单调且跨进程重启连续。
 
-### 未执行清单（不以桩替代结论）
+### 未执行清单（不以桩替代结论，2026-10-24 更新）
 
-1. 真实模型调用验证：流式消息、工具开始/结束事件、审批允许/拒绝、取消、超时（前置：0.3 专用低额度测试 Key）。
-2. 重启 Host 后：会话历史可读、失败/中断状态准确、孤儿进程回收的数据级验证。
-3. 原始事件样本采集与脱敏契约夹具（依赖第 1 项）。
-4. JSON-RPC 方法级签名核验（`dsh-sdk-jsonrpc-server`）。
-5. 优雅关闭路径复核与 `--no-open` 启动复核。
-6. 正式内存 / 冷启动 / 包体基线测量，回填 [ADR-0001](adr/0001-desktop-and-runtime.md) 接受条件。
-7. 启用 install scripts 的对照安装（koffi / node-pty）与 PTY 功能验证。
-8. 受控网络观测：确认除遥测（已禁用）与模型 API 外无其他外联。
+1. 审批允许/拒绝端到端：SDK 协议的 server→client 请求能力上游未启用（Python SDK 应答接口为未来审批预留），需先做受支持插件桥 / web API 接入决策（D08/D09 输入，见 §8.4）。
+2. PTY/终端功能与 koffi / node-pty 安装脚本的受控启用对照验证。
+3. 正式性能基线（进程树内存、包体、冷启动分布）与 ADR-0001 接受条件回填；§8.6 仅有粗测值。
+4. 受控网络观测：确认除遥测（应已 DISABLED）与模型 API 外无其他运行时外联。
+5. 将事件样本落成 D03 可执行契约测试（样本已存 [fixtures/d01](fixtures/d01/README.md)）。
+6. 遥测 DISABLED patch 在 Host 中的常驻化（本阶段仅验证 patch 机制）。
 
 ## 7. 直接依赖许可清单（86 项，registry 元数据核对）
 
@@ -180,3 +178,55 @@
 | commander | 15.0.0 | MIT |
 | js-yaml | 4.3.2 | MIT |
 | node-addon-require-builtin | 0.1.9 | MIT |
+
+## 8. 真实接入验证结果（2026-10-24，测试 Key）
+
+验证环境与 §4 相同（隔离临时目录 + 独立 `DSH_HOME`）。测试 Key 由操作者预先配置于本机环境变量（`sk-` 前缀 35 字符，DeepSeek Key 形态），启动时注入 `DEEPSEEK_API_KEY`；值未打印、未写入任何文件或本记录。是否为 0.3 要求的专用低额度 Key 由负责人认定。
+
+### 8.1 真实调用与流式
+
+| 项 | 结果 |
+| --- | --- |
+| headless 文本轮次 | 提示"仅回复 OK"→ 输出 `OK`，退出码 0 |
+| headless 工具轮次 | 模型真实调用 write/read 工具；磁盘产物验证一致（hello.txt，内容 "hi"） |
+| SDK 握手 | `initialize` 返回 `serverInfo: deepseek-harness-sdk-runtime/0.0.1`；冷启动 4.1–5.1 秒（含首次模板初始化）、暖启动 4.0 秒 |
+| SDK 提示词 | `session/prompt` 回执 14–16 ms（持久入队 `{messageId}`）；完整模型轮次约 1.0 秒（`deepseek-chat`） |
+| 事件流 | 每轮 `session.event` 18 条 + `session.status` 2 条实时推送；事件词汇与会话持久日志完全一致 |
+| 工具事件 | 持久日志与 wire 均观测 `tool/call` / `tool/result`；`tool/result` 带 `message.isError`、`meta`（operation/path）与 `sourceEventSeqs` 溯源 |
+| 优雅关闭 | `shutdown` 应答后 dispose 并 exit 0 |
+| 计费规模 | 全部验证共约 5 次微请求，远低于轻量预算关注线 |
+
+默认模型事实：headless 默认路由 `deepseek-flash` + `reasoningEffort: high`、maxTokens 256000（`request/header` 事件）；SDK 可在 `initialize` 显式指定模型（本次用 `deepseek-chat` 控制成本）。
+
+### 8.2 取消 / 中断 / 重启恢复（已验证）
+
+- 上游 SDK 协议**没有取消方法**（协议文档明示：放弃轮次的方式是关闭运行时进程）。
+- 实测：轮次进行中 SIGKILL 进程 → 新进程 `session/resume {sessionId}` 返回 `{}` 成功 → 续轮可用；恢复后日志将中断轮记为 `turn/end reason.kind = "interrupted"`，事件 `seq` 跨重启延续（不重置、不重放历史）。
+- 结论：宿主取消语义 = 终止进程 + `session/resume` 修复，与本项目 CONTRACTS 的 `interrupted` 状态与恢复模型吻合；`CANCELLED` / `TOOL_TIMEOUT` 需 Host 层实现（上游无请求级超时 API）。
+
+### 8.3 审批（存在协议缺口）
+
+- 事件层已观测：`approval/policy`（"ask"）、`permission/preset`（"workspace-write"）、`sandbox/mode`。
+- 协议层缺口：server→client 请求能力存在但上游从未使用（传输支持、Python SDK 应答接口为未来审批预留）——**SDK 客户端当前无法驱动审批**。web UI 经自身 HTTP API 操作审批（本阶段未验证）。
+- 对 D08/D09：审批链路需经受支持插件桥（Cordis 插件挂接 user-approval 服务）或 web API，不能依赖当前 SDK 协议。
+- 权限设计输入：`edit` 工具 schema 内建 `sandbox_permissions` 一次性提权枚举（`workspace-write` → `danger-full-access`，需 `justification`）。
+
+### 8.4 不支持能力列表（上游 0.2.1-rc.2，经验证）
+
+1. SDK 协议无取消/会话关闭方法（放弃 = 关闭进程；恢复 = `session/resume`）。
+2. SDK 协议无审批驱动通道（server→client 请求未启用）。
+3. SDK 协议无请求级超时参数；无协议版本协商（握手仅 `serverInfo.version` 0.0.1，无兼容承诺——升级需走 HARNESS_INTEGRATION §5 流程）。
+4. CLI 拒绝 `desktop` profile（保留给 Electron 宿主）；npm CLI 不提供插件管理（`dsh plugin` 转发 pnpm，仅限 profile 使用）。
+5. headless 默认路由为高推理档模型并发起标题生成 LLM 请求（成本控制需在组合层显式覆盖）。
+
+### 8.5 指标（粗测，正式基线待 §6 第 3 项）
+
+- SDK 冷启动（initialize 完成）4.1–5.1 s；暖启动 4.0 s；prompt 回执 14–16 ms；轮次 ~1.0 s。
+- web profile 首次启动 15–25 s（模板初始化）；进程 RSS ~187 MB（单样本）。
+- 安装足迹：node_modules 535 MB（含全部直接+传递依赖；打包需裁剪，正式包体基线待 D11 阶段口径）。
+
+### 8.6 原始事件样本
+
+- [fixtures/d01/tool-run-session.jsonl](fixtures/d01/tool-run-session.jsonl)（34 事件，headless 工具轮次）
+- [fixtures/d01/interrupt-resume-session.jsonl](fixtures/d01/interrupt-resume-session.jsonl)（29 事件，SDK 中断+恢复）
+- 脱敏规则与契约映射见 [fixtures/d01/README.md](fixtures/d01/README.md)。
