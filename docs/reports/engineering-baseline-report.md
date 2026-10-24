@@ -2,10 +2,10 @@
 
 - 任务：D00 协作区 / 共享工程基线
 - 分支：`feature/engineering-baseline`
-- 最新 SHA：`1451185ddf365e73c55e911e9cd3b0c57aa66c5c`
+- 最新 SHA：以本分支 tip 为准（验收时执行 `git rev-parse HEAD`）。文档内容提交短 SHA 见第 9 节。
 - PR：未创建（本机执行；由 Push 推远程并开草稿 PR → `develop`）
 - 环境：Windows 11 x64；Node v24.16.0；pnpm 11.28.5（corepack prepare）；执行时区 America/Los_Angeles
-- 基线：开工时 `origin/develop` = `1451185ddf365e73c55e911e9cd3b0c57aa66c5c`
+- 基线：开工时 `origin/develop` = `fba1844`
 - `feature/parallel-decision`：已合并，PR #5（`7ecbbba`）
 
 ## 1. 开工门禁
@@ -187,5 +187,5 @@ D01（Harness）与 D02（桌面壳）应从合并后的 `develop` 拉分支，�
 | `9052062` | `build: add pnpm workspace baseline` |
 | `a3748d6` | `ci: add windows quality workflow` |
 | `0ff63e7` | `feat(shared): add secret redaction helper` |
-| `1451185` | `docs: record development setup and baseline report` |
+| `fba1844` | `docs: record development setup and baseline report` |
 
