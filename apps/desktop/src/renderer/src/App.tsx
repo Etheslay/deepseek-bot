@@ -1,5 +1,8 @@
-import { Fragment, useEffect, useLayoutEffect, useRef, useState, type JSX } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type JSX } from "react";
 import { createPortal } from "react-dom";
+import { useBots, type UiBot } from "./features/bots/use-bots.js";
+import { BotForm } from "./features/bots/bot-form.js";
+import type { BotDraft } from "./services/desktop-service.js";
 
 const SHAPES: { radius: string }[] = [
   { radius: "50%" },
@@ -27,15 +30,6 @@ const PALETTE = [
 ];
 
 type Group = { key: number; name: string };
-type Bot = {
-  key: number;
-  name: string;
-  shape: number;
-  color: number;
-  group: number;
-  unread: boolean;
-};
-
 const UNGROUPED = 1;
 
 const EMOJIS = ["👍", "👎", "❤️", "😂", "🎉"] as const;
@@ -49,25 +43,27 @@ type Msg = {
   reactions: Partial<Record<Emoji, number>>;
   mine: Emoji[];
   time: number;
-  /** Bot-to-bot interaction record; rendered as a centered line with the other bot's blob. */
-  notice: { label: string; otherKey: number } | null;
-  /** Set on bot-to-bot records: groups them into a per-peer "N 条消息往来" summary. */
-  peerKey?: number;
+  /** Which bot spoke; for `from: "bot"` messages defaults to the chat owner. */
+  speakerKey?: number;
+  /** System notices (e.g. blocked cross-group requests) render as a centered muted line. */
+  system?: boolean;
 };
 
 type ChatState = Record<number, Msg[]>;
 
-const FIVE_MINUTES = 5 * 60 * 1000;
-
 function formatTime(t: number): string {
   const d = new Date(t);
-  return `${d.getHours()}:${String(d.getMinutes()).padStart(2, "0")}`;
+  const hm = `${d.getHours()}:${String(d.getMinutes()).padStart(2, "0")}`;
+  const now = new Date();
+  const sameDay =
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate();
+  return sameDay ? hm : `${d.getMonth() + 1}/${d.getDate()} ${hm}`;
 }
 
 type MenuState = { x: number; y: number; botKey: number };
-type DialogState =
-  | { type: "newGroup"; moveBot: number | null }
-  | { type: "rename"; botKey: number };
+type DialogState = { type: "newGroup"; moveBot: number | null };
 
 function BlobMark(): JSX.Element {
   return (
@@ -116,13 +112,22 @@ export function App(): JSX.Element {
   const [version, setVersion] = useState<string>("…");
 
   const [modalOpen, setModalOpen] = useState(false);
-  const [botName, setBotName] = useState("");
+  const [editingBot, setEditingBot] = useState<UiBot | null>(null);
   const [shape, setShape] = useState(0);
   const [color, setColor] = useState(2);
   const [modalGroup, setModalGroup] = useState<number>(UNGROUPED);
 
   const [groups, setGroups] = useState<Group[]>([{ key: UNGROUPED, name: "未分组" }]);
-  const [bots, setBots] = useState<Bot[]>([]);
+  const {
+    bots,
+    create: createBotEntity,
+    update: updateBotEntity,
+    archive: archiveBotEntity,
+    duplicate: duplicateBotEntity,
+    setUi,
+    moveToTop,
+    hide,
+  } = useBots(UNGROUPED);
 
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [menuDialog, setMenuDialog] = useState<DialogState | null>(null);
@@ -248,64 +253,60 @@ export function App(): JSX.Element {
   }, [toast]);
 
   const selectedBotName =
-    bots.find((b) => b.key === selectedBot)?.name ?? "DeepSeek Bot";
+    bots.find((b) => b.key === selectedBot)?.bot.name ?? "DeepSeek Bot";
 
-  const openModal = () => {
-    setBotName("");
+  const openCreateBotModal = () => {
     setShape(0);
     setColor(2);
     setModalGroup(
       groups.find((g) => g.name === "未分组")?.key ?? groups[0]?.key ?? UNGROUPED,
     );
+    setEditingBot(null);
     setModalOpen(true);
   };
 
-  const createBot = () => {
-    const name = botName.trim();
-    if (!name) {
-      return;
-    }
-    setBots((prev) => [
-      ...prev,
-      { key: Date.now(), name, shape, color, group: modalGroup, unread: false },
-    ]);
-    setModalOpen(false);
+  const openEditBotModal = (bot: UiBot) => {
+    setEditingBot(bot);
+    setModalOpen(true);
   };
 
-  const withBot = (botKey: number, fn: (b: Bot) => Bot): void => {
-    setBots((prev) => prev.map((b) => (b.key === botKey ? fn(b) : b)));
+  const submitBotDraft = async (
+    draft: BotDraft,
+  ): Promise<{ ok: boolean; errorCode?: string }> => {
+    if (editingBot) {
+      const result = await updateBotEntity(editingBot.bot.id, draft);
+      if (result.ok) {
+        setModalOpen(false);
+        setToast("已保存");
+      }
+      return result;
+    }
+    const result = await createBotEntity(draft);
+    if (result.ok && result.key !== undefined) {
+      setUi(result.key, { shape, color, group: modalGroup });
+      setModalOpen(false);
+      setToast("已创建");
+    }
+    return result;
   };
 
   const pinBot = (botKey: number): void => {
-    setBots((prev) => {
-      const target = prev.find((b) => b.key === botKey);
-      if (!target) {
-        return prev;
-      }
-      return [target, ...prev.filter((b) => b.key !== botKey)];
-    });
+    moveToTop(botKey);
     setToast("已置顶");
     setMenu(null);
   };
 
   const moveToGroup = (botKey: number, groupKey: number): void => {
     const g = groups.find((x) => x.key === groupKey);
-    withBot(botKey, (b) => ({ ...b, group: groupKey }));
+    setUi(botKey, { group: groupKey });
     setToast(g ? `已移至「${g.name}」` : "已移动");
     setMenu(null);
   };
 
   const toggleUnread = (botKey: number): void => {
-    withBot(botKey, (b) => ({ ...b, unread: !b.unread }));
+    const b = bots.find((x) => x.key === botKey);
+    setUi(botKey, { unread: !(b?.unread ?? false) });
     setMenu(null);
-  };
-
-  const renameBot = (botKey: number, name: string): void => {
-    const n = name.trim();
-    if (n) {
-      withBot(botKey, (b) => ({ ...b, name: n }));
-    }
-    setMenuDialog(null);
   };
 
   const copyText = async (text: string): Promise<void> => {
@@ -328,15 +329,15 @@ export function App(): JSX.Element {
       }
     }
   };
-
   const copyBotId = async (botKey: number): Promise<void> => {
-    const id = `bot-${botKey}`;
+    const menuTarget = bots.find((b) => b.key === botKey);
+    const id = menuTarget?.bot.id ?? `bot-${botKey}`;
     await copyText(id);
     setMenu(null);
   };
 
   const removeBot = (botKey: number, why: string): void => {
-    setBots((prev) => prev.filter((b) => b.key !== botKey));
+    hide(botKey);
     if (selectedBot === botKey) {
       setSelectedBot(null);
     }
@@ -349,45 +350,39 @@ export function App(): JSX.Element {
       return;
     }
     const name = dialogText.trim();
-    if (menuDialog.type === "newGroup") {
-      if (!name) {
-        return;
-      }
-      const key = Date.now();
-      setGroups((prev) => [...prev, { key, name }]);
-      if (menuDialog.moveBot !== null) {
-        withBot(menuDialog.moveBot, (b) => ({ ...b, group: key }));
-        setToast(`已创建分组「${name}」并移入`);
-      } else {
-        setToast(`已创建分组「${name}」`);
-      }
-    } else if (name) {
-      renameBot(menuDialog.botKey, name);
-      setToast("已重命名");
+    if (!name) {
       return;
+    }
+    const key = Date.now();
+    setGroups((prev) => [...prev, { key, name }]);
+    if (menuDialog.moveBot !== null) {
+      setUi(menuDialog.moveBot, { group: key });
+      setToast(`已创建分组「${name}」并移入`);
+    } else {
+      setToast(`已创建分组「${name}」`);
     }
     setMenuDialog(null);
   };
 
-  const ensureChat = (bot: Bot): void => {
+  const ensureChat = (bot: UiBot): void => {
     setChats((prev) => {
       if (prev[bot.key]) {
         return prev;
       }
       return {
         ...prev,
-        [bot.key]: [
-          {
-            id: bot.key,
-            from: "bot",
-            text: `hello，我是 ${bot.name}，有什么可以为你服务的吗`,
-            quote: null,
-            reactions: {},
-            mine: [],
-            time: Date.now(),
-            notice: null,
-          },
-        ],
+      [bot.key]: [
+        {
+          id: bot.key,
+          from: "bot",
+          text: `hello，我是 ${bot.bot.name}，有什么可以为你服务的吗`,
+          quote: null,
+          reactions: {},
+          mine: [],
+          time: Date.now(),
+          speakerKey: bot.key,
+        },
+      ],
       };
     });
   };
@@ -411,7 +406,6 @@ export function App(): JSX.Element {
             reactions: {},
             mine: [],
             time: Date.now(),
-            notice: null,
           },
         ],
       };
@@ -433,7 +427,7 @@ export function App(): JSX.Element {
               reactions: {},
               mine: [],
               time: Date.now(),
-              notice: null,
+              speakerKey: botKey,
             },
           ],
         };
@@ -470,8 +464,8 @@ export function App(): JSX.Element {
       setToast("已在该分组");
       return;
     }
-    withBot(botKey, (x) => ({ ...x, group: groupKey }));
-    setToast(`已将「${b.name}」拖至「${g.name}」`);
+    setUi(botKey, { group: groupKey });
+    setToast(`已将「${b.bot.name}」拖至「${g.name}」`);
   };
 
   const deleteGroup = (groupKey: number): void => {
@@ -491,7 +485,7 @@ export function App(): JSX.Element {
     setGroupMenu(null);
   };
 
-    const talkTo = (fromKey: number, toKey: number): void => {
+  const talkTo = (fromKey: number, toKey: number): void => {
     const from = bots.find((b) => b.key === fromKey);
     const to = bots.find((b) => b.key === toKey);
     if (!from || !to) {
@@ -513,54 +507,36 @@ export function App(): JSX.Element {
             reactions: {},
             mine: [],
             time: now,
-            notice: null,
+            system: true,
           },
         ],
       }));
       return;
     }
-    // Bot-to-bot pass: record it on both sides, Grok style.
+    // Bot-to-bot dialogue: both sides keep the same transcript, rendered as a real conversation.
+    const turns: { speaker: number; text: string }[] = [
+      { speaker: fromKey, text: `${to.bot.name}，在吗？我是 ${from.bot.name}。` },
+      { speaker: toKey, text: `在的 ${from.bot.name}，什么事？` },
+      {
+        speaker: fromKey,
+        text: "先占个位——等真实模型接入后，我们就能这样面对面聊天了。",
+      },
+      { speaker: toKey, text: "好啊，到时候聊个痛快。" },
+    ];
+    const transcript = turns.map((t, i) => ({
+      id: now + 1 + i,
+      from: "bot" as const,
+      text: t.text,
+      quote: null,
+      reactions: {},
+      mine: [] as Emoji[],
+      time: now + i,
+      speakerKey: t.speaker,
+    }));
     setChats((prev) => ({
       ...prev,
-      [fromKey]: [
-        ...(prev[fromKey] ?? []),
-        {
-          id: now + 2,
-          from: "bot",
-          text: "",
-          quote: null,
-          reactions: {},
-          mine: [],
-          time: now,
-          notice: { label: "已发消息给", otherKey: toKey },
-          peerKey: toKey,
-        },
-      ],
-      [toKey]: [
-        ...(prev[toKey] ?? []),
-        {
-          id: now + 3,
-          from: "bot",
-          text: "",
-          quote: null,
-          reactions: {},
-          mine: [],
-          time: now,
-          notice: { label: "消息来自", otherKey: fromKey },
-          peerKey: fromKey,
-        },
-        {
-          id: now + 4,
-          from: "bot",
-          text: `（占位）收到来自「${from.name}」的交流请求。`,
-          quote: null,
-          reactions: {},
-          mine: [],
-          time: now + 1,
-          peerKey: fromKey,
-          notice: null,
-        },
-      ],
+      [fromKey]: [...(prev[fromKey] ?? []), ...transcript],
+      [toKey]: [...(prev[toKey] ?? []), ...transcript.map((m) => ({ ...m }))],
     }));
   };
 
@@ -597,7 +573,7 @@ const logout = (): void => {
             className="circle-btn clickable"
             aria-label="创建新 Bot"
             title="创建新 Bot"
-            onClick={openModal}
+            onClick={openCreateBotModal}
           >
             <svg viewBox="0 0 24 24">
               <line x1="12" y1="5" x2="12" y2="19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
@@ -711,7 +687,10 @@ const logout = (): void => {
                     <BlobFace shape={b.shape} color={PALETTE[b.color]!} size={36} />
                     <span className="tab-label">
                       <span className="tab-title">
-                        {b.name}
+                        {b.bot.name}
+                        {b.bot.archivedAt !== null && (
+                          <span className="archived-tag">已归档</span>
+                        )}
                         {b.unread && <span className="unread-dot" aria-label="未读" />}
                       </span>
                       <span className="tab-hint">会话内占位 · 未持久化</span>
@@ -760,7 +739,7 @@ const logout = (): void => {
               onQuote={(m) => {
                 const sender =
                   m.from === "bot"
-                    ? bots.find((b) => b.key === selectedBot)?.name ?? "Bot"
+                    ? bots.find((b) => b.key === (m.speakerKey ?? selectedBot))?.bot.name ?? "Bot"
                     : "我";
                 setQuoteDraft({ name: sender, text: m.text.slice(0, 60) });
               }}
@@ -775,7 +754,7 @@ const logout = (): void => {
             <div className="empty-state">
               <BlobMark />
               <p>创建一个 Bot 开始使用</p>
-              <button type="button" className="primary-btn" onClick={openModal}>
+              <button type="button" className="primary-btn" onClick={openCreateBotModal}>
                 创建 Bot
               </button>
             </div>
@@ -790,7 +769,7 @@ const logout = (): void => {
             ref={menuRef}
             className="menu"
             role="menu"
-            aria-label={`Bot 操作：${menuBot.name}`}
+            aria-label={`Bot 操作：${menuBot.bot.name}`}
             style={{ left: menu.x, top: menu.y }}
           >
             <button type="button" role="menuitem" className="menu-item" onClick={() => pinBot(menuBot.key)}>
@@ -841,13 +820,43 @@ const logout = (): void => {
               role="menuitem"
               className="menu-item"
               onClick={() => {
-                setDialogText(menuBot.name);
-                setMenuDialog({ type: "rename", botKey: menuBot.key });
+                openEditBotModal(menuBot);
                 setMenu(null);
               }}
             >
               <MenuIcon d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5Z" />
-              重命名 Bot
+              编辑 Bot
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className="menu-item"
+              onClick={() => {
+                void (async () => {
+                  const result = await duplicateBotEntity(menuBot.bot.id);
+                  setToast(result.ok ? "已复制（副本）" : "复制失败");
+                })();
+                setMenu(null);
+              }}
+            >
+              <MenuIcon d="M9 9h10v12H9zM5 15H3V3h12v2" />
+              复制 Bot
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className={"menu-item" + (menuBot.bot.archivedAt === null ? "" : " disabled-hint")}
+              disabled={menuBot.bot.archivedAt !== null}
+              onClick={() => {
+                void (async () => {
+                  const result = await archiveBotEntity(menuBot.bot.id);
+                  setToast(result.ok ? "已归档：不能发起新聊天，历史会话保留" : "归档失败");
+                })();
+                setMenu(null);
+              }}
+            >
+              <MenuIcon d="M3 8h18M6 8V5h12v3M7 8l1 13h8l1-13" />
+              {menuBot.bot.archivedAt === null ? "归档 Bot" : "已归档"}
             </button>
             <button type="button" role="menuitem" className="menu-item" onClick={() => void copyBotId(menuBot.key)}>
               <MenuIcon d="M9 9h10v12H9zM5 15H3V3h12v2" />
@@ -872,11 +881,11 @@ const logout = (): void => {
             className="modal compact"
             role="dialog"
             aria-modal="true"
-            aria-label={menuDialog.type === "newGroup" ? "创建分组" : "重命名 Bot"}
+            aria-label="创建分组"
             onClick={(e) => e.stopPropagation()}
           >
             <header className="modal-head">
-              <h3>{menuDialog.type === "newGroup" ? "创建分组" : "重命名 Bot"}</h3>
+              <h3>创建分组</h3>
               <button type="button" className="modal-close" aria-label="关闭" onClick={() => setMenuDialog(null)}>
                 ×
               </button>
@@ -884,7 +893,7 @@ const logout = (): void => {
             <div className="modal-body">
               <input
                 className="name-input"
-                placeholder={menuDialog.type === "newGroup" ? "分组名称" : "Bot 名称"}
+                placeholder="分组名称"
                 value={dialogText}
                 maxLength={40}
                 autoFocus
@@ -914,90 +923,87 @@ const logout = (): void => {
             className="modal"
             role="dialog"
             aria-modal="true"
-            aria-label="创建新 Bot"
+            aria-label={editingBot ? "编辑机器人" : "创建新 Bot"}
             onClick={(e) => e.stopPropagation()}
           >
             <header className="modal-head">
-              <h3>创建新 Bot</h3>
+              <h3>{editingBot ? "编辑机器人" : "创建新 Bot"}</h3>
               <button type="button" className="modal-close" aria-label="关闭" onClick={() => setModalOpen(false)}>
                 ×
               </button>
             </header>
             <div className="modal-body">
-              <div className="preview">
-                <BlobFace shape={shape} color={PALETTE[color]!} size={140} />
-              </div>
-              <input
-                className="name-input"
-                placeholder="给你的 Bot 起个名字"
-                value={botName}
-                maxLength={40}
-                autoFocus
-                onChange={(e) => setBotName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    createBot();
-                  }
-                }}
+              {!editingBot && (
+                <>
+                  <div className="preview">
+                    <BlobFace shape={shape} color={PALETTE[color]!} size={100} />
+                  </div>
+                  <div className="shape-grid" role="radiogroup" aria-label="形状">
+                    {SHAPES.map((sh, i) => (
+                      <button
+                        key={i}
+                        type="button"
+                        role="radio"
+                        aria-checked={shape === i}
+                        className={shape === i ? "shape-btn selected" : "shape-btn"}
+                        onClick={() => setShape(i)}
+                      >
+                        <BlobFace shape={i} color={PALETTE[color]!} size={44} />
+                      </button>
+                    ))}
+                  </div>
+                  <div className="color-grid" role="radiogroup" aria-label="颜色">
+                    {PALETTE.map((c, i) => (
+                      <button
+                        key={c}
+                        type="button"
+                        role="radio"
+                        aria-checked={color === i}
+                        className={color === i ? "color-btn selected" : "color-btn"}
+                        style={{ background: c }}
+                        onClick={() => setColor(i)}
+                      />
+                    ))}
+                  </div>
+                  <label className="group-pick">
+                    分组
+                    <select
+                      value={modalGroup}
+                      disabled={groups.length === 0}
+                      onChange={(e) => setModalGroup(Number(e.target.value))}
+                    >
+                      {groups.map((g) => (
+                        <option key={g.key} value={g.key}>
+                          {g.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </>
+              )}
+              <BotForm
+                key={editingBot?.bot.id ?? "new"}
+                {...(editingBot
+                  ? {
+                      initial: {
+                        name: editingBot.bot.name,
+                        instructions: editingBot.bot.instructions,
+                        modelProfileId: editingBot.bot.modelProfileId,
+                        workspaceId: editingBot.bot.workspaceId,
+                        toolPolicyId: editingBot.bot.toolPolicyId,
+                      },
+                    }
+                  : {})}
+                submitLabel={editingBot ? "保存" : "创建"}
+                onSubmit={submitBotDraft}
+                onCancel={() => setModalOpen(false)}
               />
-              <div className="shape-grid" role="radiogroup" aria-label="形状">
-                {SHAPES.map((s, i) => (
-                  <button
-                    key={i}
-                    type="button"
-                    role="radio"
-                    aria-checked={shape === i}
-                    className={shape === i ? "shape-btn selected" : "shape-btn"}
-                    onClick={() => setShape(i)}
-                  >
-                    <BlobFace shape={i} color={PALETTE[color]!} size={44} />
-                  </button>
-                ))}
-              </div>
-              <div className="color-grid" role="radiogroup" aria-label="颜色">
-                {PALETTE.map((c, i) => (
-                  <button
-                    key={c}
-                    type="button"
-                    role="radio"
-                    aria-checked={color === i}
-                    className={color === i ? "color-btn selected" : "color-btn"}
-                    style={{ background: c }}
-                    onClick={() => setColor(i)}
-                  />
-                ))}
-              </div>
-              <label className="group-pick">
-                分组
-                <select
-                  value={modalGroup}
-                  disabled={groups.length === 0}
-                  onChange={(e) => setModalGroup(Number(e.target.value))}
-                >
-                  {groups.map((g) => (
-                    <option key={g.key} value={g.key}>
-                      {g.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
             </div>
-            <footer className="modal-foot">
-              <button type="button" className="ghost-btn" onClick={() => setModalOpen(false)}>
-                取消
-              </button>
-              <button
-                type="button"
-                className="primary-btn"
-                disabled={!botName.trim() || groups.length === 0}
-                onClick={createBot}
-              >
-                创建
-              </button>
-            </footer>
           </div>
         </div>
       )}
+
+      
 
       {groupMenu && (
         <>
@@ -1162,16 +1168,19 @@ const logout = (): void => {
 
 function MessageBubble({
   msg,
+  speaker,
   onReact,
   onQuote,
   onCopy,
 }: {
   msg: Msg;
+  speaker: UiBot | null;
   onReact: (msgId: number, emoji: Emoji) => void;
   onQuote: (msg: Msg) => void;
   onCopy: (text: string) => void;
 }): JSX.Element {
   const isUser = msg.from === "user";
+  const timeLabel = formatTime(msg.time);
   const [pickerOpen, setPickerOpen] = useState(false);
   const emojiBtnRef = useRef<HTMLButtonElement | null>(null);
   const pickerRef = useRef<HTMLDivElement | null>(null);
@@ -1210,8 +1219,21 @@ function MessageBubble({
   }, [pickerOpen]);
 
   return (
-    <div className={"msg-row" + (isUser ? " user" : "")}>
+    <div className={"msg-row" + (isUser ? " user" : " bot")}>
+      {!isUser && speaker && (
+        <BlobFace shape={speaker.shape} color={PALETTE[speaker.color]!} size={34} />
+      )}
       <div className="hover-wrap">
+        {!isUser && speaker ? (
+          <div className="sender-line">
+            <span className="sender-name" style={{ color: PALETTE[speaker.color]! }}>
+              {speaker.bot.name}
+            </span>
+            <span className="msg-stamp">{timeLabel}</span>
+          </div>
+        ) : (
+          <div className="msg-stamp user-stamp">{timeLabel}</div>
+        )}
         <div className={"msg-bubble" + (isUser ? " user" : "")}>
           {msg.quote && (
             <div className="msg-quote">
@@ -1331,7 +1353,7 @@ function BotsPlaceholder({
   onCopy,
   onAttach,
 }: {
-  bots: Bot[];
+  bots: UiBot[];
   groups: Group[];
   selectedBot: number;
   msgs: Msg[];
@@ -1346,7 +1368,6 @@ function BotsPlaceholder({
 }): JSX.Element {
   const [draft, setDraft] = useState("");
   const [plusOpen, setPlusOpen] = useState(false);
-  const [detailPeer, setDetailPeer] = useState<number | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
   const me = bots.find((b) => b.key === selectedBot);
 
@@ -1363,8 +1384,7 @@ function BotsPlaceholder({
     );
   }
   const others = bots.filter((b) => b.key !== me.key);
-
-  let lastShownTime = 0;
+  const archived = me.bot.archivedAt !== null;
 
   const send = (): void => {
     if (!draft.trim()) {
@@ -1380,74 +1400,26 @@ function BotsPlaceholder({
         静态占位 · 无网络请求 · 不同分组的 Bot 无法主动交流
       </p>
       <div className="chat" ref={listRef}>
-        {(() => {
-          const peerCounts = new Map<number, number>();
-          const peerLastIdx = new Map<number, number>();
-          msgs.forEach((m, idx) => {
-            if (m.peerKey !== undefined) {
-              peerCounts.set(m.peerKey, (peerCounts.get(m.peerKey) ?? 0) + 1);
-              peerLastIdx.set(m.peerKey, idx);
-            }
-          });
-          return msgs.map((m, idx) => {
-            const showTime = lastShownTime === 0 || m.time - lastShownTime >= FIVE_MINUTES;
-            if (showTime) {
-              lastShownTime = m.time;
-            }
-            if (m.peerKey !== undefined) {
-              if (peerLastIdx.get(m.peerKey) !== idx) {
-                return <Fragment key={m.id} />;
-              }
-              const count = peerCounts.get(m.peerKey) ?? 0;
-              const peer = bots.find((b) => b.key === m.peerKey);
-              return (
-                <Fragment key={m.id}>
-                  {showTime && <div className="msg-time">{formatTime(m.time)}</div>}
-                  <button
-                    type="button"
-                    className="chat-summary"
-                    title="查看消息往来详情"
-                    onClick={() => setDetailPeer(m.peerKey!)}
-                  >
-                    {count} 条消息往来：
-                    <BlobFace
-                      shape={peer?.shape ?? me.shape}
-                      color={PALETTE[peer?.color ?? 0]!}
-                      size={16}
-                    />
-                    {peer?.name ?? "?"}
-                  </button>
-                </Fragment>
-              );
-            }
-            return (
-              <Fragment key={m.id}>
-                {showTime && <div className="msg-time">{formatTime(m.time)}</div>}
-                {m.notice && (
-                  <div className="msg-notice">
-                    {m.notice.label}
-                    <BlobFace
-                      shape={bots.find((b) => b.key === m.notice?.otherKey)?.shape ?? me.shape}
-                      color={
-                        PALETTE[bots.find((b) => b.key === m.notice?.otherKey)?.color ?? me.color]!
-                      }
-                      size={16}
-                    />
-                    {bots.find((b) => b.key === m.notice?.otherKey)?.name ?? "?"}
-                  </div>
-                )}
-                {!m.notice && (
-                  <MessageBubble
-                    msg={m}
-                    onReact={onReact}
-                    onQuote={onQuote}
-                    onCopy={onCopy}
-                  />
-                )}
-              </Fragment>
-            );
-          });
-        })()}
+        {msgs.map((m) => {
+          const speaker =
+            m.from === "bot"
+              ? bots.find((b) => b.key === (m.speakerKey ?? me.key)) ?? me
+              : null;
+          return m.system ? (
+            <div className="sys-line" key={m.id}>
+              {m.text}
+            </div>
+          ) : (
+            <MessageBubble
+              key={m.id}
+              msg={m}
+              speaker={speaker}
+              onReact={onReact}
+              onQuote={onQuote}
+              onCopy={onCopy}
+            />
+          );
+        })}
         {msgs.length === 0 && <div className="sys-line">会话为空。</div>}
       </div>
       {quoteDraft && (
@@ -1458,6 +1430,11 @@ function BotsPlaceholder({
           <button type="button" className="quote-cancel" aria-label="取消引用" onClick={onCancelQuote}>
             ×
           </button>
+        </div>
+      )}
+      {archived && (
+        <div className="archived-banner" role="status">
+          该机器人已归档：不能发起新聊天；历史会话仍可查看。
         </div>
       )}
       <div className="composer">
@@ -1515,7 +1492,7 @@ function BotsPlaceholder({
                         }}
                       >
                         <BlobFace shape={b.shape} color={PALETTE[b.color]!} size={22} />
-                        <span className="tab-title">{b.name}</span>
+                        <span className="tab-title">{b.bot.name}</span>
                         <span className="composer-menu-hint">
                           {groups.find((g) => g.key === b.group)?.name ?? "?"}
                         </span>
@@ -1529,10 +1506,10 @@ function BotsPlaceholder({
         </div>
         <input
           className="composer-input"
-          placeholder={`给 ${me.name} 发消息`}
+          placeholder={archived ? "已归档：不能发起新聊天" : `给 ${me.bot.name} 发消息`}
           value={draft}
           maxLength={200}
-          aria-label={`给 ${me.name} 发消息`}
+          aria-label={archived ? "已归档，不能发起新聊天" : `给 ${me.bot.name} 发消息`}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter") {
@@ -1552,79 +1529,10 @@ function BotsPlaceholder({
             />
           </svg>
         </span>
-        <button type="button" className="send-btn" aria-label="发送" disabled={!draft.trim()} onClick={send}>
+        <button type="button" className="send-btn" aria-label="发送" disabled={archived || !draft.trim()} onClick={send}>
           ↑
         </button>
       </div>
-      {detailPeer !== null &&
-        createPortal(
-          <div className="modal-backdrop" onClick={() => setDetailPeer(null)}>
-            <div
-              className="chat-detail"
-              role="dialog"
-              aria-modal="true"
-              aria-label="消息往来详情"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <header className="detail-head">
-                <span className="page-chip">
-                  <BlobFace shape={me.shape} color={PALETTE[me.color]!} size={26} />
-                  <span className="detail-arrow">⇄</span>
-                  <BlobFace
-                    shape={bots.find((b) => b.key === detailPeer)?.shape ?? me.shape}
-                    color={PALETTE[bots.find((b) => b.key === detailPeer)?.color ?? 0]!}
-                    size={26}
-                  />
-                  {bots.find((b) => b.key === detailPeer)?.name ?? "?"}
-                </span>
-                <button type="button" className="pill-btn" onClick={() => setDetailPeer(null)}>
-                  关闭聊天
-                </button>
-              </header>
-              <div className="detail-body">
-                {msgs
-                  .filter((m) => m.peerKey === detailPeer)
-                  .map((m) => (
-                    <Fragment key={m.id}>
-                      <div className="msg-time">{formatTime(m.time)}</div>
-                      {m.notice ? (
-                        <div className="msg-notice">
-                          {m.notice.label}
-                          <BlobFace
-                            shape={
-                              bots.find((b) => b.key === m.notice?.otherKey)?.shape ?? me.shape
-                            }
-                            color={
-                              PALETTE[
-                                bots.find((b) => b.key === m.notice?.otherKey)?.color ?? 0
-                              ]!
-                            }
-                            size={16}
-                          />
-                          {bots.find((b) => b.key === m.notice?.otherKey)?.name ?? "?"}
-                        </div>
-                      ) : (
-                        <div className="detail-row">
-                          <BlobFace
-                            shape={bots.find((b) => b.key === detailPeer)?.shape ?? me.shape}
-                            color={
-                              PALETTE[bots.find((b) => b.key === detailPeer)?.color ?? 0]!
-                            }
-                            size={26}
-                          />
-                          <div className="msg-bubble">{m.text}</div>
-                        </div>
-                      )}
-                    </Fragment>
-                  ))}
-                {msgs.filter((m) => m.peerKey === detailPeer).length === 0 && (
-                  <div className="sys-line">暂无记录。</div>
-                )}
-              </div>
-            </div>
-          </div>,
-          document.body,
-        )}
     </div>
   );
 }

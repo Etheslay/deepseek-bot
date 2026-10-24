@@ -1370,26 +1370,36 @@ body {
   flex: 0 0 auto;
 }
 
-/* ---------- chat time labels and notices ---------- */
+/* ---------- chat stamps and sender labels ---------- */
 
-.msg-time {
-  align-self: center;
-  color: var(--muted);
-  font-size: 0.78rem;
-  margin-top: 0.4rem;
-}
-
-.msg-notice {
-  align-self: center;
+/* bot-to-bot dialogue renders group-chat style: avatar beside the bubble,
+   sender name in the bot's color above it */
+.sender-line {
   display: flex;
-  align-items: center;
-  gap: 5px;
-  color: var(--muted);
-  font-size: 0.8rem;
+  align-items: baseline;
+  gap: 8px;
 }
 
-.msg-notice .blob-face {
-  padding: 2px;
+.sender-line .sender-name {
+  font-size: 0.8rem;
+  line-height: 1.2;
+  margin: 0 0 3px 4px;
+}
+
+.msg-row.bot > .blob-face {
+  flex: 0 0 auto;
+  margin-top: auto;
+  margin-bottom: 2px;
+}
+
+.msg-stamp {
+  font-size: 0.72rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.msg-row.user .user-stamp {
+  margin: 0 4px 3px 0;
 }
 
 /* ---------- empty state and new group button ---------- */
@@ -1442,77 +1452,85 @@ body {
   outline: 2px solid #8ab4ff;
 }
 
-/* ---------- chat summary and detail overlay ---------- */
+/* ---------- bot form (D05 contract fields) ---------- */
 
-.chat-summary {
-  align-self: center;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font: inherit;
+.bot-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  width: 100%;
+}
+
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
   font-size: 0.85rem;
   color: var(--muted);
-  background: transparent;
-  border: none;
-  border-radius: 999px;
-  padding: 0.3rem 0.8rem;
-  cursor: pointer;
 }
 
-.chat-summary:hover {
-  background: var(--item-hover);
+.form-field input,
+.form-field textarea,
+.form-field select {
+  font: inherit;
+  font-size: 0.95rem;
   color: var(--text);
+  background: var(--input-bg);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.5rem 0.7rem;
+  outline: none;
 }
 
-.chat-summary:focus-visible {
-  outline: 2px solid #8ab4ff;
+.form-field input:focus,
+.form-field textarea:focus,
+.form-field select:focus {
+  border-color: var(--settings);
 }
 
-.chat-detail {
-  width: 820px;
-  max-width: calc(100vw - 3rem);
-  height: 74vh;
-  display: flex;
-  flex-direction: column;
-  background: var(--modal-bg);
-  border-radius: 20px;
-  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.5);
-  overflow: hidden;
+.form-field textarea {
+  resize: vertical;
+  min-height: 72px;
 }
 
-.detail-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0.9rem 1.25rem;
-  border-bottom: 1px solid var(--border);
+.field-error {
+  font-style: normal;
+  font-size: 0.78rem;
+  color: #f87171;
 }
 
-.detail-head .page-chip .detail-arrow {
+.form-error {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #f87171;
+}
+
+/* ---------- archived bot markers ---------- */
+
+.archived-tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 6px;
+  background: var(--item-active);
   color: var(--muted);
-  font-size: 0.9rem;
-  margin: 0 0.2rem;
+  font-size: 0.7rem;
+  vertical-align: middle;
 }
 
-.detail-body {
-  flex: 1;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  padding: 1.1rem 1.5rem 1.4rem;
+.archived-banner {
+  max-width: 640px;
+  width: 100%;
+  margin: 0 auto;
+  background: var(--panel);
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  padding: 0.5rem 0.9rem;
+  font-size: 0.82rem;
+  color: var(--muted);
+  text-align: center;
 }
 
-.detail-body .msg-time {
-  margin-top: 0.5rem;
-}
-
-.detail-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.6rem;
-}
-
-.detail-row .msg-bubble {
-  max-width: 620px;
+.menu-item.disabled-hint {
+  opacity: 0.55;
 }

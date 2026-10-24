@@ -5,7 +5,8 @@
   "description": "Executable schemas, fixtures and contract tests for docs/CONTRACTS.md v0.1",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./fixtures/*": "./fixtures/*"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",

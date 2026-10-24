@@ -7,7 +7,20 @@
     "module": "ESNext",
     "moduleResolution": "bundler",
     "noEmit": true,
-    "types": []
+    "resolveJsonModule": true,
+    "types": [],
+    "paths": {
+      "@deepseek-bot/contracts": ["../../packages/contracts/src/index.ts"],
+      "@deepseek-bot/contracts/fixtures/*": ["../../packages/contracts/fixtures/*"]
+    },
+    "baseUrl": "."
   },
-  "include": ["src/renderer/src/**/*"]
+  "include": [
+    "src/renderer/src/**/*",
+    "../../packages/contracts/src/**/*.ts",
+    "../../packages/contracts/fixtures/**/*.json",
+    "tests/contracts-smoke.test.ts",
+    "tests/services/**/*.ts",
+    "tests/features/**/*.ts"
+  ]
 }
