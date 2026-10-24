@@ -71,8 +71,8 @@ D2-1～D2-8、D2-10、D2-11 已完成并有本地证据；D2-9（CI）因按指�
 
 ### D2-5 导航
 
-- 机器人 / 工作流 / 运行 / 设置四页可切换；脚本逐页点击并读取面板标题：`机器人`、`工作流`、`运行`、`设置`（顺序与期望一致）。
-- 截图：`d02-05-nav-bots.png`、`d02-05-nav-workflows.png`、`d02-05-nav-runs.png`、`d02-05-nav-settings.png`
+- 原验收为四占位页切换；**应负责人会话内指示，四个固定占位页（Bots/Workflows/Runs/Settings）与「导航」标签已移除**，主界面改为「选中 Bot 即会话」，侧边栏导航验收相应调整为分组与 Bot 导航：分组折叠/展开、右键分组删除、Bot 拖拽换组、右键菜单操作均实测通过（`d02-10`～`d02-15`、`d02-24`～`d02-26`）。
+- 无选中 Bot 时显示空状态（创建引导，`d02-03`）。
 
 ### D2-6 未授权 IPC
 
@@ -123,6 +123,11 @@ D2-1～D2-8、D2-10、D2-11 已完成并有本地证据；D2-9（CI）因按指�
 11. Bot 面板升级为会话视图：问候语成为首条消息；底部输入框「给 {名字} 发消息（占位，无真实模型）」，发送后出现用户气泡（右侧、品牌绿）与 Bot 占位回复。
 12. 消息 hover 操作条：悬停气泡右下浮现 👍 👎 ❤️ 😂 🎉 与 ↩（引用）；点击表情即在消息上计入反应（再次点击取消，气泡下方显示计数 chip，自己的反应高亮）；点击 ↩ 后输入框上方出现引用 chip，发送的消息携带嵌套引用展示。实测：发送「你好呀」得到占位回复、👍 计数 `👍 1`、引用发送后消息显示 `引用 我：你好呀`。截图：`d02-20-chat-reply.png`、`d02-21-hover-actions.png`、`d02-22-reactions.png`、`d02-23-quoted.png`。
 13. 侧边栏 Bot 拖拽换组：Bot 条目可拖动（拖起时头像 blob 作为拖拽影像跟随光标），分组区域为放置目标（拖拽经过时虚线高亮，空分组显示「拖到这里移入」提示）；放下即换组并弹 toast。实测：将「第二号」从测试组拖回未分组，toast `已将「第二号」拖至「未分组」`，计数随之变化；同组放置提示「已在该分组」。截图：`d02-24-drag-over.png`、`d02-25-dropped.png`。
+14. 分组折叠/展开：点击组名收起成员（箭头 ›/⌄ 指示），再点展开。实测折叠后 `tabs:0`、label `›测试组`。截图：`d02-26-collapsed.png`。
+15. 消息状态行与时间标签：用户消息下显示「已发消息给 {名字}」、Bot 回复/交流结果上显示「消息来自 {名字}」（带小头像）；时间标签遵守 5 分钟规则——距上一标签 ≥5 分钟才插入新 `HH:mm`，5 分钟内沿用，不逐句标时间。
+16. 移除四个固定占位页与「导航」标签（负责人指示）：侧边栏仅保留用户自建分组与 Bot；初始只有一个「未分组」分组，**分组可删除**（组名右键 → 删除分组；组内有 Bot 时拒绝并提示先移出）；主界面即选中 Bot 的会话，无选中时显示创建引导空状态；头部胶囊显示当前 Bot 名。
+17. 聊天布局改版：输入条固定底部（左 ＋ 圆钮、右麦克风占位与发送钮），移除中部信息卡片与独立「发起交流」卡片；发起交流收进 ＋ 菜单，结果（跨分组拒绝 / 同分组建立会话）以 Bot 消息呈现在会话内；移除侧边栏「＋ 新建分组」按钮（创建分组走 Bot 右键 → 移至 → 创建分组）。
+18. 新建 Bot 默认归入「未分组」；右键菜单与子菜单浮动智能定位：视口边缘自动翻转并钳位（左下角的 Bot 菜单合理出现在上方），子菜单方向自适应，不再被 UI 裁剪。
 
 范围判断：任务书红线「不做机器人 CRUD」针对真实功能与数据；以上为纯视觉/会话内占位，无持久化、无后端、无 Harness 触达。涉及真实实现的部分已列入第 11 节待办，不由本任务声称完成。
 
@@ -247,6 +252,7 @@ git branch -D feature/desktop-shell
   - `feat(desktop): add desktop shell with tray, navigation and restricted ipc`
   - `feat(desktop): add settings modal and remove redundant hide button`
   - `feat(desktop): add bot drag-drop between groups and message reactions with quoting`
+  - `feat(desktop): replace fixed pages with user-managed groups and docked composer`
 - 报告-only 提交：`docs: record desktop shell` 及后续 docs 提交（不改变代码；最终 PR head 的 CI 由 Approver 在合并前确认）
 
 各提交的完整 SHA 以 `git log feature/desktop-shell` 为准；本报告不自我引用 tip SHA。
