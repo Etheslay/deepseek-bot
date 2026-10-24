@@ -2,7 +2,7 @@
 
 - 任务：D00 协作区 / 共享工程基线
 - 分支：`ffeature/engineering-baseline`
-- 最新 tip SHA（接管时）：`fbe96eef605bb215b1e0c937babd04116c24bf9a`（短 SHA `fbe96ee`）；本收尾提交后以第 9 节最新行为准
+- 最新 tip SHA：`9701492560907dc05e64163e463ed2185286c5e3`（短 SHA `9701492`）；接管点曾为 `fbe96eef605bb215b1e0c937babd04116c24bf9a`
 - executor profile：`zcode-desktop`（ZCode Desktop 3.16.3；临时；产品运行时仍为 DeepSeek Harness）
 - 执行器交接：由 DeepSeek Harness Desktop 切换为 ZCode Desktop；接管本机既有分支 `ffeature/engineering-baseline` @ `fbe96eef605bb215b1e0c937babd04116c24bf9a`；只追加提交，未改写历史、未 force push
 - 最新 SHA：以本分支 tip 为准（验收时执行 `git rev-parse HEAD`）。文档内容提交短 SHA 见第 9 节。
@@ -216,6 +216,8 @@ D01（Harness）与 D02（桌面壳）应从合并后的 `develop` 拉分支，�
 | `0ff63e7` | `feat(shared): add secret redaction helper` |
 | `fba1844` | `docs: record development setup and baseline report` |
 | `fbe96eef605bb215b1e0c937babd04116c24bf9a` | `docs: make baseline report tip SHA authoritative` |
+| `66f39b85958890c3366806f4f98ae3e58d03605b` | `docs: finalize D00 report for zcode-desktop takeover` |
+| `9701492560907dc05e64163e463ed2185286c5e3` | `docs: record final tip SHA after zcode-desktop wrap-up` |
 
 ## 10. 执行器切换与接管
 
