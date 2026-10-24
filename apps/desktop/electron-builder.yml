@@ -1,0 +1,16 @@
+appId: com.deepseekbot.desktop
+productName: DeepSeek Bot
+directories:
+  output: release
+  buildResources: assets
+files:
+  - out/**/*
+  - package.json
+  - assets/**/*
+win:
+  target:
+    - target: dir
+      arch:
+        - x64
+  signAndEditExecutable: false
+asar: true

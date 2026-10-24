@@ -8,6 +8,8 @@ export default tseslint.config(
       "**/dist/**",
       "**/build/**",
       "**/coverage/**",
+      "**/out/**",
+      "**/release/**",
       "handoff/**",
     ],
   },

@@ -1,0 +1,32 @@
+{
+  "name": "@deepseek-bot/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "DeepSeek Bot desktop shell (Electron)",
+  "author": "Destinyian",
+  "main": "./out/main/index.cjs",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "test": "vitest run --config vitest.config.ts",
+    "pack:dir": "electron-vite build && electron-builder --dir --win --x64 --config electron-builder.yml"
+  },
+  "dependencies": {
+    "react": "19.1.1",
+    "react-dom": "19.1.1"
+  },
+  "devDependencies": {
+    "@types/react": "19.1.13",
+    "@types/react-dom": "19.1.9",
+    "@vitejs/plugin-react": "5.0.3",
+    "electron": "38.2.1",
+    "electron-builder": "24.13.3",
+    "electron-vite": "4.0.1",
+    "typescript": "5.9.3",
+    "vite": "7.1.7",
+    "vitest": "3.2.4",
+    "@types/node": "24.6.2"
+  }
+}
