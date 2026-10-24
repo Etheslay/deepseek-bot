@@ -20,7 +20,7 @@ src/renderer/src/services/
 
 - 创建/编辑表单（`features/bots/bot-form.tsx`）：名称、instructions、modelProfileId、workspaceId、toolPolicyId——`BotSchema` 校验，错误定位到字段。
 - 复制：新 id/revision + 名称“副本”，不复制会话（服务层强制）。
-- 归档：`archivedAt` 标记后侧边栏显示“已归档”，**不能发起新聊天**（服务层拒绝 + 输入禁用 + 横幅提示），历史会话仍可查看。
+- 归档：**Owner 决定移除归档 UI**（D05 UI 调整）；服务层 archive 能力保留但界面不提供入口，种子不含归档 Bot。
 - revision 冲突：`REVISION_CONFLICT` 提示并自动刷新列表。
 - 分组/置顶/未读等仍是会话内 UI 状态（CONTRACTS v0.1 无 Bot.group，不进契约）。
 

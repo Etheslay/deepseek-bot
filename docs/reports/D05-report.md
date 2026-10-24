@@ -44,6 +44,22 @@ Windows 11 x64（26200）；Node 24.16.0；pnpm 11.28.5；Electron 38.2.1；Reac
 
 **截图索引**（`docs/reports/assets/d05/`）：`d05-32-notice-line.png`（通知行时间线）、`d05-33-detail.png`、`d05-34-pair-view.png`（配对聊天视图）、`d05-40-streaming.png`（流式+取消）、`d05-41-history.png`（历史回放+产物）。设置弹窗新截图因 CDP captureScreenshot 在该弹窗打开时稳定超时未取得（已尝试 3 次），以 D5-5 行为日志 + D02 的 `assets/d02/d02-16-settings.png`（同一弹窗骨架）佐证，如实记录。
 
+## UI 追加调整（Owner 会话内指示，阶段 1；头像阶段 2 按指示跳过）
+
+依据 handoff/D05_UI_UPDATE_BRIEF.md 阶段 1 + 会话内追加反馈，全部 GUI 脚本实测通过（截图 assets/d05/ d05-50～55）：
+
+| 项 | 实现 | 实测 |
+| --- | --- | --- |
+| 底栏 UI-1/2/3 | 头像（字母占位）+ 账户名 + “本地工作台” + 齿轮（真 cogwheel 图标）；版本号移除，进 设置→关于 | footer 无版本串、关于行含版本 ✓ |
+| 归档移除 UI-4 | 侧栏标签/横幅/右键“归档”/禁用逻辑全部移除；种子不再含归档 Bot（服务层 archive 能力保留未用） | tags=0 banners=0、种子 2 Bot ✓；**FR-02 归档按 Owner 决定延期** |
+| 历史 UI-5 | 聊天头部时钟按钮 → popover（≤8 条：标题/时间/状态）→ 点选恢复会话视图；事件明细面板移除 | popover 2 会话、恢复视图如实提示“夹具无聊天消息，真实回放 D06/D12” ✓ |
+| 产物 UI-6 | 独立回形针入口 → popover 列表 + 预览（md 可看、HTML 拦截不变） | 2 产物、md 预览 ✓ |
+| 表单 UI-13/14/15 | 无标签软背景：名称 44px 居中、角色 96px、占位符正确；高级设置（模型/工作目录/工具授权）折叠进 <details>；名称空时创建禁用 | 全部 ✓（d05-54） |
+| 语气 chips（会话追加） | 9 个预置语气（凶悍/严肃/可爱/呆萌/幽默/温柔/毒舌/冷静/热血）虚线胶囊多选、选中浅蓝；“＋自定义”展开输入添加；提交时以（语气：…）附加到 instructions 末尾（UI-only） | 多选凶悍+呆萌+自定义“中二”→ 创建后编辑预填见后缀 ✓ |
+| 下拉暗色 | 原生 select option 暗底亮字 | Windows Chromium 原生弹层尽力而为，若仍发白需换自绘下拉（已知限制） |
+
+已知小问题：编辑时改选语气会叠加旧后缀（includes 防重只对完全相同后缀生效）；头像阶段 2（预置 16 动物/Emoji/图片上传）按 Owner 指示跳过，素材与组件骨架已就绪待做。
+
 ## 服务层与夹具说明
 
 见 [BOT_WORKSPACE.md](../BOT_WORKSPACE.md)。要点：`DesktopService` 接口 + `FixtureService` 唯一实现 + `contract-validation` 统一 schema 校验 + Context 注入；种子 Bot×3（1 归档）、会话×2（success-run/cancel-run 事件回放）、产物×2（md 可预览/html 拦截）、流式模拟（增量/工具/取消/RATE_LIMITED|AUTH_FAILED|MODEL_UNAVAILABLE 失败注入）。
