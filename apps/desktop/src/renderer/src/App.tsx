@@ -141,6 +141,16 @@ export function App(): JSX.Element {
   const [chatResult, setChatResult] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [theme, setTheme] = useState<"dark" | "light">("dark");
+  const [accountName, setAccountName] = useState("本地用户");
+  const [editingName, setEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState("");
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+  }, [theme]);
+
   useEffect(() => {
     let cancelled = false;
     void (async () => {
@@ -166,6 +176,8 @@ export function App(): JSX.Element {
         setMenu(null);
         setMenuDialog(null);
         setModalOpen(false);
+        setSettingsOpen(false);
+        setEditingName(false);
       }
     };
     window.addEventListener("keydown", onKey);
@@ -301,6 +313,22 @@ export function App(): JSX.Element {
     }
   };
 
+  const logout = (): void => {
+    setAccountName("本地用户");
+    setTheme("dark");
+    setEditingName(false);
+    setSettingsOpen(false);
+    setToast("已退出登录（占位，未接入账号系统）");
+  };
+
+  const saveName = (): void => {
+    const n = nameDraft.trim();
+    if (n) {
+      setAccountName(n);
+    }
+    setEditingName(false);
+  };
+
   const menuBot = menu ? bots.find((b) => b.key === menu.botKey) : undefined;
 
   return (
@@ -394,11 +422,19 @@ export function App(): JSX.Element {
             </div>
           );
         })}
-        <div className="sidebar-foot" title={version}>
-          <span className="avatar" aria-hidden="true">
-            D
-          </span>
-          <span className="foot-text">{version}</span>
+        <div className="sidebar-foot clickable" title={version}>
+          <button
+            type="button"
+            className="foot-btn"
+            aria-label="打开设置"
+            title="打开设置"
+            onClick={() => setSettingsOpen(true)}
+          >
+            <span className="avatar" aria-hidden="true">
+              {accountName.slice(0, 1).toUpperCase()}
+            </span>
+            <span className="foot-text">{version}</span>
+          </button>
         </div>
       </aside>
       <section className="content">
@@ -407,13 +443,6 @@ export function App(): JSX.Element {
             <BlobMark />
             {current.label}
           </span>
-          <button
-            type="button"
-            className="ghost-btn"
-            onClick={() => void window.deepseekBot.window.hide()}
-          >
-            隐藏到托盘
-          </button>
         </header>
         <main className="panel" role="tabpanel" aria-label={current.label}>
           {page === "bots" && selectedBot !== null ? (
@@ -637,6 +666,133 @@ export function App(): JSX.Element {
                 创建
               </button>
             </footer>
+          </div>
+        </div>
+      )}
+
+      {settingsOpen && (
+        <div className="modal-backdrop" onClick={() => setSettingsOpen(false)}>
+          <div
+            className="settings"
+            role="dialog"
+            aria-modal="true"
+            aria-label="设置"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <aside className="settings-nav" aria-label="设置分类">
+              <button type="button" className="settings-nav-item active">
+                <MenuIcon d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1-1.55 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.55-1 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.09a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.09a1.7 1.7 0 0 0 1.55 1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.55 1Z" />
+                通用
+              </button>
+              {["电脑", "保险库", "用量与账单", "更新"].map((label) => (
+                <button
+                  key={label}
+                  type="button"
+                  className="settings-nav-item disabled"
+                  disabled
+                  title="后续提供"
+                >
+                  {label}
+                </button>
+              ))}
+            </aside>
+            <div className="settings-main">
+              <header className="settings-head">
+                <h3>通用</h3>
+                <button
+                  type="button"
+                  className="modal-close"
+                  aria-label="关闭设置"
+                  onClick={() => setSettingsOpen(false)}
+                >
+                  ×
+                </button>
+              </header>
+              <div className="settings-body">
+                <div className="settings-section-title">账户</div>
+                <div className="account-card">
+                  <span className="account-avatar" aria-hidden="true">
+                    {accountName.slice(0, 1).toUpperCase()}
+                  </span>
+                  <div className="account-meta">
+                    {editingName ? (
+                      <input
+                        className="name-input inline"
+                        value={nameDraft}
+                        maxLength={40}
+                        autoFocus
+                        aria-label="账户名称"
+                        onChange={(e) => setNameDraft(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            saveName();
+                          }
+                        }}
+                        onBlur={saveName}
+                      />
+                    ) : (
+                      <span className="account-name">{accountName}</span>
+                    )}
+                    <span className="account-mail">本地会话 · 未接入账号系统</span>
+                  </div>
+                  <div className="account-actions">
+                    {editingName ? (
+                      <button type="button" className="pill-btn" onClick={saveName}>
+                        保存
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="pill-btn"
+                        onClick={() => {
+                          setNameDraft(accountName);
+                          setEditingName(true);
+                        }}
+                      >
+                        改名字
+                      </button>
+                    )}
+                    <button type="button" className="pill-btn" onClick={logout}>
+                      退出登录
+                    </button>
+                  </div>
+                </div>
+                <div className="settings-section-title">外观</div>
+                <div className="settings-card">
+                  <div className="settings-row">
+                    <span>主题</span>
+                    <select
+                      className="settings-select"
+                      value={theme}
+                      onChange={(e) => setTheme(e.target.value === "light" ? "light" : "dark")}
+                      aria-label="主题"
+                    >
+                      <option value="dark">深色</option>
+                      <option value="light">浅色</option>
+                    </select>
+                  </div>
+                  <div className="settings-row">
+                    <span>强调色</span>
+                    <span className="settings-soon">后续提供</span>
+                  </div>
+                  <div className="settings-row">
+                    <span>语言</span>
+                    <span className="settings-soon">跟随系统</span>
+                  </div>
+                </div>
+                <div className="settings-section-title">系统</div>
+                <div className="settings-card">
+                  <div className="settings-row">
+                    <span>麦克风</span>
+                    <span className="settings-soon">已全部拒绝（安全策略）</span>
+                  </div>
+                  <div className="settings-row">
+                    <span>硬件加速</span>
+                    <span className="settings-soon">后续提供</span>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}
