@@ -1,38 +1,4 @@
-import { useEffect, useState, type JSX } from "react";
-
-type PageId = "bots" | "workflows" | "runs" | "settings";
-
-const PAGES: {
-  id: PageId;
-  label: string;
-  hint: string;
-  body: string;
-}[] = [
-  {
-    id: "bots",
-    label: "机器人",
-    hint: "Bots · 列表与编辑占位",
-    body: "机器人列表占位。真实机器人管理、会话与持久化将在后续里程碑接入。",
-  },
-  {
-    id: "workflows",
-    label: "工作流",
-    hint: "Workflows · 编辑器占位",
-    body: "工作流编辑占位。节点编辑器将在后续里程碑接入。",
-  },
-  {
-    id: "runs",
-    label: "运行",
-    hint: "Runs · 历史与监控占位",
-    body: "运行记录占位。实时监控与取消将在后续里程碑接入。",
-  },
-  {
-    id: "settings",
-    label: "设置",
-    hint: "Settings · 偏好占位",
-    body: "设置占位。本阶段不写入任何凭据，也不发起网络请求。",
-  },
-];
+import { Fragment, useEffect, useLayoutEffect, useRef, useState, type JSX } from "react";
 
 const SHAPES: { radius: string }[] = [
   { radius: "50%" },
@@ -81,9 +47,18 @@ type Msg = {
   quote: { name: string; text: string } | null;
   reactions: Partial<Record<Emoji, number>>;
   mine: Emoji[];
+  time: number;
+  notice: boolean;
 };
 
 type ChatState = Record<number, Msg[]>;
+
+const FIVE_MINUTES = 5 * 60 * 1000;
+
+function formatTime(t: number): string {
+  const d = new Date(t);
+  return `${d.getHours()}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
 
 type MenuState = { x: number; y: number; botKey: number };
 type DialogState =
@@ -134,7 +109,6 @@ function MenuIcon({ d }: { d: string }): JSX.Element {
 }
 
 export function App(): JSX.Element {
-  const [page, setPage] = useState<PageId>("bots");
   const [version, setVersion] = useState<string>("…");
 
   const [modalOpen, setModalOpen] = useState(false);
@@ -151,14 +125,69 @@ export function App(): JSX.Element {
   const [dialogText, setDialogText] = useState("");
 
   const [selectedBot, setSelectedBot] = useState<number | null>(null);
-  const [chatTarget, setChatTarget] = useState<string>("");
-  const [chatResult, setChatResult] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
   const [chats, setChats] = useState<ChatState>({});
   const [quoteDraft, setQuoteDraft] = useState<{ name: string; text: string } | null>(null);
   const [dragging, setDragging] = useState(false);
   const [dragOverGroup, setDragOverGroup] = useState<number | null>(null);
+  const [collapsedGroups, setCollapsedGroups] = useState<number[]>([]);
+  const [groupMenu, setGroupMenu] = useState<{ x: number; y: number; groupKey: number } | null>(
+    null,
+  );
+
+  const toggleGroupCollapsed = (groupKey: number): void => {
+    setCollapsedGroups((prev) =>
+      prev.includes(groupKey) ? prev.filter((k) => k !== groupKey) : [...prev, groupKey],
+    );
+  };
+
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  useLayoutEffect(() => {
+    if (!menu || !menuRef.current) {
+      return;
+    }
+    const el = menuRef.current;
+    const r = el.getBoundingClientRect();
+    const mw = r.width || 220;
+    const mh = r.height || 320;
+    const margin = 8;
+    let x = menu.x;
+    let y = menu.y;
+    const flipX = x + mw > window.innerWidth - margin && x - mw >= margin;
+    if (flipX) {
+      x -= mw;
+    }
+    const flipY = y + mh > window.innerHeight - margin && y - mh >= margin;
+    if (flipY) {
+      y -= mh;
+    }
+    x = Math.min(Math.max(margin, x), Math.max(margin, window.innerWidth - mw - margin));
+    y = Math.min(Math.max(margin, y), Math.max(margin, window.innerHeight - mh - margin));
+    el.style.left = `${x}px`;
+    el.style.top = `${y}px`;
+    el.dataset.sub = x + mw + 200 > window.innerWidth - margin ? "left" : "right";
+  }, [menu]);
+
+  const groupMenuRef = useRef<HTMLDivElement | null>(null);
+  useLayoutEffect(() => {
+    if (!groupMenu || !groupMenuRef.current) {
+      return;
+    }
+    const el = groupMenuRef.current;
+    const r = el.getBoundingClientRect();
+    const margin = 8;
+    let x = groupMenu.x;
+    let y = groupMenu.y;
+    if (x + r.width > window.innerWidth - margin) {
+      x = Math.max(margin, window.innerWidth - r.width - margin);
+    }
+    if (y + r.height > window.innerHeight - margin) {
+      y = Math.max(margin, window.innerHeight - r.height - margin);
+    }
+    el.style.left = `${x}px`;
+    el.style.top = `${y}px`;
+  }, [groupMenu]);
 
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [theme, setTheme] = useState<"dark" | "light">("dark");
@@ -197,6 +226,7 @@ export function App(): JSX.Element {
         setModalOpen(false);
         setSettingsOpen(false);
         setEditingName(false);
+        setGroupMenu(null);
       }
     };
     window.addEventListener("keydown", onKey);
@@ -213,13 +243,16 @@ export function App(): JSX.Element {
     return () => clearTimeout(t);
   }, [toast]);
 
-  const current = PAGES.find((p) => p.id === page) ?? PAGES[0]!;
+  const selectedBotName =
+    bots.find((b) => b.key === selectedBot)?.name ?? "DeepSeek Bot";
 
   const openModal = () => {
     setBotName("");
     setShape(0);
     setColor(2);
-    setModalGroup(UNGROUPED);
+    setModalGroup(
+      groups.find((g) => g.name === "未分组")?.key ?? groups[0]?.key ?? UNGROUPED,
+    );
     setModalOpen(true);
   };
 
@@ -286,7 +319,6 @@ export function App(): JSX.Element {
     setBots((prev) => prev.filter((b) => b.key !== botKey));
     if (selectedBot === botKey) {
       setSelectedBot(null);
-      setChatResult(null);
     }
     setToast(why);
     setMenu(null);
@@ -332,6 +364,8 @@ export function App(): JSX.Element {
             quote: null,
             reactions: {},
             mine: [],
+            time: Date.now(),
+            notice: false,
           },
         ],
       };
@@ -356,6 +390,8 @@ export function App(): JSX.Element {
             quote: quoteDraft ? { ...quoteDraft } : null,
             reactions: {},
             mine: [],
+            time: Date.now(),
+            notice: false,
           },
         ],
       };
@@ -369,7 +405,16 @@ export function App(): JSX.Element {
           ...prev,
           [botKey]: [
             ...list,
-            { id: Date.now() + 1, from: "bot", text: reply, quote: null, reactions: {}, mine: [] },
+            {
+              id: Date.now() + 1,
+              from: "bot",
+              text: reply,
+              quote: null,
+              reactions: {},
+              mine: [],
+              time: Date.now(),
+              notice: true,
+            },
           ],
         };
       });
@@ -409,19 +454,56 @@ export function App(): JSX.Element {
     setToast(`已将「${b.name}」拖至「${g.name}」`);
   };
 
-  const startTalk = (): void => {
-    const from = bots.find((b) => b.key === selectedBot);
-    const to = bots.find((b) => b.key === Number(chatTarget));
+  const deleteGroup = (groupKey: number): void => {
+    const g = groups.find((x) => x.key === groupKey);
+    if (!g) {
+      return;
+    }
+    const members = bots.filter((b) => b.group === groupKey);
+    if (members.length > 0) {
+      setToast("请先移出或删除组内 Bot");
+      setGroupMenu(null);
+      return;
+    }
+    setGroups((prev) => prev.filter((x) => x.key !== groupKey));
+    setCollapsedGroups((prev) => prev.filter((k) => k !== groupKey));
+    setToast(`已删除分组「${g.name}」`);
+    setGroupMenu(null);
+  };
+
+  const talkTo = (fromKey: number, toKey: number): void => {
+    const from = bots.find((b) => b.key === fromKey);
+    const to = bots.find((b) => b.key === toKey);
     if (!from || !to) {
       return;
     }
+    let text: string;
     if (from.group !== to.group) {
       const g1 = groups.find((g) => g.key === from.group)?.name ?? "?";
       const g2 = groups.find((g) => g.key === to.group)?.name ?? "?";
-      setChatResult(`无法发起：不同分组的 Bot 无法主动交流（${g1} ↔ ${g2}）。`);
+      text = `无法发起：不同分组的 Bot 无法主动交流（${g1} ↔ ${g2}）。`;
     } else {
-      setChatResult(`同分组，允许交流（占位会话，无后端）。`);
+      text = `已与「${to.name}」建立会话（占位，无后端）。`;
     }
+    setChats((prev) => {
+      const list = prev[fromKey] ?? [];
+      return {
+        ...prev,
+        [fromKey]: [
+          ...list,
+          {
+            id: Date.now() + 2,
+            from: "bot",
+            text,
+            quote: null,
+            reactions: {},
+            mine: [],
+            time: Date.now(),
+            notice: true,
+          },
+        ],
+      };
+    });
   };
 
   const logout = (): void => {
@@ -472,28 +554,6 @@ export function App(): JSX.Element {
           </span>
           <span className="identity-name">DeepSeek Bot</span>
         </div>
-        <div className="group-label">导航</div>
-        <nav className="tabs" aria-label="主导航">
-          {PAGES.map((p) => (
-            <button
-              key={p.id}
-              type="button"
-              role="tab"
-              aria-selected={page === p.id}
-              className={page === p.id ? "tab active" : "tab"}
-              onClick={() => setPage(p.id)}
-            >
-              <span className={`blob blob-${p.id}`} aria-hidden="true">
-                <span className="eye" />
-                <span className="eye" />
-              </span>
-              <span className="tab-label">
-                <span className="tab-title">{p.label}</span>
-                <span className="tab-hint">{p.hint}</span>
-              </span>
-            </button>
-          ))}
-        </nav>
         {groups.map((g) => {
           const members = bots.filter((b) => b.group === g.key);
           return (
@@ -523,12 +583,32 @@ export function App(): JSX.Element {
                 setDragging(false);
               }}
             >
-              <div className="group-label">
+              <button
+                type="button"
+                className="group-label"
+                aria-expanded={!collapsedGroups.includes(g.key)}
+                onClick={() => toggleGroupCollapsed(g.key)}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  setGroupMenu({ x: e.clientX, y: e.clientY, groupKey: g.key });
+                }}
+              >
+                <span
+                  className={
+                    "group-chevron" + (collapsedGroups.includes(g.key) ? " collapsed" : "")
+                  }
+                  aria-hidden="true"
+                >
+                  ›
+                </span>
                 {g.name}
-                {members.length > 0 && <span className="group-count">{members.length}</span>}
-              </div>
-              <div className="tabs" aria-label={`机器人列表-${g.name}`}>
-                {members.map((b) => (
+                {!collapsedGroups.includes(g.key) && members.length > 0 && (
+                  <span className="group-count">{members.length}</span>
+                )}
+              </button>
+              {!collapsedGroups.includes(g.key) && (
+                <div className="tabs" aria-label={`机器人列表-${g.name}`}>
+                  {members.map((b) => (
                   <button
                     key={b.key}
                     type="button"
@@ -559,14 +639,11 @@ export function App(): JSX.Element {
                       setDragging(false);
                       setDragOverGroup(null);
                     }}
-                    className={selectedBot === b.key && page === "bots" ? "tab active" : "tab"}
+                    className={selectedBot === b.key ? "tab active" : "tab"}
                     onClick={() => {
                       setSelectedBot(b.key);
-                      setChatResult(null);
-                      setChatTarget("");
                       setQuoteDraft(null);
                       ensureChat(b);
-                      setPage("bots");
                     }}
                     onContextMenu={(e) => {
                       e.preventDefault();
@@ -586,7 +663,8 @@ export function App(): JSX.Element {
                 {dragging && members.length === 0 && (
                   <div className="drop-hint">拖到这里移入「{g.name}」</div>
                 )}
-              </div>
+                </div>
+              )}
             </div>
           );
         })}
@@ -609,11 +687,11 @@ export function App(): JSX.Element {
         <header className="top">
           <span className="page-chip">
             <BlobMark />
-            {current.label}
+            {selectedBotName}
           </span>
         </header>
-        <main className="panel" role="tabpanel" aria-label={current.label}>
-          {page === "bots" && selectedBot !== null ? (
+        <main className="panel">
+          {selectedBot !== null ? (
             <BotsPlaceholder
               key={selectedBot}
               bots={bots}
@@ -621,8 +699,6 @@ export function App(): JSX.Element {
               selectedBot={selectedBot}
               msgs={chats[selectedBot] ?? []}
               quoteDraft={quoteDraft}
-              chatTarget={chatTarget}
-              chatResult={chatResult}
               onQuote={(m) => {
                 const sender =
                   m.from === "bot"
@@ -633,19 +709,16 @@ export function App(): JSX.Element {
               onCancelQuote={() => setQuoteDraft(null)}
               onSend={(t) => sendUserMessage(selectedBot, t)}
               onReact={(msgId, emoji) => toggleReaction(selectedBot, msgId, emoji)}
-              onSelect={setChatTarget}
-              onTalk={startTalk}
+              onTalkTo={(otherKey) => talkTo(selectedBot, otherKey)}
             />
           ) : (
-            <>
-              <p className="sys-line" aria-live="polite">
-                静态占位 · 无网络请求 · 不读取本地数据
-              </p>
-              <div className="bubble">
-                <h2>{current.label}</h2>
-                <p>{current.body}</p>
-              </div>
-            </>
+            <div className="empty-state">
+              <BlobMark />
+              <p>创建一个 Bot 开始使用</p>
+              <button type="button" className="primary-btn" onClick={openModal}>
+                创建 Bot
+              </button>
+            </div>
           )}
         </main>
       </section>
@@ -653,7 +726,13 @@ export function App(): JSX.Element {
       {menu && menuBot && (
         <>
           <div className="menu-overlay" onClick={() => setMenu(null)} />
-          <div className="menu" role="menu" aria-label={`Bot 操作：${menuBot.name}`} style={{ left: menu.x, top: menu.y }}>
+          <div
+            ref={menuRef}
+            className="menu"
+            role="menu"
+            aria-label={`Bot 操作：${menuBot.name}`}
+            style={{ left: menu.x, top: menu.y }}
+          >
             <button type="button" role="menuitem" className="menu-item" onClick={() => pinBot(menuBot.key)}>
               <MenuIcon d="M12 17v5M9 3h6l1 7 3 3H5l3-3 1-7Z" />
               置顶
@@ -830,7 +909,11 @@ export function App(): JSX.Element {
               </div>
               <label className="group-pick">
                 分组
-                <select value={modalGroup} onChange={(e) => setModalGroup(Number(e.target.value))}>
+                <select
+                  value={modalGroup}
+                  disabled={groups.length === 0}
+                  onChange={(e) => setModalGroup(Number(e.target.value))}
+                >
                   {groups.map((g) => (
                     <option key={g.key} value={g.key}>
                       {g.name}
@@ -843,12 +926,42 @@ export function App(): JSX.Element {
               <button type="button" className="ghost-btn" onClick={() => setModalOpen(false)}>
                 取消
               </button>
-              <button type="button" className="primary-btn" disabled={!botName.trim()} onClick={createBot}>
+              <button
+                type="button"
+                className="primary-btn"
+                disabled={!botName.trim() || groups.length === 0}
+                onClick={createBot}
+              >
                 创建
               </button>
             </footer>
           </div>
         </div>
+      )}
+
+      {groupMenu && (
+        <>
+          <div className="menu-overlay" onClick={() => setGroupMenu(null)} />
+          <div
+            ref={groupMenuRef}
+            className="menu"
+            role="menu"
+            aria-label="分组操作"
+            style={{ left: groupMenu.x, top: groupMenu.y }}
+          >
+            <button
+              type="button"
+              role="menuitem"
+              className="menu-item danger"
+              onClick={() => deleteGroup(groupMenu.groupKey)}
+            >
+              <MenuIcon d="M4 7h16M9 7V4h6v3m-8 0 1 13h8l1-13" />
+              删除分组
+              {bots.filter((b) => b.group === groupMenu.groupKey).length > 0 &&
+                "（请先移出组内 Bot）"}
+            </button>
+          </div>
+        </>
       )}
 
       {settingsOpen && (
@@ -1062,31 +1175,32 @@ function BotsPlaceholder({
   selectedBot,
   msgs,
   quoteDraft,
-  chatTarget,
-  chatResult,
   onQuote,
   onCancelQuote,
   onSend,
   onReact,
-  onSelect,
-  onTalk,
+  onTalkTo,
 }: {
   bots: Bot[];
   groups: Group[];
   selectedBot: number;
   msgs: Msg[];
   quoteDraft: { name: string; text: string } | null;
-  chatTarget: string;
-  chatResult: string | null;
   onQuote: (msg: Msg) => void;
   onCancelQuote: () => void;
   onSend: (text: string) => void;
   onReact: (msgId: number, emoji: Emoji) => void;
-  onSelect: (v: string) => void;
-  onTalk: () => void;
+  onTalkTo: (otherKey: number) => void;
 }): JSX.Element {
   const [draft, setDraft] = useState("");
+  const [plusOpen, setPlusOpen] = useState(false);
+  const listRef = useRef<HTMLDivElement | null>(null);
   const me = bots.find((b) => b.key === selectedBot);
+
+  useEffect(() => {
+    listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
+  }, [msgs.length]);
+
   if (!me) {
     return (
       <div className="bubble">
@@ -1096,7 +1210,8 @@ function BotsPlaceholder({
     );
   }
   const others = bots.filter((b) => b.key !== me.key);
-  const myGroup = groups.find((g) => g.key === me.group)?.name ?? "?";
+
+  let lastShownTime = 0;
 
   const send = (): void => {
     if (!draft.trim()) {
@@ -1107,21 +1222,43 @@ function BotsPlaceholder({
   };
 
   return (
-    <>
+    <div className="chat-page">
       <p className="sys-line" aria-live="polite">
-        静态占位 · 无网络请求 · 不读取本地数据
+        静态占位 · 无网络请求 · 不同分组的 Bot 无法主动交流
       </p>
-      <div className="chat">
-        {msgs.map((m) => (
-          <MessageBubble
-            key={m.id}
-            msg={m}
-            shape={me.shape}
-            color={PALETTE[me.color]!}
-            onReact={onReact}
-            onQuote={onQuote}
-          />
-        ))}
+      <div className="chat" ref={listRef}>
+        {msgs.map((m) => {
+          const showTime = lastShownTime === 0 || m.time - lastShownTime >= FIVE_MINUTES;
+          if (showTime) {
+            lastShownTime = m.time;
+          }
+          return (
+            <Fragment key={m.id}>
+              {showTime && <div className="msg-time">{formatTime(m.time)}</div>}
+              {m.from === "bot" && m.notice && (
+                <div className="msg-notice">
+                  消息来自
+                  <BlobFace shape={me.shape} color={PALETTE[me.color]!} size={14} />
+                  {me.name}
+                </div>
+              )}
+              <MessageBubble
+                msg={m}
+                shape={me.shape}
+                color={PALETTE[me.color]!}
+                onReact={onReact}
+                onQuote={onQuote}
+              />
+              {m.from === "user" && (
+                <div className="msg-notice">
+                  已发消息给
+                  <BlobFace shape={me.shape} color={PALETTE[me.color]!} size={14} />
+                  {me.name}
+                </div>
+              )}
+            </Fragment>
+          );
+        })}
         {msgs.length === 0 && <div className="sys-line">会话为空。</div>}
       </div>
       {quoteDraft && (
@@ -1135,9 +1272,49 @@ function BotsPlaceholder({
         </div>
       )}
       <div className="composer">
+        <div className="composer-menu-wrap">
+          <button
+            type="button"
+            className="composer-plus"
+            aria-label="更多操作"
+            title="发起交流"
+            onClick={() => setPlusOpen((v) => !v)}
+          >
+            ＋
+          </button>
+          {plusOpen && (
+            <>
+              <div className="menu-overlay" onClick={() => setPlusOpen(false)} />
+              <div className="composer-menu" role="menu" aria-label="发起交流">
+                <div className="composer-menu-title">发起交流</div>
+                {others.length === 0 && (
+                  <div className="composer-menu-empty">还没有其他 Bot。</div>
+                )}
+                {others.map((b) => (
+                  <button
+                    key={b.key}
+                    type="button"
+                    role="menuitem"
+                    className="menu-item"
+                    onClick={() => {
+                      onTalkTo(b.key);
+                      setPlusOpen(false);
+                    }}
+                  >
+                    <BlobFace shape={b.shape} color={PALETTE[b.color]!} size={26} />
+                    <span className="tab-title">{b.name}</span>
+                    <span className="composer-menu-hint">
+                      {groups.find((g) => g.key === b.group)?.name ?? "?"}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
         <input
           className="composer-input"
-          placeholder={`给 ${me.name} 发消息（占位，无真实模型）`}
+          placeholder={`给 ${me.name} 发消息`}
           value={draft}
           maxLength={200}
           aria-label={`给 ${me.name} 发消息`}
@@ -1148,48 +1325,22 @@ function BotsPlaceholder({
             }
           }}
         />
-        <button
-          type="button"
-          className="send-btn"
-          aria-label="发送"
-          disabled={!draft.trim()}
-          onClick={send}
-        >
+        <span className="composer-mic" title="后续提供" aria-hidden="true">
+          <svg viewBox="0 0 24 24">
+            <rect x="9" y="3" width="6" height="11" rx="3" fill="none" stroke="currentColor" strokeWidth="1.8" />
+            <path
+              d="M5 11a7 7 0 0 0 14 0M12 18v3"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+            />
+          </svg>
+        </span>
+        <button type="button" className="send-btn" aria-label="发送" disabled={!draft.trim()} onClick={send}>
           ↑
         </button>
       </div>
-      <div className="bubble">
-        <h2>{me.name}</h2>
-        <p>
-          分组：{myGroup} · 会话内占位，未持久化。
-          <br />
-          规则：不同分组的 Bot 无法主动交流。
-        </p>
-      </div>
-      {others.length > 0 ? (
-        <div className="bubble">
-          <h2>发起交流</h2>
-          <p className="talk-row">
-            <select
-              className="talk-select"
-              value={chatTarget}
-              onChange={(e) => onSelect(e.target.value)}
-              aria-label="选择目标 Bot"
-            >
-              <option value="">选择另一个 Bot…</option>
-              {others.map((b) => (
-                <option key={b.key} value={String(b.key)}>
-                  {b.name}（{groups.find((g) => g.key === b.group)?.name ?? "?"}）
-                </option>
-              ))}
-            </select>
-            <button type="button" className="primary-btn" disabled={!chatTarget} onClick={onTalk}>
-              发起交流
-            </button>
-          </p>
-          {chatResult && <p className="talk-result">{chatResult}</p>}
-        </div>
-      ) : null}
-    </>
+    </div>
   );
 }
