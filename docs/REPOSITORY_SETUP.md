@@ -17,12 +17,20 @@
 | main / develop / feature/project-standards | main 保持空起点 6240da3；develop 保存集成结果；规范来源提交为 bd2946b |
 | origin 与 SSH | 已配置 git@github.com:Etheslay/deepseek-bot.git；SSH 只读访问已验证 |
 | 远程分支与首次推送 | main、develop、feature/project-standards 已创建，初始文档提交 c31755f 已核验 |
-| Issue 分派、PR 创建与审查 | 未执行 |
-| GitHub 默认分支 | 远程 HEAD 已核验为 main；未改为 develop |
-| GitHub 合并选项、成员权限、保护规则 | 未设置/未核实 |
+| Issue 分派、PR 创建与审查 | D00 Issue 已由负责人创建并填写确认与自审（链接待补记）；PR #2（启动清单）与 PR #3（契约冻结）已按"0 必需批准 + 负责人自审记录 + merge commit"合并 |
+| GitHub 默认分支 | 已改为 develop（2026-10-23 ls-remote 核验 HEAD 指向 develop 合并提交 018258c） |
+| GitHub 合并选项、成员权限、保护规则 | 合并选项仅保留 Create a merge commit（合并界面核验无 Squash/Rebase）；协作者权限由负责人在界面维护；规则集 protected-branches 已建立但因免费私有库套餐不强制执行（见 2.1） |
 | 产品 CI、应用测试、安装包和版本 tag | 未建立/未生成 |
 
-规范文件不能代替 GitHub 服务器设置。用户已明确授权将本次规范合并到 develop；GitHub 连接器仍返回 404，本次通过本地 merge commit 与 SSH 普通推送完成集成，没有创建 PR 或伪造真人审批。合并包含来源 bd2946b 及本文件等集成状态记录，具体提交与远程同步以 Git 历史为准。main 不纳入此次合并；后续开发继续遵循 PR、自审、测试和发布规范。GitHub 保护规则仍未实际启用或修改。
+规范文件不能代替 GitHub 服务器设置。用户已明确授权将本次规范合并到 develop；GitHub 连接器仍返回 404，本次通过本地 merge commit 与 SSH 普通推送完成集成，没有创建 PR 或伪造真人审批。合并包含来源 bd2946b 及本文件等集成状态记录，具体提交与远程同步以 Git 历史为准。main 不纳入此次合并；后续开发继续遵循 PR、自审、测试和发布规范。GitHub 保护规则当时未实际启用或修改（当前强制状态见 2.1）。
+
+### 2.1 服务端强制状态（2026-10-23）
+
+- 规则集 `protected-branches` 已建立：目标 main、develop、release/**、hotfix/**；必需 PR、必需批准数 0、要求解决讨论、禁强推、禁删除，无 bypass；§3 第 3/5/6 项已在界面执行。
+- 仓库为私有且当前为免费方案，GitHub 明示规则集在该私有仓库不强制执行；探针实测（2026-10-23 推送 release/probe-test 被接受）证实未强制。保护要求目前为流程约定，服务端未强制；规则集配置保留，仓库转公开或升级套餐后自动生效，届时重跑探针 A/B。
+- 已核验生效项：默认分支 develop；合并选项仅 merge commit（PR #2、#3 以双父 merge commit 合入，Squash/Rebase 在界面不可用）。
+- 来源限制（PR head/base 校验）依赖 CI，尚未建立，保持流程约定；在服务端强制生效前，有写权限的账号技术上仍可直推 protected 分支，依靠流程纪律约束。
+- 提交身份事件：2026-10-23 发现 feature/project-standards 上两个非本人操作的误署名提交（署名 Destinyian），已从远程回退至已合并基线 bd2946b，内容在本地存档（archive/stage-plan-proposal）待讨论；身份来源待核实，方案内容讨论后如需入库须以真实作者身份重做。
 
 ## 3. 仓库管理员设置清单
 

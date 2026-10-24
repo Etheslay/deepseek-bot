@@ -1,6 +1,6 @@
 # 开发启动清单
 
-日期：2026-10-23。执行负责人：Etheslay。状态：阶段 0 进行中，所有条目未完成。
+日期：2026-10-23。执行负责人：Etheslay。状态：阶段 0 进行中；0.1 完成 4/7（服务端强制受免费套餐限制暂缓）、0.2 完成 6/7（余对齐估时）、0.3 未开始。
 
 本文是执行清单，只记录顺序与勾选状态；规则、验收标准和任务详情以各权威文档为准，冲突时以权威文档为准。勾选仅表示对应负责人已实际完成并留证，本文不构成完成声明。桌面侧（D02 / D05 / D07 / D09 / D11 / D13）条目由 Destinyian 认领后补充勾选。
 
@@ -11,23 +11,23 @@
 对应 [REPOSITORY_SETUP](REPOSITORY_SETUP.md) §3 第 2-6 项与 §6 验收。
 
 - [ ] 邀请/核实 Destinyian 的协作者 Write 权限。
-- [ ] 默认分支从 `main` 改为 `develop`。
-- [ ] 合并选项：仅保留 Create a merge commit，关闭 Squash / Rebase，不启用 linear history。
-- [ ] 为 `main`、`develop`、`release/*`、`hotfix/*` 建立保护规则/ruleset：必需 PR、必需批准数 0、关闭 code-owner 审批与"最后推送需他人批准"、保留必需状态检查与禁止强推/删除。
-- [ ] 按 REPOSITORY_SETUP §6 用临时 feature 分支 + PR 验证保护行为（错误来源被拒、0 批准可合并、强推被拒），截图或导出留证。
-- [ ] 回填 REPOSITORY_SETUP §2 状态表（当前各项为"未设置/未核实"）。
-- [ ] 排查 GitHub 连接器对仓库返回 404 的根因（Token 权限或私有库可见性）；未解决前 Issue/PR 全部手工创建。
+- [x] 默认分支从 `main` 改为 `develop`（2026-10-23 ls-remote 核验 HEAD 指向 develop）。
+- [x] 合并选项：仅保留 Create a merge commit，关闭 Squash / Rebase，不启用 linear history（合并界面核验无 Squash/Rebase）。
+- [x] 为 `main`、`develop`、`release/*`、`hotfix/*` 建立保护规则/ruleset：必需 PR、必需批准数 0、关闭 code-owner 审批与"最后推送需他人批准"、保留必需状态检查与禁止强推/删除（规则集 protected-branches 已建立；私有免费套餐暂不强制，见 REPOSITORY_SETUP §2.1）。
+- [ ] 按 REPOSITORY_SETUP §6 用临时 feature 分支 + PR 验证保护行为（错误来源被拒、0 批准可合并、强推被拒），截图或导出留证。（部分执行：探针 C 通过——PR #3 以 0 批准 + merge commit 合并；探针 B 证实推送未遭拒绝，A/B 暂缓至强制生效）
+- [x] 回填 REPOSITORY_SETUP §2 状态表（2026-10-23，见该文件 §2 与 §2.1）。
+- [ ] 排查 GitHub 连接器对仓库返回 404 的根因（Token 权限或私有库可见性）；未解决前 Issue/PR 全部手工创建。（进行中：gh CLI 不可用、api.github.com HTTPS 不可达，已用 SSH-443 与网页流程绕过）
 
 ### 0.2 D00 正式闭环
 
 文档产出已在 develop（合并提交 6bac6ff，来源 `feature/project-standards` bd2946b），按流程补齐正式记录。
 
-- [ ] 用 feature_task 模板创建 D00 Issue：负责人 Etheslay，分支 `feature/project-standards`，目标 develop。
-- [ ] 在 Issue 记录针对 6bac6ff 的自审：提交 SHA、检查证据、遗留问题、结论。
-- [ ] 显式确认首发平台：Windows 11 x64、简体中文、单机单用户。
-- [ ] 显式接受[轻量预算](PRODUCT_REQUIREMENTS.md)为暂定基线；D01 实测后如需调整走 ADR。
-- [ ] 显式接受 [ADR-0001](adr/0001-desktop-and-runtime.md) 为建议基线；D01 数据齐备后正式改为"接受"。
-- [ ] 冻结[契约](CONTRACTS.md) v0.1：小 PR 将状态由"草案"改为冻结，作为 D03 基线。
+- [x] 用 feature_task 模板创建 D00 Issue：负责人 Etheslay，分支 `feature/project-standards`，目标 develop。（链接由负责人补记）
+- [x] 在 Issue 记录针对 6bac6ff 的自审：提交 SHA、检查证据、遗留问题、结论。（由负责人在 Issue 填写）
+- [x] 显式确认首发平台：Windows 11 x64、简体中文、单机单用户。（D00 Issue 内由负责人确认）
+- [x] 显式接受[轻量预算](PRODUCT_REQUIREMENTS.md)为暂定基线；D01 实测后如需调整走 ADR。（D00 Issue 内由负责人确认）
+- [x] 显式接受 [ADR-0001](adr/0001-desktop-and-runtime.md) 为建议基线；D01 数据齐备后正式改为"接受"。（D00 Issue 内由负责人确认）
+- [x] 冻结[契约](CONTRACTS.md) v0.1：小 PR 将状态由"草案"改为冻结，作为 D03 基线。（PR #3 以 merge commit 合入 develop）
 - [ ] 与 Destinyian 对齐 D00-D13：填写估时、可用时间与里程碑日期，写入各自 Issue。
 
 ### 0.3 资源准备
@@ -39,6 +39,8 @@
 ## 阶段 1：D01 `feature/harness-adapter`（Etheslay）
 
 前置：0.2 完成。从最新 develop 创建分支，目标 develop。验收细节见 [DEVELOPMENT_PLAN](DEVELOPMENT_PLAN.md) 任务表与 [HARNESS_INTEGRATION](HARNESS_INTEGRATION.md) §4。
+
+> 注：是否切换为 STAGE_PLAN 提出的 S1–S14 串行执行正在讨论中（方案内容本地存档于 archive/stage-plan-proposal，暂未入库）；结论落地前按本清单与 DEVELOPMENT_PLAN 执行。
 
 ### 版本固定与环境基线
 
