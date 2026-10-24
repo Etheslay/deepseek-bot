@@ -35,7 +35,7 @@ flowchart LR
 | `packages/storage/` | 应用数据库、迁移、备份、查询 | 自定义修改 Harness 日志格式 | Etheslay |
 | `packages/ui/` | 可复用界面与可访问性组件 | 本地数据授权判断 | Destinyian |
 
-这些目录只描述未来布局，本次不创建应用骨架。
+桌面壳（D02）、共享契约（D03）与本地存储（D04）已按此布局落地；其余目录仍是规划，本次不创建。
 
 ## 3. 数据与调用链
 
@@ -47,11 +47,11 @@ flowchart LR
 
 ## 4. 本地存储
 
-应用元数据拟使用 SQLite（事务、迁移、WAL、单 Host 写入）。Harness 原生日志保留原格式和读写入口；应用数据库保存 sessionId 和运行关联，避免两套完整聊天历史成为冲突源。
+应用元数据使用 SQLite（`node:sqlite`，Node ≥ 24：事务、迁移、WAL、单 Host 写入）；实现位于 `packages/storage`（D04 起，含迁移、备份、恢复与数据目录布局）。Harness 原生日志保留原格式和读写入口；应用数据库保存 sessionId 和运行关联，避免两套完整聊天历史成为冲突源。注意 Electron 38 主进程内置 Node 22 无 `node:sqlite`（已实测），本包只可在独立 Node 24 Host 进程内运行。
 
-数据根目录通过操作系统应用数据 API 获取，Windows 期望位于 `%APPDATA%/DeepSeekBot/`；应用目录、用户选定工作区与程序安装目录分开。Harness 使用本应用专属 home，与用户已有 CLI 数据隔离。日志、缓存和可重新生成索引均设配额。
+数据根目录通过操作系统应用数据 API 获取，Windows 期望位于 `%APPDATA%/DeepSeekBot/`；应用目录、用户选定工作区与程序安装目录分开。Harness 使用本应用专属 home（`DSH_HOME`，D01 §5.1 已验证可整体迁移），与用户已有 CLI 数据隔离。日志、缓存和可重新生成索引均设配额。
 
-密钥交由系统凭据存储/操作系统加密保护，具体适配器在 D04 验证；不能安全存储时明确失败，不降级为明文。细节见[数据规范](SECURITY_DATA.md)。
+密钥交由系统凭据存储/操作系统加密保护：Windows 上桌面主进程用 Electron `safeStorage`（DPAPI，D04 实测）加密后交由 `packages/storage` 以密文 blob 落盘，数据库只保存 `cred:<uuid>` 引用；不能安全存储时明确失败，不降级为明文。细节见[数据规范](SECURITY_DATA.md)。
 
 ## 5. 生命周期与错误
 
