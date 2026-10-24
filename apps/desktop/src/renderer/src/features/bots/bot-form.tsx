@@ -1,11 +1,13 @@
 /**
- * Bot create/edit form (D05 brief §2.1 机器人工作区).
+ * Bot create/edit form (D05 UI brief §2.6).
  *
- * Validation runs the real `BotSchema` from contracts on the assembled
- * entity; issues are mapped back to form fields so errors point at the
- * exact input (D5-3: 非法输入被拒并定位字段).
+ * Label-free soft fields: centered name (44px) and role textarea (96px) on
+ * #1b1f26; contract selects collapse into an "高级设置" <details>. Slots let
+ * the modal inject avatar preview/picker and the group row without breaking
+ * validation ownership. Validation still runs the real BotSchema from
+ * contracts and maps issues onto fields.
  */
-import { useState, type JSX } from "react";
+import { useState, type JSX, type ReactNode } from "react";
 import { validateBot } from "../../services/contract-validation.js";
 import type { BotDraft } from "../../services/desktop-service.js";
 
@@ -23,6 +25,19 @@ const TOOL_POLICY_OPTIONS = [
 ];
 
 export type FieldErrors = Partial<Record<keyof BotDraft, string>>;
+
+/** Common tone presets (UI-only; merged into instructions on submit). */
+export const TONE_PRESETS: readonly string[] = [
+  "凶悍",
+  "严肃",
+  "可爱",
+  "呆萌",
+  "幽默",
+  "温柔",
+  "毒舌",
+  "冷静",
+  "热血",
+] as const;
 
 export function validateBotDraft(draft: BotDraft): FieldErrors {
   const entity = {
@@ -51,6 +66,12 @@ export function BotForm(
     submitLabel: string;
     onSubmit: (draft: BotDraft) => Promise<{ ok: boolean; errorCode?: string }>;
     onCancel: () => void;
+    /** Rendered above the name field (avatar preview). */
+    previewSlot?: ReactNode;
+    /** Rendered between name and role (avatar picker slot). */
+    avatarSlot?: ReactNode;
+    /** Rendered after role (group select row). */
+    groupSlot?: ReactNode;
   },
 ): JSX.Element {
   const [draft, setDraft] = useState<BotDraft>(
@@ -63,6 +84,10 @@ export function BotForm(
     },
   );
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+  const [selectedTones, setSelectedTones] = useState<string[]>([]);
+  const [customTones, setCustomTones] = useState<string[]>([]);
+  const [customOpen, setCustomOpen] = useState(false);
+  const [customDraft, setCustomDraft] = useState("");
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -71,15 +96,46 @@ export function BotForm(
     setFieldErrors((prev) => ({ ...prev, [field]: undefined }));
   };
 
+
+  const toggleTone = (tone: string): void => {
+    setSelectedTones((prev) =>
+      prev.includes(tone) ? prev.filter((t) => t !== tone) : [...prev, tone],
+    );
+  };
+
+  const addCustomTone = (): void => {
+    const tone = customDraft.trim();
+    if (!tone) {
+      return;
+    }
+    if (!customTones.includes(tone)) {
+      setCustomTones((prev) => [...prev, tone]);
+    }
+    setSelectedTones((prev) => (prev.includes(tone) ? prev : [...prev, tone]));
+    setCustomDraft("");
+  };
+
+  const instructionsWithTones = (instructions: string): string => {
+    if (selectedTones.length === 0) {
+      return instructions;
+    }
+    const suffix = `（语气：${selectedTones.join("、")}）`;
+    return instructions.includes(suffix) ? instructions : instructions + suffix;
+  };
+
   const submit = async (): Promise<void> => {
-    const errors = validateBotDraft(draft);
+    const merged: BotDraft = {
+      ...draft,
+      instructions: instructionsWithTones(draft.instructions),
+    };
+    const errors = validateBotDraft(merged);
     if (Object.values(errors).some(Boolean)) {
       setFieldErrors(errors);
       return;
     }
     setBusy(true);
     setSubmitError(null);
-    const result = await props.onSubmit(draft);
+    const result = await props.onSubmit(merged);
     setBusy(false);
     if (!result.ok) {
       setSubmitError(
@@ -92,83 +148,139 @@ export function BotForm(
 
   return (
     <div className="bot-form">
-      <label className="form-field">
-        <span>名称</span>
-        <input
-          value={draft.name}
-          maxLength={60}
-          autoFocus
-          aria-label="机器人名称"
-          aria-invalid={Boolean(fieldErrors.name)}
-          onChange={(e) => set("name", e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              void submit();
-            }
-          }}
-        />
-        {fieldErrors.name && <em className="field-error">{fieldErrors.name}</em>}
-      </label>
+      {props.previewSlot}
 
-      <label className="form-field">
-        <span>角色说明（instructions）</span>
-        <textarea
-          value={draft.instructions}
-          maxLength={4000}
-          rows={4}
-          aria-label="角色说明"
-          aria-invalid={Boolean(fieldErrors.instructions)}
-          onChange={(e) => set("instructions", e.target.value)}
-        />
-        {fieldErrors.instructions && (
-          <em className="field-error">{fieldErrors.instructions}</em>
-        )}
-      </label>
+      <input
+        className="form-name"
+        value={draft.name}
+        maxLength={60}
+        autoFocus
+        placeholder="给你的 Bot 起个名字"
+        aria-label="机器人名称"
+        aria-invalid={Boolean(fieldErrors.name)}
+        onChange={(e) => set("name", e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            void submit();
+          }
+        }}
+      />
+      {fieldErrors.name && <em className="field-error">{fieldErrors.name}</em>}
 
-      <label className="form-field">
-        <span>模型配置</span>
-        <select
-          value={draft.modelProfileId}
-          aria-label="模型配置"
-          onChange={(e) => set("modelProfileId", e.target.value)}
+      {props.avatarSlot}
+
+      <textarea
+        className="form-role"
+        value={draft.instructions}
+        maxLength={4000}
+        rows={4}
+        placeholder="描述这个 Bot 的角色、语气和边界…"
+        aria-label="角色说明"
+        aria-invalid={Boolean(fieldErrors.instructions)}
+        onChange={(e) => set("instructions", e.target.value)}
+      />
+      {fieldErrors.instructions && <em className="field-error">{fieldErrors.instructions}</em>}
+      <span className="form-hint">可选：说明它能做什么、不能做什么；最大 4000 字。</span>
+
+      <div className="tone-picker" role="group" aria-label="语气选择（可多选）">
+        {TONE_PRESETS.map((tone) => (
+          <button
+            key={tone}
+            type="button"
+            className={"tone-chip" + (selectedTones.includes(tone) ? " selected" : "")}
+            aria-pressed={selectedTones.includes(tone)}
+            onClick={() => toggleTone(tone)}
+          >
+            {tone}
+          </button>
+        ))}
+        {customTones.map((tone) => (
+          <button
+            key={tone}
+            type="button"
+            className={"tone-chip custom" + (selectedTones.includes(tone) ? " selected" : "")}
+            aria-pressed={selectedTones.includes(tone)}
+            onClick={() => toggleTone(tone)}
+          >
+            {tone}
+          </button>
+        ))}
+        <button
+          type="button"
+          className="tone-chip add"
+          aria-expanded={customOpen}
+          onClick={() => setCustomOpen((v) => !v)}
         >
-          {MODEL_OPTIONS.map((option) => (
-            <option key={option.id} value={option.id}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-      </label>
+          ＋ 自定义
+        </button>
+      </div>
+      {customOpen && (
+        <div className="tone-custom">
+          <input
+            value={customDraft}
+            maxLength={12}
+            placeholder="输入自定义语气，如：中二"
+            aria-label="自定义语气"
+            onChange={(e) => setCustomDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                addCustomTone();
+              }
+            }}
+          />
+          <button type="button" className="pill-btn" disabled={customDraft.trim().length === 0} onClick={addCustomTone}>
+            添加
+          </button>
+        </div>
+      )}
 
-      <label className="form-field">
-        <span>工作目录</span>
-        <select
-          value={draft.workspaceId}
-          aria-label="工作目录"
-          onChange={(e) => set("workspaceId", e.target.value)}
-        >
-          {WORKSPACE_OPTIONS.map((option) => (
-            <option key={option.id} value={option.id}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-      </label>
+      {props.groupSlot}
 
-      <label className="form-field">
-        <span>工具授权</span>
-        <select
-          value={draft.toolPolicyId}
-          aria-label="工具授权"
-          onChange={(e) => set("toolPolicyId", e.target.value)}
-        >
-          {TOOL_POLICY_OPTIONS.map((option) => (
-            <option key={option.id} value={option.id}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-      </label>
+      <details className="advanced">
+        <summary>高级设置</summary>
+        <label className="form-field">
+          <span>模型配置</span>
+          <select
+            value={draft.modelProfileId}
+            aria-label="模型配置"
+            onChange={(e) => set("modelProfileId", e.target.value)}
+          >
+            {MODEL_OPTIONS.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="form-field">
+          <span>工作目录</span>
+          <select
+            value={draft.workspaceId}
+            aria-label="工作目录"
+            onChange={(e) => set("workspaceId", e.target.value)}
+          >
+            {WORKSPACE_OPTIONS.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="form-field">
+          <span>工具授权</span>
+          <select
+            value={draft.toolPolicyId}
+            aria-label="工具授权"
+            onChange={(e) => set("toolPolicyId", e.target.value)}
+          >
+            {TOOL_POLICY_OPTIONS.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      </details>
 
       {submitError && <p className="form-error" role="alert">{submitError}</p>}
 
@@ -179,7 +291,7 @@ export function BotForm(
         <button
           type="button"
           className="primary-btn"
-          disabled={busy}
+          disabled={busy || draft.name.trim().length === 0}
           onClick={() => void submit()}
         >
           {props.submitLabel}

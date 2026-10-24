@@ -14,7 +14,7 @@ import {
   type StreamState,
 } from "./features/chat/chat-reducer.js";
 import type { StreamHandle } from "./services/desktop-service.js";
-import { SessionHistory } from "./features/chat/session-history.jsx";
+
 
 const SHAPES: { radius: string }[] = [
   { radius: "50%" },
@@ -132,7 +132,6 @@ export function App(): JSX.Element {
     bots,
     create: createBotEntity,
     update: updateBotEntity,
-    archive: archiveBotEntity,
     duplicate: duplicateBotEntity,
     setUi,
     moveToTop,
@@ -145,6 +144,23 @@ export function App(): JSX.Element {
 
   const [selectedBot, setSelectedBot] = useState<number | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [artifactsOpen, setArtifactsOpen] = useState(false);
+  const [historySessions, setHistorySessions] = useState<
+    { sessionId: string; botId: string; title: string; startedAt: string; status: string }[] | null
+  >(null);
+  const [artifactList, setArtifactList] = useState<
+    import("@deepseek-bot/contracts").Artifact[] | null
+  >(null);
+  const [artifactPreview, setArtifactPreview] = useState<
+    { id: string; kind: "text"; content: string } | { id: string; kind: "blocked"; reason: string } | null
+  >(null);
+  const [restoredSession, setRestoredSession] = useState<{
+    sessionId: string;
+    title: string;
+    startedAt: string;
+    status: string;
+  } | null>(null);
 
   const [chats, setChats] = useState<ChatState>({});
   const [quoteDraft, setQuoteDraft] = useState<{ name: string; text: string } | null>(null);
@@ -226,6 +242,48 @@ export function App(): JSX.Element {
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
+
+  useEffect(() => {
+    if (!historyOpen || selectedBot === null) {
+      return;
+    }
+    const bot = bots.find((b) => b.key === selectedBot);
+    if (!bot) {
+      return;
+    }
+    let cancelled = false;
+    void desktop.chat.listSessions(bot.bot.id).then((sessions) => {
+      if (!cancelled) {
+        setHistorySessions(sessions);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [historyOpen, selectedBot, bots, desktop]);
+
+  useEffect(() => {
+    if (!artifactsOpen || selectedBot === null) {
+      return;
+    }
+    const bot = bots.find((b) => b.key === selectedBot);
+    if (!bot) {
+      return;
+    }
+    let cancelled = false;
+    void desktop.chat
+      .listSessions(bot.bot.id)
+      .then((sessions) => (sessions.length > 0 ? sessions[0]!.sessionId : null))
+      .then((sessionId) => (sessionId ? desktop.artifacts.listBySession(sessionId) : []))
+      .then((list) => {
+        if (!cancelled) {
+          setArtifactList(list);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [artifactsOpen, selectedBot, bots, desktop]);
 
   useEffect(() => {
     let cancelled = false;
@@ -750,12 +808,9 @@ const logout = (): void => {
                     <span className="tab-label">
                       <span className="tab-title">
                         {b.bot.name}
-                        {b.bot.archivedAt !== null && (
-                          <span className="archived-tag">已归档</span>
-                        )}
                         {b.unread && <span className="unread-dot" aria-label="未读" />}
                       </span>
-                      <span className="tab-hint">会话内占位 · 未持久化</span>
+
                     </span>
                   </button>
                 ))}
@@ -767,18 +822,31 @@ const logout = (): void => {
             </div>
           );
         })}
-        <div className="sidebar-foot clickable" title={version}>
+        <div className="sidebar-foot">
+          <span className="avatar" aria-hidden="true">
+            {accountName.slice(0, 1).toUpperCase()}
+          </span>
+          <span className="foot-id">
+            <span className="foot-name">{accountName}</span>
+            <span className="foot-sub">本地工作台</span>
+          </span>
           <button
             type="button"
-            className="foot-btn"
+            className="foot-gear"
             aria-label="打开设置"
             title="打开设置"
             onClick={() => setSettingsOpen(true)}
           >
-            <span className="avatar" aria-hidden="true">
-              {accountName.slice(0, 1).toUpperCase()}
-            </span>
-            <span className="foot-text">{version}</span>
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" strokeWidth="1.6" />
+              <path
+                d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.01a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.4"
+                strokeLinejoin="round"
+              />
+            </svg>
           </button>
         </div>
       </aside>
@@ -788,9 +856,137 @@ const logout = (): void => {
             <BlobMark />
             {selectedBotName}
           </span>
+          <button
+            type="button"
+            className="top-icon-btn"
+            aria-label="最近会话"
+            title="最近会话"
+            onClick={() => {
+              setArtifactsOpen(false);
+              setHistoryOpen((v) => !v);
+            }}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
+              <path d="M12 7.5V12l3 2" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            className="top-icon-btn artifacts-btn"
+            aria-label="产物"
+            title="产物"
+            onClick={() => {
+              setHistoryOpen(false);
+              setArtifactsOpen((v) => !v);
+              setArtifactPreview(null);
+            }}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                d="M21 11.5 12.5 20a5 5 0 0 1-7-7l8-8a3.5 3.5 0 0 1 5 5l-8 8a1.8 1.8 0 0 1-2.5-2.5L15 4.5"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+              />
+            </svg>
+          </button>
+          {historyOpen && (
+            <>
+              <div className="menu-overlay" onClick={() => setHistoryOpen(false)} />
+              <div className="top-popover" role="dialog" aria-label="最近会话">
+                <div className="popover-title">最近会话</div>
+                {(historySessions ?? []).slice(0, 8).map((session) => (
+                  <button
+                    key={session.sessionId}
+                    type="button"
+                    className="session-item"
+                    onClick={() => {
+                      setRestoredSession(session);
+                      setHistoryOpen(false);
+                    }}
+                  >
+                    <span className="tab-title">{session.title}</span>
+                    <span className="session-meta">
+                      {new Date(session.startedAt).toLocaleString()} ·{" "}
+                      {session.status === "ended" ? "已结束" : "进行中"}
+                    </span>
+                  </button>
+                ))}
+                {(historySessions ?? []).length === 0 && (
+                  <div className="sys-line">还没有历史会话</div>
+                )}
+              </div>
+            </>
+          )}
+          {artifactsOpen && (
+            <>
+              <div className="menu-overlay" onClick={() => setArtifactsOpen(false)} />
+              <div className="top-popover artifacts-popover" role="dialog" aria-label="产物">
+                <div className="popover-title">产物</div>
+                {(artifactList ?? []).map((artifact) => (
+                  <div className="artifact-item" key={artifact.id}>
+                    <div className="artifact-meta">
+                      <div className="tab-title">{artifact.relativePath}</div>
+                      <div className="session-meta">
+                        {artifact.mediaType} · {artifact.size} bytes
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      className="pill-btn"
+                      onClick={() => {
+                        void desktop.artifacts.preview(artifact).then((result: { kind: "text"; content: string } | { kind: "blocked"; reason: string }) => {
+                          setArtifactPreview(
+                            result.kind === "text"
+                              ? { id: artifact.id, kind: "text", content: result.content }
+                              : { id: artifact.id, kind: "blocked", reason: result.reason },
+                          );
+                        });
+                      }}
+                    >
+                      预览
+                    </button>
+                  </div>
+                ))}
+                {(artifactList ?? []).length === 0 && <div className="sys-line">暂无产物</div>}
+                {artifactPreview !== null &&
+                  (artifactPreview.kind === "text" ? (
+                    <pre className="artifact-preview">{artifactPreview.content}</pre>
+                  ) : (
+                    <p className="form-error">{artifactPreview.reason}</p>
+                  ))}
+              </div>
+            </>
+          )}
         </header>
         <main className="panel">
-          {selectedBot !== null ? (
+          {restoredSession !== null && selectedBot !== null ? (
+            <div className="restored-view">
+              <header className="pair-head">
+                <span className="page-chip">{restoredSession.title}</span>
+              </header>
+              <div className="pair-body">
+                <div className="msg-notice">
+                  {new Date(restoredSession.startedAt).toLocaleString()} ·{" "}
+                  {restoredSession.status === "ended" ? "已结束" : "进行中"}
+                </div>
+                <div className="sys-line">
+                  该会话暂无可回放的聊天消息：当前夹具只含运行事件，真实消息回放需 D06/D12 接入。
+                </div>
+              </div>
+              <div className="pair-foot">
+                <button
+                  type="button"
+                  className="pill-btn"
+                  onClick={() => setRestoredSession(null)}
+                >
+                  返回当前会话
+                </button>
+              </div>
+            </div>
+          ) : selectedBot !== null ? (
             <BotsPlaceholder
               key={selectedBot}
               bots={bots}
@@ -925,22 +1121,6 @@ const logout = (): void => {
               <MenuIcon d="M9 9h10v12H9zM5 15H3V3h12v2" />
               复制 Bot
             </button>
-            <button
-              type="button"
-              role="menuitem"
-              className={"menu-item" + (menuBot.bot.archivedAt === null ? "" : " disabled-hint")}
-              disabled={menuBot.bot.archivedAt !== null}
-              onClick={() => {
-                void (async () => {
-                  const result = await archiveBotEntity(menuBot.bot.id);
-                  setToast(result.ok ? "已归档：不能发起新聊天，历史会话保留" : "归档失败");
-                })();
-                setMenu(null);
-              }}
-            >
-              <MenuIcon d="M3 8h18M6 8V5h12v3M7 8l1 13h8l1-13" />
-              {menuBot.bot.archivedAt === null ? "归档 Bot" : "已归档"}
-            </button>
             <button type="button" role="menuitem" className="menu-item" onClick={() => void copyBotId(menuBot.key)}>
               <MenuIcon d="M9 9h10v12H9zM5 15H3V3h12v2" />
               复制对话 ID
@@ -1016,54 +1196,6 @@ const logout = (): void => {
               </button>
             </header>
             <div className="modal-body">
-              {!editingBot && (
-                <>
-                  <div className="preview">
-                    <BlobFace shape={shape} color={PALETTE[color]!} size={100} />
-                  </div>
-                  <div className="shape-grid" role="radiogroup" aria-label="形状">
-                    {SHAPES.map((sh, i) => (
-                      <button
-                        key={i}
-                        type="button"
-                        role="radio"
-                        aria-checked={shape === i}
-                        className={shape === i ? "shape-btn selected" : "shape-btn"}
-                        onClick={() => setShape(i)}
-                      >
-                        <BlobFace shape={i} color={PALETTE[color]!} size={44} />
-                      </button>
-                    ))}
-                  </div>
-                  <div className="color-grid" role="radiogroup" aria-label="颜色">
-                    {PALETTE.map((c, i) => (
-                      <button
-                        key={c}
-                        type="button"
-                        role="radio"
-                        aria-checked={color === i}
-                        className={color === i ? "color-btn selected" : "color-btn"}
-                        style={{ background: c }}
-                        onClick={() => setColor(i)}
-                      />
-                    ))}
-                  </div>
-                  <label className="group-pick">
-                    分组
-                    <select
-                      value={modalGroup}
-                      disabled={groups.length === 0}
-                      onChange={(e) => setModalGroup(Number(e.target.value))}
-                    >
-                      {groups.map((g) => (
-                        <option key={g.key} value={g.key}>
-                          {g.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                </>
-              )}
               <BotForm
                 key={editingBot?.bot.id ?? "new"}
                 {...(editingBot
@@ -1080,13 +1212,67 @@ const logout = (): void => {
                 submitLabel={editingBot ? "保存" : "创建"}
                 onSubmit={submitBotDraft}
                 onCancel={() => setModalOpen(false)}
+                previewSlot={
+                  <div className="preview">
+                    <BlobFace shape={shape} color={PALETTE[color]!} size={100} />
+                  </div>
+                }
+                avatarSlot={
+                  !editingBot && (
+                    <>
+                      <div className="shape-grid" role="radiogroup" aria-label="形状">
+                        {SHAPES.map((sh, i) => (
+                          <button
+                            key={i}
+                            type="button"
+                            role="radio"
+                            aria-checked={shape === i}
+                            className={shape === i ? "shape-btn selected" : "shape-btn"}
+                            onClick={() => setShape(i)}
+                          >
+                            <BlobFace shape={i} color={PALETTE[color]!} size={44} />
+                          </button>
+                        ))}
+                      </div>
+                      <div className="color-grid" role="radiogroup" aria-label="颜色">
+                        {PALETTE.map((c, i) => (
+                          <button
+                            key={c}
+                            type="button"
+                            role="radio"
+                            aria-checked={color === i}
+                            className={color === i ? "color-btn selected" : "color-btn"}
+                            style={{ background: c }}
+                            onClick={() => setColor(i)}
+                          />
+                        ))}
+                      </div>
+                    </>
+                  )
+                }
+                groupSlot={
+                  !editingBot && (
+                    <label className="group-pick compact">
+                      <span>分组</span>
+                      <select
+                        value={modalGroup}
+                        disabled={groups.length === 0}
+                        onChange={(e) => setModalGroup(Number(e.target.value))}
+                      >
+                        {groups.map((g) => (
+                          <option key={g.key} value={g.key}>
+                            {g.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )
+                }
               />
             </div>
           </div>
         </div>
       )}
-
-      
 
       {groupMenu && (
         <>
@@ -1276,6 +1462,13 @@ const logout = (): void => {
                   <div className="settings-row">
                     <span>语言</span>
                     <span className="settings-soon">跟随系统</span>
+                  </div>
+                </div>
+                <div className="settings-section-title">关于</div>
+                <div className="settings-card">
+                  <div className="settings-row">
+                    <span>版本</span>
+                    <span className="settings-soon">{version}</span>
                   </div>
                 </div>
                 <div className="settings-section-title">系统</div>
@@ -1515,11 +1708,10 @@ function BotsPlaceholder({
     );
   }
   const others = bots.filter((b) => b.key !== me.key);
-  const archived = me.bot.archivedAt !== null;
 
   const send = (): void => {
     const text = draft.trim();
-    if (!text || archived) {
+    if (!text) {
       return;
     }
     onSend(text);
@@ -1757,7 +1949,6 @@ function BotsPlaceholder({
         )}
         {msgs.length === 0 && <div className="sys-line">会话为空。</div>}
       </div>
-      <SessionHistory service={service} botId={me.bot.id} />
       {quoteDraft && (
         <div className="quote-chip">
           <span>
@@ -1766,11 +1957,6 @@ function BotsPlaceholder({
           <button type="button" className="quote-cancel" aria-label="取消引用" onClick={onCancelQuote}>
             ×
           </button>
-        </div>
-      )}
-      {archived && (
-        <div className="archived-banner" role="status">
-          该机器人已归档：不能发起新聊天；历史会话仍可查看。
         </div>
       )}
       <div className="composer">
@@ -1842,10 +2028,10 @@ function BotsPlaceholder({
         </div>
         <input
           className="composer-input"
-          placeholder={archived ? "已归档：不能发起新聊天" : `给 ${me.bot.name} 发消息`}
+          placeholder={`给 ${me.bot.name} 发消息`}
           value={draft}
           maxLength={200}
-          aria-label={archived ? "已归档，不能发起新聊天" : `给 ${me.bot.name} 发消息`}
+          aria-label={`给 ${me.bot.name} 发消息`}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter") {
@@ -1865,7 +2051,7 @@ function BotsPlaceholder({
             />
           </svg>
         </span>
-        <button type="button" className="send-btn" aria-label="发送" disabled={archived || !draft.trim()} onClick={send}>
+        <button type="button" className="send-btn" aria-label="发送" disabled={!draft.trim()} onClick={send}>
           ↑
         </button>
       </div>

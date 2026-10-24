@@ -21,7 +21,7 @@ beforeEach(() => {
 describe("FixtureService bots", () => {
   it("seeds schema-valid bots", async () => {
     const bots = await service.bots.list();
-    expect(bots.length).toBeGreaterThanOrEqual(3);
+    expect(bots.length).toBeGreaterThanOrEqual(2);
     expect(bots.every((b) => b.revision.length > 0)).toBe(true);
   });
 

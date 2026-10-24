@@ -58,16 +58,6 @@ const SEED_BOTS: Bot[] = [
     toolPolicyId: "66666666-6666-4666-8666-666666666667",
     archivedAt: null,
   },
-  {
-    id: "11111111-1111-4111-8111-111111111113",
-    revision: "22222222-2222-4222-8222-222222222224",
-    name: "archived-legacy",
-    instructions: "Legacy bot kept for history.",
-    modelProfileId: "44444444-4444-4444-8444-444444444444",
-    workspaceId: "55555555-5555-4555-8555-555555555557",
-    toolPolicyId: "66666666-6666-4666-8666-666666666668",
-    archivedAt: "2026-10-23T08:00:00Z",
-  },
 ];
 
 const SEED_SESSIONS: ChatSessionView[] = [
