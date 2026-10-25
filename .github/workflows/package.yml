@@ -1,0 +1,65 @@
+name: Package
+
+# D11 (FR-10): product packaging CI. Builds the Windows x64 NSIS installer
+# and publishes it as a workflow artifact together with its SHA-256 sums.
+# CI proves the installer is reproducibly buildable from a fixed tree — it
+# does NOT replace the clean-machine install trial (D11 brief §5) and never
+# publishes a release: tags are built, not released.
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  package:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Record versions
+        run: |
+          node --version
+          pnpm --version
+          pnpm --filter @deepseek-bot/desktop exec electron-builder --version
+
+      - name: Build NSIS installer
+        run: pnpm --filter @deepseek-bot/desktop pack:win
+
+      - name: Generate SHA-256 sums
+        shell: pwsh
+        run: |
+          $files = Get-ChildItem "apps/desktop/release" -File |
+            Where-Object { $_.Name -like "*.exe" }
+          if ($files.Count -eq 0) { throw "no installer produced" }
+          $lines = $files | ForEach-Object {
+            $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower()
+            "$hash  $($_.Name)"
+          }
+          $lines | Out-File -FilePath "apps/desktop/release/SHA256SUMS.txt" -Encoding ascii
+          Get-Content "apps/desktop/release/SHA256SUMS.txt"
+
+      - name: Upload installer artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-x64-installer
+          path: |
+            apps/desktop/release/*.exe
+            apps/desktop/release/*.blockmap
+            apps/desktop/release/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 14
