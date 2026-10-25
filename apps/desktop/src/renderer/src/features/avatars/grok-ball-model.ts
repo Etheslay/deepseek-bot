@@ -9,18 +9,17 @@
 export type GrokBallShapeId =
   | "circle"
   | "blob"
-  | "pebble"
+  | "squircle"
+  | "star4"
   | "cloud"
+  | "heart"
+  | "flower6"
   | "egg"
   | "capsule"
-  | "squircle"
-  | "diamond"
   | "triangle"
   | "pentagon"
-  | "hexagon"
-  | "star4"
   | "star5"
-  | "flower6"
+  | "hexagon"
   | "pumpkin";
 
 export type GrokBallState =
@@ -37,6 +36,8 @@ export type ShapeDefinition = {
   id: GrokBallShapeId;
   /** Silhouette control points in a 100×100 local space. */
   points: Point[];
+  /** Horizontal offset of the eye pair, relative to the shape center. */
+  eyeX?: number;
   /** Vertical placement of the eye pair, relative to the shape center. */
   eyeY: number;
   /** Horizontal distance between eye centers. */
@@ -129,6 +130,39 @@ function harmonic(offset: number, ...terms: Array<[number, number, number]>): (a
     );
 }
 
+/** Classic parametric heart, normalised into the 100×100 box. */
+function heartPoints(): Point[] {
+  const raw: Point[] = [];
+  const count = 180;
+  for (let i = 0; i < count; i++) {
+    const t = (Math.PI * 2 * i) / count;
+    const x = 16 * Math.sin(t) ** 3;
+    const y =
+      13 * Math.cos(t) -
+      5 * Math.cos(2 * t) -
+      2 * Math.cos(3 * t) -
+      Math.cos(4 * t);
+    raw.push([x, y]);
+  }
+  const xs = raw.map(([x]) => x);
+  const ys = raw.map(([, y]) => y);
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
+  const scale = 82 / Math.max(maxX - minX, maxY - minY);
+  const cx = (minX + maxX) / 2;
+  const cy = (minY + maxY) / 2;
+  // Tilt the heart so the tip points down-left, like the reference picker.
+  const rot = (-28 * Math.PI) / 180;
+  const cosR = Math.cos(rot);
+  const sinR = Math.sin(rot);
+  return raw.map(([x, y]) => {
+    const px = (x - cx) * scale;
+    const py = -(y - cy) * scale + 2;
+    return [CENTER + px * cosR - py * sinR, CENTER + px * sinR + py * cosR];
+  });
+}
 export const GROK_BALL_SHAPES: Record<GrokBallShapeId, ShapeDefinition> = {
   circle: {
     id: "circle",
@@ -138,21 +172,43 @@ export const GROK_BALL_SHAPES: Record<GrokBallShapeId, ShapeDefinition> = {
   },
   blob: {
     id: "blob",
-    points: radialRing(harmonic(40, [3.2, 3, 0.5], [1.6, 2, -0.8])),
+    points: radialRing(harmonic(40, [3.8, 3, 0.5], [1.4, 2, -0.6]), { rotateDeg: 8 }),
     eyeY: 48,
     eyeSpacing: 24,
   },
-  pebble: {
-    id: "pebble",
-    points: radialRing(harmonic(40, [3, 2, 1.1], [2, 3, 0.2])),
-    eyeY: 49,
+  squircle: {
+    id: "squircle",
+    points: radialRing(superellipseRadius(4.4, 44), { rotateDeg: 18 }),
+    eyeY: 50,
     eyeSpacing: 24,
+  },
+  star4: {
+    id: "star4",
+    points: radialRing(harmonic(40, [6, 4, 0])),
+    eyeY: 48,
+    eyeSpacing: 22,
+    creases: 4,
   },
   cloud: {
     id: "cloud",
     points: radialRing(harmonic(39.5, [4.5, 3, 1.1]), { scaleY: 0.97 }),
     eyeY: 49,
     eyeSpacing: 24,
+  },
+  heart: {
+    id: "heart",
+    points: heartPoints(),
+    eyeX: 6,
+    eyeY: 40,
+    eyeSpacing: 20,
+    eyeScale: 0.92,
+  },
+  flower6: {
+    id: "flower6",
+    points: radialRing(harmonic(40, [4.2, 6, 0])),
+    eyeY: 48,
+    eyeSpacing: 22,
+    creases: 6,
   },
   egg: {
     id: "egg",
@@ -166,18 +222,6 @@ export const GROK_BALL_SHAPES: Record<GrokBallShapeId, ShapeDefinition> = {
     eyeY: 50,
     eyeSpacing: 26,
   },
-  squircle: {
-    id: "squircle",
-    points: radialRing(superellipseRadius(4.4, 44)),
-    eyeY: 50,
-    eyeSpacing: 24,
-  },
-  diamond: {
-    id: "diamond",
-    points: radialRing(superellipseRadius(2.6, 44), { rotateDeg: 18 }),
-    eyeY: 49,
-    eyeSpacing: 22,
-  },
   triangle: {
     id: "triangle",
     points: radialRing(roundedPolygonRadius(3, 0.52, 45), { rotateDeg: 90 }),
@@ -190,19 +234,6 @@ export const GROK_BALL_SHAPES: Record<GrokBallShapeId, ShapeDefinition> = {
     eyeY: 51,
     eyeSpacing: 23,
   },
-  hexagon: {
-    id: "hexagon",
-    points: radialRing(roundedPolygonRadius(6, 0.56, 45)),
-    eyeY: 50,
-    eyeSpacing: 24,
-  },
-  star4: {
-    id: "star4",
-    points: radialRing(harmonic(40, [6, 4, 0])),
-    eyeY: 48,
-    eyeSpacing: 23,
-    creases: 4,
-  },
   star5: {
     id: "star5",
     points: radialRing(harmonic(40, [6.5, 5, 0])),
@@ -210,12 +241,11 @@ export const GROK_BALL_SHAPES: Record<GrokBallShapeId, ShapeDefinition> = {
     eyeSpacing: 22,
     creases: 5,
   },
-  flower6: {
-    id: "flower6",
-    points: radialRing(harmonic(40, [4.2, 6, 0])),
-    eyeY: 48,
-    eyeSpacing: 22,
-    creases: 6,
+  hexagon: {
+    id: "hexagon",
+    points: radialRing(roundedPolygonRadius(6, 0.56, 45)),
+    eyeY: 50,
+    eyeSpacing: 24,
   },
   pumpkin: {
     id: "pumpkin",
@@ -230,21 +260,19 @@ export const GROK_BALL_SHAPES: Record<GrokBallShapeId, ShapeDefinition> = {
 export const GROK_BALL_SHAPE_IDS: GrokBallShapeId[] = [
   "circle",
   "blob",
-  "pebble",
+  "squircle",
+  "star4",
   "cloud",
+  "heart",
+  "flower6",
   "egg",
   "capsule",
-  "squircle",
-  "diamond",
   "triangle",
   "pentagon",
-  "hexagon",
-  "star4",
   "star5",
-  "flower6",
+  "hexagon",
   "pumpkin",
 ];
-
 /** Sample a closed contour at an even parameter resolution. */
 export function sampleContour(points: Point[], resolution = 64): Point[] {
   if (points.length === 0) {
@@ -518,6 +546,10 @@ export const GROK_BALL_COLORS = [
   "#e152b0",
   "#a3a3a3",
 ];
+
+
+
+
 
 
 

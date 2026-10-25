@@ -17,18 +17,17 @@ import {
 const REQUIRED_SHAPES = [
   "circle",
   "blob",
-  "pebble",
+  "squircle",
+  "star4",
   "cloud",
+  "heart",
+  "flower6",
   "egg",
   "capsule",
-  "squircle",
-  "diamond",
   "triangle",
   "pentagon",
-  "hexagon",
-  "star4",
   "star5",
-  "flower6",
+  "hexagon",
   "pumpkin",
 ] as const;
 
@@ -66,7 +65,7 @@ describe("Grok Ball shapes", () => {
   });
 
   it("samples a contour at the requested resolution", () => {
-    const sampled = sampleContour(GROK_BALL_SHAPES.blob.points, 48);
+    const sampled = sampleContour(GROK_BALL_SHAPES.cloud.points, 48);
     expect(sampled).toHaveLength(48);
     for (const [x, y] of sampled) {
       expect(Number.isFinite(x)).toBe(true);
@@ -75,7 +74,7 @@ describe("Grok Ball shapes", () => {
   });
 
   it("builds a closed SVG path from a contour", () => {
-    const d = contourPath(sampleContour(GROK_BALL_SHAPES.diamond.points, 32));
+    const d = contourPath(sampleContour(GROK_BALL_SHAPES.squircle.points, 32));
     expect(d.startsWith("M ")).toBe(true);
     expect(d.endsWith("Z")).toBe(true);
     expect(d).toContain("C ");
@@ -187,4 +186,8 @@ describe("Grok Ball fixed-slot variants", () => {
     expect(isStaticVariant("preview")).toBe(false);
   });
 });
+
+
+
+
 

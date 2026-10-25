@@ -21,7 +21,6 @@ import {
   avatarColor,
   type Avatar as AvatarKind,
 } from "./features/avatars/avatar-meta.js";
-import { DOLPHIN_LOGO_URL } from "./features/avatars/preset-urls.js";
 import { WorkflowEditor } from "./features/workflow-editor/workflow-editor.js";
 import { RunMonitor } from "./features/run-monitor/run-monitor.js";
 
@@ -883,8 +882,7 @@ const logout = (): void => {
         </div>
         <div className="side-identity">
           <span className="big-avatar">
-            <img className="identity-logo" src={DOLPHIN_LOGO_URL} alt="" draggable={false} />
-            <span className="presence-dot" />
+            <AvatarView avatar={{ kind: "grok", shape: "circle", color: "#3b93f0" }} variant="preview" size={84} />
           </span>
           <span className="identity-name">DeepSeek Bot</span>
         </div>
@@ -2219,4 +2217,6 @@ function BotsPlaceholder({
     </div>
   );
 }
+
+
 

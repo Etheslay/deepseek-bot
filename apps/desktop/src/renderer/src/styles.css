@@ -4194,12 +4194,7 @@ select option {
   --avatar-mono-fg: #111111;
   /* Eye fill: white on light surfaces, near-black on dark surfaces. */
   --gb-eye: #111111;
-  /* Soft-blob shading palette (key light fixed at the upper-left). */
-  --gb-mono-hi: #ffffff;
-  --gb-mono-mid: #f0f0f2;
-  --gb-mono-shade: #c7c7d0;
-  --gb-contact: rgba(0, 0, 0, 0.5);
-  --gb-crease: rgba(0, 0, 0, 0.18);
+
 }
 
 :root[data-theme="light"] {
@@ -4207,11 +4202,7 @@ select option {
   --avatar-mono-eye: #ffffff;
   --avatar-mono-fg: #ffffff;
   --gb-eye: #ffffff;
-  --gb-mono-hi: #5c5c66;
-  --gb-mono-mid: #1b1b1f;
-  --gb-mono-shade: #000000;
-  --gb-contact: rgba(0, 0, 0, 0.32);
-  --gb-crease: rgba(0, 0, 0, 0.4);
+
 }
 
 .avatar-minimal.mono .eye {
@@ -5850,7 +5841,6 @@ select option {
 
 .grok-ball .gb-eye {
   transition: fill 200ms ease;
-  filter: drop-shadow(0 0.8px 0.9px rgba(0, 0, 0, 0.3));
 }
 
 .grok-ball .gb-eye {
@@ -6044,5 +6034,11 @@ select option {
   .msg-row {
     animation: none;
   }
+}
+
+/* Sidebar brand slot: round bot instead of the dolphin mark. */
+.big-avatar .grok-ball {
+  width: 84px;
+  height: 84px;
 }
 
