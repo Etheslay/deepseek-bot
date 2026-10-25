@@ -18,19 +18,18 @@ const REQUIRED_SHAPES = [
   "circle",
   "blob",
   "pebble",
-  "bean",
-  "egg",
-  "squircle",
-  "capsule",
-  "hex",
   "cloud",
-  "soft-diamond",
-  "droplet-tilt",
-  "pill-wave",
-  "moon-slice",
-  "petal",
+  "egg",
+  "capsule",
+  "squircle",
+  "diamond",
+  "triangle",
+  "pentagon",
+  "hexagon",
+  "star4",
+  "star5",
+  "flower6",
   "pumpkin",
-  "soft-triangle",
 ] as const;
 
 describe("Grok Ball shapes", () => {
@@ -76,7 +75,7 @@ describe("Grok Ball shapes", () => {
   });
 
   it("builds a closed SVG path from a contour", () => {
-    const d = contourPath(sampleContour(GROK_BALL_SHAPES["soft-diamond"].points, 32));
+    const d = contourPath(sampleContour(GROK_BALL_SHAPES.diamond.points, 32));
     expect(d.startsWith("M ")).toBe(true);
     expect(d.endsWith("Z")).toBe(true);
     expect(d).toContain("C ");
@@ -96,7 +95,9 @@ describe("Grok Ball soft-blob shading", () => {
 
   it("marks the multi-lobe bodies with soft creases", () => {
     expect(GROK_BALL_SHAPES.pumpkin.creases).toBe(6);
-    expect(GROK_BALL_SHAPES.petal.creases).toBe(3);
+    expect(GROK_BALL_SHAPES.flower6.creases).toBe(6);
+    expect(GROK_BALL_SHAPES.star4.creases).toBe(4);
+    expect(GROK_BALL_SHAPES.star5.creases).toBe(5);
     for (const id of GROK_BALL_SHAPE_IDS) {
       const creases = GROK_BALL_SHAPES[id].creases;
       if (creases !== undefined) {
@@ -186,3 +187,4 @@ describe("Grok Ball fixed-slot variants", () => {
     expect(isStaticVariant("preview")).toBe(false);
   });
 });
+

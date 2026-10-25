@@ -1,16 +1,16 @@
 {
-  "capturedAt": "2026-10-25T11:08:41.541Z",
+  "capturedAt": "2026-10-25T11:15:18.181Z",
   "themeFacts": {
-    "shapes": 16,
-    "colors": 13,
+    "shapes": 15,
+    "colors": 11,
     "theme": "dark",
     "previewPaths": 1
   },
   "monoClicked": true,
   "images": {
-    "dark": 221812,
-    "zoom": 344878,
-    "light": 232324
+    "dark": 219881,
+    "zoom": 351958,
+    "light": 232320
   },
   "screenshots": [
     "B-AVATAR-01-r1-picker-dark.png",

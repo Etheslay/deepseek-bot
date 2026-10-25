@@ -4192,6 +4192,8 @@ select option {
   --avatar-mono-bg: #ffffff;
   --avatar-mono-eye: #111111;
   --avatar-mono-fg: #111111;
+  /* Eye fill: white on light surfaces, near-black on dark surfaces. */
+  --gb-eye: #111111;
   /* Soft-blob shading palette (key light fixed at the upper-left). */
   --gb-mono-hi: #ffffff;
   --gb-mono-mid: #f0f0f2;
@@ -4204,6 +4206,7 @@ select option {
   --avatar-mono-bg: #111111;
   --avatar-mono-eye: #ffffff;
   --avatar-mono-fg: #ffffff;
+  --gb-eye: #ffffff;
   --gb-mono-hi: #5c5c66;
   --gb-mono-mid: #1b1b1f;
   --gb-mono-shade: #000000;
@@ -5850,8 +5853,8 @@ select option {
   filter: drop-shadow(0 0.8px 0.9px rgba(0, 0, 0, 0.3));
 }
 
-.grok-ball.gb-mono .gb-eye {
-  fill: var(--avatar-mono-eye);
+.grok-ball .gb-eye {
+  fill: var(--gb-eye);
 }
 
 /* Fixed identity slots never shrink or wrap the ball. */
@@ -5859,3 +5862,4 @@ select option {
 .tab > .grok-ball {
   flex: 0 0 auto;
 }
+

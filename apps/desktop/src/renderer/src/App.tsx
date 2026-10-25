@@ -1348,7 +1348,7 @@ const logout = (): void => {
                     <AvatarView avatar={avatar} variant="preview" size={editingBot ? 100 : 80} />
                   </div>
                 }
-                avatarSlot={<AvatarPicker value={avatar} onChange={setAvatar} />}
+                avatarSlot={<AvatarPicker value={avatar} onChange={setAvatar} theme={theme} />}
                 groupSlot={
                   !editingBot && (
                     <div className="group-pick compact">
@@ -2219,3 +2219,4 @@ function BotsPlaceholder({
     </div>
   );
 }
+

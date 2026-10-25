@@ -36,6 +36,8 @@ const BREATH_AMPLITUDE = 0.014;
 const BLINK_MIN_MS = 2000;
 const BLINK_MAX_MS = 6000;
 const GAZE_TIME_CONSTANT_MS = 105;
+/** Resting glance: up and to the left (~45°), like a head watching a cursor there. */
+const RESTING_GAZE = { x: -0.52, y: 0.5 };
 
 type GrokBallProps = {
   /** Explicit pixel size; overrides the variant preset when provided. */
@@ -130,8 +132,8 @@ export function GrokBall({
   const targetFrameRef = useRef<StateFrame>(GROK_BALL_STATE_FRAMES[state]);
   const morphRef = useRef<{ start: number; from: StateFrame } | null>(null);
 
-  const gazeRef = useRef({ x: 0, y: 0 });
-  const gazeTargetRef = useRef({ x: 0, y: 0 });
+  const gazeRef = useRef({ ...RESTING_GAZE });
+  const gazeTargetRef = useRef({ ...RESTING_GAZE });
   const lastMouseMoveRef = useRef(0);
   const nextSaccadeRef = useRef(0);
   const blinkRef = useRef({ value: 0, velocity: 0, target: 0, next: 0 });
@@ -195,7 +197,7 @@ export function GrokBall({
       const cy = rect.top + rect.height / 2;
       gazeTargetRef.current = {
         x: Math.max(-1, Math.min(1, (event.clientX - cx) / (rect.width / 2))),
-        y: Math.max(-1, Math.min(1, (event.clientY - cy) / (rect.height / 2))),
+        y: Math.max(-1, Math.min(1, -(event.clientY - cy) / (rect.height / 2))),
       };
       lastMouseMoveRef.current = performance.now();
     };
@@ -222,8 +224,8 @@ export function GrokBall({
       // Idle saccade when the cursor has been still for a while.
       if (now - lastMouseMoveRef.current > 2400 && now > nextSaccadeRef.current) {
         gazeTargetRef.current = {
-          x: (Math.random() - 0.5) * 1.1,
-          y: (Math.random() - 0.5) * 0.8,
+          x: Math.max(-1, Math.min(1, RESTING_GAZE.x + (Math.random() - 0.5) * 0.4)),
+          y: Math.max(-1, Math.min(1, RESTING_GAZE.y + (Math.random() - 0.5) * 0.4)),
         };
         nextSaccadeRef.current = now + 1800 + Math.random() * 3200;
       }
@@ -305,14 +307,22 @@ export function GrokBall({
       if (leftPath) {
         leftPath.setAttribute("d", eyePathFromFrame(frame.left));
         if (!mono) {
-          leftPath.setAttribute("fill", frame.left.color);
+          if (stateRef.current === "idle") {
+            leftPath.style.removeProperty("fill");
+          } else {
+            leftPath.style.fill = frame.left.color;
+          }
         }
       }
       const rightPath = rightEyePathRef.current;
       if (rightPath) {
         rightPath.setAttribute("d", eyePathFromFrame(frame.right));
         if (!mono) {
-          rightPath.setAttribute("fill", frame.right.color);
+          if (stateRef.current === "idle") {
+            rightPath.style.removeProperty("fill");
+          } else {
+            rightPath.style.fill = frame.right.color;
+          }
         }
       }
 
@@ -420,6 +430,13 @@ export function GrokBall({
         filter={`url(#${contactBlurId})`}
       />
       <g ref={bodyGroupRef}>
+        {definition.stem && (
+          <path
+            className="gb-stem"
+            d="M49 15 C48 8 51 4 57 3 L59 6 C54 7 52 11 52 15 Z"
+            fill="#8b5e3c"
+          />
+        )}
         <path className="gb-body" d={bodyPath} fill={`url(#${bodyGradientId})`} />
         <g clipPath={`url(#${clipId})`}>
           {/* Core shadow on the lower-right, opposite the upper-left key light. */}
@@ -462,7 +479,11 @@ export function GrokBall({
               ref={leftEyePathRef}
               className="gb-eye"
               d={eyePathFromFrame(GROK_BALL_STATE_FRAMES[state].left)}
-              fill={mono ? undefined : GROK_BALL_STATE_FRAMES[state].left.color}
+              style={
+                mono || state === "idle"
+                  ? undefined
+                  : { fill: GROK_BALL_STATE_FRAMES[state].left.color }
+              }
             />
           </g>
           <g ref={rightEyeGroupRef} transform={neutralEyeTransform(1, definition)}>
@@ -470,7 +491,11 @@ export function GrokBall({
               ref={rightEyePathRef}
               className="gb-eye"
               d={eyePathFromFrame(GROK_BALL_STATE_FRAMES[state].right)}
-              fill={mono ? undefined : GROK_BALL_STATE_FRAMES[state].right.color}
+              style={
+                mono || state === "idle"
+                  ? undefined
+                  : { fill: GROK_BALL_STATE_FRAMES[state].right.color }
+              }
             />
           </g>
         </g>
@@ -488,5 +513,7 @@ export function GrokBall({
     </svg>
   );
 }
+
+
 
 

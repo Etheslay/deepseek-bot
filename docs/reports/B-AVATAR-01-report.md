@@ -29,6 +29,8 @@
 
 ## 形体集合（共 15 款，全部自研轮廓）
 
+> R1.1 起本节的低模轮廓已被替换为 15 款 180 点采样的平滑轮廓（`circle`/`blob`/`pebble`/`cloud`/`egg`/`capsule`/`squircle`/`diamond`/`triangle`/`pentagon`/`hexagon`/`star4`/`star5`/`flower6`/`pumpkin`），以下为历史记录。
+
 基础集（对齐官方/API 常见子集）：
 `circle` · `blob` · `pebble` · `bean` · `egg` · `squircle` · `capsule` · `hex` · `cloud`
 
@@ -83,22 +85,26 @@
 | 边缘光 | 沿轮廓描边，`linearGradient` 左上白 0.7 → 中段透明，宽 2，clip 在形体内 |
 | 镜面高光 | 左上肩椭圆（36,32，12×8.5，-34°），径向渐变 + 高斯模糊 2.6，中心 0.45，避免硬白斑 |
 | 接触阴影 | 形体下方椭圆（50,96，27×3.4）+ 模糊，`--gb-contact`，让球"坐"在立牌上而不是悬浮 |
-| 多瓣 / 果冻 | 新增 `pumpkin`（6 瓣，`40 + 3.2·cos6θ`）；`petal`(3) / `pumpkin`(6) 加柔和径向褶皱（模糊 2.6，clip 内） |
+| 形体重做（R1.1） | 全部轮廓改为解析函数 + 180 点采样，旧版 18–36 点低模轮廓被移除（折角/多边形感消除）：`circle`/`blob`/`pebble`/`cloud`/`egg`/`capsule`/`squircle`/`diamond`/`triangle`/`pentagon`/`hexagon`/`star4`/`star5`/`flower6`/`pumpkin`，共 15 款 |
+| 多瓣 / 果冻 | `flower6`(6 瓣)、`star4`(4)、`star5`(5)、`pumpkin`(6 瓣 + 褐色小梗) 用余弦半径调制，并加柔和径向褶皱（模糊 2.6，clip 内） |
+| 配色随主题 | 调色板 10 色；黑白只保留一个随主题反相的 mono 色块（浅色=黑、深色=白），色块不带眼睛；浅色主题不出白色、深色主题不出黑色 |
+| 眼睛颜色 | 浅色主题白眼、深色主题黑眼（`--gb-eye`）；mono 球保持反相 |
+| 视线 | 静息视线朝左上约 45°（`RESTING_GAZE`），闲置扫视围绕该方向；鼠标跟随修正 Y 方向，可看正面与斜侧 |
 | 亮暗反相 | mono 不再用纯色 `fill`：三档改用 `--gb-mono-hi/mid/shade` 变量（深色主题 白→浅灰，浅色主题 灰→黑），仍随主题切换 |
-| 保留 | gaze（105ms 阻尼）、眨眼弹簧、状态帧逐点插值、呼吸、固定位立牌（sidebar/message-header/preview 动、inline 静）全部未动；眼睛仅加 0.8px 投影 |
+| 保留 | 眨眼弹簧、状态帧逐点插值、呼吸、固定位立牌（sidebar/message-header/preview 动、inline 静）未动；视线改为静息左上并修正鼠标 Y 方向；眼睛仅加 0.8px 投影 |
 
 **验证**（Windows 11 · Node v24.16.0 · pnpm 11.28.5）：
 
 - `pnpm lint` → exit 0
 - `pnpm typecheck` → exit 0（6 包）
-- `pnpm --filter @deepseek-bot/desktop test` → **136 passed**（新增 2 例：三档明暗推导、多瓣褶皱元数据；形状总数 16）
-- `pnpm --filter @deepseek-bot/desktop build` → exit 0（renderer JS 1064.51 kB / CSS 100.04 kB）
+- `pnpm --filter @deepseek-bot/desktop test` → **136 passed**（新增 2 例：三档明暗推导、多瓣褶皱元数据；形状总数 15）
+- `pnpm --filter @deepseek-bot/desktop build` → exit 0（renderer JS 1062.27 kB / CSS 100.13 kB）
 - 运行时取证（生产 bundle + 无头 Chrome 1100×720 @2x，驱动脚本 `handoff/r1-capture.mjs`，不入库）：
-  - `B-AVATAR-01-r1-compare.png`：before（纯色）/ after（R1）同主题并排对比
-  - `B-AVATAR-01-r1-picker-dark.png`：深色主题选择器
-  - `B-AVATAR-01-r1-shapes-zoom.png`：16 形体放大（渐变 / 边缘光 / 接触阴影）
-  - `B-AVATAR-01-r1-picker-light.png` · `-light-mono.png`：浅色主题与 mono 反相（深色球）
-  - 断言日志 `B-AVATAR-01-r1-capture-log.json`（shapes=16、colors=13、monoClicked=true）
+  - `B-AVATAR-01-r1-compare.png`：before（纯色扁平）/ after（R1）同主题并排对比
+  - `B-AVATAR-01-r1-picker-dark.png`：深色主题选择器（白色 mono 色块、黑眼、无黑色块）
+  - `B-AVATAR-01-r1-shapes-zoom.png`：15 形体放大（平滑轮廓 + 渐变 / 边缘光 / 接触阴影）
+  - `B-AVATAR-01-r1-picker-light.png` · `-light-mono.png`：浅色主题（黑色 mono 色块、白眼、无白色块）
+  - 断言日志 `B-AVATAR-01-r1-capture-log.json`（shapes=15、colors=11、monoClicked=true）
 
 **顺带修复**：`styles.css` 中 D09 注释处的 em dash 被截断为字节 `E2 80 3F`（文件因此不是合法 UTF-8），已还原为 `E2 80 94`；只改字节，未改任何规则。
 
@@ -118,10 +124,12 @@
 
 R1 返修（`32b3432`）：
 
-- 改 `grok-ball.tsx`：渐变身体、边缘光、右下核心阴影、接触阴影、软化镜面高光、多瓣褶皱
-- 改 `grok-ball-model.ts`：新增 `shadePalette()`、`pumpkin` 形体（16 款）、`creases` 元数据
-- 改 `styles.css`：新增 `--gb-mono-hi/mid/shade`、`--gb-contact`、`--gb-crease`；移除 mono 纯色 fill；修复无效 UTF-8
-- 改 `tests/features/grok-ball-model.test.ts`：新增明暗推导与褶皱元数据 2 例
+- 改 `grok-ball.tsx`：渐变身体、边缘光、右下核心阴影、接触阴影、软化镜面高光、多瓣褶皱、南瓜小梗、静息视线
+- 改 `grok-ball-model.ts`：`shadePalette()`、15 款平滑轮廓（180 点采样）、`creases`/`stem` 元数据、主题调色板 10 色
+- 改 `avatar-picker.tsx`：mono 色块改为纯色圆（不带眼睛）、按主题显示黑/白、新增 `theme` prop
+- 改 `App.tsx`：把 `theme` 传给选择器
+- 改 `styles.css`：新增 `--gb-eye`、`--gb-mono-hi/mid/shade`、`--gb-contact`、`--gb-crease`；移除 mono 纯色 fill；修复无效 UTF-8
+- 改 `tests/features/grok-ball-model.test.ts`：明暗推导、褶皱元数据、新形体集合
 - 新增 `B-AVATAR-01-r1-*.png` 5 张取证图 + `B-AVATAR-01-r1-capture-log.json`
 
 ## 验证证据

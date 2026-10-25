@@ -10,6 +10,8 @@ import { Avatar as AvatarView } from "./avatar.js";
 export function AvatarPicker(props: {
   value: Avatar;
   onChange: (avatar: Avatar) => void;
+  /** Theme drives which extreme swatch exists and the eye color. */
+  theme?: "light" | "dark";
 }): JSX.Element {
   const shape = props.value.kind === "grok" ? props.value.shape : "circle";
   const color = props.value.kind === "grok" ? props.value.color : "#3b93f0";
@@ -42,15 +44,14 @@ export function AvatarPicker(props: {
           type="button"
           role="radio"
           aria-checked={props.value.kind === "mono"}
-          title="黑白（跟随主题）"
-          aria-label="黑白（跟随主题）"
           className={
             "color-btn mono-color" + (props.value.kind === "mono" ? " selected" : "")
           }
+          style={{ background: "var(--avatar-mono-bg)" }}
+          aria-label={props.theme === "light" ? "黑色（跟随主题）" : "白色（跟随主题）"}
+          title={props.theme === "light" ? "黑色（跟随主题）" : "白色（跟随主题）"}
           onClick={() => props.onChange({ kind: "mono" })}
-        >
-          <AvatarView avatar={{ kind: "mono" }} variant="inline" size={24} />
-        </button>
+        />
         {GROK_BALL_COLORS.map((c) => (
           <button
             key={c}
@@ -70,3 +71,5 @@ export function AvatarPicker(props: {
     </div>
   );
 }
+
+

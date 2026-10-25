@@ -10,19 +10,18 @@ export type GrokBallShapeId =
   | "circle"
   | "blob"
   | "pebble"
-  | "bean"
-  | "egg"
-  | "squircle"
-  | "capsule"
-  | "hex"
   | "cloud"
-  | "soft-diamond"
-  | "droplet-tilt"
-  | "pill-wave"
-  | "moon-slice"
-  | "petal"
-  | "pumpkin"
-  | "soft-triangle";
+  | "egg"
+  | "capsule"
+  | "squircle"
+  | "diamond"
+  | "triangle"
+  | "pentagon"
+  | "hexagon"
+  | "star4"
+  | "star5"
+  | "flower6"
+  | "pumpkin";
 
 export type GrokBallState =
   | "idle"
@@ -44,342 +43,187 @@ export type ShapeDefinition = {
   eyeSpacing: number;
   /** Optional eye scale multiplier for narrow shapes. */
   eyeScale?: number;
-  /** Soft radial creases for multi-lobe (pumpkin / petal) bodies. */
+  /** Soft radial creases for multi-lobe (pumpkin / flower) bodies. */
   creases?: number;
+  /** Draw the little pumpkin stalk on top of the body. */
+  stem?: boolean;
 };
 
 const CENTER = 50;
 
-function ring(
-  count: number,
-  radius: (index: number) => number,
-  angleOffset = 0,
+const TAU = Math.PI * 2;
+
+/**
+ * Sample a radial silhouette r(θ) into a dense ring of points.
+ *
+ * The dense sampling is deliberate: with ~180 points the cubic path builder
+ * follows the analytic curve instead of exposing the low-poly corners that
+ * made the earlier 18–36 point silhouettes look faceted.
+ */
+function radialRing(
+  radius: (angle: number) => number,
+  options: {
+    count?: number;
+    scaleX?: number;
+    scaleY?: number;
+    rotateDeg?: number;
+  } = {},
 ): Point[] {
+  const { count = 180, scaleX = 1, scaleY = 1, rotateDeg = 0 } = options;
+  const rot = (rotateDeg * Math.PI) / 180;
+  const cosR = Math.cos(rot);
+  const sinR = Math.sin(rot);
   const points: Point[] = [];
   for (let i = 0; i < count; i++) {
-    const angle = (Math.PI * 2 * i) / count + angleOffset;
-    const r = radius(i);
-    points.push([
-      CENTER + Math.cos(angle) * r,
-      CENTER + Math.sin(angle) * r,
-    ]);
-  }
-  return points;
-}
-
-function ellipseRing(
-  count: number,
-  rx: number,
-  ry: number,
-  rotation = 0,
-): Point[] {
-  const points: Point[] = [];
-  for (let i = 0; i < count; i++) {
-    const angle = (Math.PI * 2 * i) / count;
-    const x = Math.cos(angle) * rx;
-    const y = Math.sin(angle) * ry;
-    const cos = Math.cos(rotation);
-    const sin = Math.sin(rotation);
-    points.push([
-      CENTER + x * cos - y * sin,
-      CENTER + x * sin + y * cos,
-    ]);
-  }
-  return points;
-}
-
-function squirclePoints(): Point[] {
-  const count = 20;
-  const exponent = 4;
-  const points: Point[] = [];
-  for (let i = 0; i < count; i++) {
-    const angle = (Math.PI * 2 * i) / count;
-    const x = Math.sign(Math.cos(angle)) * Math.abs(Math.cos(angle)) ** (2 / exponent);
-    const y = Math.sign(Math.sin(angle)) * Math.abs(Math.sin(angle)) ** (2 / exponent);
-    points.push([
-      CENTER + x * 43,
-      CENTER + y * 43,
-    ]);
-  }
-  return points;
-}
-
-function capsulePoints(): Point[] {
-  const points: Point[] = [];
-  const count = 24;
-  for (let i = 0; i < count; i++) {
-    const angle = (Math.PI * 2 * i) / count;
-    const x = Math.cos(angle);
-    const y = Math.sin(angle);
-    const capX = x >= 0 ? 30 + x * 15 : -30 + x * 15;
-    const capY = y * 25;
-    points.push([CENTER + capX, CENTER + capY]);
-  }
-  return points;
-}
-
-function hexPoints(): Point[] {
-  const points: Point[] = [];
-  const count = 18;
-  for (let i = 0; i < count; i++) {
-    const angle = (Math.PI * 2 * i) / count - Math.PI / 6;
-    const radius = i % 3 === 0 ? 46 : 38;
-    points.push([
-      CENTER + Math.cos(angle) * radius,
-      CENTER + Math.sin(angle) * radius,
-    ]);
-  }
-  return points;
-}
-
-function rotatePoints(points: Point[], deg: number): Point[] {
-  const rad = (deg * Math.PI) / 180;
-  const cos = Math.cos(rad);
-  const sin = Math.sin(rad);
-  return points.map(([x, y]) => {
-    const dx = x - CENTER;
-    const dy = y - CENTER;
-    return [CENTER + dx * cos - dy * sin, CENTER + dx * sin + dy * cos];
-  });
-}
-
-function superellipsePoints(
-  exponent: number,
-  size: number,
-  count: number,
-  rotationDeg = 0,
-): Point[] {
-  const points: Point[] = [];
-  for (let i = 0; i < count; i++) {
-    const angle = (Math.PI * 2 * i) / count;
-    const x = Math.sign(Math.cos(angle)) * Math.abs(Math.cos(angle)) ** (2 / exponent);
-    const y = Math.sign(Math.sin(angle)) * Math.abs(Math.sin(angle)) ** (2 / exponent);
-    points.push([CENTER + x * size, CENTER + y * size]);
-  }
-  return rotationDeg ? rotatePoints(points, rotationDeg) : points;
-}
-
-/** Three-lobed petal body: an oval whose radius bulges three times around. */
-function petalPoints(): Point[] {
-  const points: Point[] = [];
-  const count = 30;
-  for (let i = 0; i < count; i++) {
-    const angle = (Math.PI * 2 * i) / count;
-    const r = 40 + 7 * Math.cos(3 * (angle + Math.PI / 2));
-    points.push([CENTER + Math.cos(angle) * r, CENTER + Math.sin(angle) * r]);
-  }
-  return points;
-}
-
-/** Blunt, super-rounded triangle (shield-like) with three soft vertices. */
-function softTrianglePoints(): Point[] {
-  const points: Point[] = [];
-  const count = 36;
-  for (let i = 0; i < count; i++) {
-    const angle = (Math.PI * 2 * i) / count;
-    const r = 40 + 8 * Math.cos(3 * (angle + Math.PI / 2));
-    points.push([CENTER + Math.cos(angle) * r * 1.05, CENTER + Math.sin(angle) * r]);
+    const angle = (TAU * i) / count;
+    const r = radius(angle);
+    const x = Math.cos(angle) * r * scaleX;
+    const y = Math.sin(angle) * r * scaleY;
+    points.push([CENTER + x * cosR - y * sinR, CENTER + x * sinR + y * cosR]);
   }
   return points;
 }
 
 /**
- * Six-lobed pumpkin body: a gourd-like ring whose radius bulges six times,
- * slightly taller than wide so the lobes read as soft segments.
+ * Regular n-gon radius, blended (`round` 0→1) toward a circle so the corners
+ * become soft instead of sharp.
  */
-function pumpkinPoints(): Point[] {
-  const points: Point[] = [];
-  const count = 36;
-  for (let i = 0; i < count; i++) {
-    const angle = (Math.PI * 2 * i) / count;
-    const r = 40 + 3.2 * Math.cos(6 * angle);
-    points.push([
-      CENTER + Math.cos(angle) * r,
-      CENTER + Math.sin(angle) * r * 1.04,
-    ]);
-  }
-  return points;
+function roundedPolygonRadius(
+  sides: number,
+  round: number,
+  size: number,
+): (angle: number) => number {
+  const inner = Math.cos(Math.PI / sides);
+  const step = TAU / sides;
+  return (angle) => {
+    const wrapped = ((angle % step) + step) % step;
+    const poly = (size * inner) / Math.cos(wrapped - step / 2);
+    return size + (poly - size) * (1 - round);
+  };
 }
 
-/** Pointed-top teardrop, tilted for a more dynamic silhouette. */
-function dropletTiltPoints(): Point[] {
-  const base: Point[] = [
-    [50, 8],
-    [63, 22],
-    [73, 40],
-    [75, 58],
-    [67, 77],
-    [50, 87],
-    [33, 77],
-    [25, 58],
-    [27, 40],
-    [37, 22],
-  ];
-  return rotatePoints(base, 16);
+/** Polar form of a superellipse |x|^n + |y|^n = a^n. */
+function superellipseRadius(
+  exponent: number,
+  size: number,
+): (angle: number) => number {
+  return (angle) => {
+    const c = Math.abs(Math.cos(angle)) ** exponent;
+    const s = Math.abs(Math.sin(angle)) ** exponent;
+    return size / Math.max(c + s, 1e-6) ** (1 / exponent);
+  };
 }
 
-/** Capsule whose lower edge carries two gentle wave bumps. */
-function pillWavePoints(): Point[] {
-  return [
-    [24, 30],
-    [50, 28],
-    [76, 30],
-    [90, 40],
-    [90, 60],
-    [76, 70],
-    [63, 77],
-    [50, 70],
-    [37, 77],
-    [24, 70],
-    [10, 60],
-    [10, 40],
-  ];
+/** Stadium silhouette: a segment swept by a disk. */
+function capsuleRadius(length: number, thickness: number): (angle: number) => number {
+  return (angle) => thickness + (length / 2) * Math.abs(Math.cos(angle));
 }
 
-/** Thick upward-opening crescent; the broad bottom still seats both eyes. */
-function moonSlicePoints(): Point[] {
-  return [
-    [22, 30],
-    [14, 46],
-    [18, 64],
-    [30, 78],
-    [50, 84],
-    [70, 78],
-    [82, 64],
-    [86, 46],
-    [78, 30],
-    [66, 40],
-    [50, 44],
-    [34, 40],
-  ];
+function harmonic(offset: number, ...terms: Array<[number, number, number]>): (angle: number) => number {
+  // terms: [amplitude, frequency, phase]
+  return (angle) =>
+    offset +
+    terms.reduce(
+      (sum, [amp, freq, phase]) => sum + amp * Math.cos(freq * angle + phase),
+      0,
+    );
 }
 
 export const GROK_BALL_SHAPES: Record<GrokBallShapeId, ShapeDefinition> = {
   circle: {
     id: "circle",
-    points: ring(24, () => 46),
+    points: radialRing(() => 44),
     eyeY: 48,
     eyeSpacing: 24,
   },
   blob: {
     id: "blob",
-    points: ring(18, (i) => (i % 4 === 0 ? 46 : i % 3 === 0 ? 41 : 44)),
+    points: radialRing(harmonic(40, [3.2, 3, 0.5], [1.6, 2, -0.8])),
     eyeY: 48,
     eyeSpacing: 24,
   },
   pebble: {
     id: "pebble",
-    points: ring(20, (i) => (i % 5 === 0 ? 44 : i % 3 === 0 ? 48 : 41)),
-    eyeY: 50,
-    eyeSpacing: 25,
-  },
-  bean: {
-    id: "bean",
-    points: [
-      [30, 18],
-      [52, 10],
-      [76, 22],
-      [86, 44],
-      [78, 68],
-      [58, 88],
-      [34, 86],
-      [18, 70],
-      [14, 46],
-      [22, 28],
-    ],
-    eyeY: 48,
-    eyeSpacing: 24,
-    eyeScale: 0.9,
-  },
-  egg: {
-    id: "egg",
-    points: ellipseRing(20, 34, 45),
-    eyeY: 47,
-    eyeSpacing: 22,
-  },
-  squircle: {
-    id: "squircle",
-    points: squirclePoints(),
-    eyeY: 50,
-    eyeSpacing: 24,
-  },
-  capsule: {
-    id: "capsule",
-    points: capsulePoints(),
-    eyeY: 50,
-    eyeSpacing: 26,
-  },
-  hex: {
-    id: "hex",
-    points: hexPoints(),
-    eyeY: 50,
+    points: radialRing(harmonic(40, [3, 2, 1.1], [2, 3, 0.2])),
+    eyeY: 49,
     eyeSpacing: 24,
   },
   cloud: {
     id: "cloud",
-    points: [
-      [26, 68],
-      [18, 56],
-      [24, 42],
-      [38, 34],
-      [50, 26],
-      [66, 28],
-      [80, 38],
-      [86, 52],
-      [80, 66],
-      [66, 76],
-      [50, 82],
-      [34, 78],
-    ],
-    eyeY: 52,
+    points: radialRing(harmonic(39.5, [4.5, 3, 1.1]), { scaleY: 0.97 }),
+    eyeY: 49,
     eyeSpacing: 24,
-    eyeScale: 0.95,
   },
-  "soft-diamond": {
-    id: "soft-diamond",
-    points: superellipsePoints(2.4, 44, 24, 45),
+  egg: {
+    id: "egg",
+    points: radialRing((a) => 40 * (1 - 0.1 * Math.cos(a)), { scaleY: 1.1 }),
+    eyeY: 47,
+    eyeSpacing: 22,
+  },
+  capsule: {
+    id: "capsule",
+    points: radialRing(capsuleRadius(44, 24), { rotateDeg: -8 }),
     eyeY: 50,
-    eyeSpacing: 22,
+    eyeSpacing: 26,
   },
-  "droplet-tilt": {
-    id: "droplet-tilt",
-    points: dropletTiltPoints(),
-    eyeY: 56,
-    eyeSpacing: 22,
-    eyeScale: 0.95,
-  },
-  "pill-wave": {
-    id: "pill-wave",
-    points: pillWavePoints(),
-    eyeY: 46,
+  squircle: {
+    id: "squircle",
+    points: radialRing(superellipseRadius(4.4, 44)),
+    eyeY: 50,
     eyeSpacing: 24,
   },
-  "moon-slice": {
-    id: "moon-slice",
-    points: moonSlicePoints(),
-    eyeY: 60,
+  diamond: {
+    id: "diamond",
+    points: radialRing(superellipseRadius(2.6, 44), { rotateDeg: 18 }),
+    eyeY: 49,
     eyeSpacing: 22,
-    eyeScale: 0.9,
   },
-  petal: {
-    id: "petal",
-    points: petalPoints(),
+  triangle: {
+    id: "triangle",
+    points: radialRing(roundedPolygonRadius(3, 0.52, 45), { rotateDeg: 90 }),
+    eyeY: 54,
+    eyeSpacing: 22,
+  },
+  pentagon: {
+    id: "pentagon",
+    points: radialRing(roundedPolygonRadius(5, 0.5, 45), { rotateDeg: 90 }),
+    eyeY: 51,
+    eyeSpacing: 23,
+  },
+  hexagon: {
+    id: "hexagon",
+    points: radialRing(roundedPolygonRadius(6, 0.56, 45)),
+    eyeY: 50,
+    eyeSpacing: 24,
+  },
+  star4: {
+    id: "star4",
+    points: radialRing(harmonic(40, [6, 4, 0])),
     eyeY: 48,
     eyeSpacing: 23,
-    creases: 3,
+    creases: 4,
   },
-  pumpkin: {
-    id: "pumpkin",
-    points: pumpkinPoints(),
+  star5: {
+    id: "star5",
+    points: radialRing(harmonic(40, [6.5, 5, 0])),
+    eyeY: 48,
+    eyeSpacing: 22,
+    creases: 5,
+  },
+  flower6: {
+    id: "flower6",
+    points: radialRing(harmonic(40, [4.2, 6, 0])),
     eyeY: 48,
     eyeSpacing: 22,
     creases: 6,
   },
-  "soft-triangle": {
-    id: "soft-triangle",
-    points: softTrianglePoints(),
-    eyeY: 54,
+  pumpkin: {
+    id: "pumpkin",
+    points: radialRing(harmonic(40, [3.4, 6, 0]), { scaleY: 1.03 }),
+    eyeY: 48,
     eyeSpacing: 22,
+    creases: 6,
+    stem: true,
   },
 };
 
@@ -387,19 +231,18 @@ export const GROK_BALL_SHAPE_IDS: GrokBallShapeId[] = [
   "circle",
   "blob",
   "pebble",
-  "bean",
-  "egg",
-  "squircle",
-  "capsule",
-  "hex",
   "cloud",
-  "soft-diamond",
-  "droplet-tilt",
-  "pill-wave",
-  "moon-slice",
-  "petal",
+  "egg",
+  "capsule",
+  "squircle",
+  "diamond",
+  "triangle",
+  "pentagon",
+  "hexagon",
+  "star4",
+  "star5",
+  "flower6",
   "pumpkin",
-  "soft-triangle",
 ];
 
 /** Sample a closed contour at an even parameter resolution. */
@@ -658,8 +501,12 @@ export function isStaticVariant(variant: GrokBallVariant): boolean {
   return GROK_BALL_STATIC_VARIANTS.includes(variant);
 }
 
+/**
+ * Body palette, matching the reference picker's swatches. The black/white
+ * extreme is not listed here: it is the theme-aware mono ball, whose swatch
+ * renders black on the light theme and white on the dark theme.
+ */
 export const GROK_BALL_COLORS = [
-  "#0a0a0c",
   "#8b5e3c",
   "#e8483f",
   "#f08a24",
@@ -670,6 +517,8 @@ export const GROK_BALL_COLORS = [
   "#8b5cf6",
   "#e152b0",
   "#a3a3a3",
-  "#f1efe9",
 ];
+
+
+
 
