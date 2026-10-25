@@ -110,6 +110,12 @@
 
 **未做**：未接 Agent 状态（仍属 D12）；未加瞳孔高光；未改 `packages/contracts`、IPC、preload。
 
+## R1.2 对话区：隐藏消息级头像 + 合并 ZCode Grok 风格 polish（Owner 指示）
+
+- 消息行仍渲染 inline 头像组件，但由 polish 层隐藏：`.msg-row.bot > .grok-ball { display: none; }`；固定立牌（侧栏）、消息头 chip、选择器缩略图不受影响。实测 `avatarExists=true`、`avatarDisplay=none`。
+- 从 ZCode 的 `feature/mono-shape` 工作区合入 append-only 的 Grok 风格 polish 层（助手消息去气泡、用户气泡石墨色、发送按钮、页头 chip、侧栏字号等）；`styles.css` 只追加，不改动既有规则。
+- **未合并** ZCode 对旧 `avatar-minimal` / `mono` 组件的重构：本分支已用 GrokBall 取代该实现，两者互斥；polish 层里指向旧头像的选择器已改为 `.grok-ball`。
+- 证据：`B-AVATAR-01-r3-chat.png`（对话区无消息级头像，助手消息为纯文本，页头仍显示固定头像）。
 ## 变更文件
 
 - 新增 `apps/desktop/src/renderer/src/features/avatars/grok-ball-model.ts`（纯几何/状态，可单测）
@@ -151,3 +157,4 @@ R1 返修（`32b3432`）：
 - 已核对：15 形状 id 与 `GROK_BALL_SHAPES` 键一致（单测断言）；投影/插值/背面剔除有单测覆盖；typecheck/lint/test/build 均通过并记录退出码。
 - 未验证：真人在应用内手动切换 6 状态与全部形状的观感确认；未接 Agent 状态。
 - 结论：代码层面 ACCEPT 项达成；**请 Destinyian 本人审阅并确认自审，AI 记录不冒充真人身份。**
+
