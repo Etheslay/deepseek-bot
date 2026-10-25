@@ -1,28 +1,30 @@
 /**
- * Real DeepSeek API smoke (QA-05 real leg + QA-06 auth sampling).
+ * Real DeepSeek API smoke (QA-05 real leg) + QA-06 auth classification.
  *
- * Runs ONLY when DEEPSEEK_API_KEY is present in the environment (TESTING.md §1:
- * 真实冒烟独立运行、显式配置 Key/预算，不进常规 CI)。The key is injected per
- * attempt through the host's resolveApiKey; it is never logged, persisted or
- * embedded here. Budget: ~5 deepseek-chat turns per invocation.
+ * QA-05 runs ONLY when DEEPSEEK_API_KEY is present in the environment
+ * (TESTING.md §1: 真实冒烟独立运行、显式配置 Key/预算，不进常规 CI)。The key is
+ * injected per attempt through the host's resolveApiKey; it is never logged,
+ * persisted or embedded here. Budget: ~3 deepseek-chat turns per invocation.
  *
- * 2026-10-25 真机结果：QA-05 三机器人真实全链路通过（真实 DeepSeek Harness，
- * 顺序+独立分支，会话互异）。QA-06 显式跳过，实证原因：坏凭据下 Harness 轮次
- * 仍正常转 idle 且无 agent/request-error 会话事件（该事件为 Cordis 事件而非
- * 会话日志事件，适配层不可见），运行被记为成功——模型级错误的会话日志定位属
- * 真机战役遗留项（见 D12 报告）；本文件的采集器（request-error 捕获）保留，
- * 待定位到正确的失败信号后接回。
+ * QA-06 is fake-wire driven (no API cost): the "turn-error" fake scenario
+ * replays the exact 401 turn/end shape captured from a real bad-credential
+ * run (2026-10-25: turn/end reason.kind "error" with code AUTH / status 401 —
+ * the agent still settles to idle afterwards, so the adapter must classify
+ * turn errors or the run would report success with an empty response).
  */
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { afterAll, describe, expect, it } from "vitest";
 import { listNodeRuns } from "@deepseek-bot/storage";
 import { createHost, type DeepSeekBotHost } from "./host.js";
 
 const REAL_KEY = process.env["DEEPSEEK_API_KEY"];
-// BAD_KEY sample removed with the blocked QA-06 sampling (see file header).
+const fakeHarness = fileURLToPath(
+  new URL("../../harness-adapter/src/testing/fake-harness.mjs", import.meta.url),
+);
 
 const roots: string[] = [];
 const hosts: DeepSeekBotHost[] = [];
@@ -183,13 +185,80 @@ describe.skipIf(REAL_KEY === undefined)("real API smoke", () => {
     expect(byNode.get("n1")?.sessionId).not.toBe(byNode.get("n2")?.sessionId);
     expect(byNode.get("n2")?.sessionId).not.toBe(byNode.get("n3")?.sessionId);
   }, 300_000);
+});
 
-  it.skip("QA-06 sampling: bad credential classification (blocked — see file header finding)", async () => {
-    // Blocked 2026-10-25: with an invalid key the real harness settles the
-    // turn to idle without any session-log error event (agent/request-error
-    // is a Cordis event, invisible to the adapter), so the run reports
-    // success. Locating the real failure signal in the harness session log
-    // is a documented D12 follow-up before this sampling can assert.
-    expect(true).toBe(true);
+describe("QA-06 auth classification (fake wire, real 401 shape)", () => {
+  it("fails the node as AUTH_FAILED when the turn ends with a provider error", async () => {
+    const root = mkdtempSync(join(tmpdir(), "dsb-auth-"));
+    roots.push(root);
+    const workspace = join(root, "workspace");
+    mkdirSync(workspace, { recursive: true });
+    const host = await createHost({
+      dataRoot: root,
+      resolveApiKey: async () => "ignored-by-fake",
+      dshBin: fakeHarness,
+      childEnv: (env) => ({ ...env, FAKE_SCENARIO: "turn-error" }),
+    });
+    hosts.push(host);
+    const refs = seedRefs(host.db, workspace, `cred:${randomUUID()}`);
+    const bot = (await host.handleMethod("bot.create", {
+      name: "坏凭据机器人",
+      instructions: "只回复文本。",
+      modelProfileId: refs.profileId,
+      workspaceId: refs.workspaceId,
+      toolPolicyId: refs.toolPolicyId,
+    })) as { id: string };
+    const workflow = (await host.handleMethod("workflow.save", {
+      workflow: {
+        id: randomUUID(),
+        revision: randomUUID(),
+        name: "坏凭据工作流",
+        schemaVersion: "0.1",
+        nodes: [
+          {
+            id: "n1",
+            type: "bot",
+            botId: bot.id,
+            instructionTemplate: "回复 OK。",
+            inputBindings: [],
+            retryPolicy: { maxRetries: 0 },
+          },
+        ],
+        edges: [],
+        limits: { maxConcurrentNodes: 1 },
+      },
+    })) as { id: string; revision: string };
+    const run = (await host.handleMethod("run.start", {
+      workflowId: workflow.id,
+      expectedRevision: workflow.revision,
+      idempotencyKey: randomUUID(),
+    })) as { id: string };
+
+    await waitFor(async () => {
+      const current = (await host.handleMethod("run.get", { runId: run.id })) as {
+        status: string;
+      };
+      return current.status === "failed" || current.status === "succeeded";
+    });
+
+    const runStatus = (await host.handleMethod("run.get", { runId: run.id })) as {
+      status: string;
+    };
+    expect(runStatus.status).toBe("failed");
+    const events = (await host.handleMethod("events.subscribe", {
+      runId: run.id,
+      afterSequence: 0,
+    })) as {
+      events: Array<{ type: string; payload: { to?: string; reason?: string } }>;
+    };
+    const failureEvent = events.events.find(
+      (event) => event.type === "node.statusChanged" && event.payload.to === "failed",
+    );
+    expect(failureEvent?.payload.reason).toContain("AUTH_FAILED");
+    // Non-retryable classification: exactly one attempt, no retry loop.
+    const attempts = listNodeRuns(host.db, run.id).filter(
+      (nodeRun) => nodeRun.nodeId === "n1",
+    );
+    expect(attempts).toHaveLength(1);
   });
 });
