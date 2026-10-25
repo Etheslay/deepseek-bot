@@ -19,6 +19,8 @@
 | [产品需求](docs/PRODUCT_REQUIREMENTS.md) | 目标用户、功能边界、竞品对应关系、验收场景 |
 | [技术架构](docs/ARCHITECTURE.md) | 桌面、运行时、存储和工作流的职责与数据流 |
 | [技术选型记录](docs/adr/0001-desktop-and-runtime.md) | Electron、Tauri 与复用上游桌面的权衡 |
+| [智能体平台](docs/AGENT_PLATFORM.md) | v0.2 的聊天驱动创建、技能、连接器与执行边界 |
+| [权限与授权](docs/PERMISSIONS.md) | 能力/授权/审批三层模型与设置页 |
 | [Harness 接入](docs/HARNESS_INTEGRATION.md) | 已核实能力、接入验证、版本固定与升级 |
 | [接口与数据契约](docs/CONTRACTS.md) | 两人并行开发的边界、实体、事件和错误语义 |
 | [双人开发计划](docs/DEVELOPMENT_PLAN.md) | 每项任务的负责人、分支、依赖及完成标准 |
@@ -51,3 +53,4 @@ Etheslay 负责运行时与本地数据，Destinyian 负责桌面产品与交互
 - [Grok Bot 官方指南](https://x.ai/bot/guides/grok-bot-101)
 
 调研基线与来源见 [Harness 接入](docs/HARNESS_INTEGRATION.md)；上游能力不自动等于本项目已实现能力。
+

@@ -39,6 +39,8 @@ flowchart LR
 
 桌面壳（D02）、共享契约（D03）、本地存储（D04）、工作流引擎（D06，`packages/runtime/`，经 `NodeExecutor` 端口与 Harness 适配层解耦）、后端工具权限层（D08，`packages/runtime/src/permissions/`：路径规范化/包含校验、策略评估、一次性审批门、MCP 授权检查；storage 增加 `tool_policies` 表与启动代次）与本地调度器（D10，`packages/runtime/src/scheduler/`：时区感知 cron 触发、occurrence 去重、skip-and-notify misfire、恢复重启中断的运行；storage 增加 `schedule_misses` 表与节点输出持久化）已按此布局落地；D12 起 `packages/harness-adapter/`（钉扎上游 `@deepseek-ai/dsh` 0.2.1-rc.2：一次节点尝试一个运行时子进程、经上游 JSON-RPC 行传输做回合结算、稳定错误分类）、`packages/harness-bridge/`（挂入 profile 应答 `approval/request`，回读会话日志取精确参数，无 Host 通道时 fail-closed）与 `packages/host/`（单进程组装数据库+引擎+调度器+适配器，经 stdio 暴露契约方法面；桌面 main 拉起并经反向请求完成凭据解密）已落地，QA-05/QA-09 的编排回归经假 Harness 全链自动化，真实 API 腿与睡眠唤醒联调属 D12 收尾；`packages/ui/` 仍是规划，本次不创建。主进程不得 import `packages/storage`（其索引进口拉 `node:sqlite`，Electron 38 主进程的 Node 22 不提供）——数据根与凭据 blob 读取在 main 侧按 layout 常量最小复刻。
 
+v0.2 计划新增 `packages/agent-tools/`（工具网关）、`packages/skills/`、`packages/memory/`、`packages/connectors/` 与 `packages/exec-daemon/`，边界与契约影响见 [智能体平台](AGENT_PLATFORM.md) 与 [权限与授权](PERMISSIONS.md)；在 D13 通过前不创建这些目录。
+
 ## 3. 数据与调用链
 
 一次运行先验证 workflowVersion、机器人快照、路径权限与预算，再将 Run 写入本地数据库。调度器领取可执行节点，Harness 适配层建立/关联会话。流式片段只更新 UI；持久结果以 Harness 日志与本项目运行记录为准，不能把片段显示完成当作节点成功。
@@ -73,3 +75,4 @@ flowchart LR
 ## 7. 需要技术验证的边界
 
 Node 与 Electron ABI、Harness SDK 的取消/审批能力、Windows 工具进程回收、密钥存储、插件白名单和离线打包必须实测。上游 experimental Agent Teams 仅作为可选研究，不作为 v0.1 的关键依赖。本项目工作流编排不依赖实验团队功能。
+
