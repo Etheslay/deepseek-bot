@@ -78,7 +78,7 @@ apps/desktop/src/renderer/src/features/run-monitor/
 | 截图（docs/reports/assets/d09/） | 内容 |
 | --- | --- |
 | d09-01-run-list.png | 运行列表：8 个运行、活跃/历史分组、状态徽章 |
-| d09-02-approval-card.png | 审批卡片：等待审批、TTL 剩 9:59、resource `D:\workspaces\demo\report.md`、digest、按钮可用 |
+| d09-02-approval-card.png | 审批卡片特写（元素级裁剪，内容与 d09-01 不再重复）：等待审批、倒计时、resource `D:\workspaces\demo\report.md`、digest、允许/拒绝可用 |
 | d09-03-approval-allowed.png | 允许后：运行中、卡片提示「一次消费，等待执行」 |
 | d09-04-approval-consumed.png | 执行完成：已成功、卡片「已允许（一次消费，不可重放）」、按钮禁用 |
 | d09-05-history.png | 历史标签：版本快照、产物表 reports/review.md |
