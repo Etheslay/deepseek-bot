@@ -351,6 +351,7 @@ export class HarnessAttempt {
     let finalResponse = "";
     let turnEndKind: TurnEndKind = undefined;
     let sawReceipt = false;
+    let requestError: unknown;
     for (;;) {
       const notification = await this.nextNotification();
       if (notification.method === "session.event" && notification.params["sessionId"] === sessionId) {
@@ -369,6 +370,11 @@ export class HarnessAttempt {
           finalResponse = assistantText(event) ?? finalResponse;
         } else if (event.type === "turn/end") {
           turnEndKind = turnEndReasonKind(event);
+        } else if (event.type === "agent/request-error") {
+          // Model dispatch failures (auth, rate limit, unavailable routes)
+          // surface here — the agent still settles to idle afterwards, so an
+          // unclassified turn would report success with an empty response.
+          requestError = event.data;
         }
       } else if (
         notification.method === "session.status" &&
@@ -376,6 +382,14 @@ export class HarnessAttempt {
         sawReceipt &&
         notification.params["status"] === "idle"
       ) {
+        if (requestError !== undefined) {
+          throw nodeExecutionErrorFromHarness(
+            new Error(
+              `harness reported a request error: ${JSON.stringify(requestError).slice(0, 300)}`,
+            ),
+            this.failureContext(),
+          );
+        }
         return { finalResponse, events, turnEndKind };
       }
     }
