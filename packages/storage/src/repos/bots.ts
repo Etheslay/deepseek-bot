@@ -24,6 +24,8 @@ export interface BotPatch {
   readonly modelProfileId?: string;
   readonly workspaceId?: string;
   readonly toolPolicyId?: string;
+  readonly avatar?: Bot["avatar"];
+  readonly groupId?: string | null;
 }
 
 interface BotRow {
@@ -34,6 +36,9 @@ interface BotRow {
   model_profile_id: string;
   workspace_id: string;
   tool_policy_id: string;
+  avatar_shape: string | null;
+  avatar_color: string | null;
+  group_id: string | null;
   archived_at: string | null;
   created_at: string;
 }
@@ -47,6 +52,10 @@ function rowToBot(row: BotRow): Bot {
     modelProfileId: row.model_profile_id,
     workspaceId: row.workspace_id,
     toolPolicyId: row.tool_policy_id,
+    ...(row.avatar_shape !== null && row.avatar_color !== null
+      ? { avatar: { shape: row.avatar_shape, color: row.avatar_color } }
+      : {}),
+    ...(row.group_id !== null ? { groupId: row.group_id } : {}),
     archivedAt: row.archived_at,
   });
   if (!parsed.success) {
@@ -83,25 +92,7 @@ export function createBot(
 
   requireProfileAndWorkspace(db, bot);
   try {
-    db.raw
-      .prepare(
-        "INSERT INTO bots (id, revision, name, instructions, model_profile_id, " +
-          "workspace_id, tool_policy_id, archived_at, created_request_id, created_at, updated_at) " +
-          "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
-      )
-      .run(
-        bot.id,
-        bot.revision,
-        bot.name,
-        bot.instructions,
-        bot.modelProfileId,
-        bot.workspaceId,
-        bot.toolPolicyId,
-        bot.archivedAt,
-        input.requestId ?? null,
-        now,
-        now,
-      );
+    insertBotRow(db, bot, input.requestId ?? null, now);
   } catch (error) {
     if (error instanceof Error && error.message.includes("UNIQUE constraint failed: bots.id")) {
       throw invalidInput("bot id already exists", { botId: bot.id });
@@ -111,7 +102,40 @@ export function createBot(
   return { bot, created: true };
 }
 
-function requireProfileAndWorkspace(db: OpenedDatabase, bot: Bot): void {
+/** Raw insert shared by createBot and the transactional batch creation. */
+export function insertBotRow(
+  db: OpenedDatabase,
+  bot: Bot,
+  requestId: string | null,
+  now: string,
+): void {
+  db.raw
+    .prepare(
+      "INSERT INTO bots (id, revision, name, instructions, model_profile_id, " +
+        "workspace_id, tool_policy_id, avatar_shape, avatar_color, group_id, " +
+        "archived_at, created_request_id, created_at, updated_at) " +
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
+    )
+    .run(
+      bot.id,
+      bot.revision,
+      bot.name,
+      bot.instructions,
+      bot.modelProfileId,
+      bot.workspaceId,
+      bot.toolPolicyId,
+      bot.avatar?.shape ?? null,
+      bot.avatar?.color ?? null,
+      bot.groupId ?? null,
+      bot.archivedAt,
+      requestId,
+      now,
+      now,
+    );
+}
+
+/** Referenced profile/workspace must exist (shared with batch creation). */
+export function requireProfileAndWorkspace(db: OpenedDatabase, bot: Bot): void {
   const profile = db.raw
     .prepare("SELECT id FROM model_profiles WHERE id = ?;")
     .get(bot.modelProfileId);
@@ -143,6 +167,20 @@ export function listBots(
   return rows.map(rowToBot);
 }
 
+/** Members of one group (avatar auto-assignment scope for batch creation). */
+export function listBotsInGroup(
+  db: OpenedDatabase,
+  groupId: string,
+  options: { includeArchived?: boolean } = {},
+): Bot[] {
+  const sql =
+    options.includeArchived === true
+      ? "SELECT * FROM bots WHERE group_id = ? ORDER BY created_at ASC, id ASC;"
+      : "SELECT * FROM bots WHERE group_id = ? AND archived_at IS NULL ORDER BY created_at ASC, id ASC;";
+  const rows = db.raw.prepare(sql).all(groupId) as unknown as BotRow[];
+  return rows.map(rowToBot);
+}
+
 /**
  * Revision-guarded update. The merged entity is validated against the
  * contract schema before it is written; the revision rotates on success.
@@ -164,7 +202,7 @@ export function updateBot(
         retryable: false,
       });
     }
-    const merged = BotSchema.parse({
+    const parsed = BotSchema.parse({
       id: row.id,
       revision: row.revision,
       name: input.patch.name ?? row.name,
@@ -172,8 +210,36 @@ export function updateBot(
       modelProfileId: input.patch.modelProfileId ?? row.model_profile_id,
       workspaceId: input.patch.workspaceId ?? row.workspace_id,
       toolPolicyId: input.patch.toolPolicyId ?? row.tool_policy_id,
+      ...(input.patch.avatar !== undefined
+        ? { avatar: input.patch.avatar }
+        : row.avatar_shape !== null && row.avatar_color !== null
+          ? { avatar: { shape: row.avatar_shape, color: row.avatar_color } }
+          : {}),
+      ...(input.patch.groupId !== undefined
+        ? { groupId: input.patch.groupId }
+        : row.group_id !== null
+          ? { groupId: row.group_id }
+          : {}),
       archivedAt: row.archived_at,
     });
+    // Reads omit unassigned avatar/group keys; keep the update response in
+    // the same shape (null stays a storage-only representation).
+    const merged = {
+      id: parsed.id,
+      revision: parsed.revision,
+      name: parsed.name,
+      instructions: parsed.instructions,
+      modelProfileId: parsed.modelProfileId,
+      workspaceId: parsed.workspaceId,
+      toolPolicyId: parsed.toolPolicyId,
+      ...(parsed.avatar !== undefined && parsed.avatar !== null
+        ? { avatar: parsed.avatar }
+        : {}),
+      ...(parsed.groupId !== undefined && parsed.groupId !== null
+        ? { groupId: parsed.groupId }
+        : {}),
+      archivedAt: parsed.archivedAt,
+    };
     if (
       input.patch.modelProfileId !== undefined ||
       input.patch.workspaceId !== undefined
@@ -184,7 +250,8 @@ export function updateBot(
     db.raw
       .prepare(
         "UPDATE bots SET revision = ?, name = ?, instructions = ?, " +
-          "model_profile_id = ?, workspace_id = ?, tool_policy_id = ?, updated_at = ? " +
+          "model_profile_id = ?, workspace_id = ?, tool_policy_id = ?, " +
+          "avatar_shape = ?, avatar_color = ?, group_id = ?, updated_at = ? " +
           "WHERE id = ? AND revision = ?;",
       )
       .run(
@@ -194,6 +261,9 @@ export function updateBot(
         merged.modelProfileId,
         merged.workspaceId,
         merged.toolPolicyId,
+        merged.avatar?.shape ?? null,
+        merged.avatar?.color ?? null,
+        merged.groupId ?? null,
         isoNow(db.now),
         input.id,
         input.expectedRevision,
@@ -222,6 +292,36 @@ export function archiveBot(
         details: { botId: input.id, currentRevision: row.revision },
         retryable: false,
       });
+    }
+    if (row.archived_at !== null) {
+      return rowToBot(row);
+    }
+    const nextRevision = randomUUID();
+    const archivedAt = isoNow(db.now);
+    db.raw
+      .prepare("UPDATE bots SET archived_at = ?, revision = ?, updated_at = ? WHERE id = ?;")
+      .run(archivedAt, nextRevision, archivedAt, input.id);
+    const updated = selectBotRow(db.raw, input.id);
+    if (updated === undefined) {
+      throw invalidInput("bot disappeared during archive", { botId: input.id });
+    }
+    return rowToBot(updated);
+  });
+}
+
+/**
+ * Archive without the revision guard — the creation.revoke path (FR-12):
+ * a batch member may legitimately have been edited after creation, and the
+ * undo must still win. Idempotent on already-archived bots.
+ */
+export function archiveBotUnchecked(
+  db: OpenedDatabase,
+  input: { id: string },
+): Bot {
+  return runInTransaction(db.raw, () => {
+    const row = selectBotRow(db.raw, input.id);
+    if (row === undefined) {
+      throw invalidInput("bot not found", { botId: input.id });
     }
     if (row.archived_at !== null) {
       return rowToBot(row);

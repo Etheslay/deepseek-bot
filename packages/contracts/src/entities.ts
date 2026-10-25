@@ -24,6 +24,109 @@ import { WORKFLOW_SCHEMA_VERSION } from "./version.js";
 // Bot
 // ---------------------------------------------------------------------------
 
+/**
+ * Canonical Grok Ball avatar pool (SPRINTS §6 #7). The shape×color matrix is
+ * a data contract: batch creation assigns members distinct combinations, so
+ * every consumer must compare the same pool. Renderers map these ids to
+ * their own visuals; ids are stable, palettes evolve only via a contract PR.
+ */
+export const AVATAR_SHAPES = [
+  "circle",
+  "blob",
+  "squircle",
+  "star4",
+  "cloud",
+  "heart",
+  "flower6",
+  "egg",
+  "capsule",
+  "triangle",
+  "pentagon",
+  "star5",
+  "hexagon",
+  "pumpkin",
+] as const;
+
+export const AVATAR_COLORS = [
+  "#8b5e3c",
+  "#e8483f",
+  "#f08a24",
+  "#f0b429",
+  "#3ecf8e",
+  "#2fbfa0",
+  "#3b93f0",
+  "#8b5cf6",
+  "#e152b0",
+  "#a3a3a3",
+] as const;
+
+export const AvatarSchema = z.object({
+  shape: z.enum(AVATAR_SHAPES),
+  color: z.enum(AVATAR_COLORS),
+});
+
+export type Avatar = z.infer<typeof AvatarSchema>;
+
+/** Stable identity of one pool combination (uniqueness scope key). */
+export function avatarPoolKey(avatar: Avatar): string {
+  return `${avatar.shape}:${avatar.color}`;
+}
+
+/** The full pool in canonical assignment order (shape-major). */
+export function canonicalAvatarPool(): Avatar[] {
+  return AVATAR_SHAPES.flatMap((shape) =>
+    AVATAR_COLORS.map((color) => ({ shape, color })),
+  );
+}
+
+/**
+ * Avatar auto-assignment for one batch (SPRINTS §6 #7): explicit picks win
+ * verbatim even when they collide (用户显式指定时以用户为准); automatic
+ * picks take the first unused combination and stay distinct from each
+ * other, the explicit picks and everything in `taken` (the scope's existing
+ * members). Repeats only once the whole pool is exhausted in that scope.
+ */
+export function assignBatchAvatars(input: {
+  readonly count: number;
+  /** Length must equal `count`; `undefined` marks an auto slot. */
+  readonly explicit: ReadonlyArray<Avatar | undefined>;
+  /** Pool keys already used by the scope (e.g. the group's members). */
+  readonly taken: ReadonlySet<string>;
+}): Avatar[] {
+  if (input.explicit.length !== input.count) {
+    throw new Error("explicit avatar list must cover the whole batch");
+  }
+  const used = new Set(input.taken);
+  for (const avatar of input.explicit) {
+    if (avatar !== undefined) {
+      used.add(avatarPoolKey(avatar));
+    }
+  }
+  const pool = canonicalAvatarPool();
+  const free = pool.filter((avatar) => !used.has(avatarPoolKey(avatar)));
+  const assigned: Avatar[] = [];
+  let cycle = 0;
+  for (const avatar of input.explicit) {
+    if (avatar !== undefined) {
+      assigned.push(avatar);
+      continue;
+    }
+    const next = free.shift();
+    if (next !== undefined) {
+      assigned.push(next);
+      continue;
+    }
+    assigned.push(pool[cycle % pool.length]!);
+    cycle += 1;
+  }
+  return assigned;
+}
+
+/**
+ * `avatar`/`groupId` are nullish (not merely nullable) because Bot embeds
+ * into run botSnapshots recorded before D15: absent keys must keep parsing.
+ * Null means "not assigned" — UIs fall back to their own derivation.
+ */
 export const BotSchema = z.object({
   id: UuidSchema,
   revision: UuidSchema,
@@ -32,10 +135,43 @@ export const BotSchema = z.object({
   modelProfileId: UuidSchema,
   workspaceId: UuidSchema,
   toolPolicyId: UuidSchema,
+  avatar: AvatarSchema.nullish(),
+  groupId: UuidSchema.nullish(),
   archivedAt: IsoDateTimeUtcSchema.nullable(),
 });
 
 export type Bot = z.infer<typeof BotSchema>;
+
+// ---------------------------------------------------------------------------
+// Bot group (D15 write layer, FR-12)
+// ---------------------------------------------------------------------------
+
+export const BotGroupSchema = z.object({
+  id: UuidSchema,
+  revision: UuidSchema,
+  name: NonEmptyStringSchema(TEXT_LIMITS.name),
+  archivedAt: IsoDateTimeUtcSchema.nullable(),
+});
+
+export type BotGroup = z.infer<typeof BotGroupSchema>;
+
+/**
+ * A bot creation draft (M5: 聊天可生成创建草案，编辑器可见但未落库). Every
+ * field is optional: the chat fills what it knows, the editor resolves the
+ * rest. Drafts are message-level data — nothing persists them; reference
+ * fields are validated only when a real creation method consumes them.
+ */
+export const BotCreationDraftSchema = z.object({
+  name: NonEmptyStringSchema(TEXT_LIMITS.name).optional(),
+  instructions: z.string().max(TEXT_LIMITS.instructions).optional(),
+  modelProfileId: UuidSchema.optional(),
+  workspaceId: UuidSchema.optional(),
+  toolPolicyId: UuidSchema.optional(),
+  groupId: UuidSchema.nullish(),
+  avatar: AvatarSchema.optional(),
+});
+
+export type BotCreationDraft = z.infer<typeof BotCreationDraftSchema>;
 
 // ---------------------------------------------------------------------------
 // ModelProfile

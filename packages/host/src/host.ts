@@ -38,7 +38,7 @@ import {
   type OpenedDatabase,
 } from "@deepseek-bot/storage";
 import { buildHandlers, type HostContext } from "./handlers.js";
-import { JsonlAuditSink, ToolGateway, ToolRegistry, bindReadTools } from "@deepseek-bot/agent-tools";
+import { JsonlAuditSink, ToolGateway, ToolRegistry, bindReadTools, bindWriteTools } from "@deepseek-bot/agent-tools";
 
 export interface HostOptions {
   /** Data root (storage layout: database, harness home, artifacts, backups). */
@@ -79,7 +79,7 @@ export interface DeepSeekBotHost {
    * to the wire error object.
    */
   handleMethod(method: Method, payload: unknown, requestId?: string): Promise<unknown>;
-  /** D15 agent tool gateway (read layer; every call audited). */
+  /** D15 agent tool gateway (read + write layers; every call audited). */
   readonly agentTools: ToolGateway;
   /** Start the scheduler tick loop (FR-08). */
   start(): void;
@@ -268,9 +268,13 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
   };
 
   const agentRegistry = new ToolRegistry();
-  for (const capability of bindReadTools((method, payload) =>
-    dispatch(method as Method, payload),
-  )) {
+  // D15: read layer (default-allow) plus the write layer (draft / group /
+  // batch create / revoke). D16 replaces AllowAllGrants with the three-layer
+  // grant/审批 checkpoint — until then write calls ride the same stub.
+  for (const capability of [
+    ...bindReadTools((method, payload) => dispatch(method as Method, payload)),
+    ...bindWriteTools((method, payload) => dispatch(method as Method, payload)),
+  ]) {
     agentRegistry.register(capability);
   }
   const agentTools = new ToolGateway({

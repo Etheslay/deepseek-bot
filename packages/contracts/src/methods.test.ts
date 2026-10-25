@@ -26,7 +26,7 @@ describe("method whitelist", () => {
   it("defines a contract for every whitelisted method and nothing else", () => {
     const contractMethods = Object.keys(METHOD_CONTRACTS).sort();
     expect(contractMethods).toEqual([...METHODS].sort());
-    expect(METHODS).toHaveLength(24);
+    expect(METHODS).toHaveLength(28);
   });
 
   it("covers every method group from CONTRACTS §3", () => {
@@ -34,8 +34,10 @@ describe("method whitelist", () => {
     expect([...groups].sort()).toEqual([
       "approval",
       "bot",
+      "creation",
       "data",
       "events",
+      "group",
       "run",
       "schedule",
       "settings",
@@ -45,15 +47,16 @@ describe("method whitelist", () => {
 });
 
 describe("protocol version", () => {
-  it("accepts only the frozen v0.1 protocol", () => {
+  it("accepts the current v0.2 protocol and the previous v0.1 senders", () => {
+    expect(isProtocolVersionSupported("0.2")).toBe(true);
     expect(isProtocolVersionSupported("0.1")).toBe(true);
-    expect(isProtocolVersionSupported("0.2")).toBe(false);
+    expect(isProtocolVersionSupported("0.3")).toBe(false);
     expect(isProtocolVersionSupported("1.0")).toBe(false);
   });
 
   it("rejects unknown or higher protocol versions outright", () => {
     const result = RequestEnvelopeSchema.safeParse({
-      protocolVersion: "0.2",
+      protocolVersion: "0.3",
       requestId: REQUEST_ID,
       method: "bot.list",
       payload: {},
@@ -161,5 +164,99 @@ describe("parseRequest", () => {
       "bot.update",
     );
     expect(result.success).toBe(false);
+  });
+
+  it("validates bot.batchCreate payloads", () => {
+    const profileId = "44444444-4444-4444-8444-444444444444";
+    const workspaceId = "55555555-5555-4555-8555-555555555555";
+    const groupId = "77777777-7777-4777-8777-777777777777";
+    const batchId = "88888888-8888-4888-8888-888888888888";
+
+    const valid = parseRequest(
+      envelope("bot.batchCreate", {
+        newGroup: { name: "research-squad" },
+        defaults: {
+          modelProfileId: profileId,
+          workspaceId,
+          toolPolicyId: "66666666-6666-4666-8666-666666666666",
+        },
+        bots: [{ name: "scout", instructions: "Look things up." }],
+      }),
+      "bot.batchCreate",
+    );
+    expect(valid.success).toBe(true);
+
+    const withGroup = parseRequest(
+      envelope("bot.batchCreate", {
+        groupId,
+        bots: [
+          {
+            name: "scout",
+            instructions: "Look things up.",
+            avatar: { shape: "egg", color: "#f0b429" },
+          },
+        ],
+        idempotencyKey: batchId,
+      }),
+      "bot.batchCreate",
+    );
+    expect(withGroup.success).toBe(true);
+
+    expect(
+      parseRequest(
+        envelope("bot.batchCreate", {
+          groupId,
+          newGroup: { name: "duplicate" },
+          bots: [{ name: "scout", instructions: "Look things up." }],
+        }),
+        "bot.batchCreate",
+      ).success,
+    ).toBe(false);
+    expect(
+      parseRequest(
+        envelope("bot.batchCreate", { bots: [] }),
+        "bot.batchCreate",
+      ).success,
+    ).toBe(false);
+    expect(
+      parseRequest(
+        envelope("bot.batchCreate", {
+          bots: [
+            {
+              name: "scout",
+              instructions: "Look things up.",
+              avatar: { shape: "egg", color: "#ff00ff" },
+            },
+          ],
+        }),
+        "bot.batchCreate",
+      ).success,
+    ).toBe(false);
+  });
+
+  it("validates group.create, group.list and creation.revoke payloads", () => {
+    expect(
+      parseRequest(envelope("group.create", { name: "ops" }), "group.create")
+        .success,
+    ).toBe(true);
+    expect(
+      parseRequest(envelope("group.create", { name: "" }), "group.create")
+        .success,
+    ).toBe(false);
+    expect(parseRequest(envelope("group.list", {}), "group.list").success).toBe(
+      true,
+    );
+    expect(
+      parseRequest(
+        envelope("creation.revoke", {
+          batchId: "88888888-8888-4888-8888-888888888888",
+        }),
+        "creation.revoke",
+      ).success,
+    ).toBe(true);
+    expect(
+      parseRequest(envelope("creation.revoke", { batchId: "nope" }), "creation.revoke")
+        .success,
+    ).toBe(false);
   });
 });

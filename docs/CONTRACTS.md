@@ -1,6 +1,6 @@
-# 接口与数据契约 v0.1
+# 接口与数据契约 v0.2
 
-本文件定义本项目前后端契约，不是 DeepSeek Harness 官方 API。状态：已冻结（2026-10-23，D00 验收记录见 D00 Issue）；后续变更按 §7 提升版本并由变更负责人自审同步使用方。可执行实现位于 `packages/contracts/`（D03 起）：schema、§7 夹具与双方共用契约测试见 [packages/contracts/README.md](../packages/contracts/README.md)。所有字段均需后端校验，TypeScript 类型不能替代运行时校验。
+本文件定义本项目前后端契约，不是 DeepSeek Harness 官方 API。状态：v0.1 已冻结（2026-10-23，D00 验收记录见 D00 Issue）；v0.2（2026-10-25，D15 写层）按 §7 附加式扩展——新增方法不改旧语义，`protocolVersion` 升至 0.2 且继续接受 0.1 发送方，工作流文档 `schemaVersion` 保持 0.1（存量数据可读）。后续变更按 §7 提升版本并由变更负责人自审同步使用方。可执行实现位于 `packages/contracts/`（D03 起）：schema、§7 夹具与双方共用契约测试见 [packages/contracts/README.md](../packages/contracts/README.md)。所有字段均需后端校验，TypeScript 类型不能替代运行时校验。
 
 ## 1. 通用规则
 
@@ -15,7 +15,10 @@
 
 | 实体 | 必要字段 | 约束 |
 | --- | --- | --- |
-| Bot | id, revision, name, instructions, modelProfileId, workspaceId, toolPolicyId, archivedAt | 机器人实例不保存原始 API Key；归档后禁止新执行，历史快照保留 |
+| Bot | id, revision, name, instructions, modelProfileId, workspaceId, toolPolicyId, avatar?, groupId?, archivedAt | 机器人实例不保存原始 API Key；归档后禁止新执行，历史快照保留；avatar/groupId 为 v0.2 附加（nullish，缺失即未分配，UI 自行回退） |
+| BotGroup | id, revision, name, archivedAt | v0.2：bot 的分组标签，成员关系存于 Bot.groupId |
+| BotCreationDraft | name?, instructions?, modelProfileId?, workspaceId?, toolPolicyId?, groupId?, avatar? | v0.2：聊天生成、编辑器预览的创建草案，**不落库**；引用字段仅在真实创建方法消费时校验 |
+| Avatar | shape, color | v0.2：规范形状×颜色池（14×10），批量创建据此组内去重；形状/色板演进需契约 PR |
 | ModelProfile | id, provider, model, endpoint, credentialRef, limits | credentialRef 指向系统凭据；默认 DeepSeek HTTPS 地址，变更目标需显式操作 |
 | Workspace | id, canonicalPath, grants | 授权以规范路径与操作范围表示，不仅是字符串前缀 |
 | Workflow | id, revision, name, schemaVersion, nodes, edges, limits | 图无环、引用完整；导入不自动授予工具或目录权限 |
@@ -31,7 +34,10 @@
 
 | 方法组 | 语义 | 幂等/错误重点 |
 | --- | --- | --- |
-| bot.list / create / update / archive | 管理机器人 | create 以 requestId 去重；update 校验 revision |
+| bot.list / create / update / archive | 管理机器人 | create 以 requestId 去重；update 校验 revision；create/update 可携带显式 avatar/groupId（用户指定优先） |
+| bot.batchCreate | v0.2 聊天驱动批量创建（FR-12） | 单事务：newGroup 与 groupId 互斥；逐字段回退 batch defaults；头像显式优先、自动分配组内不重复（组合用尽才允许重复）；以 idempotencyKey 去重；返回 batchId 供 creation.revoke |
+| creation.revoke | v0.2 整批撤销 | 归档该批全部 bot（无 revision 守卫，撤销必须生效），批次自建的组一并归档；重复撤销返回 INVALID_INPUT |
+| group.create / list | v0.2 分组管理 | list 仅返回未归档组 |
 | workflow.validate / save / export / import | 编辑与模板交换 | validate 返回可定位节点/字段的错误；import 先校验 schemaVersion |
 | run.start / get / list / cancel | 运行控制 | start 以 idempotencyKey 去重；cancel 重复调用返回已有终态 |
 | run.retryNode | 显式重试失败/中断节点 | 新 attempt；校验下游状态与副作用；不静默恢复旧审批 |
