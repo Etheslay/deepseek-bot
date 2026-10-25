@@ -71,7 +71,10 @@ Etheslay 主责 Harness、Host、执行、权限、存储和调度；Destinyian 
 | D21 `feature/local-exec` | Etheslay | D08、D15 | 本地执行守护、窗口截图与 OCR、设备动作；默认关闭，逐次授权，产物只存本地 |
 | D22 `feature/system-integration` | Destinyian | D02、D11 | 每 bot 托盘图标、Chrome 数据导入、通知设置、中英双语；不引入账户体系 |
 | D23 `feature/platform-acceptance` | Destinyian 主责，Etheslay 复核 | D13、D14–D22 | 对标矩阵、性能预算、可访问性与发布门槛；无 P0/P1；证据与结论一致 |
-| D24 `feature/chat-interactions` | Destinyian | D05、D14、D15 | bot 内联提及（彩色 @name，点击直达该 bot）、多 bot 交付通知（头像栈可点）、定向回复（“已只回某 bot”路由可见）、选项卡片（A/B/C/D 决策卡，点击即回答并回写会话）、自动化状态通知条；卡片组件供 D16 授权弹层复用 |
+| D24 `feature/chat-interactions` | Destinyian | D05、D14、D15 | bot 内联提及（彩色 @name，点击直达该 bot）、多 bot 交付通知（头像栈可点）、定向回复（“已只回某 bot”路由可见）、选项卡片（A/B/C/D 决策卡，点击即回答并回写会话）、自动化状态通知条；**用户气泡颜色跟随当前 bot 主题色**；卡片组件供 D16 授权弹层复用 |
+| D25 `feature/global-search` | Destinyian | D05、D14 | 顶栏搜索落地：跨 bot / 会话 / 产物 / 设置项的本地搜索（渲染层索引先行，host 检索后接）；键盘唤起（Ctrl+K） |
+| D26 `feature/settings-completion` | Destinyian | D04、D22 | 设置补全与持久化：外观强调色、语言切换、数据备份/恢复入口（接 data.* 契约）、本地用量统计、检查更新入口、硬件加速与通知开关；清理全部占位假控件；设置写本地存储不再重启即失 |
+| D27 `feature/chat-attachments` | Destinyian | D08、D15 | 聊天附件：文件/图片经工具网关进入 bot 工作区（受 grant 与审批约束），聊天内附件卡片与产物预览打通；麦克风语音列为候选另行评估 |
 
 ## 7. 阶段二里程碑
 
