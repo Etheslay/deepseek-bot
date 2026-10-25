@@ -124,6 +124,28 @@ lines.on("line", (line) => {
         status("running");
         return;
       }
+      if (scenario === "turn-error") {
+        // Real 401 wire shape (QA-06, verified 2026-10-25): the turn ends with
+        // reason.kind "error" carrying the provider error envelope, then idle.
+        sessionEvent({ type: "agent/inbox/spliced", data: { inserted: [{ id: messageId }] } });
+        sessionEvent({ type: "turn/start", data: { turn: 1 } });
+        sessionEvent({
+          type: "turn/end",
+          data: {
+            reason: {
+              kind: "error",
+              error: {
+                message: "Authentication Fails, Your api key: ****tion is invalid",
+                code: "AUTH",
+                status: 401,
+              },
+            },
+          },
+        });
+        status("running");
+        status("idle");
+        return;
+      }
       if (scenario === "first-ok-then-hang") {
         // First turn completes (resume seed material); later turns hang.
         if (fakeState.turns === 0) {
