@@ -1,12 +1,10 @@
 /**
- * Unified avatar renderer (brief §2.5): preset PNG / dolphin logo / emoji /
- * uploaded image. White-round presets and the logo render bare; emoji and
- * images use no chrome either. UI-only, never persisted.
+ * Avatar renderer: theme-aware solid bot and Minimal geometric shapes.
+ * UI-only selection; never persisted.
  */
 import { useEffect, useRef, useState, type JSX } from "react";
 import type { Avatar } from "./avatar-meta.js";
 import { MINIMAL_SHAPES } from "./avatar-minimal.js";
-import { DOLPHIN_LOGO_URL, PRESET_URLS } from "./preset-urls.js";
 
 function MinimalAvatar(props: {
   shapeIndex: number;
@@ -65,12 +63,7 @@ function MinimalAvatar(props: {
 }
 
 export function Avatar(props: { avatar: Avatar; size: number }): JSX.Element {
-  const [broken, setBroken] = useState(false);
   const { avatar, size } = props;
-
-  if (avatar.kind === "image" && broken) {
-    return <Avatar avatar={{ kind: "preset", preset: "bear" }} size={size} />;
-  }
 
   switch (avatar.kind) {
     case "mono":
@@ -88,46 +81,6 @@ export function Avatar(props: { avatar: Avatar; size: number }): JSX.Element {
           shapeIndex={avatar.shape}
           color={avatar.color}
           size={size}
-        />
-      );
-    case "preset":
-      return (
-        <img
-          className="avatar-img"
-          src={PRESET_URLS[avatar.preset]}
-          alt=""
-          width={size}
-          height={size}
-          draggable={false}
-        />
-      );
-    case "logo":
-      return (
-        <img
-          className="avatar-img logo"
-          src={DOLPHIN_LOGO_URL}
-          alt="DeepSeek"
-          width={size}
-          height={size}
-          draggable={false}
-        />
-      );
-    case "emoji":
-      return (
-        <span className="avatar-emoji" style={{ fontSize: Math.round(size * 0.72) }} aria-hidden="true">
-          {avatar.emoji}
-        </span>
-      );
-    case "image":
-      return (
-        <img
-          className="avatar-img"
-          src={avatar.dataUrl}
-          alt={avatar.alt ?? ""}
-          width={size}
-          height={size}
-          draggable={false}
-          onError={() => setBroken(true)}
         />
       );
   }
