@@ -4,7 +4,7 @@
 - 板块：B / Destinyian
 - 分支：`feature/desktop-avatar-ball`（独立 worktree）
 - 基线：`origin/develop` @ `0c4a9dd`（开工前 fetch 记录）
-- 实现提交：`1a664c2`
+- 实现提交：`1a664c2`（球球主体）· `c049d41`（补卡：固定位立牌 + 主题反相）
 - 状态：DONE（待 Integrator 代开草稿 PR / 负责人自审确认）
 
 ## 概述
@@ -45,6 +45,31 @@
 
 切换 shape 时双眼仍走同一 `projectEye` 投影与同一状态机，眼环关键帧不变。
 
+## 补卡 · 固定位立牌 + 主题反相（c049d41）
+
+### 1) 固定位 bot 立牌（不是飘在聊天的球）
+`GrokBall` 增加 `variant` 身份槽位与尺寸预设（`GROK_BALL_SIZES`）：
+
+| variant | 尺寸 | 动画 | 用途 |
+|---------|------|------|------|
+| `sidebar` | 40 | 动 | 侧栏圆角卡片固定 avatar+名称 |
+| `message-header` | 26 | 动 | 消息头小尺寸复用同一图标 |
+| `preview` | 96 | 动 | 创建/编辑弹窗预览 |
+| `inline` | 26 | **静** | 消息流内头像、选择器缩略图 |
+
+`inline` 为**静态身份字形**（无 RAF / 无全局 mousemove），所以灵动的球只出现在固定槽位（侧栏立牌、消息头、预览），不会“飘在聊天里”，也避免长会话里几十个动画循环的开销。消息头由原 `BlobMark` 改为复用选中 bot 的球图标。
+
+### 2) 亮暗黑白互相反相
+`mono`（黑白）球随主题反相：Light=深色身+浅色眼，Dark=浅色身+深色眼。
+实现：身体/眼填充改由 CSS 变量 `--avatar-mono-bg` / `--avatar-mono-eye` 驱动（`.gb-mono .gb-body/.gb-eye`），配 `transition: fill 200ms`；切换主题时 200ms 插值，gaze/blink 动画不中断。橙星等强调色（thinking/done aura、彩色 bot）为主题无关，保留不变。
+
+### 3) 与多 shape / 自研形体 / 状态机并存
+反相与立牌只作用于 `mono`；15 款自研形体、`GrokBallState` 状态机、眼环逐点插值、投影/阻尼/呼吸/眨眼全部不变。
+
+### 验收截图
+- `docs/reports/B-AVATAR-01-light.png`：浅色——预览/侧栏立牌/消息头为黑身白眼；彩色 bot 保持自身色。
+- `docs/reports/B-AVATAR-01-dark.png`：深色——`mono` 预览反相为白身黑眼；彩色 bot 不变。
+
 ## 变更文件
 
 - 新增 `apps/desktop/src/renderer/src/features/avatars/grok-ball-model.ts`（纯几何/状态，可单测）
@@ -61,9 +86,9 @@
 
 - `pnpm typecheck` → 0（6 包全绿）
 - `pnpm lint` → 0
-- `pnpm --filter @deepseek-bot/desktop test` → 132 passed（含 grok-ball-model 12 例：轮廓采样/闭合路径/眼投影背面剔除/颜色与关键帧插值/状态帧点数一致）
-- `pnpm --filter @deepseek-bot/desktop build` → 0（167 modules）
-- 运行时截图 `docs/reports/B-AVATAR-01-shapes.png`：15 形状网格 + 12 色 + 黑白；预览 blob 竖眼、侧栏 bot 小尺寸投影正常，无穿模。
+- `pnpm --filter @deepseek-bot/desktop test` → 134 passed（含 grok-ball-model 14 例：轮廓采样/闭合路径/眼投影背面剔除/颜色与关键帧插值/状态帧点数一致/变体尺寸/静态变体）
+- `pnpm --filter @deepseek-bot/desktop build` → 0
+- 运行时截图：`B-AVATAR-01-shapes.png`（15 形状网格）、`B-AVATAR-01-light.png` / `B-AVATAR-01-dark.png`（固定位立牌 + mono 主题反相）。
 
 ## 已知限制 / 后续
 
