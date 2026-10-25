@@ -10,6 +10,7 @@
 import { useState, type JSX, type ReactNode } from "react";
 import { validateBot } from "../../services/contract-validation.js";
 import type { BotDraft } from "../../services/desktop-service.js";
+import { CustomSelect } from "../../components/custom-select.js";
 
 const MODEL_OPTIONS = [
   { id: "44444444-4444-4444-8444-444444444444", label: "DeepSeek · deepseek-chat" },
@@ -40,6 +41,11 @@ export const TONE_PRESETS: readonly string[] = [
   "冷静",
   "热血",
 ] as const;
+
+/** Create dialog keeps only the lighter, positive presets. */
+const MINIMAL_TONES = TONE_PRESETS.filter(
+  (tone) => !["傲娇", "严肃", "凶悍", "毒舌"].includes(tone),
+);
 
 export function validateBotDraft(draft: BotDraft): FieldErrors {
   const entity = {
@@ -74,6 +80,8 @@ export function BotForm(
     avatarSlot?: ReactNode;
     /** Rendered after role (group select row). */
     groupSlot?: ReactNode;
+    /** Create mode: keep the dialog focused on name + avatar. */
+    minimal?: boolean;
   },
 ): JSX.Element {
   const [draft, setDraft] = useState<BotDraft>(
@@ -140,7 +148,7 @@ export function BotForm(
   };
 
   return (
-    <div className="bot-form">
+    <div className={"bot-form" + (props.minimal ? " minimal" : "")}>
       {props.previewSlot}
 
       <input
@@ -175,8 +183,9 @@ export function BotForm(
       {fieldErrors.instructions && <em className="field-error">{fieldErrors.instructions}</em>}
       <span className="form-hint">可选：说明它能做什么、不能做什么；最大 4000 字。</span>
 
+      <span className="tone-label">性格</span>
       <div className="tone-picker" role="group" aria-label="语气选择（可多选）">
-        {TONE_PRESETS.map((tone) => (
+        {(props.minimal ? MINIMAL_TONES : TONE_PRESETS).map((tone) => (
           <button
             key={tone}
             type="button"
@@ -212,48 +221,34 @@ export function BotForm(
 
       <details className="advanced">
         <summary>高级设置</summary>
-        <label className="form-field">
+        {/* 不能用 label 包裹：label 会把点击转发给内部触发按钮，选中后菜单立即重开（假死） */}
+        <div className="form-field">
           <span>模型配置</span>
-          <select
+          <CustomSelect
             value={draft.modelProfileId}
-            aria-label="模型配置"
-            onChange={(e) => set("modelProfileId", e.target.value)}
-          >
-            {MODEL_OPTIONS.map((option) => (
-              <option key={option.id} value={option.id}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="form-field">
+            options={MODEL_OPTIONS.map((o) => ({ value: o.id, label: o.label }))}
+            onChange={(v) => set("modelProfileId", v)}
+            ariaLabel="模型配置"
+          />
+        </div>
+        <div className="form-field">
           <span>工作目录</span>
-          <select
+          <CustomSelect
             value={draft.workspaceId}
-            aria-label="工作目录"
-            onChange={(e) => set("workspaceId", e.target.value)}
-          >
-            {WORKSPACE_OPTIONS.map((option) => (
-              <option key={option.id} value={option.id}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="form-field">
+            options={WORKSPACE_OPTIONS.map((o) => ({ value: o.id, label: o.label }))}
+            onChange={(v) => set("workspaceId", v)}
+            ariaLabel="工作目录"
+          />
+        </div>
+        <div className="form-field">
           <span>工具授权</span>
-          <select
+          <CustomSelect
             value={draft.toolPolicyId}
-            aria-label="工具授权"
-            onChange={(e) => set("toolPolicyId", e.target.value)}
-          >
-            {TOOL_POLICY_OPTIONS.map((option) => (
-              <option key={option.id} value={option.id}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
+            options={TOOL_POLICY_OPTIONS.map((o) => ({ value: o.id, label: o.label }))}
+            onChange={(v) => set("toolPolicyId", v)}
+            ariaLabel="工具授权"
+          />
+        </div>
       </details>
 
       {submitError && <p className="form-error" role="alert">{submitError}</p>}

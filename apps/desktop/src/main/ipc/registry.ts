@@ -2,6 +2,7 @@ import { ipcMain, type IpcMainInvokeEvent } from "electron";
 import {
   IPC_CHANNELS,
   assertAllowedChannel,
+  assertValidTitleBarOverlayColors,
   type AppInfo,
 } from "../../shared/ipc-channels.js";
 import {
@@ -16,6 +17,7 @@ export type IpcHandlers = {
   minimizeWindow: () => void;
   toggleMaximizeWindow: () => void;
   closeWindow: () => void;
+  setTitleBarOverlay: (colors: { color: string; symbolColor: string }) => void;
 };
 
 /**
@@ -68,6 +70,15 @@ export function registerIpcHandlers(
     wrap(IPC_CHANNELS.WINDOW_CLOSE, () => {
       handlers.closeWindow();
     }),
+  );
+  ipcMain.handle(
+    IPC_CHANNELS.WINDOW_SET_TITLEBAR_OVERLAY,
+    (event: IpcMainInvokeEvent, payload: unknown) => {
+      assertAllowedChannel(IPC_CHANNELS.WINDOW_SET_TITLEBAR_OVERLAY);
+      assertAuthorizedSender(event, isAuthorized);
+      assertValidTitleBarOverlayColors(payload);
+      handlers.setTitleBarOverlay(payload);
+    },
   );
 }
 

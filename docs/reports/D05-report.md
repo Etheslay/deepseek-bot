@@ -56,7 +56,12 @@ Windows 11 x64（26200）；Node 24.16.0；pnpm 11.28.5；Electron 38.2.1；Reac
 | 产物 UI-6 | 独立回形针入口 → popover 列表 + 预览（md 可看、HTML 拦截不变） | 2 产物、md 预览 ✓ |
 | 表单 UI-13/14/15 | 无标签软背景：名称 44px 居中、角色 96px、占位符正确；高级设置（模型/工作目录/工具授权）折叠进 <details>；名称空时创建禁用 | 全部 ✓（d05-54） |
 | 语气 chips（会话追加） | 11 个预置语气（傲娇/撒娇/可爱/呆萌/严肃/凶悍/幽默/温柔/毒舌/冷静/热血）虚线胶囊自由多选、选中浅蓝；“自定义”作为选项，勾选后才展开输入；提交时以（语气：…）附加到 instructions 末尾（UI-only） | 选中傲娇+自定义“中二”→ 编辑预填后缀（语气：傲娇、中二）✓（d05-56） |
-| 下拉暗色 | 原生 select option 暗底亮字 | Windows Chromium 原生弹层尽力而为，若仍发白需换自绘下拉（已知限制） |
+| 下拉暗色 | 原生 select 全部替换为自绘 `CustomSelect`（`components/custom-select.tsx`，按钮+弹层，role=listbox/option）：分组 + 高级设置 3 项（模型/工作目录/工具授权）+ 设置弹窗主题（深色/浅色，随 `data-theme` 亮色主题适配）；选中/悬停高亮 **暗灰**（`--item-active`/`--item-hover`），当前项带 ✓ | GUI 实测：全应用 `select` 计数 0；创建表单选中行 `rgb(42,47,56)`、主题下拉选中行 `rgb(32,32,36)`、勾选灰 `rgb(142,142,150)`；全模态无 `#3b82f6/#8ab4ff` 蓝色残留（d05-57～59） |
+| 头像选中高亮改暗灰（会话追加） | `.avatar-cell.selected` / `.emoji-cell.selected` 边框 `var(--settings)` 蓝 → `#6b7280` 灰（语气 chips 选中浅蓝为 Owner 认可设计，保持不变） | GUI 实测：选中头像边框 `rgb(107,114,128)` ✓ |
+| 浅色主题去黑块（会话追加） | 滚动条/齿轮悬停/空状态图标眼珠改用主题变量；窗口控制条颜色经新增白名单 IPC `window:set-titlebar-overlay`（hex 校验 + sender guard + 6 个测试用例）随主题同步 | 真实鼠标流程实测：设置→主题下拉选“浅色”→菜单自动收起、body 变 `rgb(246,246,248)`、overlay IPC 往返 `ipc-ok`（d05-60） |
+| 高级下拉“选完不闭合”修复（会话追加） | 根因：`<label className="form-field">` 包裹自绘下拉时，label 激活转发把第二次 click 打到触发按钮，选中后菜单立即重开（点击埋点证据：一次物理点击产生 item+trigger 两个 click）。改为 `<div>` 包裹 | 修复后埋点只剩单个 click；人工节奏（移动→停顿→按下→释放）真实点击实测 5 处下拉（模型配置/工作目录/工具授权/分组/主题）全部“选中即闭合” ✓ |
+| 全宽标题栏（会话追加，Owner 参考稿） | `.shell` 改列布局：`.top` 提升为全宽 52px 标题栏（= overlay 高度），背景 `var(--bg)` 与原生控制条同色无缝；侧栏/内容下移至 y=52；最近会话/产物按钮与 page-chip 居中 cy=26 与原生按钮同高；popover 锚点随按钮右对齐 | GUI 实测：`.top` 0-1100×52、bg=overlay 色、按钮/chip cy=26、popover 右缘=按钮右缘（905/950）；深浅两主题截图（d05-62/63） |
+| 全局圆角 + 云朵装饰（会话追加，Owner 参考稿） | 52 处 border-radius 按值统一拉升（3-16px→8-22px），消息气泡 4px 尖角尾→22px 全圆角；侧栏右缘 20px 圆角过渡；空状态加 `CloudDecor` 云朵（BlobMark 坐云上） | GUI 实测：可见组件 0 个 <8px 尖角；cloud-decor 渲染 ✓、sidebar `0 20px 20px 0` ✓（d05-64）；40 测试全绿 |
 
 已知小问题：编辑时改选语气会叠加旧后缀（includes 防重只对完全相同后缀生效）；头像阶段 2（预置 16 动物/Emoji/图片上传）按 Owner 指示跳过，素材与组件骨架已就绪待做。
 
@@ -130,3 +135,14 @@ git branch -D feature/bot-workspace
   - `feat(bot-workspace): add streaming chat, history, artifacts and settings wiring`（本次收尾提交）
 - docs-only：`docs: record bot workspace`（本报告与 BOT_WORKSPACE.md）
 - 完整 SHA 以 `git log feature/bot-workspace` 为准；报告不自我引用 tip。
+
+## 最终 UI 追加修正（2026-10-24）
+
+本报告上方的“头像阶段 2 跳过”“全宽标题栏 52px”等描述属于中间版本，已被最终实现取代。最终状态：
+
+- 头像：Minimal / Animal / Emoji 三页；Animal 使用 OpenMoji SVG（CC BY-SA 4.0，见 `docs/THIRD_PARTY_NOTICES.md`），猴子位由 DeepSeek 蓝海豚品牌头像替换；新增随主题切换的纯色 Bot（浅色黑、深色白）；创建弹窗只保留头像、名字、性格，编辑弹窗保留完整字段。
+- 布局：浅色/深色共用同一套全出血布局（侧栏 300px、主区圆角、顶部胶囊、贴底输入条）；深色仅换色；窗口控制条经 `window:set-titlebar-overlay` 同步主题。
+- 聊天：消息组共用居中时间；引用/表情/复制操作栏悬停可用；用户消息右对齐并使用当前 Bot 颜色；Bot 往来显示“N 条消息往来：BotA 和 BotB”，点击单个 Bot 打开双方记录，记录内支持引用/复制；删除 Bot 增加确认弹窗。
+- 主题：深色按钮对比度已提升；设置/创建/删除等弹窗层级高于页头模糊层。
+
+本追加段为最终交付说明；上方历史验收记录保留。

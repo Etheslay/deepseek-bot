@@ -178,6 +178,10 @@ function registerShellIpc(win: BrowserWindow): void {
         // Routes through the close handler: hides to tray unless quitting.
         win.close();
       },
+      setTitleBarOverlay: (colors) => {
+        // Renderer re-colors the native window-control strip on theme switch.
+        win.setTitleBarOverlay({ color: colors.color, symbolColor: colors.symbolColor });
+      },
     },
     createPrimaryWindowSenderGuard(() => mainWindow),
   );

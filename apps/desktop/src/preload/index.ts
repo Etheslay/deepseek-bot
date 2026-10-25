@@ -13,6 +13,7 @@ export type DesktopBridge = {
     minimize: () => Promise<void>;
     toggleMaximize: () => Promise<void>;
     close: () => Promise<void>;
+    setTitleBarOverlay: (colors: { color: string; symbolColor: string }) => Promise<void>;
   };
 };
 
@@ -24,6 +25,8 @@ const api: DesktopBridge = {
     minimize: () => ipcRenderer.invoke(IPC_CHANNELS.WINDOW_MINIMIZE),
     toggleMaximize: () => ipcRenderer.invoke(IPC_CHANNELS.WINDOW_TOGGLE_MAXIMIZE),
     close: () => ipcRenderer.invoke(IPC_CHANNELS.WINDOW_CLOSE),
+    setTitleBarOverlay: (colors) =>
+      ipcRenderer.invoke(IPC_CHANNELS.WINDOW_SET_TITLEBAR_OVERLAY, colors),
   },
 };
 

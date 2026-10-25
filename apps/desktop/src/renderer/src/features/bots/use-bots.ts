@@ -11,11 +11,13 @@ import type { Bot } from "@deepseek-bot/contracts";
 import type { BotDraft } from "../../services/desktop-service.js";
 import { ServiceError } from "../../services/desktop-service.js";
 import { useService } from "../../services/service-context.js";
+import { defaultAvatarFor, type Avatar } from "../avatars/avatar-meta.js";
 
 export type UiBot = {
   /** Stable numeric key for list rendering; contract id lives on `bot.id`. */
   key: number;
   bot: Bot;
+  avatar: Avatar;
   shape: number;
   color: number;
   group: number;
@@ -24,7 +26,7 @@ export type UiBot = {
   hidden: boolean;
 };
 
-type UiFields = Pick<UiBot, "shape" | "color" | "group" | "unread">;
+type UiFields = Pick<UiBot, "avatar" | "shape" | "color" | "group" | "unread">;
 
 export type BotsOperationResult = {
   ok: boolean;
@@ -44,6 +46,7 @@ export function useBots(defaultGroupKey: number) {
   const toUi = useCallback((bot: Bot): UiBot => {
     const saved = uiByBotId.current.get(bot.id);
     const fields: UiFields = saved ?? {
+      avatar: defaultAvatarFor(bot.id),
       shape: 0,
       color: 2,
       group: defaultGroupKey,
@@ -54,6 +57,7 @@ export function useBots(defaultGroupKey: number) {
 
   const remember = (bot: Bot, patch: Partial<UiFields>): void => {
     const saved = uiByBotId.current.get(bot.id) ?? {
+      avatar: defaultAvatarFor(bot.id),
       shape: 0,
       color: 2,
       group: defaultGroupKey,
@@ -165,6 +169,7 @@ export function useBots(defaultGroupKey: number) {
       try {
         const copy = await service.bots.duplicate(botId);
         remember(copy, {
+          avatar: target.avatar,
           shape: target.shape,
           color: target.color,
           group: target.group,
