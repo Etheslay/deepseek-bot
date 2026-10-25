@@ -42,3 +42,29 @@ export function listSettingKeys(db: OpenedDatabase): string[] {
   }>;
   return rows.map((row) => row.key);
 }
+
+// ---------------------------------------------------------------------------
+// Host boot generation (CONTRACTS §2 Approval: 启动代次绑定)
+// ---------------------------------------------------------------------------
+
+const BOOT_GENERATION_KEY = "host.boot_generation";
+
+/** Current boot generation; 0 before the first increment. */
+export function getBootGeneration(db: OpenedDatabase): number {
+  const value = getSettingRaw(db, BOOT_GENERATION_KEY);
+  return typeof value === "number" && Number.isInteger(value) && value >= 0
+    ? value
+    : 0;
+}
+
+/**
+ * Bump and return the boot generation. The Host calls this exactly once at
+ * startup; approvals created afterwards bind to the returned value, so
+ * approvals left over from a previous process can no longer be decided or
+ * consumed (FR-06: 重启后旧审批不能直接重放).
+ */
+export function incrementBootGeneration(db: OpenedDatabase): number {
+  const next = getBootGeneration(db) + 1;
+  setSetting(db, BOOT_GENERATION_KEY, next);
+  return next;
+}

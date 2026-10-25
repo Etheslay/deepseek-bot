@@ -35,13 +35,13 @@ flowchart LR
 | `packages/storage/` | 应用数据库、迁移、备份、查询 | 自定义修改 Harness 日志格式 | Etheslay |
 | `packages/ui/` | 可复用界面与可访问性组件 | 本地数据授权判断 | Destinyian |
 
-桌面壳（D02）、共享契约（D03）、本地存储（D04）与工作流引擎（D06，`packages/runtime/`，经 `NodeExecutor` 端口与 Harness 适配层解耦）已按此布局落地；`packages/harness-adapter/`、`packages/ui/` 仍是规划，本次不创建。
+桌面壳（D02）、共享契约（D03）、本地存储（D04）、工作流引擎（D06，`packages/runtime/`，经 `NodeExecutor` 端口与 Harness 适配层解耦）与后端工具权限层（D08，`packages/runtime/src/permissions/`：路径规范化/包含校验、策略评估、一次性审批门、MCP 授权检查；storage 增加 `tool_policies` 表与启动代次）已按此布局落地；`packages/harness-adapter/`、`packages/ui/` 仍是规划，本次不创建。
 
 ## 3. 数据与调用链
 
 一次运行先验证 workflowVersion、机器人快照、路径权限与预算，再将 Run 写入本地数据库。调度器领取可执行节点，Harness 适配层建立/关联会话。流式片段只更新 UI；持久结果以 Harness 日志与本项目运行记录为准，不能把片段显示完成当作节点成功。
 
-工具动作在执行前经过后端策略检查。审批包含动作摘要、完整参数摘要哈希、目标资源和有效期。批准后必须再次校验参数、权限和运行状态；关闭的运行或已消费审批不能再执行。
+工具动作在执行前经过后端策略检查（D08 已实现，位于 `packages/runtime/src/permissions/`）：适配层经 `NodeExecutor` 上下文拿到的权限句柄必须对每个副作用动作调用 `authorize` —— 先发 `tool.requested`（精确参数）再评估钉扎策略（policy 操作 × workspace 授权 × 产物目录；shell 仅审批放行；MCP 按服务器+工具白名单），放行、以稳定错误码拒绝或转一次性审批。审批包含动作摘要、完整参数摘要哈希（`actionDigest`，决定时必须回传校验）、目标资源和有效期（默认 10 分钟），并绑定宿主启动代次（storage `incrementBootGeneration`），重启后旧审批不能被决定或消费。批准后必须再次校验参数、权限和运行状态；关闭的运行或已消费审批不能再执行。
 
 节点完成后提交输出引用和状态，再解锁后继节点。跨进程崩溃可能发生在工具执行与状态提交之间，因此仅保证状态记录和调度去重，不承诺外部副作用 exactly-once。
 

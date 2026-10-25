@@ -34,9 +34,11 @@ export function openTestDatabase(): OpenedDatabase {
 export interface SeededRefs {
   readonly profile: ModelProfile;
   readonly workspaceId: string;
+  /** Default least-privilege tool policy created for the seeded bot. */
+  readonly toolPolicyId: string;
 }
 
-/** Insert the credential/profile/workspace rows a bot needs to exist. */
+/** Insert the credential/profile/workspace/tool-policy rows a bot needs. */
 export function seedProfileAndWorkspace(db: OpenedDatabase): SeededRefs {
   const ref = `cred:${randomUUID()}`;
   const now = db.now().toISOString();
@@ -65,7 +67,26 @@ export function seedProfileAndWorkspace(db: OpenedDatabase): SeededRefs {
       "INSERT INTO workspaces (id, canonical_path, grants_json, created_at, updated_at) VALUES (?, ?, '[]', ?, ?);",
     )
     .run(workspaceId, "D:\\workspaces\\demo", now, now);
-  return { profile, workspaceId };
+  const toolPolicyId = randomUUID();
+  db.raw
+    .prepare(
+      "INSERT INTO tool_policies (id, revision, name, policy_json, created_at, updated_at) " +
+        "VALUES (?, ?, ?, ?, ?, ?);",
+    )
+    .run(
+      toolPolicyId,
+      randomUUID(),
+      "测试工具策略",
+      JSON.stringify({
+        filesystem: { enabled: false, operations: [] },
+        shell: { mode: "disabled" },
+        network: { mode: "disabled" },
+        mcp: { enabled: false, requireApproval: false, servers: [] },
+      }),
+      now,
+      now,
+    );
+  return { profile, workspaceId, toolPolicyId };
 }
 
 export function makeBot(refs: SeededRefs, overrides: Partial<Bot> = {}): Bot {
@@ -76,7 +97,7 @@ export function makeBot(refs: SeededRefs, overrides: Partial<Bot> = {}): Bot {
     instructions: "仅用于运行时测试的指令文本。",
     modelProfileId: refs.profile.id,
     workspaceId: refs.workspaceId,
-    toolPolicyId: randomUUID(),
+    toolPolicyId: refs.toolPolicyId,
     archivedAt: null,
     ...overrides,
   };

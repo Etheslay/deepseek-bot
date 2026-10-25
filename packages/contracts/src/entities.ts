@@ -287,6 +287,58 @@ export const ApprovalSchema = z.object({
 export type Approval = z.infer<typeof ApprovalSchema>;
 
 // ---------------------------------------------------------------------------
+// Tool policy (D08: FR-06 backend enforcement data)
+// ---------------------------------------------------------------------------
+
+/**
+ * Shell execution has no unattended allow mode in v0.1 (SECURITY_DATA §3:
+ * a verifiable OS-level constraint or the capability stays off), so every
+ * shell invocation is user-approved with the exact command line.
+ */
+export const TOOL_SHELL_MODES = ["disabled", "approval-required"] as const;
+export type ToolShellMode = (typeof TOOL_SHELL_MODES)[number];
+
+export const TOOL_NETWORK_MODES = ["disabled", "allowed", "approval-required"] as const;
+export type ToolNetworkMode = (typeof TOOL_NETWORK_MODES)[number];
+
+/**
+ * MCP authorization is an explicit per-server tool allowlist. Wildcards are
+ * not representable: project files or model output cannot enlarge the grant
+ * (SECURITY_DATA §3), only a policy record change can.
+ */
+export const McpServerGrantSchema = z.object({
+  serverId: NonEmptyStringSchema(TEXT_LIMITS.label),
+  allowedTools: z.array(NonEmptyStringSchema(TEXT_LIMITS.label)).max(200),
+});
+export type McpServerGrant = z.infer<typeof McpServerGrantSchema>;
+
+/**
+ * Tool authorization for one bot. Least privilege by default: an empty
+ * policy disables every capability. Filesystem tools operate inside the
+ * workspace grant scopes (WorkspaceGrantSchema); the run artifact directory
+ * is granted separately by the Host when filesystem access is enabled.
+ */
+export const ToolPolicySchema = z.object({
+  id: UuidSchema,
+  revision: UuidSchema,
+  name: NonEmptyStringSchema(TEXT_LIMITS.name),
+  filesystem: z.object({
+    enabled: z.boolean(),
+    /** Subset of read/write; process execution belongs to the shell capability. */
+    operations: z.array(z.enum(["read", "write"])).max(2),
+  }),
+  shell: z.object({ mode: z.enum(TOOL_SHELL_MODES) }),
+  network: z.object({ mode: z.enum(TOOL_NETWORK_MODES) }),
+  mcp: z.object({
+    enabled: z.boolean(),
+    /** When true every authorized MCP tool call still requires user approval. */
+    requireApproval: z.boolean(),
+    servers: z.array(McpServerGrantSchema).max(50),
+  }),
+});
+export type ToolPolicy = z.infer<typeof ToolPolicySchema>;
+
+// ---------------------------------------------------------------------------
 // Artifact
 // ---------------------------------------------------------------------------
 

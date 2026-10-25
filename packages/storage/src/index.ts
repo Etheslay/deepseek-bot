@@ -17,6 +17,7 @@ export * from "./backup.js";
 export * from "./repos/shared.js";
 export * from "./repos/bots.js";
 export * from "./repos/profiles.js";
+export * from "./repos/tool-policies.js";
 export * from "./repos/workflows.js";
 export * from "./repos/schedules.js";
 export * from "./repos/runs.js";

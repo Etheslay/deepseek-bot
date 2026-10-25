@@ -8,6 +8,7 @@ import {
   decideApproval,
   expireApprovals,
   expireApprovalsForRun,
+  getApprovalGeneration,
   markApprovalExpired,
   getApproval,
   listApprovals,
@@ -204,6 +205,50 @@ describe("approval expiry helpers", () => {
     expect(getApproval(db, second.id)?.status).toBe("expired");
     expect(getApproval(db, other.id)?.status).toBe("pending");
     expect(expireApprovalsForRun(db, runId)).toBe(0);
+    db.close();
+  });
+});
+
+describe("approval boot generation binding (D08)", () => {
+  it("stores the generation an approval is bound to", () => {
+    const db = openTestDatabase(makeLayout(makeTempRoot()));
+    const { runId, nodeRunId } = seedRunAndNode(db);
+    createApproval(db, makeApproval(runId, nodeRunId), { generation: 3 });
+    expect(getApprovalGeneration(db, randomUUID())).toBeUndefined();
+    expect(getApprovalGeneration(db, "no-such-id")).toBeUndefined();
+    const created = makeApproval(runId, nodeRunId);
+    createApproval(db, created, { generation: 3 });
+    expect(getApprovalGeneration(db, created.id)).toBe(3);
+    // Defaults to generation 0 like rows created before D08.
+    const plain = makeApproval(runId, nodeRunId);
+    createApproval(db, plain);
+    expect(getApprovalGeneration(db, plain.id)).toBe(0);
+    db.close();
+  });
+
+  it("refuses consuming an approval bound to a foreign generation", () => {
+    const db = openTestDatabase(makeLayout(makeTempRoot()));
+    const { runId, nodeRunId } = seedRunAndNode(db);
+    const approval = makeApproval(runId, nodeRunId);
+    createApproval(db, approval, { generation: 2 });
+    decideApproval(db, { id: approval.id, decision: "approved" });
+
+    try {
+      consumeApproval(db, { id: approval.id, generation: 3 });
+      expect.fail("expected foreign-generation consume rejection");
+    } catch (error) {
+      expect((error as StorageError).code).toBe("INVALID_INPUT");
+      expect((error as StorageError).details["approvalGeneration"]).toBe(2);
+      expect((error as StorageError).details["hostGeneration"]).toBe(3);
+    }
+    // The matching generation consumes exactly once.
+    expect(consumeApproval(db, { id: approval.id, generation: 2 }).status).toBe("consumed");
+    try {
+      consumeApproval(db, { id: approval.id, generation: 2 });
+      expect.fail("expected double-consume rejection");
+    } catch (error) {
+      expect((error as StorageError).code).toBe("INVALID_INPUT");
+    }
     db.close();
   });
 });

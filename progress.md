@@ -78,3 +78,16 @@
 - 根目录 lint / typecheck / test 全绿：desktop 4、shared 6、contracts 64、storage 106、runtime 43 用例；runtime 覆盖率行 88.56%、分支 81.25%（TESTING.md 要求行 ≥ 80%）。
 - 未做：真实 Harness 进程联动、真实 API 请求、权限检查（D08）、调度（D10）、适配层接入（D12）；文档同步 ARCHITECTURE / DEVELOPMENT_SETUP / packages/runtime README / D06 报告。
 - 自审记录按规范留空待负责人 Etheslay 填写；PR 合并由本人确认。
+
+## 2026-10-25：D08 工具权限后端（feature/tool-permissions）
+
+- 用户确认 Destinyian 的 D07 已合并后开始；分支自 develop 63bacf9（D07 合并记录后）创建，目标 develop。
+- 契约附加式扩展 `ToolPolicy` 实体（filesystem/shell/network/mcp；shell 无无人值守放行模式，MCP 显式服务器+工具白名单，无通配符）。
+- storage：migration 0002 新增 `tool_policies` 表与仓储；settings 增加宿主启动代次（get/incrementBootGeneration）；审批支持 generation 绑定读取与消费校验。
+- runtime：`permissions/`（actions/paths/policy/gate）+ `NodeExecutor` 上下文注入 `NodePermissionHandle`；引擎 startRun 钉扎每 bot 的 policy 与 workspace（缺失即拒绝启动，最小权限）；`decideApproval` 增加 expectedActionDigest 校验与启动代次校验；工具审批等待与运行状态调和（等待工具审批时 run 显示 waiting_approval）。
+- 自测发现并修复两个缺陷：策略评估器漏掉 policy 级文件操作白名单；取消期间迟到结算不触发 cancel drain（靠 grace 兜底 5 秒）。
+- 根目录 lint / typecheck / test 全绿：desktop 86、shared 6、contracts 64、storage 112、runtime 89 用例；权限模块分支覆盖 gate 88.2%、paths 93.3%、policy 86.3%（余下为不可达防御分支）。
+- 未做：真实 Harness 进程联动与 MCP 子进程托管（D12）、资源锁、产物文件登记（D09）、shell 操作系统级约束（v0.1 以审批放行为边界）。
+- 自审记录按规范留空待负责人 Etheslay 填写；PR 合并由本人确认。
+
+- CI 补充（同日）：首次 CI 运行 3 个用例失败（runner TEMP 为 8.3 短名 RUNNER~1，fs.realpathSync 与 fs.promises.realpath 行为不一致，范围与子路径规范化形式分裂）。修复：gate 以同一 canonicalizeToolPath 规范化 grants/产物目录 scope，测试改用规范 scope，新增注入 realpath 的回归测试；本地全绿（358 用例）后推送复验。
