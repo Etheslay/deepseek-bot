@@ -259,6 +259,7 @@ export function App(): JSX.Element {
   const [testResult, setTestResult] = useState<
     { result: "success" | "failure" | "unverified"; ok: boolean; errorCode?: string } | null
   >(null);
+  const [testing, setTesting] = useState(false);
   const [nameDraft, setNameDraft] = useState("");
 
   useEffect(() => {
@@ -1517,27 +1518,28 @@ const logout = (): void => {
                   <div className="settings-row">
                     <span>测试连接</span>
                     <span className="key-input-wrap">
-                      {testResult ? (
-                        testResult.result === "unverified" ? (
+                      {testResult &&
+                        (testResult.result === "unverified" ? (
                           <span className="settings-soon">UNVERIFIED（无真实网络，占位）</span>
                         ) : (
                           <span className={testResult.ok ? "settings-ok" : "form-error"}>
                             {testResult.ok ? "连接成功" : testResult.errorCode}
                           </span>
-                        )
-                      ) : (
-                        <button
-                          type="button"
-                          className="pill-btn"
-                          onClick={() => {
-                            void desktop.settings
-                              .testConnection({ model: "deepseek-chat", endpoint: "https://api.deepseek.com" })
-                              .then(setTestResult);
-                          }}
-                        >
-                          测试连接
-                        </button>
-                      )}
+                        ))}
+                      <button
+                        type="button"
+                        className="pill-btn"
+                        disabled={testing}
+                        onClick={() => {
+                          setTesting(true);
+                          void desktop.settings
+                            .testConnection({ model: "deepseek-chat", endpoint: "https://api.deepseek.com" })
+                            .then(setTestResult)
+                            .finally(() => setTesting(false));
+                        }}
+                      >
+                        {testing ? "测试中…" : "测试连接"}
+                      </button>
                     </span>
                   </div>
                 </div>
