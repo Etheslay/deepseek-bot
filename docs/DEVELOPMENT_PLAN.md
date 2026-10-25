@@ -54,3 +54,36 @@ Etheslay 主责 Harness、Host、执行、权限、存储和调度；Destinyian 
 ## 5. 发布职责
 
 首版由 Destinyian 组织安装包、版本和发布说明，Etheslay 对自己负责的 runtime、数据迁移、测试与回滚提交自审及验证证据。各自负责自己的修改；release 负责人检查最终候选与完整证据，在 PR 记录自审后按发布门槛合并，无需另一人批准。签名和发布凭据不能放进仓库。
+
+## 6. 阶段二任务清单（v0.2，D13 通过后启动）
+
+下表所有任务从 D13 合并后的 `develop` 创建独立 feature 分支，目标均为 `develop`。阶段二只做本地单机能力，云端、计费、遥测与远程中继不在范围内。契约与依赖变更仍先走小型独立 PR（见 [Git 工作流](GIT_WORKFLOW.md)）。
+
+| 任务 / 分支 | 负责人（开发与自审） | 依赖 | 交付与验收 |
+| --- | --- | --- | --- |
+| D14 `feature/chat-rendering` | Destinyian | D05 | 聊天内 Markdown、代码高亮、KaTeX、流程图与产物预览；资源全部本地打包，不请求远程 CDN |
+| D15 `feature/agent-tools` | Etheslay | D08、D12 | 工具网关与读写工具（读现状、建设计稿）；聊天可生成创建草案，暂不落库；审计字段预留 |
+| D16 `feature/permissions-grants` | Etheslay | D08、D15 | capability/grant/审批三层模型；设置页三档策略；聊天内授权与撤销；审计可查（见 [权限与授权](PERMISSIONS.md)） |
+| D17 `feature/skills-templates` | Destinyian | D05、D15 | 技能定义与复用、bot 模板与本地模板库；导入导出走契约校验 |
+| D18 `feature/memory-knowledge` | Etheslay | D04、D15 | 记忆写入与检索、知识导入；用户可查看与删除；默认不跨 bot 共享 |
+| D19 `feature/connectors-mcp` | Etheslay | D08、D15 | 连接器注册与生命周期、自定义 MCP、凭据引用托管；调用受 grant 与审批约束 |
+| D20 `feature/automation-triggers` | Etheslay | D10、D15 | 事件触发与规则、评审队列；重复触发防护；错过触发可见 |
+| D21 `feature/local-exec` | Etheslay | D08、D15 | 本地执行守护、窗口截图与 OCR、设备动作；默认关闭，逐次授权，产物只存本地 |
+| D22 `feature/system-integration` | Destinyian | D02、D11 | 每 bot 托盘图标、Chrome 数据导入、通知设置、中英双语；不引入账户体系 |
+| D23 `feature/platform-acceptance` | Destinyian 主责，Etheslay 复核 | D13、D14–D22 | 对标矩阵、性能预算、可访问性与发布门槛；无 P0/P1；证据与结论一致 |
+
+## 7. 阶段二里程碑
+
+| 阶段 | 任务 | 退出条件 |
+| --- | --- | --- |
+| M5 聊天工作台 | D14 / D15 | 聊天可渲染富文本与流程图；聊天可生成创建草案，编辑器可见但未落库 |
+| M6 授权与复用 | D16 / D17 | 三档策略与会话授权生效；“从不允许”在网关层被拒；技能与模板可复用 |
+| M7 平台能力 | D18 / D19 / D20 | 记忆与知识、连接器、事件自动化可用且全部有审计 |
+| M8 执行与交付 | D21 / D22 / D23 | 本地执行与屏幕感知受控可用；系统集成与双语完成；平台验收通过 |
+
+## 8. 阶段二边界与完成标准
+
+- 对标 Grok Bot 的**能力形态**，不做它的云端基础设施：无云电脑、无账户/计费、无遥测上报、无远程中继；
+- 聊天驱动的创建必须“可预览、可撤销、有审计”，不允许模型绕过网关直接写库；
+- 每项任务沿用 §4 的完成定义：实现一致、自动化检查通过、手测留证、文档同步、负责人自审记录；
+- 阶段二不包含插件市场与云端共享；如要做，单独立项，不能计入 v0.2 完成度。
