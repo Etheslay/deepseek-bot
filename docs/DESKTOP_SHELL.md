@@ -9,7 +9,7 @@ apps/desktop/
   package.json                 @deepseek-bot/desktop；脚本见下
   tsconfig.json                引用 node / web 两套工程
   electron.vite.config.ts      main / preload（CJS 输出）与 renderer 构建
-  electron-builder.yml         仅 --dir 的 Windows x64 unpacked 打包
+  electron-builder.yml         NSIS x64 安装包 + unpacked 的 Windows 打包配置
   src/main/index.ts            窗口、托盘、单实例、生命周期、权限拒绝
   src/main/ipc/registry.ts     IPC 白名单注册
   src/main/ipc/guards.ts       sender 校验（主窗口主 frame）
@@ -29,9 +29,10 @@ pnpm --filter @deepseek-bot/desktop dev        # 开发模式（electron-vite de
 pnpm --filter @deepseek-bot/desktop build      # 仅构建 main/preload/renderer 到 out/
 pnpm --filter @deepseek-bot/desktop test       # vitest 单元测试
 pnpm --filter @deepseek-bot/desktop pack:dir   # 构建 + electron-builder --dir 出 unpacked
+pnpm --filter @deepseek-bot/desktop pack:win   # 构建 + electron-builder NSIS x64 安装包
 ```
 
-根 `pnpm lint` / `pnpm typecheck` / `pnpm test` 会覆盖本包。打包输出在 `apps/desktop/release/win-unpacked/`（已 gitignore）；`out/` 为中间构建产物（已 gitignore）。
+根 `pnpm lint` / `pnpm typecheck` / `pnpm test` 会覆盖本包。打包输出在 `apps/desktop/release/`（已 gitignore）：NSIS 安装包 `DeepSeek Bot-<version>-x64.exe`、`win-unpacked/`、blockmap 与 `SHA256SUMS.txt`；`out/` 为中间构建产物（已 gitignore）。
 
 打包需要下载/缓存 Electron 发行包；若默认缓存目录不可写，可设置 `ELECTRON_CACHE` / `ELECTRON_BUILDER_CACHE` 指向可写目录。
 
@@ -99,8 +100,17 @@ preload 暴露面：`deepseekBot.getAppInfo()` 与 `deepseekBot.window.{show,hid
 - 界面与设置状态不持久化；Bot/分组/账户名/主题等在应用重启后恢复默认。
 - 「退出登录」「复制对话 ID」为占位（未接入账号系统）；真实账号体系见待办。
 - 不接 Harness、不调用 DeepSeek API、无数据库；真实机器人 CRUD、会话、工作流、运行属于 D03–D09。
-- 打包仅 `--dir` unpacked，不签名、不做安装器与自动更新（D11）。
 - CI 不构建 GUI；桌面打包证据来自本地运行（见 D02 报告）。
+- 安装包未签名（`signAndEditExecutable: false`），安装器/应用 exe 资源为默认 Electron 元数据，SmartScreen 会提示；不提供自动更新（无更新服务器）。
+- 安装版应用 UI 状态仍是会话内存；卸载保留的 `%APPDATA%\DeepSeekBot` 数据根在 D12 接线 storage 前尚无 UI 数据写入。
+
+## 打包（D11）
+
+- NSIS x64 按用户安装：`pnpm --filter @deepseek-bot/desktop pack:win`，不需管理员、不写 HKLM、不创建系统服务；`pack:dir` 仍可只出 unpacked。
+- 卸载默认保留用户数据（`deleteAppDataOnUninstall: false`）；数据根 `%APPDATA%\DeepSeekBot`（`packages/storage/src/layout.ts`，由平台 API 解析），发布说明须写明路径与手动清理方式。
+- `THIRD_PARTY_NOTICES.md` 经 `extraResources` 随包，安装后在 `<安装目录>\resources\` 可见。
+- 产品打包 CI：`.github/workflows/package.yml`（`workflow_dispatch` + push tag `v*`，windows-latest，Node 24，Corepack），产出安装包 + blockmap + `SHA256SUMS.txt` artifact；CI 只证明可构建，不替代干净机安装试验。
+- 打包/安装/升级/卸载的验收边界与证据见 [D11 报告](reports/D11-report.md)。
 
 ## 待完成（后端 / 持久化，后续任务实现）
 
