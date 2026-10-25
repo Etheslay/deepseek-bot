@@ -117,6 +117,49 @@ importers:
         specifier: 3.2.4
         version: 3.2.4(@types/debug@4.1.13)(@types/node@24.19.2)(supports-color@7.2.0)(yaml@2.9.1)
 
+  packages/harness-bridge:
+    devDependencies:
+      '@types/node':
+        specifier: 24.19.2
+        version: 24.19.2
+      '@vitest/coverage-v8':
+        specifier: 3.2.4
+        version: 3.2.4(supports-color@7.2.0)(vitest@3.2.4(@types/debug@4.1.13)(@types/node@24.19.2)(supports-color@7.2.0)(yaml@2.9.1))
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: 3.2.4
+        version: 3.2.4(@types/debug@4.1.13)(@types/node@24.19.2)(supports-color@7.2.0)(yaml@2.9.1)
+
+  packages/host:
+    dependencies:
+      '@deepseek-bot/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@deepseek-bot/harness-adapter':
+        specifier: workspace:*
+        version: link:../harness-adapter
+      '@deepseek-bot/runtime':
+        specifier: workspace:*
+        version: link:../runtime
+      '@deepseek-bot/storage':
+        specifier: workspace:*
+        version: link:../storage
+    devDependencies:
+      '@types/node':
+        specifier: 24.19.2
+        version: 24.19.2
+      '@vitest/coverage-v8':
+        specifier: 3.2.4
+        version: 3.2.4(supports-color@7.2.0)(vitest@3.2.4(@types/debug@4.1.13)(@types/node@24.19.2)(supports-color@7.2.0)(yaml@2.9.1))
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: 3.2.4
+        version: 3.2.4(@types/debug@4.1.13)(@types/node@24.19.2)(supports-color@7.2.0)(yaml@2.9.1)
+
   packages/runtime:
     dependencies:
       '@deepseek-bot/contracts':

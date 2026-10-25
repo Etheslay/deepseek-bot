@@ -1,0 +1,6 @@
+# Mounted by the app's per-launch profile patch (--patch), never auto-installed:
+# the Host installs this package into the profile workspace and points the
+# bridge at the per-launch loopback URL/token through the child environment.
+- insert:
+    - id: dsb-approval-bridge
+      name: "@deepseek-bot/harness-bridge"

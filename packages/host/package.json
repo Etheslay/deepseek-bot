@@ -1,0 +1,28 @@
+{
+  "name": "@deepseek-bot/host",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local Host assembly (D12): storage + workflow engine + scheduler + pinned Harness adapter behind the CONTRACTS §3 method surface",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "main": "./dist/main.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --coverage"
+  },
+  "dependencies": {
+    "@deepseek-bot/contracts": "workspace:*",
+    "@deepseek-bot/harness-adapter": "workspace:*",
+    "@deepseek-bot/runtime": "workspace:*",
+    "@deepseek-bot/storage": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "@vitest/coverage-v8": "3.2.4",
+    "typescript": "5.9.3",
+    "vitest": "3.2.4"
+  }
+}
