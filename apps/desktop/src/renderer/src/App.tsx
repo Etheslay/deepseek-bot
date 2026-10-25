@@ -21,7 +21,7 @@ import {
   avatarColor,
   type Avatar as AvatarKind,
 } from "./features/avatars/avatar-meta.js";
-import { DOLPHIN_LOGO_URL, PRESET_URLS } from "./features/avatars/preset-urls.js";
+import { DOLPHIN_LOGO_URL } from "./features/avatars/preset-urls.js";
 import { WorkflowEditor } from "./features/workflow-editor/workflow-editor.js";
 import { RunMonitor } from "./features/run-monitor/run-monitor.js";
 
@@ -940,31 +940,16 @@ const logout = (): void => {
                       setDragging(true);
                       const ghost = document.createElement("div");
                       ghost.className = "drag-ghost";
-                      if (b.avatar.kind === "emoji") {
-                        const emoji = document.createElement("span");
-                        emoji.className = "drag-ghost-emoji";
-                        emoji.textContent = b.avatar.emoji;
-                        ghost.append(emoji);
-                      } else if (b.avatar.kind === "minimal") {
+                      if (b.avatar.kind === "minimal") {
                         const face = document.createElement("span");
                         face.className = "drag-ghost-avatar drag-ghost-minimal";
                         face.style.background = b.avatar.color;
                         ghost.append(face);
-                      } else if (b.avatar.kind === "mono") {
+                      } else {
                         const face = document.createElement("span");
                         face.className = "drag-ghost-avatar";
                         face.style.background = "var(--avatar-mono-bg)";
                         ghost.append(face);
-                      } else {
-                        const img = document.createElement("img");
-                        img.className = "drag-ghost-avatar";
-                        img.src =
-                          b.avatar.kind === "preset"
-                            ? PRESET_URLS[b.avatar.preset]
-                            : b.avatar.kind === "logo"
-                              ? DOLPHIN_LOGO_URL
-                              : b.avatar.dataUrl;
-                        ghost.append(img);
                       }
                       document.body.append(ghost);
                       e.dataTransfer.setDragImage(ghost, 26, 26);
