@@ -38,6 +38,7 @@ import {
   type OpenedDatabase,
 } from "@deepseek-bot/storage";
 import { buildHandlers, type HostContext } from "./handlers.js";
+import { JsonlAuditSink, ToolGateway, ToolRegistry, bindReadTools } from "@deepseek-bot/agent-tools";
 
 export interface HostOptions {
   /** Data root (storage layout: database, harness home, artifacts, backups). */
@@ -78,6 +79,8 @@ export interface DeepSeekBotHost {
    * to the wire error object.
    */
   handleMethod(method: Method, payload: unknown, requestId?: string): Promise<unknown>;
+  /** D15 agent tool gateway (read layer; every call audited). */
+  readonly agentTools: ToolGateway;
   /** Start the scheduler tick loop (FR-08). */
   start(): void;
   /** Stop the scheduler, close the approval bridge and the database. */
@@ -207,23 +210,22 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
   const context: HostContext = { db, engine, scheduler, layout, now, resolveApiKey: options.resolveApiKey };
   const handlers = buildHandlers(context);
 
-  return {
-    layout,
-    db,
-    engine,
-    scheduler,
-    bridge,
-    bootGeneration,
-    recoveredRuns,
-    async handleMethod(method: Method, payload: unknown, requestId?: string): Promise<unknown> {
-      if (closed) {
-        throw new EngineError({
-          code: "RUNTIME_UNAVAILABLE",
-          message: "host is shut down (data restore requires a host restart)",
-          retryable: false,
-        });
-      }
-      const contract = methodContract(method);
+  // D15: the agent tool gateway is the only sanctioned side-effect path for
+  // agents (AGENT_PLATFORM §2); the read layer forwards to this host's own
+  // contract surface and audits every call under the data-root logs.
+  const dispatch = async (
+    method: Method,
+    payload: unknown,
+    requestId?: string,
+  ): Promise<unknown> => {
+    if (closed) {
+      throw new EngineError({
+        code: "RUNTIME_UNAVAILABLE",
+        message: "host is shut down (data restore requires a host restart)",
+        retryable: false,
+      });
+    }
+    const contract = methodContract(method);
       const parsed = contract.request.safeParse(payload ?? {});
       if (!parsed.success) {
         throw new EngineError({
@@ -263,7 +265,29 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
         });
       }
       return validated.data;
-    },
+  };
+
+  const agentRegistry = new ToolRegistry();
+  for (const capability of bindReadTools((method, payload) =>
+    dispatch(method as Method, payload),
+  )) {
+    agentRegistry.register(capability);
+  }
+  const agentTools = new ToolGateway({
+    registry: agentRegistry,
+    audit: new JsonlAuditSink(join(layout.logs, "agent-tools-audit.jsonl")),
+  });
+
+  return {
+    layout,
+    db,
+    engine,
+    scheduler,
+    bridge,
+    bootGeneration,
+    recoveredRuns,
+    agentTools,
+    handleMethod: dispatch,
     start(): void {
       scheduler.start();
     },
