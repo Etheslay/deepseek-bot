@@ -141,7 +141,11 @@ export function App(): JSX.Element {
   const [editingBot, setEditingBot] = useState<UiBot | null>(null);
   const [shape, setShape] = useState(0);
   const [color, setColor] = useState(2);
-  const [avatar, setAvatar] = useState<AvatarKind>(() => ({ kind: "mono" }));
+  const [avatar, setAvatar] = useState<AvatarKind>(() => ({
+    kind: "grok",
+    shape: "blob",
+    color: "#3b93f0",
+  }));
   const [modalGroup, setModalGroup] = useState<number>(UNGROUPED);
 
   const [groups, setGroups] = useState<Group[]>([{ key: UNGROUPED, name: "未分组" }]);
@@ -270,7 +274,7 @@ export function App(): JSX.Element {
 
   useEffect(() => {
     if (modalOpen && !editingBot) {
-      setAvatar({ kind: "mono" });
+      setAvatar({ kind: "grok", shape: "blob", color: "#3b93f0" });
     }
   }, [modalOpen, editingBot]);
   useEffect(() => {
@@ -365,7 +369,7 @@ export function App(): JSX.Element {
   const openCreateBotModal = () => {
     setShape(0);
     setColor(2);
-    setAvatar({ kind: "mono" });
+    setAvatar({ kind: "grok", shape: "blob", color: "#3b93f0" });
     setModalGroup(
       groups.find((g) => g.name === "未分组")?.key ?? groups[0]?.key ?? UNGROUPED,
     );
@@ -945,10 +949,13 @@ const logout = (): void => {
                       setDragging(true);
                       const ghost = document.createElement("div");
                       ghost.className = "drag-ghost";
-                      if (b.avatar.kind === "minimal") {
+                      if (b.avatar.kind === "grok") {
                         const face = document.createElement("span");
                         face.className = "drag-ghost-avatar drag-ghost-minimal";
-                        face.style.background = b.avatar.color;
+                        face.style.background =
+                          b.avatar.color === "mono"
+                            ? "var(--avatar-mono-bg)"
+                            : b.avatar.color;
                         ghost.append(face);
                       } else {
                         const face = document.createElement("span");

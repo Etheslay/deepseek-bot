@@ -1,39 +1,39 @@
-/**
- * Minimal avatar picker: rounded shapes, colors and theme-aware mono bot.
- * Controlled by the parent so create/edit always reflects the real avatar.
- */
+/** Grok Ball avatar picker: shapes, colors and theme-aware mono bot. */
 import type { JSX } from "react";
 import type { Avatar } from "./avatar-meta.js";
-import { MINIMAL_COLORS, MINIMAL_SHAPES } from "./avatar-minimal.js";
+import {
+  GROK_BALL_COLORS,
+  GROK_BALL_SHAPE_IDS,
+} from "./grok-ball-model.js";
 import { Avatar as AvatarView } from "./avatar.js";
 
 export function AvatarPicker(props: {
   value: Avatar;
   onChange: (avatar: Avatar) => void;
 }): JSX.Element {
-  const shape = props.value.kind === "minimal" ? props.value.shape : 0;
-  const color = props.value.kind === "minimal" ? props.value.color : "#3b82f6";
+  const shape = props.value.kind === "grok" ? props.value.shape : "circle";
+  const color = props.value.kind === "grok" ? props.value.color : "#3b93f0";
 
-  const pickMinimal = (nextShape: number, nextColor: string): void => {
-    props.onChange({ kind: "minimal", shape: nextShape, color: nextColor });
+  const pickGrok = (nextShape: typeof shape, nextColor: string): void => {
+    props.onChange({ kind: "grok", shape: nextShape, color: nextColor });
   };
 
   return (
     <div className="avatar-picker">
       <div className="shape-grid" role="radiogroup" aria-label="形状">
-        {MINIMAL_SHAPES.map((_, i) => (
+        {GROK_BALL_SHAPE_IDS.map((id) => (
           <button
-            key={i}
+            key={id}
             type="button"
             role="radio"
-            aria-checked={props.value.kind === "minimal" && shape === i}
+            aria-checked={props.value.kind === "grok" && shape === id}
             className={
               "shape-btn" +
-              (props.value.kind === "minimal" && shape === i ? " selected" : "")
+              (props.value.kind === "grok" && shape === id ? " selected" : "")
             }
-            onClick={() => pickMinimal(i, color)}
+            onClick={() => pickGrok(id, color)}
           >
-            <AvatarView avatar={{ kind: "minimal", shape: i, color }} size={34} />
+            <AvatarView avatar={{ kind: "grok", shape: id, color }} size={34} />
           </button>
         ))}
       </div>
@@ -51,18 +51,18 @@ export function AvatarPicker(props: {
         >
           <AvatarView avatar={{ kind: "mono" }} size={24} />
         </button>
-        {MINIMAL_COLORS.map((c) => (
+        {GROK_BALL_COLORS.map((c) => (
           <button
             key={c}
             type="button"
             role="radio"
-            aria-checked={props.value.kind === "minimal" && color === c}
+            aria-checked={props.value.kind === "grok" && color === c}
             className={
               "color-btn" +
-              (props.value.kind === "minimal" && color === c ? " selected" : "")
+              (props.value.kind === "grok" && color === c ? " selected" : "")
             }
             style={{ background: c }}
-            onClick={() => pickMinimal(shape, c)}
+            onClick={() => pickGrok(shape, c)}
             aria-label={`颜色 ${c}`}
           />
         ))}
