@@ -6532,3 +6532,84 @@ select option {
 .msg-attachment-size {
   color: var(--muted);
 }
+
+/* ============================================================
+   Settings & updates (D24) — accent chips, update badge/footer.
+   ============================================================ */
+
+.accent-chips {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.accent-chip {
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  border: 2px solid transparent;
+  cursor: pointer;
+  padding: 0;
+}
+
+.accent-chip.selected,
+.accent-chip:focus-visible {
+  border-color: var(--text);
+  outline: none;
+}
+
+.update-state {
+  font-size: 0.76rem;
+  color: var(--muted);
+  max-width: 220px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.update-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: calc(100% - 12px);
+  margin: 0 6px 8px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--accent, #6ea8ff);
+  background: color-mix(in srgb, var(--accent, #6ea8ff) 14%, transparent);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.78rem;
+  cursor: pointer;
+  text-align: left;
+}
+
+.update-badge:hover {
+  background: color-mix(in srgb, var(--accent, #6ea8ff) 24%, transparent);
+}
+
+.update-badge-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--accent, #6ea8ff);
+  flex: none;
+}
+
+/* accent variable applies to a few signature surfaces */
+.send-btn:not(:disabled) {
+  background: var(--accent, #ffffff);
+}
+
+.choice-option:hover {
+  border-color: var(--accent, #6ea8ff);
+}
+
+.gs-item.active,
+.gs-item:focus-visible {
+  background: color-mix(in srgb, var(--accent, #6ea8ff) 18%, transparent);
+}
+
+.mention-chip {
+  color: var(--mention-color, var(--accent, #6ea8ff));
+}

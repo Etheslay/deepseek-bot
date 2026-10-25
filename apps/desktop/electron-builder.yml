@@ -35,4 +35,11 @@ nsis:
   createStartMenuShortcut: true
   deleteAppDataOnUninstall: false
   artifactName: "${productName}-${version}-${arch}.${ext}"
+# D24: electron-updater metadata source. CI/packaging never auto-publishes
+# (`--publish never` default); the first GitHub Release goes out with the
+# finale task per RELEASE.md.
+publish:
+  provider: github
+  owner: Etheslay
+  repo: deepseek-bot
 asar: true

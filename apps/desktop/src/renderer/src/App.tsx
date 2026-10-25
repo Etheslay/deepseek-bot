@@ -34,6 +34,11 @@ import {
 } from "./features/chat/attachments.js";
 import { GlobalSearch } from "./features/search/global-search.js";
 import { buildSearchIndex, type SearchItem } from "./features/search/search-core.js";
+import {
+  ACCENT_PRESETS,
+  loadSettings,
+  saveSettings,
+} from "./features/settings/settings-store.js";
 
 
 type Group = { key: number; name: string };
@@ -277,8 +282,33 @@ export function App(): JSX.Element {
   const [workflowOpen, setWorkflowOpen] = useState(false);
   const [monitorOpen, setMonitorOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
-  const [theme, setTheme] = useState<"dark" | "light">("dark");
-  const [accountName, setAccountName] = useState("本地用户");
+  const initialSettings = useMemo(() => loadSettings(window.localStorage), []);
+  const [theme, setTheme] = useState<"dark" | "light">(initialSettings.theme);
+  const [accountName, setAccountName] = useState(initialSettings.accountName);
+  const [accent, setAccent] = useState(initialSettings.accent);
+  const [updateStatus, setUpdateStatus] = useState<
+    { available: boolean; version: string | null; downloading: boolean; readyToInstall: boolean; error: string | null } | null
+  >(null);
+
+  useEffect(() => {
+    saveSettings(window.localStorage, { theme, accountName, accent });
+  }, [theme, accountName, accent]);
+
+  useEffect(() => {
+    document.documentElement.style.setProperty("--accent", accent);
+  }, [accent]);
+
+  useEffect(() => {
+    // Silent startup check; preview shims have no updates bridge.
+    const bridge = window.deepseekBot;
+    if (!bridge || !("updates" in bridge)) {
+      return;
+    }
+    const timer = setTimeout(() => {
+      void bridge.updates.check().then(setUpdateStatus).catch(() => undefined);
+    }, 4000);
+    return () => clearTimeout(timer);
+  }, []);
   const [editingName, setEditingName] = useState(false);
   const [keyDraft, setKeyDraft] = useState("");
   const [testResult, setTestResult] = useState<
@@ -1153,6 +1183,27 @@ const logout = (): void => {
             </div>
           );
         })}
+        {updateStatus?.available && (
+          <button
+            type="button"
+            className="update-badge"
+            title={`下载并安装 ${updateStatus.version ?? "新版本"}`}
+            onClick={() => {
+              const bridge = window.deepseekBot;
+              if (!bridge || !("updates" in bridge)) {
+                return;
+              }
+              setUpdateStatus({ ...updateStatus, downloading: true });
+              void bridge.updates
+                .downloadInstall()
+                .then(setUpdateStatus)
+                .catch(() => setUpdateStatus({ ...updateStatus, downloading: false, error: "下载失败" }));
+            }}
+          >
+            <span className="update-badge-dot" />
+            {updateStatus.downloading ? "更新下载中…" : "有新版本，点击更新"}
+          </button>
+        )}
         <div className="sidebar-foot">
           <button
             type="button"
@@ -1717,18 +1768,67 @@ const logout = (): void => {
                   </div>
                   <div className="settings-row">
                     <span>强调色</span>
-                    <span className="settings-soon">后续提供</span>
+                    <span className="accent-chips" role="radiogroup" aria-label="强调色">
+                      {ACCENT_PRESETS.map((preset) => (
+                        <button
+                          key={preset}
+                          type="button"
+                          className={"accent-chip" + (accent === preset ? " selected" : "")}
+                          style={{ background: preset }}
+                          aria-label={`强调色 ${preset}`}
+                          aria-pressed={accent === preset}
+                          onClick={() => setAccent(preset)}
+                        />
+                      ))}
+                    </span>
                   </div>
                   <div className="settings-row">
                     <span>语言</span>
                     <span className="settings-soon">跟随系统</span>
                   </div>
                 </div>
-                <div className="settings-section-title">关于</div>
+                <div className="settings-section-title">关于与更新</div>
                 <div className="settings-card">
                   <div className="settings-row">
                     <span>版本</span>
                     <span className="settings-soon">{version}</span>
+                  </div>
+                  <div className="settings-row">
+                    <span>检查更新</span>
+                    <span className="key-input-wrap">
+                      <span className="update-state">
+                        {updateStatus === null
+                          ? "（GitHub Releases）"
+                          : updateStatus.available
+                            ? `发现新版本 ${updateStatus.version ?? ""}`
+                            : updateStatus.error
+                              ? "暂无可用更新（尚未发布 Release）"
+                              : "已是最新"}
+                      </span>
+                      <button
+                        type="button"
+                        className="pill-btn"
+                        onClick={() => {
+                          const bridge = window.deepseekBot;
+                          if (!bridge || !("updates" in bridge)) {
+                            setToast("更新通道需要主进程（打包版可用）");
+                            return;
+                          }
+                          void bridge.updates.check().then(setUpdateStatus).catch(() => {
+                            setToast("检查更新失败（网络或无 Release）");
+                          });
+                        }}
+                      >
+                        检查
+                      </button>
+                    </span>
+                  </div>
+                  <div className="settings-row">
+                    <span>本地用量</span>
+                    <span className="settings-soon">
+                      {bots.length} 个 Bot · {Object.keys(chats).length} 个会话 ·{" "}
+                      {Object.values(chats).reduce((sum, list) => sum + list.length, 0)} 条消息
+                    </span>
                   </div>
                 </div>
                 <div className="settings-section-title">系统</div>

@@ -17,6 +17,22 @@ type DesktopBridge = {
   settings: {
     saveKey: (key: string) => Promise<{ configured: boolean }>;
   };
+  updates: {
+    check: () => Promise<{
+      available: boolean;
+      version: string | null;
+      downloading: boolean;
+      readyToInstall: boolean;
+      error: string | null;
+    }>;
+    downloadInstall: () => Promise<{
+      available: boolean;
+      version: string | null;
+      downloading: boolean;
+      readyToInstall: boolean;
+      error: string | null;
+    }>;
+  };
   host: {
     call: (method: string, payload: unknown) => Promise<unknown>;
   };

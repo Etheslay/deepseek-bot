@@ -9,6 +9,7 @@ import {
   isAllowedHostMethod,
   type HostProcessClient,
 } from "./host-client.js";
+import { checkUpdates, downloadAndInstallUpdate, setAppVersion } from "./updates.js";
 import { DATA_ROOT_DIR_NAME, HOST_EVENT_MISSED } from "../shared/ipc-channels.js";
 
 let mainWindow: BrowserWindow | null = null;
@@ -224,6 +225,8 @@ function registerShellIpc(win: BrowserWindow): void {
         platform: process.platform,
       }),
       saveKey: (key) => saveApiKey(key),
+      checkUpdates: () => checkUpdates(),
+      downloadAndInstallUpdate: () => downloadAndInstallUpdate(),
       hostCall: (method, payload) => {
         if (!isAllowedHostMethod(method)) {
           return Promise.reject(new Error(`unknown host method`));
@@ -282,6 +285,10 @@ if (gotLock) {
     if (process.platform === "win32") {
       app.setAppUserModelId("com.deepseekbot.desktop");
     }
+    // D24: version source for update checks; silent first check fails soft
+    // (no releases yet) and only surfaces when the renderer asks.
+    setAppVersion(app.getVersion());
+    void checkUpdates().catch(() => undefined);
 
     denyAllPermissions();
 
