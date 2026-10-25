@@ -21,6 +21,7 @@ export type GrokBallShapeId =
   | "pill-wave"
   | "moon-slice"
   | "petal"
+  | "pumpkin"
   | "soft-triangle";
 
 export type GrokBallState =
@@ -43,6 +44,8 @@ export type ShapeDefinition = {
   eyeSpacing: number;
   /** Optional eye scale multiplier for narrow shapes. */
   eyeScale?: number;
+  /** Soft radial creases for multi-lobe (pumpkin / petal) bodies. */
+  creases?: number;
 };
 
 const CENTER = 50;
@@ -176,6 +179,24 @@ function softTrianglePoints(): Point[] {
     const angle = (Math.PI * 2 * i) / count;
     const r = 40 + 8 * Math.cos(3 * (angle + Math.PI / 2));
     points.push([CENTER + Math.cos(angle) * r * 1.05, CENTER + Math.sin(angle) * r]);
+  }
+  return points;
+}
+
+/**
+ * Six-lobed pumpkin body: a gourd-like ring whose radius bulges six times,
+ * slightly taller than wide so the lobes read as soft segments.
+ */
+function pumpkinPoints(): Point[] {
+  const points: Point[] = [];
+  const count = 36;
+  for (let i = 0; i < count; i++) {
+    const angle = (Math.PI * 2 * i) / count;
+    const r = 40 + 3.2 * Math.cos(6 * angle);
+    points.push([
+      CENTER + Math.cos(angle) * r,
+      CENTER + Math.sin(angle) * r * 1.04,
+    ]);
   }
   return points;
 }
@@ -345,6 +366,14 @@ export const GROK_BALL_SHAPES: Record<GrokBallShapeId, ShapeDefinition> = {
     points: petalPoints(),
     eyeY: 48,
     eyeSpacing: 23,
+    creases: 3,
+  },
+  pumpkin: {
+    id: "pumpkin",
+    points: pumpkinPoints(),
+    eyeY: 48,
+    eyeSpacing: 22,
+    creases: 6,
   },
   "soft-triangle": {
     id: "soft-triangle",
@@ -369,6 +398,7 @@ export const GROK_BALL_SHAPE_IDS: GrokBallShapeId[] = [
   "pill-wave",
   "moon-slice",
   "petal",
+  "pumpkin",
   "soft-triangle",
 ];
 
@@ -487,6 +517,29 @@ export function mixColor(a: string, b: string, t: number): string {
     Math.round(channel + (to[index]! - channel) * t),
   );
   return `#${mixed.map((channel) => channel.toString(16).padStart(2, "0")).join("")}`;
+}
+
+export type ShadePalette = {
+  /** Lit tone, sampled toward the upper-left highlight. */
+  hi: string;
+  /** Base body tone. */
+  mid: string;
+  /** Occluded tone for the lower-right side. */
+  shade: string;
+};
+
+/**
+ * Three-stop palette for the soft-blob body gradient.
+ *
+ * The light source is fixed at the upper-left (~45° azimuth), so the model
+ * only has to derive a lit tone and an occluded tone from the base color.
+ */
+export function shadePalette(base: string): ShadePalette {
+  return {
+    hi: mixColor(base, "#ffffff", 0.55),
+    mid: base,
+    shade: mixColor(base, "#000000", 0.34),
+  };
 }
 
 export type EyeRingFrame = {
@@ -619,3 +672,4 @@ export const GROK_BALL_COLORS = [
   "#a3a3a3",
   "#f1efe9",
 ];
+

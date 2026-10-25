@@ -19,6 +19,7 @@ import {
   isStaticVariant,
   projectEye,
   sampleContour,
+  shadePalette,
   type GrokBallShapeId,
   type GrokBallState,
   type GrokBallVariant,
@@ -82,12 +83,41 @@ export function GrokBall({
   const animate = motion ?? !isStaticVariant(variant);
   const mono = isMono(color);
 
-  const clipId = useId().replace(/[:]/g, "");
+  const clipId = `gbClip${useId().replace(/[:]/g, "")}`;
+  const bodyGradientId = `${clipId}Body`;
+  const rimGradientId = `${clipId}Rim`;
+  const coreGradientId = `${clipId}Core`;
+  const specGradientId = `${clipId}Spec`;
+  const softBlurId = `${clipId}Soft`;
+  const creaseBlurId = `${clipId}Crease`;
+  const contactBlurId = `${clipId}Contact`;
   const definition = GROK_BALL_SHAPES[shape];
   const bodyPath = useMemo(
     () => contourPath(sampleContour(definition.points, 72)),
     [definition.points],
   );
+  const palette = mono
+    ? {
+        hi: "var(--gb-mono-hi)",
+        mid: "var(--gb-mono-mid)",
+        shade: "var(--gb-mono-shade)",
+      }
+    : shadePalette(color);
+  const creases = useMemo(() => {
+    const count = definition.creases ?? 0;
+    if (count === 0) {
+      return [];
+    }
+    return Array.from({ length: count }, (_, index) => {
+      const angle = (Math.PI * 2 * index) / count + Math.PI / count;
+      return {
+        x1: 50 + Math.cos(angle) * 9,
+        y1: 50 + Math.sin(angle) * 9,
+        x2: 50 + Math.cos(angle) * 54,
+        y2: 50 + Math.sin(angle) * 54,
+      };
+    });
+  }, [definition.creases]);
 
   const bodyGroupRef = useRef<SVGGElement | null>(null);
   const leftEyeGroupRef = useRef<SVGGElement | null>(null);
@@ -333,17 +363,100 @@ export function GrokBall({
       aria-hidden="true"
     >
       <defs>
+        <radialGradient id={bodyGradientId} cx="30%" cy="24%" r="82%" fx="26%" fy="20%">
+          <stop offset="0%" style={{ stopColor: palette.hi }} />
+          <stop offset="32%" style={{ stopColor: palette.mid }} />
+          <stop offset="100%" style={{ stopColor: palette.shade }} />
+        </radialGradient>
+        <linearGradient id={rimGradientId} x1="14%" y1="4%" x2="86%" y2="96%">
+          <stop offset="0%" stopColor="#ffffff" stopOpacity="0.7" />
+          <stop offset="18%" stopColor="#ffffff" stopOpacity="0.16" />
+          <stop offset="55%" stopColor="#ffffff" stopOpacity="0" />
+          <stop offset="100%" stopColor="#ffffff" stopOpacity="0.05" />
+        </linearGradient>
+        <radialGradient
+          id={coreGradientId}
+          gradientUnits="userSpaceOnUse"
+          cx="68"
+          cy="74"
+          r="34"
+        >
+          <stop offset="0%" stopColor="#000000" stopOpacity="0.42" />
+          <stop offset="55%" stopColor="#000000" stopOpacity="0.16" />
+          <stop offset="100%" stopColor="#000000" stopOpacity="0" />
+        </radialGradient>
+        <radialGradient
+          id={specGradientId}
+          gradientUnits="userSpaceOnUse"
+          cx="36"
+          cy="32"
+          r="16"
+        >
+          <stop offset="0%" stopColor="#ffffff" stopOpacity="0.45" />
+          <stop offset="45%" stopColor="#ffffff" stopOpacity="0.14" />
+          <stop offset="100%" stopColor="#ffffff" stopOpacity="0" />
+        </radialGradient>
+        <filter id={softBlurId} x="-60%" y="-60%" width="220%" height="220%">
+          <feGaussianBlur stdDeviation="2.6" />
+        </filter>
+        <filter id={creaseBlurId} x="-60%" y="-60%" width="220%" height="220%">
+          <feGaussianBlur stdDeviation="2.6" />
+        </filter>
+        <filter id={contactBlurId} x="-80%" y="-80%" width="260%" height="260%">
+          <feGaussianBlur stdDeviation="2.4" />
+        </filter>
         <clipPath id={clipId}>
           <path d={bodyPath} />
         </clipPath>
       </defs>
+      {/* Contact shadow: keeps the ball seated on its plaque instead of floating. */}
+      <ellipse
+        className="gb-contact"
+        cx="50"
+        cy="96"
+        rx="27"
+        ry="3.4"
+        style={{ fill: "var(--gb-contact)" }}
+        filter={`url(#${contactBlurId})`}
+      />
       <g ref={bodyGroupRef}>
-        <path
-          className="gb-body"
-          d={bodyPath}
-          fill={mono ? undefined : color}
-        />
+        <path className="gb-body" d={bodyPath} fill={`url(#${bodyGradientId})`} />
         <g clipPath={`url(#${clipId})`}>
+          {/* Core shadow on the lower-right, opposite the upper-left key light. */}
+          <ellipse cx="68" cy="74" rx="32" ry="28" fill={`url(#${coreGradientId})`} />
+          {creases.map((crease, index) => (
+            <line
+              key={index}
+              x1={crease.x1}
+              y1={crease.y1}
+              x2={crease.x2}
+              y2={crease.y2}
+              style={{
+                stroke: mono ? "var(--gb-crease)" : "rgba(0, 0, 0, 0.22)",
+              }}
+              strokeWidth="7"
+              strokeLinecap="round"
+              filter={`url(#${creaseBlurId})`}
+            />
+          ))}
+          {/* Rim light hugging the lit edge. */}
+          <path
+            d={bodyPath}
+            fill="none"
+            stroke={`url(#${rimGradientId})`}
+            strokeWidth="2"
+            strokeLinejoin="round"
+          />
+          {/* Specular sheen on the upper-left shoulder. */}
+          <ellipse
+            cx="36"
+            cy="32"
+            rx="12"
+            ry="8.5"
+            fill={`url(#${specGradientId})`}
+            transform="rotate(-34 36 32)"
+            filter={`url(#${softBlurId})`}
+          />
           <g ref={leftEyeGroupRef} transform={neutralEyeTransform(-1, definition)}>
             <path
               ref={leftEyePathRef}
@@ -375,3 +488,5 @@ export function GrokBall({
     </svg>
   );
 }
+
+

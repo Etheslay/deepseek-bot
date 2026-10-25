@@ -11,6 +11,7 @@ import {
   mixColor,
   projectEye,
   sampleContour,
+  shadePalette,
 } from "../../src/renderer/src/features/avatars/grok-ball-model.js";
 
 const REQUIRED_SHAPES = [
@@ -28,6 +29,7 @@ const REQUIRED_SHAPES = [
   "pill-wave",
   "moon-slice",
   "petal",
+  "pumpkin",
   "soft-triangle",
 ] as const;
 
@@ -78,6 +80,30 @@ describe("Grok Ball shapes", () => {
     expect(d.startsWith("M ")).toBe(true);
     expect(d.endsWith("Z")).toBe(true);
     expect(d).toContain("C ");
+  });
+});
+
+describe("Grok Ball soft-blob shading", () => {
+  it("derives a lit tone above and an occluded tone below the base color", () => {
+    const palette = shadePalette("#3b93f0");
+    expect(palette.mid).toBe("#3b93f0");
+    const lit = Number.parseInt(palette.hi.slice(1, 3), 16);
+    const base = Number.parseInt(palette.mid.slice(1, 3), 16);
+    const shade = Number.parseInt(palette.shade.slice(1, 3), 16);
+    expect(lit).toBeGreaterThan(base);
+    expect(shade).toBeLessThan(base);
+  });
+
+  it("marks the multi-lobe bodies with soft creases", () => {
+    expect(GROK_BALL_SHAPES.pumpkin.creases).toBe(6);
+    expect(GROK_BALL_SHAPES.petal.creases).toBe(3);
+    for (const id of GROK_BALL_SHAPE_IDS) {
+      const creases = GROK_BALL_SHAPES[id].creases;
+      if (creases !== undefined) {
+        expect(Number.isInteger(creases)).toBe(true);
+        expect(creases).toBeGreaterThanOrEqual(3);
+      }
+    }
   });
 });
 

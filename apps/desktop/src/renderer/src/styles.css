@@ -4192,12 +4192,23 @@ select option {
   --avatar-mono-bg: #ffffff;
   --avatar-mono-eye: #111111;
   --avatar-mono-fg: #111111;
+  /* Soft-blob shading palette (key light fixed at the upper-left). */
+  --gb-mono-hi: #ffffff;
+  --gb-mono-mid: #f0f0f2;
+  --gb-mono-shade: #c7c7d0;
+  --gb-contact: rgba(0, 0, 0, 0.5);
+  --gb-crease: rgba(0, 0, 0, 0.18);
 }
 
 :root[data-theme="light"] {
   --avatar-mono-bg: #111111;
   --avatar-mono-eye: #ffffff;
   --avatar-mono-fg: #ffffff;
+  --gb-mono-hi: #5c5c66;
+  --gb-mono-mid: #1b1b1f;
+  --gb-mono-shade: #000000;
+  --gb-contact: rgba(0, 0, 0, 0.32);
+  --gb-crease: rgba(0, 0, 0, 0.4);
 }
 
 .avatar-minimal.mono .eye {
@@ -5179,7 +5190,7 @@ select option {
 
 
 /* ============================================================
-   Run monitor (D09) �?FR-06 审批 / FR-07 运行历史
+   Run monitor (D09) —FR-06 审批 / FR-07 运行历史
    ============================================================ */
 
 .rm-shell {
@@ -5337,7 +5348,7 @@ select option {
   text-align: center;
 }
 
-/* status chips �?one class per contract status */
+/* status chips —one class per contract status */
 .rm-status {
   display: inline-flex;
   align-items: center;
@@ -5828,14 +5839,15 @@ select option {
 
 /* ---------- Grok Ball: theme inversion + fixed-slot plaque ---------- */
 /* Light = dark body + light eyes; Dark = light body + dark eyes.
-   Fill interpolates over 200ms on theme change; gaze/blink keep running. */
-.grok-ball .gb-body,
-.grok-ball .gb-eye {
-  transition: fill 200ms ease;
+   The body is a shaded gradient now, so the mono palette is fed through the
+   --gb-mono-* stops instead of a flat fill; eyes still swap via CSS. */
+.grok-ball .gb-body {
+  transition: opacity 200ms ease;
 }
 
-.grok-ball.gb-mono .gb-body {
-  fill: var(--avatar-mono-bg);
+.grok-ball .gb-eye {
+  transition: fill 200ms ease;
+  filter: drop-shadow(0 0.8px 0.9px rgba(0, 0, 0, 0.3));
 }
 
 .grok-ball.gb-mono .gb-eye {
