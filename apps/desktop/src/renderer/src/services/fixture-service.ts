@@ -24,6 +24,7 @@ import {
   type TestConnectionResult,
   type ToolStatus,
 } from "./desktop-service.js";
+import { createFixtureWorkflowService } from "../features/workflow-editor/workflow-service.js";
 
 // Fixture imports resolve through the workspace package exports
 // ("./fixtures/*"); validated against EventEnvelopeSchema in openSession.
@@ -378,6 +379,8 @@ export function createFixtureService(): DesktopService {
         };
       },
     },
+
+    workflows: createFixtureWorkflowService(),
   };
 
   return service;

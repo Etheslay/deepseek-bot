@@ -7,6 +7,7 @@
  * Session entity — they must never be promoted into packages/contracts.
  */
 import type { Artifact, Bot, ErrorCode, EventEnvelope } from "@deepseek-bot/contracts";
+import type { WorkflowServiceApi } from "../features/workflow-editor/workflow-service.js";
 
 export type ChatSessionView = {
   sessionId: string;
@@ -111,4 +112,6 @@ export interface DesktopService {
     /** Text/Markdown preview; HTML and unknown media are blocked, never executed. */
     preview(artifact: Artifact): Promise<{ kind: "text"; content: string } | { kind: "blocked"; reason: string }>;
   };
+  /** Workflow editor API (D07); fixture-backed, no execution/persistence. */
+  workflows: WorkflowServiceApi;
 }
