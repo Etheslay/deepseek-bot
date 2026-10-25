@@ -7,7 +7,19 @@ export const IPC_CHANNELS = {
   WINDOW_TOGGLE_MAXIMIZE: "window:toggleMaximize",
   WINDOW_CLOSE: "window:close",
   WINDOW_SET_TITLEBAR_OVERLAY: "window:set-titlebar-overlay",
+  /** Renderer → Host contract call (method allowlist enforced in main). */
+  HOST_CALL: "host:call",
 } as const;
+
+/** Main → renderer event channel for scheduler skip-and-notify notices (FR-08). */
+export const HOST_EVENT_MISSED = "host:event:missed";
+
+/**
+ * Data root directory name, mirroring storage's layout constant. Duplicated
+ * because the main process must not import @deepseek-bot/storage (its index
+ * pulls node:sqlite, unavailable in Electron 38's Node 22).
+ */
+export const DATA_ROOT_DIR_NAME = "DeepSeekBot";
 
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS];
 

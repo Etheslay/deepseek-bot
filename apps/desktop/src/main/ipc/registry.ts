@@ -18,6 +18,8 @@ export type IpcHandlers = {
   toggleMaximizeWindow: () => void;
   closeWindow: () => void;
   setTitleBarOverlay: (colors: { color: string; symbolColor: string }) => void;
+  /** Forward one allowlisted contract method call to the Host process. */
+  hostCall: (method: unknown, payload: unknown) => Promise<unknown>;
 };
 
 /**
@@ -78,6 +80,14 @@ export function registerIpcHandlers(
       assertAuthorizedSender(event, isAuthorized);
       assertValidTitleBarOverlayColors(payload);
       handlers.setTitleBarOverlay(payload);
+    },
+  );
+  ipcMain.handle(
+    IPC_CHANNELS.HOST_CALL,
+    (event: IpcMainInvokeEvent, method: unknown, payload: unknown) => {
+      assertAllowedChannel(IPC_CHANNELS.HOST_CALL);
+      assertAuthorizedSender(event, isAuthorized);
+      return handlers.hostCall(method, payload);
     },
   );
 }

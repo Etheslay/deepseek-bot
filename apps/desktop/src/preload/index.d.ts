@@ -1,17 +1,4 @@
-export type DesktopBridge = {
-  getAppInfo: () => Promise<{
-    name: string;
-    version: string;
-    platform: string;
-  }>;
-  window: {
-    show: () => Promise<void>;
-    hide: () => Promise<void>;
-    minimize: () => Promise<void>;
-    toggleMaximize: () => Promise<void>;
-    close: () => Promise<void>;
-  };
-};
+import type { DesktopBridge } from "./index.js";
 
 declare global {
   interface Window {
