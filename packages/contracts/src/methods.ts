@@ -123,9 +123,13 @@ const RevisionRefSchema = z.object({
 
 const RunIdRefSchema = z.object({ runId: UuidSchema });
 
-export const ScheduleDraftSchema = ScheduleSchema.omit({ id: true }).extend({
-  id: UuidSchema.optional(),
-});
+export const ScheduleDraftSchema = ScheduleSchema
+  // id is minted server-side when absent; nextRunAt is computed by the
+  // scheduler on save (D10) and must never be supplied by the caller.
+  .omit({ id: true, nextRunAt: true })
+  .extend({
+    id: UuidSchema.optional(),
+  });
 
 /**
  * Unknown workflow schemaVersion is rejected explicitly with
