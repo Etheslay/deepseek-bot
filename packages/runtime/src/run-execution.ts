@@ -35,6 +35,7 @@ import {
   getRun,
   listApprovals,
   markApprovalExpired,
+  setNodeRunOutputs,
   setNodeRunSession,
   transitionNodeRun,
   transitionRun,
@@ -74,6 +75,24 @@ export interface RunExecutionOptions {
   readonly bootGeneration?: number;
   /** Canonical artifact directory granted to file tools (D08). */
   readonly artifactsRoot?: string;
+  /**
+   * Carried-over state of the interrupted run this run resumes (D10):
+   * nodes that succeeded before the restart keep their session, outputs and
+   * succeeded status without re-execution; nodes the old run skipped stay
+   * decided only until their upstream re-runs, so they restart pending.
+   */
+  readonly resumeSeed?: ResumeSeed;
+}
+
+export interface ResumeSeedEntry {
+  readonly nodeId: string;
+  readonly sessionId: string | null;
+  readonly outputs: Record<string, unknown>;
+}
+
+export interface ResumeSeed {
+  readonly succeeded: ReadonlyArray<ResumeSeedEntry>;
+  readonly skippedNodeIds: ReadonlyArray<string>;
 }
 
 const DEFAULT_APPROVAL_TTL_MS = 600_000;
@@ -119,6 +138,7 @@ export class RunExecution {
   >;
   private readonly bootGeneration: number;
   private readonly artifactsRoot: string | undefined;
+  private readonly resumeSeed: ResumeSeed | undefined;
 
   /** Attempts per node id, ordered by attempt number; last entry is current. */
   private readonly nodeRuns = new Map<string, NodeRun[]>();
@@ -155,6 +175,7 @@ export class RunExecution {
     this.permissionPins = options.permissionPins ?? new Map();
     this.bootGeneration = options.bootGeneration ?? 0;
     this.artifactsRoot = options.artifactsRoot;
+    this.resumeSeed = options.resumeSeed;
   }
 
   get status(): RunStatus {
@@ -185,7 +206,48 @@ export class RunExecution {
       triggerKind: this.run.trigger.kind,
     });
     this.setRunStatus("running", "run started");
+    if (this.resumeSeed !== undefined) {
+      this.applyResumeSeed(this.resumeSeed);
+    }
     this.pump();
+  }
+
+  /**
+   * Carry the interrupted predecessor's terminal state into this run (D10):
+   * succeeded nodes flip to succeeded with their persisted outputs and
+   * Harness session rehydrated (no re-execution, no repeated side effects),
+   * previously skipped nodes restart pending so an upstream retry can
+   * dispatch them again.
+   */
+  private applyResumeSeed(seed: ResumeSeed): void {
+    for (const entry of seed.succeeded) {
+      const pending = this.nodeRuns.get(entry.nodeId)?.at(-1);
+      if (pending === undefined || pending.status !== "pending") {
+        continue;
+      }
+      const running = transitionNodeRun(this.db, { id: pending.id, to: "running" });
+      this.replaceLatest(running);
+      this.emitNodeStatus(running, "pending", "running", "resumed from previous run");
+      if (entry.sessionId !== null) {
+        setNodeRunSession(this.db, { id: pending.id, sessionId: entry.sessionId });
+      }
+      if (Object.keys(entry.outputs).length > 0) {
+        setNodeRunOutputs(this.db, { id: pending.id, outputs: entry.outputs });
+      }
+      const succeeded = transitionNodeRun(this.db, { id: pending.id, to: "succeeded" });
+      this.replaceLatest(succeeded);
+      this.emitNodeStatus(succeeded, "running", "succeeded", "completed before the restart");
+      this.outputs.set(entry.nodeId, { ...entry.outputs });
+    }
+    for (const nodeId of seed.skippedNodeIds) {
+      const pending = this.nodeRuns.get(nodeId)?.at(-1);
+      if (pending === undefined || pending.status !== "pending") {
+        continue;
+      }
+      const skipped = transitionNodeRun(this.db, { id: pending.id, to: "skipped" });
+      this.replaceLatest(skipped);
+      this.emitNodeStatus(skipped, "pending", "skipped", "skipped before the restart");
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -482,6 +544,9 @@ export class RunExecution {
           }),
         );
       }
+      // Persist the inline outputs so a restart-interrupted successor run
+      // can rehydrate data flow without re-running this node (D10).
+      setNodeRunOutputs(this.db, { id: nodeRunId, outputs: { ...outcome.result.outputs } });
       const succeeded = transitionNodeRun(this.db, { id: nodeRunId, to: "succeeded" });
       this.replaceLatest(succeeded);
       this.emitNodeStatus(succeeded, "running", "succeeded", "node completed");

@@ -351,4 +351,24 @@ CREATE TABLE tool_policies (
 );
 `,
   },
+  {
+    // D10 (FR-08): missed schedule occurrences stay visible
+    // (skip-and-notify, QA-10) and resumed runs rehydrate the node outputs
+    // of work that already completed before the restart.
+    id: 3,
+    name: "0003-schedule-misses-node-outputs",
+    sql: /* sql */ `
+CREATE TABLE schedule_misses (
+  id TEXT PRIMARY KEY,
+  schedule_id TEXT NOT NULL REFERENCES schedules(id) ON DELETE CASCADE,
+  occurrence_utc TEXT NOT NULL,
+  reason TEXT NOT NULL,
+  detected_at TEXT NOT NULL,
+  UNIQUE (schedule_id, occurrence_utc)
+);
+CREATE INDEX schedule_misses_schedule ON schedule_misses(schedule_id, detected_at);
+
+ALTER TABLE node_runs ADD COLUMN outputs_json TEXT;
+`,
+  },
 ];

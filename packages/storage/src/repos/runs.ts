@@ -367,3 +367,41 @@ export function setNodeRunSession(
     .get(input.id) as unknown as NodeRunRow;
   return rowToNodeRun(updated);
 }
+
+/**
+ * Persist a succeeded attempt's output values (D10). The contract's
+ * outputRefs stay artifact references; these are the small inline values a
+ * resumed run needs to rehydrate data flow without re-running completed
+ * nodes (restart-interrupted state, CONTRACTS §5).
+ */
+export function setNodeRunOutputs(
+  db: OpenedDatabase,
+  input: { id: string; outputs: Record<string, unknown> },
+): void {
+  const row = db.raw
+    .prepare("SELECT * FROM node_runs WHERE id = ?;")
+    .get(input.id) as unknown as NodeRunRow | undefined;
+  if (row === undefined) {
+    throw invalidInput("node run not found", { nodeRunId: input.id });
+  }
+  db.raw
+    .prepare("UPDATE node_runs SET outputs_json = ?, updated_at = ? WHERE id = ?;")
+    .run(stringifyJson(input.outputs), isoNow(db.now), input.id);
+}
+
+/** Read a node attempt's persisted output values (empty when never set). */
+export function getNodeRunOutputs(
+  db: OpenedDatabase,
+  id: string,
+): Record<string, unknown> {
+  const row = db.raw
+    .prepare("SELECT * FROM node_runs WHERE id = ?;")
+    .get(id) as unknown as (NodeRunRow & { outputs_json: string | null }) | undefined;
+  if (row === undefined || row.outputs_json === null) {
+    return {};
+  }
+  const parsed: unknown = JSON.parse(row.outputs_json);
+  return typeof parsed === "object" && parsed !== null
+    ? (parsed as Record<string, unknown>)
+    : {};
+}
