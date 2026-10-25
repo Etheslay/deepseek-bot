@@ -6036,6 +6036,42 @@ select option {
   }
 }
 
+/* ---------- Reaction corner pill (message reactions) ---------- */
+/* Float the reaction cluster as a raised pill on the bubble's top-right
+   corner for both bot and user messages; surfaces reactions on your OWN
+   sent messages too. Colors are theme-aware (light=light pill, dark=dark). */
+.msg-bubble {
+  position: relative;
+}
+
+.reaction-chips {
+  position: absolute;
+  top: -14px;
+  right: 10px;
+  left: auto;
+  margin-top: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
+  z-index: 4;
+}
+
+.reaction-chip {
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.18);
+  padding: 2px 8px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text);
+}
+
+.reaction-chip.mine {
+  border-color: var(--settings);
+  background: var(--item-hover);
+}
+
 /* Sidebar brand slot: round bot instead of the dolphin mark. */
 .big-avatar .grok-ball {
   width: 84px;
