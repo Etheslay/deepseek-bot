@@ -22,6 +22,7 @@ import {
   type Avatar as AvatarKind,
 } from "./features/avatars/avatar-meta.js";
 import { DOLPHIN_LOGO_URL, PRESET_URLS } from "./features/avatars/preset-urls.js";
+import { WorkflowEditor } from "./features/workflow-editor/workflow-editor.js";
 
 
 type Group = { key: number; name: string };
@@ -245,6 +246,7 @@ export function App(): JSX.Element {
   }, [groupMenu]);
 
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [workflowOpen, setWorkflowOpen] = useState(false);
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [accountName, setAccountName] = useState("本地用户");
   const [editingName, setEditingName] = useState(false);
@@ -701,6 +703,20 @@ const logout = (): void => {
         </span>
         <button
           type="button"
+          className={"top-icon-btn" + (workflowOpen ? " active" : "")}
+          aria-label="工作流编辑器"
+          title="工作流编辑器"
+          onClick={() => setWorkflowOpen((v) => !v)}
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="3" y="4" width="7" height="6" rx="1.6" fill="none" stroke="currentColor" strokeWidth="1.6" />
+            <rect x="14" y="14" width="7" height="6" rx="1.6" fill="none" stroke="currentColor" strokeWidth="1.6" />
+            <path d="M6.5 10v4a2 2 0 0 0 2 2H14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+            <circle cx="6.5" cy="17" r="1.4" fill="currentColor" />
+          </svg>
+        </button>
+        <button
+          type="button"
           className="top-icon-btn"
           aria-label="最近会话"
           title="最近会话"
@@ -999,7 +1015,9 @@ const logout = (): void => {
       </aside>
       <section className="content">
         <main className="panel">
-          {restoredSession !== null && selectedBot !== null ? (
+          {workflowOpen ? (
+            <WorkflowEditor onClose={() => setWorkflowOpen(false)} />
+          ) : restoredSession !== null && selectedBot !== null ? (
             <div className="restored-view">
               <header className="pair-head">
                 <span className="page-chip">{restoredSession.title}</span>
