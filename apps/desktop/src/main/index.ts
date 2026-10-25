@@ -1,6 +1,7 @@
 import { app, BrowserWindow, Menu, Tray, nativeImage, safeStorage, session } from "electron";
-import { join } from "node:path";
-import { existsSync, readFileSync } from "node:fs";
+import { delimiter, join } from "node:path";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { createPrimaryWindowSenderGuard } from "./ipc/guards.js";
 import { registerIpcHandlers, unregisterIpcHandlers } from "./ipc/registry.js";
 import {
@@ -187,6 +188,33 @@ function createTray(win: BrowserWindow): Tray {
   return next;
 }
 
+/**
+ * Persist the API key: safeStorage ciphertext goes to the credential blob
+ * store; the Host only receives the opaque `cred:` reference. Plaintext
+ * fallback is forbidden (SECURITY_DATA §1).
+ */
+async function saveApiKey(key: unknown): Promise<{ configured: boolean }> {
+  if (typeof key !== "string") {
+    throw new Error("API Key 必须是字符串");
+  }
+  const trimmed = key.trim();
+  if (trimmed.length < 20 || trimmed.length > 200 || !trimmed.startsWith("sk-")) {
+    throw new Error("API Key 格式不正确");
+  }
+  if (!hostClient) {
+    throw new Error("Host 进程尚未就绪，请稍后重试");
+  }
+  if (!safeStorage.isEncryptionAvailable()) {
+    throw new Error("系统凭据存储不可用，无法安全保存 Key");
+  }
+  const id = randomUUID();
+  const credentialRef = `cred:${id}`;
+  const credentialsDir = join(resolveDataRoot(), "credentials");
+  mkdirSync(credentialsDir, { recursive: true });
+  writeFileSync(join(credentialsDir, `${id}.blob`), safeStorage.encryptString(trimmed));
+  await hostClient.call("settings.update", { patch: { apiKeyRef: credentialRef } });
+  return { configured: true };
+}
 function registerShellIpc(win: BrowserWindow): void {
   registerIpcHandlers(
     {
@@ -195,6 +223,7 @@ function registerShellIpc(win: BrowserWindow): void {
         version: app.getVersion(),
         platform: process.platform,
       }),
+      saveKey: (key) => saveApiKey(key),
       hostCall: (method, payload) => {
         if (!isAllowedHostMethod(method)) {
           return Promise.reject(new Error(`unknown host method`));
@@ -265,10 +294,26 @@ if (gotLock) {
       join(process.resourcesPath, "host", "main.js"),
       join(app.getAppPath(), "..", "..", "packages", "host", "dist", "main.js"),
     ];
+    // The bundled Host still resolves the pinned Harness package through
+    // NODE_PATH in a source checkout (the packaged app ships it in resources).
+    const devHarnessModules = join(
+      app.getAppPath(),
+      "..",
+      "..",
+      "packages",
+      "harness-adapter",
+      "node_modules",
+    );
     hostClient = spawnHostProcess({
       entryPath: hostEntryCandidates.find((candidate) => existsSync(candidate)) ?? hostEntryCandidates[0]!,
       dataRoot: resolveDataRoot(),
       decryptCredential,
+      childEnv: (parent) =>
+        existsSync(devHarnessModules)
+          ? {
+              NODE_PATH: [devHarnessModules, parent["NODE_PATH"]].filter(Boolean).join(delimiter),
+            }
+          : {},
     });
     hostClient.onMissed((notices) => {
       if (mainWindow !== null && !mainWindow.isDestroyed()) {
@@ -306,4 +351,6 @@ if (gotLock) {
     }
   });
 }
+
+
 

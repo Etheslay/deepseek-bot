@@ -33,6 +33,10 @@ export type DesktopBridge = {
    * allowlist and payload schemas are enforced in the main process and the
    * Host; failures reject with { code, message, retryable }.
    */
+  /** Settings helpers that must stay in the main process (safeStorage). */
+  settings: {
+    saveKey: (key: string) => Promise<{ configured: boolean }>;
+  };
   host: {
     call: (method: string, payload: unknown) => Promise<unknown>;
     /** Scheduler skip-and-notify notices (FR-08); returns an unsubscribe. */
@@ -51,6 +55,9 @@ const api: DesktopBridge = {
     setTitleBarOverlay: (colors) =>
       ipcRenderer.invoke(IPC_CHANNELS.WINDOW_SET_TITLEBAR_OVERLAY, colors),
   },
+  settings: {
+    saveKey: (key) => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_SAVE_KEY, key),
+  },
   host: {
     call: (method, payload) => ipcRenderer.invoke(IPC_CHANNELS.HOST_CALL, method, payload),
     onMissed: (listener) => {
@@ -63,3 +70,4 @@ const api: DesktopBridge = {
 };
 
 contextBridge.exposeInMainWorld("deepseekBot", api);
+

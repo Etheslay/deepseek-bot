@@ -5,6 +5,7 @@
  */
 import { createContext, useContext, useMemo, type ReactNode } from "react";
 import { createFixtureService } from "./fixture-service.js";
+import { createHostService } from "./host-service.js";
 import type { DesktopService } from "./desktop-service.js";
 
 const ServiceContext = createContext<DesktopService | null>(null);
@@ -14,10 +15,18 @@ export function ServiceProvider(
     | { children: ReactNode; service?: DesktopService }
     | { children: ReactNode; service: DesktopService },
 ): React.JSX.Element {
-  const service = useMemo(
-    () => props.service ?? createFixtureService(),
-    [props.service],
-  );
+  const service = useMemo(() => {
+    if (props.service) {
+      return props.service;
+    }
+    // Inside Electron the preload bridge exposes the Host; browsers (visual
+    // evidence runs) fall back to the fixture.
+    const bridge =
+      typeof window !== "undefined" ? window.deepseekBot : undefined;
+    return bridge !== undefined && bridge.host !== undefined
+      ? createHostService(bridge)
+      : createFixtureService();
+  }, [props.service]);
   return (
     <ServiceContext.Provider value={service}>{props.children}</ServiceContext.Provider>
   );
@@ -30,3 +39,4 @@ export function useService(): DesktopService {
   }
   return service;
 }
+

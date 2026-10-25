@@ -1479,7 +1479,7 @@ const logout = (): void => {
                     </button>
                   </div>
                 </div>
-                <div className="settings-section-title">接入（占位：Key 加密与真实连接由 D04/D08 负责）</div>
+                <div className="settings-section-title">接入（Key 加密保存在系统凭据库，只写不读）</div>
                 <div className="settings-card">
                   <div className="settings-row">
                     <span>API Key（只写不读）</span>
@@ -1497,10 +1497,17 @@ const logout = (): void => {
                         className="pill-btn"
                         disabled={keyDraft.length === 0}
                         onClick={() => {
-                          void desktop.settings.saveKey(keyDraft).then(() => {
-                            setKeyDraft("");
-                            setToast("已保存（不回显）");
-                          });
+                          void desktop.settings
+                            .saveKey(keyDraft)
+                            .then(() => {
+                              setKeyDraft("");
+                              setToast("已保存（不回显）");
+                            })
+                            .catch((error: unknown) => {
+                              setToast(
+                                `保存失败：${error instanceof Error ? error.message : String(error)}`,
+                              );
+                            });
                         }}
                       >
                         保存
@@ -2220,6 +2227,7 @@ function BotsPlaceholder({
     </div>
   );
 }
+
 
 
 

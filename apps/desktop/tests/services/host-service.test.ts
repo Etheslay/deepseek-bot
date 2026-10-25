@@ -1,0 +1,125 @@
+import { describe, expect, it } from "vitest";
+import type { Bot } from "@deepseek-bot/contracts";
+import { createHostService } from "../../src/renderer/src/services/host-service.js";
+
+const bot = {
+  id: "11111111-1111-4111-8111-111111111111",
+  revision: "22222222-2222-4222-8222-222222222222",
+  name: "note-summarizer",
+  instructions: "summarize",
+  modelProfileId: "44444444-4444-4444-8444-444444444444",
+  workspaceId: "55555555-5555-4555-8555-555555555555",
+  toolPolicyId: "66666666-6666-4666-8666-666666666666",
+  archivedAt: null,
+} satisfies Bot;
+
+function makeBridge(handlers: Record<string, (payload: unknown) => unknown>) {
+  const calls: Array<{ method: string; payload: unknown }> = [];
+  const bridge = {
+    host: {
+      call: async (method: string, payload: unknown) => {
+        calls.push({ method, payload });
+        const handler = handlers[method];
+        if (!handler) throw new Error(`unexpected method ${method}`);
+        return handler(payload);
+      },
+    },
+    settings: { saveKey: async () => ({ configured: true }) },
+  };
+  return { bridge, calls };
+}
+
+describe("host-backed DesktopService", () => {
+  it("lists bots through bot.list", async () => {
+    const { bridge, calls } = makeBridge({ "bot.list": () => ({ bots: [bot] }) });
+    const service = createHostService(bridge);
+    await expect(service.bots.list()).resolves.toEqual([bot]);
+    expect(calls[0]).toEqual({ method: "bot.list", payload: {} });
+  });
+
+  it("forwards create/update/archive payloads unchanged", async () => {
+    const { bridge, calls } = makeBridge({
+      "bot.create": () => bot,
+      "bot.update": () => bot,
+      "bot.archive": () => ({ ...bot, archivedAt: new Date().toISOString() }),
+    });
+    const service = createHostService(bridge);
+    const draft = {
+      name: "note-summarizer",
+      instructions: "summarize",
+      modelProfileId: bot.modelProfileId,
+      workspaceId: bot.workspaceId,
+      toolPolicyId: bot.toolPolicyId,
+    };
+    await service.bots.create(draft);
+    await service.bots.update(bot.id, bot.revision, { name: "renamed" });
+    await service.bots.archive(bot.id, bot.revision);
+    expect(calls.map((call) => call.method)).toEqual([
+      "bot.create",
+      "bot.update",
+      "bot.archive",
+    ]);
+    expect(calls[0]!.payload).toEqual(draft);
+    expect(calls[1]!.payload).toEqual({
+      id: bot.id,
+      expectedRevision: bot.revision,
+      patch: { name: "renamed" },
+    });
+  });
+
+  it("duplicates by creating a copy with the 副本 suffix", async () => {
+    const { bridge, calls } = makeBridge({
+      "bot.list": () => ({ bots: [bot] }),
+      "bot.create": () => ({ ...bot, name: `${bot.name} 副本` }),
+    });
+    const service = createHostService(bridge);
+    await service.bots.duplicate(bot.id);
+    expect(calls[1]).toMatchObject({
+      method: "bot.create",
+      payload: { name: "note-summarizer 副本" },
+    });
+  });
+
+  it("saves the key through the safeStorage bridge and remembers it", async () => {
+    const { bridge } = makeBridge({});
+    const service = createHostService(bridge);
+    expect(service.settings.keyConfigured()).toBe(false);
+    await expect(service.settings.saveKey("sk-test")).resolves.toEqual({ configured: true });
+    expect(service.settings.keyConfigured()).toBe(true);
+  });
+
+  it("maps the connection test response", async () => {
+    const { bridge } = makeBridge({
+      "settings.testConnection": () => ({ ok: true, latencyMs: 42 }),
+    });
+    const service = createHostService(bridge);
+    await expect(
+      service.settings.testConnection({ model: "deepseek-chat", endpoint: "https://api.deepseek.com" }),
+    ).resolves.toEqual({ result: "success", ok: true, latencyMs: 42 });
+
+    const { bridge: failing } = makeBridge({
+      "settings.testConnection": () => ({ ok: false, errorCode: "AUTH_FAILED" }),
+    });
+    await expect(
+      createHostService(failing).settings.testConnection({
+        model: "deepseek-chat",
+        endpoint: "https://api.deepseek.com",
+      }),
+    ).resolves.toEqual({ result: "failure", ok: false, errorCode: "AUTH_FAILED" });
+  });
+
+  it("turns a rejected host call into a failure result", async () => {
+    const { bridge } = makeBridge({
+      "settings.testConnection": () => {
+        throw Object.assign(new Error("no key"), { code: "INVALID_INPUT" });
+      },
+    });
+    await expect(
+      createHostService(bridge).settings.testConnection({
+        model: "deepseek-chat",
+        endpoint: "https://api.deepseek.com",
+      }),
+    ).resolves.toMatchObject({ ok: false, errorCode: "INVALID_INPUT" });
+  });
+});
+

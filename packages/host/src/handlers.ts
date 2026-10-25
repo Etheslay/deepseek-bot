@@ -40,12 +40,13 @@ import {
   restoreBackup,
   saveWorkflow,
   setSetting,
+  getSettingRaw,
   updateBot,
   type BotPatch,
   type DataLayout,
   type OpenedDatabase,
 } from "@deepseek-bot/storage";
-import { backupDirFor, newBackupId } from "./host.js";
+import { DEFAULT_MODEL_PROFILE_ID, backupDirFor, newBackupId } from "./host.js";
 
 export interface HostContext {
   readonly db: OpenedDatabase;
@@ -53,6 +54,8 @@ export interface HostContext {
   readonly scheduler: LocalScheduler;
   readonly layout: DataLayout;
   readonly now: () => Date;
+  /** Desktop main decrypts credential blobs with safeStorage; Host never sees them. */
+  readonly resolveApiKey: (credentialRef: string) => Promise<string>;
 }
 
 export interface HandlerCallContext {
@@ -79,7 +82,7 @@ function invalid(message: string, details?: Record<string, unknown>): EngineErro
  * method whitelist at build time.
  */
 export function buildHandlers(context: HostContext): { [M in Method]: Handler<M> } {
-  const { db, engine, scheduler, layout, now } = context;
+  const { db, engine, scheduler, layout, now, resolveApiKey } = context;
   return {
     "bot.list": () => ({ bots: listBots(db) }),
 
@@ -261,15 +264,62 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
 
     "schedule.disable": (payload) => scheduler.setEnabled({ id: payload.id, enabled: false }),
 
-    "settings.testConnection": () => {
-      throw invalid(
-        "settings.testConnection is not wired in this host slice: desktop credential flow pending (D12)",
-      );
+    "settings.testConnection": async (payload) => {
+      const credentialRef = getSettingRaw(db, "apiKeyRef");
+      if (typeof credentialRef !== "string" || !credentialRef.startsWith("cred:")) {
+        throw invalid("还没有保存 API Key，请先在设置中保存后再测试连接");
+      }
+      const started = Date.now();
+      try {
+        const apiKey = await resolveApiKey(credentialRef);
+        const endpoint = payload.modelProfile.endpoint.replace(/\/+$/, "");
+        const response = await fetch(`${endpoint}/chat/completions`, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            authorization: `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify({
+            model: payload.modelProfile.model,
+            messages: [{ role: "user", content: "ping" }],
+            max_tokens: 1,
+            stream: false,
+          }),
+          signal: AbortSignal.timeout(15_000),
+        });
+        if (response.ok) {
+          return { ok: true, latencyMs: Date.now() - started };
+        }
+        const errorCode =
+          response.status === 401 || response.status === 403
+            ? "AUTH_FAILED"
+            : response.status === 429
+              ? "RATE_LIMITED"
+              : "MODEL_UNAVAILABLE";
+        return { ok: false, latencyMs: Date.now() - started, errorCode };
+      } catch {
+        return { ok: false, errorCode: "RUNTIME_UNAVAILABLE" };
+      }
     },
 
     "settings.update": (payload) => {
       for (const [key, value] of Object.entries(payload.patch)) {
         setSetting(db, key, value);
+      }
+      // Keep the default model profile pointed at the freshly saved key.
+      const credentialRef = payload.patch["apiKeyRef"];
+      if (typeof credentialRef === "string" && credentialRef.startsWith("cred:")) {
+        const at = now().toISOString();
+        // The blob itself lives in the desktop main (safeStorage); the Host
+        // only registers the reference so the FK from model_profiles holds.
+        db.raw
+          .prepare(
+            "INSERT OR IGNORE INTO credentials (ref, label, created_at, updated_at) VALUES (?, 'default', ?, ?);",
+          )
+          .run(credentialRef, at, at);
+        db.raw
+          .prepare("UPDATE model_profiles SET credential_ref = ?, updated_at = ? WHERE id = ?;")
+          .run(credentialRef, at, DEFAULT_MODEL_PROFILE_ID);
       }
       return { configured: true };
     },
@@ -305,3 +355,6 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
     }),
   };
 }
+
+
+

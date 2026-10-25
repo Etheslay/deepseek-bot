@@ -14,6 +14,12 @@ type DesktopBridge = {
     close: () => Promise<void>;
     setTitleBarOverlay: (colors: { color: string; symbolColor: string }) => Promise<void>;
   };
+  settings: {
+    saveKey: (key: string) => Promise<{ configured: boolean }>;
+  };
+  host: {
+    call: (method: string, payload: unknown) => Promise<unknown>;
+  };
 };
 
 declare global {
@@ -21,3 +27,4 @@ declare global {
     deepseekBot: DesktopBridge;
   }
 }
+
