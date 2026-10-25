@@ -23,6 +23,7 @@ import {
 } from "./features/avatars/avatar-meta.js";
 import { DOLPHIN_LOGO_URL, PRESET_URLS } from "./features/avatars/preset-urls.js";
 import { WorkflowEditor } from "./features/workflow-editor/workflow-editor.js";
+import { RunMonitor } from "./features/run-monitor/run-monitor.js";
 
 
 type Group = { key: number; name: string };
@@ -247,6 +248,7 @@ export function App(): JSX.Element {
 
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [workflowOpen, setWorkflowOpen] = useState(false);
+  const [monitorOpen, setMonitorOpen] = useState(false);
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [accountName, setAccountName] = useState("本地用户");
   const [editingName, setEditingName] = useState(false);
@@ -703,10 +705,34 @@ const logout = (): void => {
         </span>
         <button
           type="button"
+          className={"top-icon-btn" + (monitorOpen ? " active" : "")}
+          aria-label="运行监控与审批"
+          title="运行监控与审批"
+          onClick={() => {
+            setWorkflowOpen(false);
+            setMonitorOpen((v) => !v);
+          }}
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path
+              d="M3 13h3.5l2-6 3 12 2.5-8 2 4.5H21"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </button>
+        <button
+          type="button"
           className={"top-icon-btn" + (workflowOpen ? " active" : "")}
           aria-label="工作流编辑器"
           title="工作流编辑器"
-          onClick={() => setWorkflowOpen((v) => !v)}
+          onClick={() => {
+            setMonitorOpen(false);
+            setWorkflowOpen((v) => !v);
+          }}
         >
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <rect x="3" y="4" width="7" height="6" rx="1.6" fill="none" stroke="currentColor" strokeWidth="1.6" />
@@ -1015,7 +1041,9 @@ const logout = (): void => {
       </aside>
       <section className="content">
         <main className="panel">
-          {workflowOpen ? (
+          {monitorOpen ? (
+            <RunMonitor onClose={() => setMonitorOpen(false)} />
+          ) : workflowOpen ? (
             <WorkflowEditor onClose={() => setWorkflowOpen(false)} />
           ) : restoredSession !== null && selectedBot !== null ? (
             <div className="restored-view">
