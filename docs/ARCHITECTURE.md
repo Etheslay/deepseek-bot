@@ -35,7 +35,7 @@ flowchart LR
 | `packages/storage/` | 应用数据库、迁移、备份、查询 | 自定义修改 Harness 日志格式 | Etheslay |
 | `packages/ui/` | 可复用界面与可访问性组件 | 本地数据授权判断 | Destinyian |
 
-桌面壳（D02）、共享契约（D03）、本地存储（D04）、工作流引擎（D06，`packages/runtime/`，经 `NodeExecutor` 端口与 Harness 适配层解耦）、后端工具权限层（D08，`packages/runtime/src/permissions/`：路径规范化/包含校验、策略评估、一次性审批门、MCP 授权检查；storage 增加 `tool_policies` 表与启动代次）与本地调度器（D10，`packages/runtime/src/scheduler/`：时区感知 cron 触发、occurrence 去重、skip-and-notify misfire、恢复重启中断的运行；storage 增加 `schedule_misses` 表与节点输出持久化）已按此布局落地；`packages/harness-adapter/`、`packages/ui/` 仍是规划，本次不创建。
+桌面壳（D02）、共享契约（D03）、本地存储（D04）、工作流引擎（D06，`packages/runtime/`，经 `NodeExecutor` 端口与 Harness 适配层解耦）、后端工具权限层（D08，`packages/runtime/src/permissions/`：路径规范化/包含校验、策略评估、一次性审批门、MCP 授权检查；storage 增加 `tool_policies` 表与启动代次）与本地调度器（D10，`packages/runtime/src/scheduler/`：时区感知 cron 触发、occurrence 去重、skip-and-notify misfire、恢复重启中断的运行；storage 增加 `schedule_misses` 表与节点输出持久化）已按此布局落地；`packages/harness-adapter/` 自 D12 起落地（钉扎上游 `@deepseek-ai/dsh` 0.2.1-rc.2：一次节点尝试一个运行时子进程、经上游 JSON-RPC 行传输做回合结算、稳定错误分类；真实链路联调进行中），`packages/ui/` 仍是规划，本次不创建。
 
 ## 3. 数据与调用链
 

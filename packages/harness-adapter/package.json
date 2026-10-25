@@ -1,0 +1,26 @@
+{
+  "name": "@deepseek-bot/harness-adapter",
+  "version": "0.1.0",
+  "private": true,
+  "description": "DeepSeek Harness adapter: the pinned upstream SDK runtime behind the runtime package's NodeExecutor port (D12)",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --coverage"
+  },
+  "dependencies": {
+    "@deepseek-ai/dsh": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-sdk-protocol": "0.2.1-rc.2",
+    "@deepseek-bot/contracts": "workspace:*",
+    "@deepseek-bot/runtime": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "@vitest/coverage-v8": "3.2.4",
+    "typescript": "5.9.3",
+    "vitest": "3.2.4"
+  }
+}
