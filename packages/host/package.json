@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@deepseek-bot/contracts": "workspace:*",
+    "@deepseek-bot/agent-tools": "workspace:*",
     "@deepseek-bot/harness-adapter": "workspace:*",
     "@deepseek-bot/runtime": "workspace:*",
     "@deepseek-bot/storage": "workspace:*"
