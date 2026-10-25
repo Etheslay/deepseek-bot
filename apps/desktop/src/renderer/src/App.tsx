@@ -363,8 +363,8 @@ export function App(): JSX.Element {
     return () => clearTimeout(t);
   }, [toast]);
 
-  const selectedBotName =
-    bots.find((b) => b.key === selectedBot)?.bot.name ?? "DeepSeek Bot";
+  const selectedBotEntry = bots.find((b) => b.key === selectedBot);
+  const selectedBotName = selectedBotEntry?.bot.name ?? "DeepSeek Bot";
 
   const openCreateBotModal = () => {
     setShape(0);
@@ -709,7 +709,11 @@ const logout = (): void => {
     <div className="shell">
       <header className="top">
         <span className="page-chip">
-          <BlobMark />
+          {selectedBotEntry ? (
+            <AvatarView avatar={selectedBotEntry.avatar} variant="message-header" />
+          ) : (
+            <BlobMark />
+          )}
           {selectedBotName}
         </span>
         <button
@@ -982,7 +986,7 @@ const logout = (): void => {
                       setMenu({ x: e.clientX, y: e.clientY, botKey: b.key });
                     }}
                   >
-                    <AvatarView avatar={b.avatar} size={36} />
+                    <AvatarView avatar={b.avatar} variant="sidebar" size={36} />
                     <span className="tab-label">
                       <span className="tab-title">
                         {b.bot.name}
@@ -1341,7 +1345,7 @@ const logout = (): void => {
                 onCancel={() => setModalOpen(false)}
                 previewSlot={
                   <div className="preview">
-                    <AvatarView avatar={avatar} size={editingBot ? 100 : 80} />
+                    <AvatarView avatar={avatar} variant="preview" size={editingBot ? 100 : 80} />
                   </div>
                 }
                 avatarSlot={<AvatarPicker value={avatar} onChange={setAvatar} />}
@@ -1644,7 +1648,7 @@ function MessageBubble({
   return (
     <div className={"msg-row" + (isUser ? " user" : " bot")}>
       {!isUser && speaker && (
-        <AvatarView avatar={speaker.avatar} size={34} />
+        <AvatarView avatar={speaker.avatar} variant="inline" size={34} />
       )}
       <div className="hover-wrap">
         {!isUser && speaker ? (
@@ -1828,9 +1832,9 @@ function BotsPlaceholder({
       <div className="pair-view">
         <header className="pair-head">
           <span className="pair-title">
-            <AvatarView avatar={me.avatar} size={26} />
+            <AvatarView avatar={me.avatar} variant="inline" size={26} />
             <span className="pair-arrow">⇄</span>
-            <AvatarView avatar={peer?.avatar ?? me.avatar} size={26} />
+            <AvatarView avatar={peer?.avatar ?? me.avatar} variant="inline" size={26} />
             <span>{peer?.bot.name ?? "?"}</span>
           </span>
         </header>
@@ -1839,7 +1843,7 @@ function BotsPlaceholder({
             const speaker = bots.find((bot) => bot.key === turn.speakerKey);
             return (
               <div className="pair-turn" key={turn.id}>
-                <AvatarView avatar={speaker?.avatar ?? me.avatar} size={30} />
+                <AvatarView avatar={speaker?.avatar ?? me.avatar} variant="inline" size={30} />
                 <div className="pair-turn-main">
                   <span
                     className="pair-speaker"
@@ -2031,7 +2035,7 @@ function BotsPlaceholder({
                             title={`查看与 ${peer?.bot.name ?? "?"} 的消息往来`}
                             onClick={() => setDetailOther(peerKey)}
                           >
-                            <AvatarView avatar={peer?.avatar ?? me.avatar} size={16} />
+                            <AvatarView avatar={peer?.avatar ?? me.avatar} variant="inline" size={16} />
                             <span>{peer?.bot.name ?? "?"}</span>
                           </button>
                         </Fragment>
@@ -2169,7 +2173,7 @@ function BotsPlaceholder({
                           setPlusOpen(false);
                         }}
                       >
-                        <AvatarView avatar={b.avatar} size={22} />
+                        <AvatarView avatar={b.avatar} variant="inline" size={22} />
                         <span className="tab-title">{b.bot.name}</span>
                         <span className="composer-menu-hint">
                           {groups.find((g) => g.key === b.group)?.name ?? "?"}

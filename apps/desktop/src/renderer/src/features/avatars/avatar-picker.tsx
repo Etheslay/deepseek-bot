@@ -33,7 +33,7 @@ export function AvatarPicker(props: {
             }
             onClick={() => pickGrok(id, color)}
           >
-            <AvatarView avatar={{ kind: "grok", shape: id, color }} size={34} />
+            <AvatarView avatar={{ kind: "grok", shape: id, color }} variant="inline" size={34} />
           </button>
         ))}
       </div>
@@ -49,7 +49,7 @@ export function AvatarPicker(props: {
           }
           onClick={() => props.onChange({ kind: "mono" })}
         >
-          <AvatarView avatar={{ kind: "mono" }} size={24} />
+          <AvatarView avatar={{ kind: "mono" }} variant="inline" size={24} />
         </button>
         {GROK_BALL_COLORS.map((c) => (
           <button

@@ -5825,3 +5825,25 @@ select option {
   flex: 0 0 auto;
   overflow: visible;
 }
+
+/* ---------- Grok Ball: theme inversion + fixed-slot plaque ---------- */
+/* Light = dark body + light eyes; Dark = light body + dark eyes.
+   Fill interpolates over 200ms on theme change; gaze/blink keep running. */
+.grok-ball .gb-body,
+.grok-ball .gb-eye {
+  transition: fill 200ms ease;
+}
+
+.grok-ball.gb-mono .gb-body {
+  fill: var(--avatar-mono-bg);
+}
+
+.grok-ball.gb-mono .gb-eye {
+  fill: var(--avatar-mono-eye);
+}
+
+/* Fixed identity slots never shrink or wrap the ball. */
+.page-chip .grok-ball,
+.tab > .grok-ball {
+  flex: 0 0 auto;
+}

@@ -588,6 +588,23 @@ export function interpolateStateFrame(
 }
 
 
+/** Fixed-slot identity roles; `inline` renders a static (non-animated) glyph. */
+export type GrokBallVariant = "sidebar" | "message-header" | "preview" | "inline";
+
+export const GROK_BALL_SIZES: Record<GrokBallVariant, number> = {
+  sidebar: 40,
+  "message-header": 26,
+  preview: 96,
+  inline: 26,
+};
+
+/** Variants that must not run the animation loop (in-message + thumbnails). */
+export const GROK_BALL_STATIC_VARIANTS: readonly GrokBallVariant[] = ["inline"];
+
+export function isStaticVariant(variant: GrokBallVariant): boolean {
+  return GROK_BALL_STATIC_VARIANTS.includes(variant);
+}
+
 export const GROK_BALL_COLORS = [
   "#0a0a0c",
   "#8b5e3c",

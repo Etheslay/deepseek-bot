@@ -2,10 +2,12 @@ import { describe, expect, it } from "vitest";
 import {
   GROK_BALL_SHAPES,
   GROK_BALL_SHAPE_IDS,
+  GROK_BALL_SIZES,
   GROK_BALL_STATE_FRAMES,
   contourPath,
   interpolatePoints,
   interpolateStateFrame,
+  isStaticVariant,
   mixColor,
   projectEye,
   sampleContour,
@@ -139,5 +141,22 @@ describe("Grok Ball keyframe interpolation", () => {
       (frame) => frame.left.points.length,
     );
     expect(new Set(counts).size).toBe(1);
+  });
+});
+
+describe("Grok Ball fixed-slot variants", () => {
+  it("provides a pixel size for every identity slot", () => {
+    for (const variant of ["sidebar", "message-header", "preview", "inline"] as const) {
+      expect(GROK_BALL_SIZES[variant]).toBeGreaterThan(0);
+    }
+    expect(GROK_BALL_SIZES["message-header"]).toBeLessThan(GROK_BALL_SIZES.preview);
+    expect(GROK_BALL_SIZES.sidebar).toBeLessThan(GROK_BALL_SIZES.preview);
+  });
+
+  it("treats only the inline variant as a static (non-animated) glyph", () => {
+    expect(isStaticVariant("inline")).toBe(true);
+    expect(isStaticVariant("sidebar")).toBe(false);
+    expect(isStaticVariant("message-header")).toBe(false);
+    expect(isStaticVariant("preview")).toBe(false);
   });
 });
