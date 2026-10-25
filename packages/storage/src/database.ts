@@ -171,8 +171,9 @@ function applyMigration(raw: DatabaseSync, migration: MigrationDefinition): void
 // Structured payloads (grants, nodes/edges, snapshots, trigger, event
 // payloads) are JSON columns; every read/write path parses them through the
 // contract schemas, so the shapes stay validated at runtime.
-// `tool_policy_id` has no table yet (permissions are D08); it is stored as a
-// plain id until that task defines the entity.
+// `tool_policy_id` referenced the tool_policies table added in migration
+// 0002 (D08); bots keep storing the plain id until then (checked by the
+// repos, not by a foreign key).
 // ---------------------------------------------------------------------------
 
 const INITIAL_SCHEMA_SQL = /* sql */ `
@@ -335,5 +336,19 @@ export const MIGRATIONS: ReadonlyArray<MigrationDefinition> = [
     id: 1,
     name: "0001-initial",
     sql: INITIAL_SCHEMA_SQL,
+  },
+  {
+    id: 2,
+    name: "0002-tool-policies",
+    sql: /* sql */ `
+CREATE TABLE tool_policies (
+  id TEXT PRIMARY KEY,
+  revision TEXT NOT NULL,
+  name TEXT NOT NULL,
+  policy_json TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+`,
   },
 ];

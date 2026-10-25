@@ -16,6 +16,8 @@ import {
   validateWorkflowDraft,
   type Bot,
   type Run,
+  type ToolPolicy,
+  type Workspace,
 } from "@deepseek-bot/contracts";
 import {
   ACTIVE_RUN_STATUSES,
@@ -24,7 +26,9 @@ import {
   getApproval,
   getBot,
   getRun,
+  getToolPolicy,
   getWorkflow,
+  getWorkspace,
   listApprovals,
   listNodeRuns,
   listRuns,
@@ -46,6 +50,16 @@ export interface WorkflowEngineOptions {
   readonly retryBaseDelayMs?: number;
   readonly retryMaxDelayMs?: number;
   readonly cancelGraceMs?: number;
+  /**
+   * Host boot generation (CONTRACTS §2: 启动代次绑定). The Host increments
+   * the persisted generation once per process (storage
+   * `incrementBootGeneration`) and passes the value here; approvals created
+   * by this engine bind to it and decisions for foreign generations are
+   * rejected (FR-06: 重启后旧审批不能直接重放). Defaults to 0.
+   */
+  readonly bootGeneration?: number;
+  /** Canonical artifact directory granted to file tools (D08). */
+  readonly artifactsRoot?: string;
 }
 
 export interface StartRunInput {
@@ -109,6 +123,31 @@ export class WorkflowEngine {
       bots.push(bot);
     }
 
+    // Resolve and pin permission inputs for the whole run (ARCHITECTURE §6:
+    // mid-run policy/workspace edits never affect a running run).
+    const permissionPins = new Map<
+      string,
+      { policy: ToolPolicy; workspace: Workspace | undefined }
+    >();
+    for (const bot of bots) {
+      const policy = getToolPolicy(db, bot.toolPolicyId);
+      if (policy === undefined) {
+        // Least privilege: no policy record, no execution.
+        throw invalidInput("tool policy not found for bot", {
+          botId: bot.id,
+          toolPolicyId: bot.toolPolicyId,
+        });
+      }
+      const workspace = getWorkspace(db, bot.workspaceId);
+      if (workspace === undefined) {
+        throw invalidInput("workspace not found for bot", {
+          botId: bot.id,
+          workspaceId: bot.workspaceId,
+        });
+      }
+      permissionPins.set(bot.id, { policy, workspace });
+    }
+
     const trigger = RunTriggerSchema.safeParse(input.trigger);
     if (!trigger.success) {
       throw invalidInput("invalid run trigger", {
@@ -133,7 +172,9 @@ export class WorkflowEngine {
       return { run, created: false };
     }
 
-    const execution = new RunExecution(this.executionOptions(run));
+    const execution = new RunExecution(
+      this.executionOptions(run, permissionPins),
+    );
     this.executions.set(run.id, execution);
     execution.start();
     const started = getRun(db, run.id);
@@ -162,8 +203,16 @@ export class WorkflowEngine {
     });
   }
 
-  /** Apply an approval decision for an active run (CONTRACTS §3). */
-  decideApproval(approvalId: string, decision: ApprovalDecision): void {
+  /**
+   * Apply an approval decision for an active run (CONTRACTS §3). The caller
+   * must echo the approval's actionDigest from the approval.requested event;
+   * a mismatch or a foreign boot generation is rejected.
+   */
+  decideApproval(
+    approvalId: string,
+    decision: ApprovalDecision,
+    expectedActionDigest: string,
+  ): void {
     const db = this.options.db;
     const approval = getApproval(db, approvalId);
     if (approval === undefined) {
@@ -175,7 +224,7 @@ export class WorkflowEngine {
         runId: approval.runId,
       });
     }
-    execution.decideApproval(approvalId, decision);
+    execution.decideApproval(approvalId, decision, expectedActionDigest);
   }
 
   /**
@@ -271,11 +320,15 @@ export class WorkflowEngine {
     return execution;
   }
 
-  private executionOptions(run: Run): RunExecutionOptions {
+  private executionOptions(
+    run: Run,
+    permissionPins: ReadonlyMap<string, { policy: ToolPolicy; workspace: Workspace | undefined }>,
+  ): RunExecutionOptions {
     return {
       db: this.options.db,
       executor: this.options.executor,
       run,
+      permissionPins,
       ...(this.options.now !== undefined ? { now: this.options.now } : {}),
       ...(this.options.approvalTtlMs !== undefined
         ? { approvalTtlMs: this.options.approvalTtlMs }
@@ -288,6 +341,12 @@ export class WorkflowEngine {
         : {}),
       ...(this.options.cancelGraceMs !== undefined
         ? { cancelGraceMs: this.options.cancelGraceMs }
+        : {}),
+      ...(this.options.bootGeneration !== undefined
+        ? { bootGeneration: this.options.bootGeneration }
+        : {}),
+      ...(this.options.artifactsRoot !== undefined
+        ? { artifactsRoot: this.options.artifactsRoot }
         : {}),
     };
   }

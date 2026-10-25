@@ -96,6 +96,22 @@ export function getApproval(db: OpenedDatabase, id: string): Approval | undefine
   return row === undefined ? undefined : rowToApproval(row);
 }
 
+/**
+ * Boot generation an approval is bound to (CONTRACTS §2: 启动代次绑定).
+ * The Host rejects decisions/consumption when this differs from the current
+ * host generation, so approvals created by a previous process cannot be
+ * replayed after a restart even before recovery expires them.
+ */
+export function getApprovalGeneration(
+  db: OpenedDatabase,
+  id: string,
+): number | undefined {
+  const row = db.raw
+    .prepare("SELECT generation FROM approvals WHERE id = ?;")
+    .get(id) as { generation: number } | undefined;
+  return row === undefined ? undefined : row.generation;
+}
+
 export function listApprovals(
   db: OpenedDatabase,
   options: { runId?: string; status?: Approval["status"] } = {},
@@ -171,8 +187,15 @@ export function decideApproval(
   });
 }
 
-/** Consume an approved approval exactly once before executing the action. */
-export function consumeApproval(db: OpenedDatabase, input: { id: string }): Approval {
+/**
+ * Consume an approved approval exactly once before executing the action.
+ * When `generation` is provided the consume only applies to an approval
+ * bound to that host generation — a stale approval can never be consumed.
+ */
+export function consumeApproval(
+  db: OpenedDatabase,
+  input: { id: string; generation?: number },
+): Approval {
   return runInTransaction(db.raw, () => {
     const row = db.raw
       .prepare("SELECT * FROM approvals WHERE id = ?;")
@@ -184,6 +207,13 @@ export function consumeApproval(db: OpenedDatabase, input: { id: string }): Appr
       throw invalidInput("only approved approvals can be consumed", {
         approvalId: input.id,
         status: row.status,
+      });
+    }
+    if (input.generation !== undefined && row.generation !== input.generation) {
+      throw invalidInput("approval is bound to a different host generation", {
+        approvalId: input.id,
+        approvalGeneration: row.generation,
+        hostGeneration: input.generation,
       });
     }
     const now = isoNow(db.now);

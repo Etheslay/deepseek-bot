@@ -6,10 +6,11 @@
  * skipped at quiescence while independent branches finish), bounded retries
  * with exponential backoff and Retry-After, whole-graph cancellation
  * (cancelling → cancelled only after in-flight work stops), approval-node
- * pauses with TTL, and quiescence finalization with reasons.
+ * pauses with TTL, tool-permission gating with one-time approvals (D08),
+ * and quiescence finalization with reasons.
  *
- * Does NOT own: tool permission checks (D08), the Harness process lifecycle
- * (adapter via NodeExecutor), or schedule-driven triggering (D10).
+ * Does NOT own: the Harness process lifecycle (adapter via NodeExecutor) or
+ * schedule-driven triggering (D10).
  */
 import { createHash, randomUUID } from "node:crypto";
 import {
@@ -18,7 +19,9 @@ import {
   type NodeRun,
   type Run,
   type RunStatus,
+  type ToolPolicy,
   type WorkflowNode,
+  type Workspace,
 } from "@deepseek-bot/contracts";
 import {
   consumeApproval,
@@ -27,6 +30,7 @@ import {
   decideApproval as decideApprovalInStorage,
   expireApprovalsForRun,
   getApproval,
+  getApprovalGeneration,
   getNodeRun,
   getRun,
   listApprovals,
@@ -49,6 +53,7 @@ import {
 } from "./executor.js";
 import { invalidInput } from "./errors.js";
 import { buildSnapshotGraph, type SnapshotGraph } from "./graph.js";
+import { NodeToolGate } from "./permissions/gate.js";
 import { RunEventEmitter } from "./run-events.js";
 
 export interface RunExecutionOptions {
@@ -60,6 +65,15 @@ export interface RunExecutionOptions {
   readonly retryBaseDelayMs?: number;
   readonly retryMaxDelayMs?: number;
   readonly cancelGraceMs?: number;
+  /** Pinned per-bot permission inputs resolved at run start (D08). */
+  readonly permissionPins?: ReadonlyMap<
+    string,
+    { policy: ToolPolicy; workspace: Workspace | undefined }
+  >;
+  /** Host boot generation stamped onto created approvals (D08). */
+  readonly bootGeneration?: number;
+  /** Canonical artifact directory granted to file tools (D08). */
+  readonly artifactsRoot?: string;
 }
 
 const DEFAULT_APPROVAL_TTL_MS = 600_000;
@@ -99,6 +113,12 @@ export class RunExecution {
   private readonly retryBaseDelayMs: number;
   private readonly retryMaxDelayMs: number;
   private readonly cancelGraceMs: number;
+  private readonly permissionPins: ReadonlyMap<
+    string,
+    { policy: ToolPolicy; workspace: Workspace | undefined }
+  >;
+  private readonly bootGeneration: number;
+  private readonly artifactsRoot: string | undefined;
 
   /** Attempts per node id, ordered by attempt number; last entry is current. */
   private readonly nodeRuns = new Map<string, NodeRun[]>();
@@ -107,6 +127,12 @@ export class RunExecution {
   private readonly retryTimers = new Map<string, NodeJS.Timeout>();
   private readonly approvalTimers = new Map<string, NodeJS.Timeout>();
   private readonly failures = new Map<string, RecordedFailure>();
+  /** Live tool-permission gates per node run (D08). */
+  private readonly toolGates = new Map<string, NodeToolGate>();
+  /** Approval id → gate holding its waiter (tool approvals only). */
+  private readonly toolApprovalWaiters = new Map<string, NodeToolGate>();
+  /** Node runs paused inside the executor waiting for a tool approval. */
+  private readonly toolApprovalWaitingNodeRuns = new Set<string>();
   private runStatus: RunStatus;
   private cancelRequested = false;
   private finished = false;
@@ -126,6 +152,9 @@ export class RunExecution {
     this.retryBaseDelayMs = options.retryBaseDelayMs ?? DEFAULT_RETRY_BASE_DELAY_MS;
     this.retryMaxDelayMs = options.retryMaxDelayMs ?? DEFAULT_RETRY_MAX_DELAY_MS;
     this.cancelGraceMs = options.cancelGraceMs ?? DEFAULT_CANCEL_GRACE_MS;
+    this.permissionPins = options.permissionPins ?? new Map();
+    this.bootGeneration = options.bootGeneration ?? 0;
+    this.artifactsRoot = options.artifactsRoot;
   }
 
   get status(): RunStatus {
@@ -245,6 +274,41 @@ export class RunExecution {
       return;
     }
 
+    const pin = this.permissionPins.get(bot.id);
+    if (pin === undefined) {
+      // Least privilege (SECURITY_DATA §3): a bot without a resolvable tool
+      // policy executes no side-effecting work at all.
+      this.failBeforeExecution(running, node, new NodeExecutionError({
+        code: "INVALID_INPUT",
+        message: `tool policy missing for bot '${bot.id}'`,
+        retryable: false,
+      }));
+      return;
+    }
+    const gate = new NodeToolGate({
+      db: this.db,
+      events: this.events,
+      runId: this.runId,
+      nodeRunId: running.id,
+      policy: pin.policy,
+      workspace: pin.workspace,
+      artifactsRoot: this.artifactsRoot,
+      bootGeneration: this.bootGeneration,
+      approvalTtlMs: this.approvalTtlMs,
+      now: this.now,
+      isRunActive: () => !this.cancelRequested && !this.finished && !isRunTerminal(this.runStatus),
+      beginApprovalWait: (nodeRunId, reason) =>
+        this.beginToolApprovalWait(nodeRunId, reason),
+      endApprovalWait: (nodeRunId, reason) => this.endToolApprovalWait(nodeRunId, reason),
+      registerWaiter: (approvalId, gateOwner) => {
+        this.toolApprovalWaiters.set(approvalId, gateOwner);
+      },
+      unregisterWaiter: (approvalId) => {
+        this.toolApprovalWaiters.delete(approvalId);
+      },
+    });
+    this.toolGates.set(running.id, gate);
+
     const resolution = this.resolveInputs(node);
     const firstMissing = resolution.missing[0];
     if (firstMissing !== undefined) {
@@ -281,6 +345,7 @@ export class RunExecution {
       bot,
       inputs: resolution.inputs,
       signal: controller.signal,
+      permissions: gate,
     };
     let promise: Promise<BotNodeExecutionResult>;
     try {
@@ -388,6 +453,13 @@ export class RunExecution {
       clearTimeout(entry.timer);
     }
     this.inflight.delete(nodeRunId);
+    this.disposeToolGate(nodeRunId);
+    if (this.cancelRequested) {
+      // Late settlement during cancellation (e.g. a tool wait rejected with
+      // CANCELLED after the node was already swept) must still release the
+      // cancel drain once the last in-flight entry is gone.
+      this.notifyCancelDrain();
+    }
 
     const latest = this.latestAttempt(entry.nodeId);
     if (latest === undefined || latest.id !== nodeRunId) {
@@ -517,8 +589,14 @@ export class RunExecution {
       const latest = this.latestAttempt(nodeId);
       return latest?.status === "running" && !this.inflight.has(latest.id);
     });
+    // In-flight attempts paused inside the executor for a tool approval do
+    // not keep the run "running": other independent nodes may finish, but
+    // quiescence with only approval waits shows waiting_approval (§5).
+    const busyInflight = [...this.inflight.values()].some(
+      (entry) => !this.toolApprovalWaitingNodeRuns.has(entry.nodeRunId),
+    );
     const busy =
-      this.inflight.size > 0 ||
+      busyInflight ||
       this.retryTimers.size > 0 ||
       hasOrphanRunning ||
       this.findReadyNode() !== undefined;
@@ -646,15 +724,19 @@ export class RunExecution {
         }),
       )
       .digest("hex");
-    const approval = createApproval(this.db, {
-      id: randomUUID(),
-      runId: this.runId,
-      nodeRunId: nodeRun.id,
-      actionDigest,
-      resource: `workflow-run/${this.runId}/node/${node.id}`,
-      expiresAt,
-      status: "pending",
-    });
+    const approval = createApproval(
+      this.db,
+      {
+        id: randomUUID(),
+        runId: this.runId,
+        nodeRunId: nodeRun.id,
+        actionDigest,
+        resource: `workflow-run/${this.runId}/node/${node.id}`,
+        expiresAt,
+        status: "pending",
+      },
+      { generation: this.bootGeneration },
+    );
     this.events.emit("approval.requested", { approval });
 
     const waiting = transitionNodeRun(this.db, { id: nodeRun.id, to: "waiting_approval" });
@@ -713,13 +795,19 @@ export class RunExecution {
   }
 
   /**
-   * Apply an approval decision (CONTRACTS §3 approval.decide): approve
-   * consumes the approval once and completes the node, deny fails the node
-   * (stop-descendants applies). An expired-but-pending approval fails the
-   * node with APPROVAL_EXPIRED. A retry creates a fresh approval; old ones
-   * are never silently restored.
+   * Apply an approval decision (CONTRACTS §3 approval.decide): the caller's
+   * expected digest and the host boot generation are validated first, then
+   * the decision routes to a tool-action waiter (D08) or the approval-node
+   * pause. Approve consumes the approval once; deny fails the node
+   * (stop-descendants applies); expired-but-pending fails with
+   * APPROVAL_EXPIRED. A retry creates a fresh approval; old ones are never
+   * silently restored.
    */
-  decideApproval(approvalId: string, decision: ApprovalDecision): void {
+  decideApproval(
+    approvalId: string,
+    decision: ApprovalDecision,
+    expectedActionDigest: string,
+  ): void {
     if (this.finished || isRunTerminal(this.runStatus)) {
       throw invalidInput("run is already finished", { runId: this.runId });
     }
@@ -727,6 +815,54 @@ export class RunExecution {
     if (approval === undefined || approval.runId !== this.runId) {
       throw invalidInput("approval not found in this run", { approvalId });
     }
+    if (approval.actionDigest !== expectedActionDigest) {
+      throw invalidInput("action digest mismatch", { approvalId });
+    }
+    const generation = getApprovalGeneration(this.db, approvalId);
+    if (generation !== undefined && generation !== this.bootGeneration) {
+      // Stale process: the decision must not be applied (FR-06: 重启后旧审批
+      // 不能直接重放). Recovery expires these approvals at host startup.
+      throw new StorageError({
+        code: "APPROVAL_EXPIRED",
+        message: "approval belongs to a previous host session",
+        details: {
+          approvalId,
+          approvalGeneration: generation,
+          hostGeneration: this.bootGeneration,
+        },
+        retryable: false,
+      });
+    }
+
+    const gate = this.toolApprovalWaiters.get(approvalId);
+    if (gate !== undefined) {
+      // Tool action approval: the gate re-validates, consumes and flips the
+      // node status; the executor owns the outcome.
+      try {
+        decideApprovalInStorage(this.db, { id: approvalId, decision });
+      } catch (error) {
+        if (error instanceof StorageError && error.code === "APPROVAL_EXPIRED") {
+          this.events.emit("approval.resolved", {
+            approvalId,
+            decision: "expired",
+            resolvedAt: this.now().toISOString(),
+          });
+          gate.settleWait(approvalId, { kind: "expired" });
+          return;
+        }
+        throw error;
+      }
+      this.events.emit("approval.resolved", {
+        approvalId,
+        decision,
+        resolvedAt: this.now().toISOString(),
+      });
+      gate.settleWait(approvalId, {
+        kind: decision === "approved" ? "approved" : "denied",
+      });
+      return;
+    }
+
     const nodeRun = getNodeRun(this.db, approval.nodeRunId);
     if (nodeRun === undefined || nodeRun.runId !== this.runId) {
       throw invalidInput("approval does not reference this run", { approvalId });
@@ -797,6 +933,61 @@ export class RunExecution {
   }
 
   // -------------------------------------------------------------------------
+  // Tool permission waits (D08)
+  // -------------------------------------------------------------------------
+
+  /**
+   * Flip a running node to waiting_approval while its executor awaits a tool
+   * approval inside `authorize`. Returns false when the node is no longer
+   * running (cancelled meanwhile) — the gate then refuses the action.
+   */
+  private beginToolApprovalWait(nodeRunId: string, reason: string): boolean {
+    const latest = this.latestAttemptByNodeRunId(nodeRunId);
+    if (latest === undefined || latest.status !== "running") {
+      return false;
+    }
+    try {
+      const waiting = transitionNodeRun(this.db, { id: nodeRunId, to: "waiting_approval" });
+      this.replaceLatest(waiting);
+      this.toolApprovalWaitingNodeRuns.add(nodeRunId);
+      this.emitNodeStatus(waiting, "running", "waiting_approval", reason);
+      this.pump();
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /** Flip a tool-waiting node back to running once its wait is over. */
+  private endToolApprovalWait(nodeRunId: string, reason: string): void {
+    this.toolApprovalWaitingNodeRuns.delete(nodeRunId);
+    const latest = this.latestAttemptByNodeRunId(nodeRunId);
+    if (latest === undefined || latest.status !== "waiting_approval") {
+      return;
+    }
+    try {
+      const running = transitionNodeRun(this.db, { id: nodeRunId, to: "running" });
+      this.replaceLatest(running);
+      this.emitNodeStatus(running, "waiting_approval", "running", reason);
+      this.pump();
+    } catch {
+      // Terminal meanwhile (cancellation won the race); nothing to flip.
+    }
+  }
+
+  /** Drop a settled node run's gate; stragglers cannot execute afterwards. */
+  private disposeToolGate(nodeRunId: string): void {
+    const gate = this.toolGates.get(nodeRunId);
+    if (gate === undefined) {
+      return;
+    }
+    this.toolGates.delete(nodeRunId);
+    for (const approvalId of gate.pendingApprovalIds()) {
+      gate.settleWait(approvalId, { kind: "cancelled" });
+    }
+  }
+
+  // -------------------------------------------------------------------------
   // Cancellation and explicit node retry
   // -------------------------------------------------------------------------
 
@@ -844,6 +1035,13 @@ export class RunExecution {
       }
     }
 
+    // Executors waiting inside authorize() must fail fast with CANCELLED;
+    // their waiting nodes reach cancelled through the status sweep below.
+    for (const [approvalId, gate] of [...this.toolApprovalWaiters]) {
+      gate.settleWait(approvalId, { kind: "cancelled" });
+    }
+    this.toolApprovalWaitingNodeRuns.clear();
+
     for (const nodeId of this.graph.nodeOrder) {
       const latest = this.latestAttempt(nodeId);
       if (latest === undefined) {
@@ -882,6 +1080,7 @@ export class RunExecution {
         clearTimeout(entry.timer);
       }
       this.inflight.delete(entry.nodeRunId);
+      this.disposeToolGate(entry.nodeRunId);
       const latest = this.latestAttempt(entry.nodeId);
       if (latest !== undefined && latest.status === "running") {
         this.finishAttemptAsCancelled(latest, "run cancelled");

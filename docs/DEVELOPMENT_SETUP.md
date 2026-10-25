@@ -73,7 +73,7 @@ pnpm-workspace.yaml       # packages/*、apps/*
 packages/shared/          # 最小共享包（密钥脱敏）
 packages/contracts/       # 契约 schema、场景夹具与契约测试（D03 起存在）
 packages/storage/         # 本地存储后端：SQLite、数据目录、凭据 blob、备份恢复（D04 起存在）
-packages/runtime/         # 工作流执行引擎：DAG、并发、失败/取消、审批、事件、恢复（D06 起存在）
+packages/runtime/         # 工作流执行引擎 + 后端工具权限层：DAG、并发、失败/取消、审批、事件、恢复、路径约束、工具策略、MCP 授权（D06/D08 起存在）
 apps/desktop/             # Electron 桌面壳（D02 起存在）
 .github/workflows/ci.yml  # windows-latest + Node 24
 ```

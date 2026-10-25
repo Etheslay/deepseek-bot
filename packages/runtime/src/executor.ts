@@ -15,6 +15,23 @@ import {
   type Run,
   type WorkflowNode,
 } from "@deepseek-bot/contracts";
+import type {
+  AuthorizedAction,
+  PermissionDecision,
+  ToolActionRequest,
+} from "./permissions/actions.js";
+
+/**
+ * Permission handle for one node attempt (D08). The executor MUST route
+ * every side-effecting tool action through `authorize` — it resolves only
+ * after a policy allow or a consumed one-time approval, and throws a
+ * classified NodeExecutionError otherwise. `evaluate` is a non-blocking
+ * preview for UI/display decisions and grants nothing.
+ */
+export interface NodePermissionHandle {
+  evaluate(action: ToolActionRequest): Promise<PermissionDecision>;
+  authorize(action: ToolActionRequest): Promise<AuthorizedAction>;
+}
 
 export interface BotNodeExecutionContext {
   readonly run: Run;
@@ -24,6 +41,8 @@ export interface BotNodeExecutionContext {
   /** Values resolved from predecessor outputs through edge mappings. */
   readonly inputs: Readonly<Record<string, unknown>>;
   readonly signal: AbortSignal;
+  /** Pre-execution tool permission gate for this attempt (D08). */
+  readonly permissions: NodePermissionHandle;
 }
 
 export interface BotNodeExecutionResult {

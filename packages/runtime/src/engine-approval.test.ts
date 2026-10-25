@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type { OpenedDatabase } from "@deepseek-bot/storage";
 import type { Run, Workflow } from "@deepseek-bot/contracts";
 import {
@@ -29,6 +29,11 @@ import {
 interface Harness {
   db: OpenedDatabase;
   bot: ReturnType<typeof makeBot>;
+}
+
+/** Any well-formed digest for calls rejected before digest comparison. */
+function randomDigest(): string {
+  return createHash("sha256").update(randomUUID()).digest("hex");
 }
 
 function setup(): Harness {
@@ -120,7 +125,7 @@ describe("approval nodes", () => {
       listEvents(harness.db, run.id).some((event) => event.type === "approval.requested"),
     ).toBe(true);
 
-    engine.decideApproval(approval.id, "approved");
+    engine.decideApproval(approval.id, "approved", approval.actionDigest);
     await waitFor(() => getRun(harness.db, run.id)?.status === "succeeded");
 
     expect(getApproval(harness.db, approval.id)?.status).toBe("consumed");
@@ -143,7 +148,7 @@ describe("approval nodes", () => {
 
     await waitFor(() => getRun(harness.db, run.id)?.status === "waiting_approval");
     const approval = pendingApproval(harness, run.id);
-    engine.decideApproval(approval.id, "denied");
+    engine.decideApproval(approval.id, "denied", approval.actionDigest);
 
     await waitFor(() => getRun(harness.db, run.id)?.status === "failed");
 
@@ -199,7 +204,7 @@ describe("approval nodes", () => {
     await waitFor(() => getRun(harness.db, run.id)?.status === "waiting_approval");
 
     const approval = pendingApproval(harness, run.id);
-    engine.decideApproval(approval.id, "approved");
+    engine.decideApproval(approval.id, "approved", approval.actionDigest);
     await waitFor(() => getRun(harness.db, run.id)?.status === "succeeded");
     harness.db.close();
   });
@@ -219,7 +224,7 @@ describe("approval nodes", () => {
     // c keeps executing, so the run itself stays running while the gate waits.
     await waitFor(() => latestAttempt(harness, run.id, "gate").status === "waiting_approval");
     const firstApproval = pendingApproval(harness, run.id);
-    engine.decideApproval(firstApproval.id, "denied");
+    engine.decideApproval(firstApproval.id, "denied", firstApproval.actionDigest);
     await waitFor(() => latestAttempt(harness, run.id, "gate").status === "failed");
     expect(getRun(harness.db, run.id)?.status).toBe("running");
 
@@ -229,14 +234,15 @@ describe("approval nodes", () => {
 
     // The denied approval from attempt 1 must not decide attempt 2.
     expectEngineError(
-      () => engine.decideApproval(firstApproval.id, "approved"),
+      () =>
+        engine.decideApproval(firstApproval.id, "approved", firstApproval.actionDigest),
       "INVALID_INPUT",
       /superseded/,
     );
 
     const secondApproval = pendingApproval(harness, run.id);
     expect(secondApproval.id).not.toBe(firstApproval.id);
-    engine.decideApproval(secondApproval.id, "approved");
+    engine.decideApproval(secondApproval.id, "approved", secondApproval.actionDigest);
     cGate.resolve({ outputs: {} });
     await waitFor(() => getRun(harness.db, run.id)?.status === "succeeded");
     harness.db.close();
@@ -263,7 +269,7 @@ describe("approval nodes", () => {
       throw new Error("expected a recorded approval");
     }
     expectEngineError(
-      () => engine.decideApproval(approval.id, "approved"),
+      () => engine.decideApproval(approval.id, "approved", approval.actionDigest),
       "INVALID_INPUT",
       /not waiting for a decision/,
     );
@@ -278,14 +284,18 @@ describe("approval nodes", () => {
     const { engine, run } = startEngine(harness, gateWorkflow(harness), executor);
     await waitFor(() => getRun(harness.db, run.id)?.status === "waiting_approval");
 
-    expectEngineError(() => engine.decideApproval(randomUUID(), "approved"), "INVALID_INPUT");
+    expectEngineError(
+      () =>
+        engine.decideApproval(randomUUID(), "approved", randomDigest()),
+      "INVALID_INPUT",
+    );
 
     const approval = pendingApproval(harness, run.id);
-    engine.decideApproval(approval.id, "approved");
+    engine.decideApproval(approval.id, "approved", approval.actionDigest);
     await waitFor(() => getRun(harness.db, run.id)?.status === "succeeded");
 
     expectEngineError(
-      () => engine.decideApproval(approval.id, "denied"),
+      () => engine.decideApproval(approval.id, "denied", approval.actionDigest),
       "INVALID_INPUT",
     );
     harness.db.close();
