@@ -35,7 +35,11 @@ import {
   type PermissionDecision,
   type ToolActionRequest,
 } from "./actions.js";
-import { canonicalizeToolPath, InvalidToolPathError } from "./paths.js";
+import {
+  canonicalizeScopePath,
+  canonicalizeToolPath,
+  InvalidToolPathError,
+} from "./paths.js";
 import {
   evaluateToolAction,
   toolActionResource,
@@ -87,14 +91,23 @@ export class NodeToolGate {
   private readonly waits = new Map<string, PendingWait>();
   /** Serializes concurrent authorize calls of one node attempt. */
   private queue: Promise<unknown> = Promise.resolve();
+  /**
+   * Scope canonicalization is lazy and cached: grant scopes must go through
+   * the same canonicalizeToolPath implementation as tool paths, or forms can
+   * diverge (Windows 8.3 short names) and containment silently fails.
+   */
+  private scopesPromise: Promise<PolicyCheckInput> | undefined;
 
   constructor(private readonly options: NodeToolGateOptions) {}
 
   /** Non-blocking policy preview of an action (no events, no approvals). */
   async evaluate(action: ToolActionRequest): Promise<PermissionDecision> {
     try {
-      const canonicalPath = await this.canonicalizePath(action);
-      return evaluateToolAction(action, canonicalPath, this.policyInput());
+      const [canonicalPath, policyInput] = await Promise.all([
+        this.canonicalizePath(action),
+        this.policyInput(),
+      ]);
+      return evaluateToolAction(action, canonicalPath, policyInput);
     } catch (error) {
       return {
         effect: "deny",
@@ -135,7 +148,10 @@ export class NodeToolGate {
         retryable: false,
       });
     }
-    const canonicalPath = await this.canonicalizeOrThrow(action);
+    const [canonicalPath, policyInput] = await Promise.all([
+      this.canonicalizeOrThrow(action),
+      this.policyInput(),
+    ]);
     const resource = toolActionResource(action, canonicalPath);
     this.options.events.emit("tool.requested", {
       nodeRunId: this.options.nodeRunId,
@@ -144,7 +160,7 @@ export class NodeToolGate {
       arguments: action.arguments,
       resource,
     });
-    const decision = evaluateToolAction(action, canonicalPath, this.policyInput());
+    const decision = evaluateToolAction(action, canonicalPath, policyInput);
     if (decision.effect === "allow") {
       return {
         approvalId: null,
@@ -159,13 +175,14 @@ export class NodeToolGate {
         retryable: false,
       });
     }
-    return this.requestApproval(action, canonicalPath, resource, decision.reason);
+    return this.requestApproval(action, canonicalPath, resource, policyInput, decision.reason);
   }
 
   private async requestApproval(
     action: ToolActionRequest,
     canonicalPath: string | undefined,
     resource: string,
+    policyInput: PolicyCheckInput,
     reason: string,
   ): Promise<AuthorizedAction> {
     if (!this.options.isRunActive()) {
@@ -209,7 +226,7 @@ export class NodeToolGate {
           // Cancellation owns the waiting node's terminal transition.
           throw cancelledError();
         }
-        const recheck = evaluateToolAction(action, canonicalPath, this.policyInput());
+        const recheck = evaluateToolAction(action, canonicalPath, policyInput);
         if (recheck.effect === "deny") {
           this.options.endApprovalWait(this.options.nodeRunId, "policy rejected after approval");
           throw new NodeExecutionError({
@@ -295,11 +312,37 @@ export class NodeToolGate {
     this.settleWait(approvalId, { kind: "expired" });
   }
 
-  private policyInput(): PolicyCheckInput {
+  /**
+   * Canonicalize the pinned scopes once per gate with the same function tool
+   * paths use, so containment compares identical path forms. A scope that
+   * cannot be canonicalized falls back to its normalized lexical form.
+   */
+  private policyInput(): Promise<PolicyCheckInput> {
+    this.scopesPromise ??= this.canonicalizeScopes();
+    return this.scopesPromise;
+  }
+
+  private async canonicalizeScopes(): Promise<PolicyCheckInput> {
+    const { policy, workspace, artifactsRoot } = this.options;
+    const canonicalWorkspace = workspace === undefined
+      ? undefined
+      : {
+          ...workspace,
+          canonicalPath: await canonicalizeScopePath(workspace.canonicalPath),
+          grants: await Promise.all(
+            workspace.grants.map(async (grant) => ({
+              ...grant,
+              scopePath: await canonicalizeScopePath(grant.scopePath),
+            })),
+          ),
+        };
+    const canonicalArtifactsRoot = artifactsRoot === undefined
+      ? undefined
+      : await canonicalizeScopePath(artifactsRoot);
     return {
-      policy: this.options.policy,
-      workspace: this.options.workspace,
-      artifactsRoot: this.options.artifactsRoot,
+      policy,
+      workspace: canonicalWorkspace,
+      artifactsRoot: canonicalArtifactsRoot,
     };
   }
 

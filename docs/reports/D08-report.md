@@ -24,6 +24,7 @@ Harness 适配边界：`NodeExecutor` 上下文新增必填 `permissions` 句柄
 - **策略评估器漏掉 policy 级操作白名单**：初版只查 workspace 授权，policy.filesystem.operations 形同虚设。测试「policy 只读但 grant 可写」暴露后补上双层校验。
 - **取消期间迟到结算不释放 cancel drain**：工具审批被取消拒绝后 executor 拒绝，此时节点已被取消扫描终态化，settleAttempt 早退路径不调用 notifyCancelDrain → 取消需等满 grace（5 秒）。已补：cancelRequested 时 inflight 清空即触发 drain。
 - **测试脚手架缺策略行**：startRun 现在要求 policy 存在，runtime test-support 补种默认最小权限策略。
+- **Windows 8.3 短名导致包含判断静默失效（CI 发现）**：GitHub Actions runner 的 TEMP 为 `C:\Users\RUNNER~1\...`；`fs.realpathSync`（JS 实现）不解析 8.3 短名而 `fs.promises.realpath` 解析，导致"授权范围入库用一种形式、子路径规范化成另一种形式"，越界测试碰巧通过、放行测试被误拒。修复：审批门对钉扎的 grants/产物目录 scope 惰性执行与子路径**同一个** `canonicalizeToolPath`（`canonicalizeScopePath`），测试一律用规范 scope 比对，并加注入 realpath 的回归测试复现 runner 行为（提交记录见 Git 历史）。
 
 ## 3. 测试与覆盖率
 

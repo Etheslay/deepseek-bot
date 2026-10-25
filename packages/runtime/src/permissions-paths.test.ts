@@ -10,6 +10,7 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  canonicalizeScopePath,
   canonicalizeToolPath,
   InvalidToolPathError,
   isPathWithinScope,
@@ -116,18 +117,22 @@ describe("canonicalizeToolPath", () => {
     try {
       const link = path.join(root, "work", "link");
       makeDirLink(path.join(root, "outside"), link);
+      // Scopes must be compared in canonical form (canonicalizeScopePath),
+      // mirroring what the gate does with stored grant scopes.
+      const workScope = await canonicalizeToolPath(path.join(root, "work"));
+      const outsideScope = await canonicalizeToolPath(path.join(root, "outside"));
       // Two missing levels below the link: judged by the link's real target.
       const target = await canonicalizeToolPath(
         path.join(root, "work", "link", "a", "b", "file.txt"),
       );
-      expect(isPathWithinScope(target, path.join(root, "work"))).toBe(false);
-      expect(isPathWithinScope(target, path.join(root, "outside"))).toBe(true);
+      expect(isPathWithinScope(target, workScope)).toBe(false);
+      expect(isPathWithinScope(target, outsideScope)).toBe(true);
 
       // Missing directory inside the plain workspace stays inside.
       const inside = await canonicalizeToolPath(
         path.join(root, "work", "newdir", "out.txt"),
       );
-      expect(isPathWithinScope(inside, path.join(root, "work"))).toBe(true);
+      expect(isPathWithinScope(inside, workScope)).toBe(true);
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }
@@ -139,13 +144,35 @@ describe("canonicalizeToolPath", () => {
       const resolved = await canonicalizeToolPath(
         path.join(root, "work", "sub", "..", "out.txt"),
       );
-      expect(isPathWithinScope(resolved, path.join(root, "work"))).toBe(true);
+      const workScope = await canonicalizeToolPath(path.join(root, "work"));
+      expect(isPathWithinScope(resolved, workScope)).toBe(true);
       expect(resolved.toLowerCase()).toBe(
-        path.join(root, "work", "out.txt").toLowerCase(),
+        path.join(workScope, "out.txt").toLowerCase(),
       );
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }
+  });
+
+  it("keeps scope and child forms identical when realpath longifies 8.3 names", async () => {
+    // CI runners expose TEMP via 8.3 short names (RUNNER~1) and the JS
+    // fs.realpathSync keeps them while promises.realpath longifies. With an
+    // injected realpath that behaves like the runner, a short-named scope and
+    // a canonicalized child must still agree once both go through
+    // canonicalizeScopePath / canonicalizeToolPath.
+    const real = "C:\\Users\\runneradmin\\AppData\\Local\\Temp\\dsb-8dot3";
+    const short = "C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\dsb-8dot3";
+    const fakeRealpath = async (p: string) => p.replaceAll("RUNNER~1", "runneradmin");
+    const scope = await canonicalizeScopePath(short, { realpath: fakeRealpath });
+    expect(scope).toBe(real);
+    const child = await canonicalizeToolPath(path.join(short, "missing", "out.txt"), {
+      realpath: fakeRealpath,
+    });
+    expect(child).toBe(path.join(real, "missing", "out.txt"));
+    expect(isPathWithinScope(child, scope)).toBe(true);
+    // Raw short-form scope against a long child mismatches — the reason the
+    // gate canonicalizes scopes instead of trusting stored strings.
+    expect(isPathWithinScope(child, short, { caseInsensitive: true })).toBe(false);
   });
 
   it("rejects relative paths and device namespaces", async () => {

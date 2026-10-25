@@ -79,6 +79,29 @@ export async function canonicalizeToolPath(
 }
 
 /**
+ * Canonicalize a stored grant scope through the SAME function tool paths use
+ * (canonicalizeToolPath), falling back to lexical normalization when no
+ * existing ancestor can be canonicalized. Gates must run scopes and children
+ * through one shared implementation: fs.realpathSync (JS impl) and
+ * fs.promises.realpath disagree on Windows 8.3 short names — the JS impl
+ * keeps `RUNNER~1` while the promises/native path returns `runneradmin` —
+ * so mixing them silently breaks every containment check.
+ */
+export async function canonicalizeScopePath(
+  input: string,
+  options: PathCheckOptions = {},
+): Promise<string> {
+  try {
+    return await canonicalizeToolPath(input, options);
+  } catch (error) {
+    if (error instanceof InvalidToolPathError) {
+      return path.normalize(input);
+    }
+    throw error;
+  }
+}
+
+/**
  * Segment-aware containment of `child` under `scope`. Both paths are
  * lexically normalized; comparison is case-insensitive on Windows
  * (case-preserving filesystems) unless overridden.

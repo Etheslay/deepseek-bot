@@ -51,7 +51,12 @@ interface Harness {
 async function setup(policyOverrides: Partial<ToolPolicy> = {}): Promise<Harness> {
   const db = openTestDatabase();
   const refs = seedProfileAndWorkspace(db);
-  const workDir = fs.realpathSync(fs.mkdtempSync(path.join(makeTempRoot(), "perm-")));
+  // realpathSync (JS impl) does not resolve Windows 8.3 short names while
+  // promises.realpath does; use the native variant so the stored scope is
+  // the true canonical location (e.g. RUNNER~1 → runneradmin on CI).
+  const workDir = fs.realpathSync.native(
+    fs.mkdtempSync(path.join(makeTempRoot(), "perm-")),
+  );
   const workspaceId = randomUUID();
   const now = db.now().toISOString();
   db.raw
