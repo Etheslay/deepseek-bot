@@ -35,7 +35,7 @@ flowchart LR
 | `packages/storage/` | 应用数据库、迁移、备份、查询 | 自定义修改 Harness 日志格式 | Etheslay |
 | `packages/ui/` | 可复用界面与可访问性组件 | 本地数据授权判断 | Destinyian |
 
-桌面壳（D02）、共享契约（D03）与本地存储（D04）已按此布局落地；其余目录仍是规划，本次不创建。
+桌面壳（D02）、共享契约（D03）、本地存储（D04）与工作流引擎（D06，`packages/runtime/`，经 `NodeExecutor` 端口与 Harness 适配层解耦）已按此布局落地；`packages/harness-adapter/`、`packages/ui/` 仍是规划，本次不创建。
 
 ## 3. 数据与调用链
 
@@ -66,7 +66,7 @@ flowchart LR
 
 工作流是有向无环图。保存时校验环、悬空引用、端口类型与预算；执行前再次验证。并发上限默认 2，可配置上限须在压力测试后确定；同一文件写目标与桌面交互工具使用资源锁。
 
-状态机、失败后的后继处理、重试、人工确认、调度去重均以[接口契约](CONTRACTS.md)为准。工作流版本与机器人配置在运行开始时形成不可变快照，执行中修改不影响已有运行。
+状态机、失败后的后继处理、重试、人工确认、调度去重均以[接口契约](CONTRACTS.md)为准。D06 起可执行实现位于 `packages/runtime/`：stop-descendants 失败传播、有界重试（指数退避 + Retry-After）、两阶段取消与 `recoverInterruptedRuns` 已按契约状态机落地；调度去重与 misfire 属 D10。工作流版本与机器人配置在运行开始时形成不可变快照，执行中修改不影响已有运行。
 
 ## 7. 需要技术验证的边界
 

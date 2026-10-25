@@ -68,3 +68,13 @@
 - 同日第二次发现 feature/project-standards 被同一误署名身份（Destinyian）追加三笔提交，内容为对齐已合并状态的阶段化方案修订；已再次从远程回退至 bd2946b，两版提案分别本地存档为 archive/stage-plan-proposal（ec85db7）与 archive/stage-plan-push2（5caafd7）。
 - 推送来源尚未定位；在该环境停止或改用真实身份前，远程可能再次被推送，需负责人在源头处理（检查各机器/会话的 git 身份配置或访问权限）。
 - npm registry 独立核验：@deepseek-ai/dsh latest=0.2.1-rc.2、next=0.2.1-rc.3、alpha=0.2.1-alpha.5，已合入 HARNESS_INTEGRATION §1。
+
+## 2026-10-24：D06 工作流引擎（feature/workflow-engine）
+
+- 用户明确授权开始 D-06 应用实现；分支自 develop 9cf4ba2 创建，目标 develop，未触碰 main / develop。
+- 交付 `packages/runtime`（`@deepseek-bot/runtime` 0.1.0）：DAG 校验、顺序/并发调度、stop-descendants 失败传播、有界重试、两阶段取消、审批节点（TTL/批准/拒绝/过期）、运行快照、持久事件（sequence 续号）、宿主重启 interrupted 恢复；Harness 适配经 `NodeExecutor` 端口解耦。
+- storage 附加两个审批辅助函数（markApprovalExpired / expireApprovalsForRun）及测试；无 schema 变更。
+- 自测发现并修复三个引擎缺陷：前置失败被 settled 守卫吞掉、reconcile 对 running 无 inflight 节点错误终态化、waiting_approval 直达 succeeded 的非法迁移。
+- 根目录 lint / typecheck / test 全绿：desktop 4、shared 6、contracts 64、storage 106、runtime 43 用例；runtime 覆盖率行 88.56%、分支 81.25%（TESTING.md 要求行 ≥ 80%）。
+- 未做：真实 Harness 进程联动、真实 API 请求、权限检查（D08）、调度（D10）、适配层接入（D12）；文档同步 ARCHITECTURE / DEVELOPMENT_SETUP / packages/runtime README / D06 报告。
+- 自审记录按规范留空待负责人 Etheslay 填写；PR 合并由本人确认。

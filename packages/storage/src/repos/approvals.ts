@@ -208,3 +208,49 @@ export function expireApprovals(db: OpenedDatabase): number {
     .run(now, now);
   return Number(result.changes);
 }
+
+/**
+ * Expire one specific pending approval (workflow engine TTL path). Only a
+ * pending approval can be expired; anything else is an INVALID_INPUT.
+ */
+export function markApprovalExpired(
+  db: OpenedDatabase,
+  input: { id: string },
+): Approval {
+  return runInTransaction(db.raw, () => {
+    const row = db.raw
+      .prepare("SELECT * FROM approvals WHERE id = ?;")
+      .get(input.id) as unknown as ApprovalRow | undefined;
+    if (row === undefined) {
+      throw invalidInput("approval not found", { approvalId: input.id });
+    }
+    if (row.status !== "pending") {
+      throw invalidInput("only pending approvals can be expired", {
+        approvalId: input.id,
+        status: row.status,
+      });
+    }
+    const now = isoNow(db.now);
+    db.raw
+      .prepare("UPDATE approvals SET status = 'expired', updated_at = ? WHERE id = ?;")
+      .run(now, input.id);
+    const updated = db.raw
+      .prepare("SELECT * FROM approvals WHERE id = ?;")
+      .get(input.id) as unknown as ApprovalRow;
+    return rowToApproval(updated);
+  });
+}
+
+/**
+ * Expire every pending approval of one run — used when the run is cancelled
+ * or interrupted so no approval can outlive its run (CONTRACTS §2: 一次消费).
+ */
+export function expireApprovalsForRun(db: OpenedDatabase, runId: string): number {
+  const result = db.raw
+    .prepare(
+      "UPDATE approvals SET status = 'expired', updated_at = ? " +
+        "WHERE run_id = ? AND status = 'pending';",
+    )
+    .run(isoNow(db.now), runId);
+  return Number(result.changes);
+}
