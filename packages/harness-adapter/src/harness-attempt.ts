@@ -351,7 +351,7 @@ export class HarnessAttempt {
     let finalResponse = "";
     let turnEndKind: TurnEndKind = undefined;
     let sawReceipt = false;
-    let requestError: unknown;
+    let turnError: { message: string; code?: unknown; status?: unknown } | undefined;
     for (;;) {
       const notification = await this.nextNotification();
       if (notification.method === "session.event" && notification.params["sessionId"] === sessionId) {
@@ -370,11 +370,22 @@ export class HarnessAttempt {
           finalResponse = assistantText(event) ?? finalResponse;
         } else if (event.type === "turn/end") {
           turnEndKind = turnEndReasonKind(event);
-        } else if (event.type === "agent/request-error") {
-          // Model dispatch failures (auth, rate limit, unavailable routes)
-          // surface here — the agent still settles to idle afterwards, so an
-          // unclassified turn would report success with an empty response.
-          requestError = event.data;
+          // Model dispatch failures end the turn with reason.kind "error" and
+          // a structured error envelope (verified against a real 401: code
+          // AUTH, status 401). The agent still settles to idle afterwards, so
+          // an unclassified turn would report success with an empty response.
+          const reason = (event.data as { reason?: { kind?: unknown; error?: unknown } } | undefined)?.reason;
+          if (reason?.kind === "error") {
+            const error = reason.error as { message?: unknown; code?: unknown; status?: unknown } | undefined;
+            turnError = {
+              message:
+                typeof error?.message === "string"
+                  ? error.message
+                  : JSON.stringify(reason).slice(0, 300),
+              ...(error?.code !== undefined ? { code: error.code } : {}),
+              ...(error?.status !== undefined ? { status: error.status } : {}),
+            };
+          }
         }
       } else if (
         notification.method === "session.status" &&
@@ -382,13 +393,8 @@ export class HarnessAttempt {
         sawReceipt &&
         notification.params["status"] === "idle"
       ) {
-        if (requestError !== undefined) {
-          throw nodeExecutionErrorFromHarness(
-            new Error(
-              `harness reported a request error: ${JSON.stringify(requestError).slice(0, 300)}`,
-            ),
-            this.failureContext(),
-          );
+        if (turnError !== undefined) {
+          throw turnExecutionError(turnError);
         }
         return { finalResponse, events, turnEndKind };
       }
@@ -396,9 +402,51 @@ export class HarnessAttempt {
   }
 }
 
+/**
+ * Classify a turn-level provider error (turn/end reason.kind "error") into a
+ * stable NodeExecutionError: the envelope carries the provider's code/status
+ * (verified against a real 401: code AUTH, status 401), so classification is
+ * structural, not message-pattern guessing. Unknown shapes stay retryable
+ * RUNTIME_UNAVAILABLE unless they clearly say auth or rate limit.
+ */
+export function turnExecutionError(turnError: {
+  message: string;
+  code?: unknown;
+  status?: unknown;
+}): NodeExecutionError {
+  const code = typeof turnError.code === "string" ? turnError.code.toUpperCase() : undefined;
+  const status = typeof turnError.status === "number" ? turnError.status : undefined;
+  const label = code ?? status ?? "unknown";
+  if (status === 401 || status === 403 || code === "AUTH" || code === "FORBIDDEN") {
+    return new NodeExecutionError({
+      code: "AUTH_FAILED",
+      message: `harness turn failed (${label}): ${turnError.message}`,
+      retryable: false,
+    });
+  }
+  if (status === 429 || code === "RATE_LIMIT" || code === "RATE_LIMITED") {
+    return new NodeExecutionError({
+      code: "RATE_LIMITED",
+      message: `harness turn failed (${label}): ${turnError.message}`,
+      retryable: true,
+    });
+  }
+  if (status !== undefined && status >= 500) {
+    return new NodeExecutionError({
+      code: "MODEL_UNAVAILABLE",
+      message: `harness turn failed (${label}): ${turnError.message}`,
+      retryable: true,
+    });
+  }
+  return new NodeExecutionError({
+    code: "RUNTIME_UNAVAILABLE",
+    message: `harness turn failed (${label}): ${turnError.message}`,
+    retryable: true,
+  });
+}
+
 /** Whether the event is the durable enqueue receipt for `messageId` (upstream api.ts). */
-function isInboxReceipt(event: SessionEventEnvelope, messageId: string): boolean {
-  if (event.type !== "agent/inbox/spliced") {
+function isInboxReceipt(event: SessionEventEnvelope, messageId: string): boolean {  if (event.type !== "agent/inbox/spliced") {
     return false;
   }
   const inserted = (event.data as { inserted?: unknown } | undefined)?.inserted;
