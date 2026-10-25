@@ -20,6 +20,8 @@ export type IpcHandlers = {
   setTitleBarOverlay: (colors: { color: string; symbolColor: string }) => void;
   /** Forward one allowlisted contract method call to the Host process. */
   hostCall: (method: unknown, payload: unknown) => Promise<unknown>;
+  /** Encrypt the API key with safeStorage and register the credential ref. */
+  saveKey: (key: unknown) => Promise<{ configured: boolean }>;
 };
 
 /**
@@ -42,6 +44,14 @@ export function registerIpcHandlers(
   ipcMain.handle(
     IPC_CHANNELS.APP_GET_INFO,
     wrap(IPC_CHANNELS.APP_GET_INFO, () => handlers.getAppInfo()),
+  );
+  ipcMain.handle(
+    IPC_CHANNELS.SETTINGS_SAVE_KEY,
+    (event, key: unknown) => {
+      assertAllowedChannel(IPC_CHANNELS.SETTINGS_SAVE_KEY);
+      assertAuthorizedSender(event, isAuthorized);
+      return handlers.saveKey(key);
+    },
   );
   ipcMain.handle(
     IPC_CHANNELS.WINDOW_SHOW,
@@ -97,3 +107,5 @@ export function unregisterIpcHandlers(): void {
     ipcMain.removeHandler(channel);
   }
 }
+
+

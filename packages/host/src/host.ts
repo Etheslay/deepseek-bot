@@ -17,6 +17,7 @@
  * holds the replaced database); the caller restarts the process.
  */
 import { randomUUID } from "node:crypto";
+import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { methodContract, type Method } from "@deepseek-bot/contracts";
 import {
@@ -83,9 +84,56 @@ export interface DeepSeekBotHost {
   shutdown(): Promise<void>;
 }
 
+/**
+ * Default rows the desktop UI references by fixed ids until the contract grows
+ * profile/workspace/policy methods. Seeding keeps a fresh install usable:
+ * bot.create needs a model profile, a workspace and a tool policy.
+ */
+export const DEFAULT_MODEL_PROFILE_ID = "44444444-4444-4444-8444-444444444444";
+const DEFAULT_WORKSPACE_ID = "55555555-5555-4555-8555-555555555555";
+const DEFAULT_TOOL_POLICY_ID = "66666666-6666-4666-8666-666666666666";
+const DEFAULT_CREDENTIAL_REF = "cred:00000000-0000-4000-8000-000000000001";
+
+function seedDefaults(db: OpenedDatabase, layout: DataLayout): void {
+  const now = db.now().toISOString();
+  const workspacePath = join(layout.root, "workspace");
+  mkdirSync(workspacePath, { recursive: true });
+  db.raw
+    .prepare(
+      "INSERT OR IGNORE INTO credentials (ref, label, created_at, updated_at) VALUES (?, 'default', ?, ?);",
+    )
+    .run(DEFAULT_CREDENTIAL_REF, now, now);
+  db.raw
+    .prepare(
+      "INSERT OR IGNORE INTO model_profiles (id, provider, model, endpoint, credential_ref, limits_json, created_at, updated_at) VALUES (?, 'deepseek', 'deepseek-chat', 'https://api.deepseek.com', ?, '{}', ?, ?);",
+    )
+    .run(DEFAULT_MODEL_PROFILE_ID, DEFAULT_CREDENTIAL_REF, now, now);
+  db.raw
+    .prepare(
+      "INSERT OR IGNORE INTO workspaces (id, canonical_path, grants_json, created_at, updated_at) VALUES (?, ?, '[]', ?, ?);",
+    )
+    .run(DEFAULT_WORKSPACE_ID, workspacePath, now, now);
+  db.raw
+    .prepare(
+      "INSERT OR IGNORE INTO tool_policies (id, revision, name, policy_json, created_at, updated_at) VALUES (?, ?, 'default', ?, ?, ?);",
+    )
+    .run(
+      DEFAULT_TOOL_POLICY_ID,
+      randomUUID(),
+      JSON.stringify({
+        filesystem: { enabled: true, operations: ["read", "write"] },
+        shell: { mode: "approval" },
+        network: { mode: "allow" },
+        mcp: { enabled: false, requireApproval: true, servers: [] },
+      }),
+      now,
+      now,
+    );
+}
 export async function createHost(options: HostOptions): Promise<DeepSeekBotHost> {
   const layout = ensureDataLayout(options.dataRoot);
   const db = openDatabase(layout.dbFile);
+  seedDefaults(db, layout);
   const bootGeneration = incrementBootGeneration(db);
   const patches = writeProfilePatches(layout.harnessHome);
   const now = options.now ?? (() => new Date());
@@ -156,7 +204,7 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
   const recoveredRuns = engine.recoverInterruptedRuns();
 
   let closed = false;
-  const context: HostContext = { db, engine, scheduler, layout, now };
+  const context: HostContext = { db, engine, scheduler, layout, now, resolveApiKey: options.resolveApiKey };
   const handlers = buildHandlers(context);
 
   return {
@@ -237,3 +285,7 @@ export function backupDirFor(layout: DataLayout, backupId: string): string {
 export function newBackupId(): string {
   return randomUUID();
 }
+
+
+
+
