@@ -1657,7 +1657,7 @@ function MessageBubble({
             </div>
           )}
           {msg.text}
-          {(EMOJIS.some((e) => (msg.reactions[e] ?? 0) > 0)) && (
+          {!isUser && EMOJIS.some((e) => (msg.reactions[e] ?? 0) > 0) && (
             <div className="reaction-chips">
               {EMOJIS.filter((e) => (msg.reactions[e] ?? 0) > 0).map((e) => (
                 <button
@@ -1673,7 +1673,8 @@ function MessageBubble({
             </div>
           )}
         </div>
-        {pickerOpen &&
+        {!isUser &&
+          pickerOpen &&
           createPortal(
             <>
               <div className="menu-overlay" onClick={() => setPickerOpen(false)} />
@@ -1705,21 +1706,23 @@ function MessageBubble({
           )}
       </div>
       <div className="msg-actions" role="toolbar" aria-label="消息操作">
-        <button
-          type="button"
-          className={"msg-icon-btn" + (pickerOpen ? " active" : "")}
-          data-action="emoji"
-          title="回应"
-          ref={emojiBtnRef}
-          onClick={() => setPickerOpen((v) => !v)}
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
-            <circle cx="9.2" cy="10" r="1" fill="currentColor" />
-            <circle cx="14.8" cy="10" r="1" fill="currentColor" />
-            <path d="M8.6 14a4.2 4.2 0 0 0 6.8 0" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-          </svg>
-        </button>
+        {!isUser && (
+          <button
+            type="button"
+            className={"msg-icon-btn" + (pickerOpen ? " active" : "")}
+            data-action="emoji"
+            title="回应"
+            ref={emojiBtnRef}
+            onClick={() => setPickerOpen((v) => !v)}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
+              <circle cx="9.2" cy="10" r="1" fill="currentColor" />
+              <circle cx="14.8" cy="10" r="1" fill="currentColor" />
+              <path d="M8.6 14a4.2 4.2 0 0 0 6.8 0" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+            </svg>
+          </button>
+        )}
         <button
           type="button"
           className="msg-icon-btn"
