@@ -27,7 +27,7 @@
 - [ ] 发布负责人已记录最新候选提交的自审结论，讨论解决且无管理员绕过。
 - [ ] main 合并候选对应的内容已经构建验证；目标 main 变化必须重建/重审候选。
 
-CI 自动化尚未建立，以上是必需条件；不能创建永远成功的占位 `release-ready` 检查。
+CI 自动化现状：产品打包 CI（`.github/workflows/package.yml`，D11）可从固定源码构建 Windows x64 安装包并产出 SHA-256 artifact；release-ready 检查尚无自动化，以上门槛仍是必需条件，不能创建永远成功的占位 `release-ready` 检查。
 
 ## 4. 发布步骤
 

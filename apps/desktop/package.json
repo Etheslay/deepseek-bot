@@ -11,7 +11,8 @@
     "preview": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "test": "vitest run --config vitest.config.ts",
-    "pack:dir": "electron-vite build && electron-builder --dir --win --x64 --config electron-builder.yml"
+    "pack:dir": "electron-vite build && electron-builder --dir --win --x64 --config electron-builder.yml",
+    "pack:win": "electron-vite build && electron-builder --win nsis --x64 --config electron-builder.yml"
   },
   "dependencies": {
     "@deepseek-bot/contracts": "workspace:*",
