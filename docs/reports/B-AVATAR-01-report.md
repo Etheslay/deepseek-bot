@@ -4,8 +4,8 @@
 - 板块：B / Destinyian
 - 分支：`feature/desktop-avatar-ball`（独立 worktree）
 - 基线：`origin/develop` @ `0c4a9dd`（开工前 fetch 记录）
-- 实现提交：`1a664c2`（球球主体）· `c049d41`（补卡：固定位立牌 + 主题反相）
-- 状态：DONE（待 Integrator 代开草稿 PR / 负责人自审确认）
+- 实现提交：`1a664c2`（球球主体）· `c049d41`（补卡：固定位立牌 + 主题反相）· `32b3432`（R1 有机 soft-blob 立体渲染）
+- 状态：R1 返修完成（同分支 `feature/desktop-avatar-ball` / PR #22；待负责人自审确认）
 
 ## 概述
 
@@ -70,6 +70,40 @@
 - `docs/reports/B-AVATAR-01-light.png`：浅色——预览/侧栏立牌/消息头为黑身白眼；彩色 bot 保持自身色。
 - `docs/reports/B-AVATAR-01-dark.png`：深色——`mono` 预览反相为白身黑眼；彩色 bot 不变。
 
+## R1 返修 · 有机 soft-blob 立体渲染（Owner 纠偏）
+
+**问题**：R0 的身体是纯色 `fill`，在选择器里呈扁平贴纸感，没有官方那种有机 soft-blob / 多瓣 / 果冻形体的体积感；眼睛本身已符合要求，保留不动。
+
+**改法**（全部在 SVG 内完成，仍无外部依赖、无 WebGL）：
+
+| 目标 | 实现 |
+|------|------|
+| 柔和渐变体积 | 身体改为 `radialGradient`（焦点 30%/24%，左上），三档：lit（基色混白 55%）→ base → occluded（基色混黑 34%） |
+| 观察角约 45° 左上 | 高光/镜面/边缘光固定在左上，核心阴影落在右下（渐变中心 68,74） |
+| 边缘光 | 沿轮廓描边，`linearGradient` 左上白 0.7 → 中段透明，宽 2，clip 在形体内 |
+| 镜面高光 | 左上肩椭圆（36,32，12×8.5，-34°），径向渐变 + 高斯模糊 2.6，中心 0.45，避免硬白斑 |
+| 接触阴影 | 形体下方椭圆（50,96，27×3.4）+ 模糊，`--gb-contact`，让球"坐"在立牌上而不是悬浮 |
+| 多瓣 / 果冻 | 新增 `pumpkin`（6 瓣，`40 + 3.2·cos6θ`）；`petal`(3) / `pumpkin`(6) 加柔和径向褶皱（模糊 2.6，clip 内） |
+| 亮暗反相 | mono 不再用纯色 `fill`：三档改用 `--gb-mono-hi/mid/shade` 变量（深色主题 白→浅灰，浅色主题 灰→黑），仍随主题切换 |
+| 保留 | gaze（105ms 阻尼）、眨眼弹簧、状态帧逐点插值、呼吸、固定位立牌（sidebar/message-header/preview 动、inline 静）全部未动；眼睛仅加 0.8px 投影 |
+
+**验证**（Windows 11 · Node v24.16.0 · pnpm 11.28.5）：
+
+- `pnpm lint` → exit 0
+- `pnpm typecheck` → exit 0（6 包）
+- `pnpm --filter @deepseek-bot/desktop test` → **136 passed**（新增 2 例：三档明暗推导、多瓣褶皱元数据；形状总数 16）
+- `pnpm --filter @deepseek-bot/desktop build` → exit 0（renderer JS 1064.51 kB / CSS 100.04 kB）
+- 运行时取证（生产 bundle + 无头 Chrome 1100×720 @2x，驱动脚本 `handoff/r1-capture.mjs`，不入库）：
+  - `B-AVATAR-01-r1-compare.png`：before（纯色）/ after（R1）同主题并排对比
+  - `B-AVATAR-01-r1-picker-dark.png`：深色主题选择器
+  - `B-AVATAR-01-r1-shapes-zoom.png`：16 形体放大（渐变 / 边缘光 / 接触阴影）
+  - `B-AVATAR-01-r1-picker-light.png` · `-light-mono.png`：浅色主题与 mono 反相（深色球）
+  - 断言日志 `B-AVATAR-01-r1-capture-log.json`（shapes=16、colors=13、monoClicked=true）
+
+**顺带修复**：`styles.css` 中 D09 注释处的 em dash 被截断为字节 `E2 80 3F`（文件因此不是合法 UTF-8），已还原为 `E2 80 94`；只改字节，未改任何规则。
+
+**未做**：未接 Agent 状态（仍属 D12）；未加瞳孔高光；未改 `packages/contracts`、IPC、preload。
+
 ## 变更文件
 
 - 新增 `apps/desktop/src/renderer/src/features/avatars/grok-ball-model.ts`（纯几何/状态，可单测）
@@ -81,6 +115,14 @@
 - 改 `styles.css`（`.grok-ball` 基础样式）
 - 删 `avatar-minimal.ts`（被 grok-ball-model 取代）
 - 新增 `apps/desktop/tests/features/grok-ball-model.test.ts`（12 例）
+
+R1 返修（`32b3432`）：
+
+- 改 `grok-ball.tsx`：渐变身体、边缘光、右下核心阴影、接触阴影、软化镜面高光、多瓣褶皱
+- 改 `grok-ball-model.ts`：新增 `shadePalette()`、`pumpkin` 形体（16 款）、`creases` 元数据
+- 改 `styles.css`：新增 `--gb-mono-hi/mid/shade`、`--gb-contact`、`--gb-crease`；移除 mono 纯色 fill；修复无效 UTF-8
+- 改 `tests/features/grok-ball-model.test.ts`：新增明暗推导与褶皱元数据 2 例
+- 新增 `B-AVATAR-01-r1-*.png` 5 张取证图 + `B-AVATAR-01-r1-capture-log.json`
 
 ## 验证证据
 
