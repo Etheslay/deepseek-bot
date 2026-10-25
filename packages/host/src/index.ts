@@ -6,3 +6,8 @@ export {
   type HostOptions,
 } from "./host.js";
 export { buildHandlers, type HandlerCallContext, type HostContext } from "./handlers.js";
+export {
+  startStdioHost,
+  type StdioHostController,
+  type StdioHostOptions,
+} from "./stdio.js";
