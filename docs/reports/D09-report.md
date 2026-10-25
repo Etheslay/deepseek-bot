@@ -130,6 +130,9 @@ apps/desktop/src/renderer/src/features/run-monitor/
 
 ## 7. PR 描述草稿
 
+> **分支已推送**：`feature/run-monitor` → `origin`（功能 `6bd9c40` + 文档 `8b2f6d2` + 本记录 `docs` 提交）。
+> **草稿 PR 创建受阻（如实记录）**：本机未安装 GitHub CLI（`gh` 不在 PATH，常见安装位置亦未找到），无法从命令行创建草稿 PR。由负责人经 https://github.com/Etheslay/deepseek-bot/pull/new/feature/run-monitor 创建（base=`develop`，勾选 Draft），描述可用下文草稿。
+
 > **feat(run-monitor): implement run monitoring, approvals and history UI (D09)**
 >
 > - 运行列表/详情：契约状态机驱动的节点状态与时间线、事件流（去重计数、snapshotRequired 重建、瞬态流）、取消 cancelling→cancelled、失败节点 run.retryNode 入口
