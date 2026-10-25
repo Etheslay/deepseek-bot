@@ -6444,3 +6444,91 @@ select option {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* ============================================================
+   Chat attachments (D26) — pending chips above the composer and
+   attachment cards inside bubbles.
+   ============================================================ */
+
+.attach-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  width: calc(100% - 48px);
+  max-width: 800px;
+  margin: 0 auto 8px;
+}
+
+.attach-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px 4px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--raised);
+  font-size: 0.76rem;
+}
+
+.attach-chip-name {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attach-chip-size {
+  color: var(--muted);
+}
+
+.attach-chip-remove {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.9rem;
+  padding: 0 4px;
+  border-radius: 999px;
+}
+
+.attach-chip-remove:hover {
+  color: var(--text);
+  background: var(--item-hover);
+}
+
+.msg-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 6px 0 2px;
+}
+
+.msg-attachment-image {
+  max-width: 240px;
+  max-height: 180px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  object-fit: contain;
+}
+
+.msg-attachment-file {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--md-inline-bg, rgba(127, 127, 127, 0.12));
+  font-size: 0.78rem;
+}
+
+.msg-attachment-name {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.msg-attachment-size {
+  color: var(--muted);
+}

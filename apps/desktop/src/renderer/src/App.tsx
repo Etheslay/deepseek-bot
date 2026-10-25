@@ -25,6 +25,13 @@ import { WorkflowEditor } from "./features/workflow-editor/workflow-editor.js";
 import { RunMonitor } from "./features/run-monitor/run-monitor.js";
 import { ChatMarkdown } from "./features/chat/chat-markdown.js";
 import type { MentionTable } from "./features/chat/mentions.js";
+import {
+  attachmentAccept,
+  classifyAttachment,
+  formatAttachmentSize,
+  MAX_ATTACHMENT_BYTES,
+  type AttachmentDraft,
+} from "./features/chat/attachments.js";
 import { GlobalSearch } from "./features/search/global-search.js";
 import { buildSearchIndex, type SearchItem } from "./features/search/search-core.js";
 
@@ -50,6 +57,10 @@ type Msg = {
   /** Multi-bot delivery: stacked avatar chips, clickable per bot. */
   deliverTo?: number[];
   peerKey?: number;
+  /** Files sent with the message (D26 renderer slice). */
+  attachments?:
+    | { name: string; size: number; kind: "text" | "image" | "binary"; dataUrl?: string }[]
+    | undefined;
   /** Choice card the bot put to the user (D14 interaction slice). */
   choices?: {
     question: string;
@@ -476,9 +487,13 @@ export function App(): JSX.Element {
     setMenu(null);
   };
 
-    const sendUserMessage = (botKey: number, text: string): void => {
+    const sendUserMessage = (
+    botKey: number,
+    text: string,
+    attachments?: Msg["attachments"],
+  ): void => {
     const t = text.trim();
-    if (!t) {
+    if (!t && !(attachments && attachments.length > 0)) {
       return;
     }
     setChats((prev) => {
@@ -496,12 +511,17 @@ export function App(): JSX.Element {
             mine: [],
             time: Date.now(),
             system: false,
+            attachments: attachments && attachments.length > 0 ? attachments : undefined,
           },
         ],
       };
     });
     setQuoteDraft(null);
-    const reply = `（占位回复）已收到：「${t.slice(0, 24)}」。真实模型会话将在后续里程碑接入。`;
+    const attachNote =
+      attachments && attachments.length > 0
+        ? `已读取附件 ${attachments.map((a) => `${a.name}（${formatAttachmentSize(a.size)}）`).join("、")}；`
+        : "";
+    const reply = `（占位回复）${attachNote}已收到：「${t.slice(0, 24)}」。附件读取经工具网关的真实链路在 D15 写层接线后启用。`;
     setTimeout(() => {
       setChats((prev) => {
         const list = prev[botKey] ?? [];
@@ -1217,7 +1237,7 @@ const logout = (): void => {
               }}
               onPairQuote={(name, text) => setQuoteDraft({ name, text: text.slice(0, 60) })}
               onCancelQuote={() => setQuoteDraft(null)}
-              onSend={(t) => sendUserMessage(selectedBot, t)}
+              onSend={(text, attachments) => sendUserMessage(selectedBot, text, attachments)}
               onAssistant={(t) =>
                 setChats((prev) => ({
                   ...prev,
@@ -1240,7 +1260,7 @@ const logout = (): void => {
               onReact={(msgId, emoji) => toggleReaction(selectedBot, msgId, emoji)}
               onTalkTo={(otherKey) => talkTo(selectedBot, otherKey)}
               onCopy={(t) => void copyText(t)}
-              onAttach={() => setToast("添加附件（后续提供）")}
+              onNotify={(message) => setToast(message)}
               onOpenBot={(botKey) => {
                 const target = bots.find((b) => b.key === botKey);
                 if (target) {
@@ -1825,6 +1845,28 @@ function MessageBubble({
               引用 {msg.quote.name}：{msg.quote.text}
             </div>
           )}
+          {msg.attachments && msg.attachments.length > 0 && (
+            <div className="msg-attachments">
+              {msg.attachments.map((file) =>
+                file.kind === "image" && file.dataUrl ? (
+                  <img
+                    key={file.name}
+                    className="msg-attachment-image"
+                    src={file.dataUrl}
+                    alt={file.name}
+                    draggable={false}
+                  />
+                ) : (
+                  <span className="msg-attachment-file" key={file.name}>
+                    <span className="msg-attachment-name">{file.name}</span>
+                    <span className="msg-attachment-size">
+                      {formatAttachmentSize(file.size)}
+                    </span>
+                  </span>
+                ),
+              )}
+            </div>
+          )}
           {isUser ? (
             msg.text
           ) : (
@@ -1981,9 +2023,9 @@ function BotsPlaceholder({
   onReact,
   onTalkTo,
   onCopy,
-  onAttach,
   onAssistant,
   onOpenBot,
+  onNotify,
 }: {
   bots: UiBot[];
   groups: Group[];
@@ -1997,13 +2039,13 @@ function BotsPlaceholder({
   onQuote: (msg: Msg) => void;
   onPairQuote: (name: string, text: string) => void;
   onCancelQuote: () => void;
-  onSend: (text: string) => void;
+  onSend: (text: string, attachments?: Msg["attachments"]) => void;
   onReact: (msgId: number, emoji: Emoji) => void;
   onTalkTo: (otherKey: number) => void;
   onCopy: (text: string) => void;
-  onAttach: () => void;
   onAssistant: (text: string) => void;
   onOpenBot: (botKey: number) => void;
+  onNotify: (message: string) => void;
 }): JSX.Element {
   const service = useService();
   const [draft, setDraft] = useState("");
@@ -2012,6 +2054,8 @@ function BotsPlaceholder({
   const [stream, setStream] = useState<(StreamState & { forKey: number }) | null>(null);
   const [failedText, setFailedText] = useState("");
   const [answeredChoices, setAnsweredChoices] = useState<Record<number, string>>({});
+  const [pendingFiles, setPendingFiles] = useState<AttachmentDraft[]>([]);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const streamRef = useRef<StreamHandle | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -2139,12 +2183,49 @@ function BotsPlaceholder({
   );
   const firstNoticeId = msgs.find((message) => message.notice)?.id ?? null;
 
-  const send = (): void => {
-    const text = draft.trim();
-    if (!text) {
+  const readPickedFiles = async (files: FileList | null): Promise<void> => {
+    if (!files || files.length === 0) {
       return;
     }
-    onSend(text);
+    const drafts: AttachmentDraft[] = [];
+    for (const file of [...files]) {
+      if (file.size > MAX_ATTACHMENT_BYTES) {
+        onNotify(`${file.name} 超过 2 MB 上限`);
+        continue;
+      }
+      const kind = classifyAttachment(file.type, file.name);
+      if (kind === "text") {
+        drafts.push({ name: file.name, size: file.size, mime: file.type, text: await file.text() });
+      } else if (kind === "image") {
+        const dataUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result));
+          reader.onerror = () => reject(reader.error);
+          reader.readAsDataURL(file);
+        });
+        drafts.push({ name: file.name, size: file.size, mime: file.type, dataUrl });
+      } else {
+        onNotify(`${file.name} 暂不支持预览（仅文本与图片）`);
+      }
+    }
+    if (drafts.length > 0) {
+      setPendingFiles((prev) => [...prev, ...drafts]);
+    }
+  };
+
+  const send = (): void => {
+    const text = draft.trim();
+    if (!text && pendingFiles.length === 0) {
+      return;
+    }
+    const outgoing: NonNullable<Msg["attachments"]> = pendingFiles.map((f) => ({
+      name: f.name,
+      size: f.size,
+      kind: classifyAttachment(f.mime, f.name),
+      ...(f.dataUrl !== undefined ? { dataUrl: f.dataUrl } : {}),
+    }));
+    onSend(text, outgoing.length > 0 ? outgoing : undefined);
+    setPendingFiles([]);
     setFailedText(text);
     setDraft("");
     if (streamRef.current) {
@@ -2368,6 +2449,26 @@ function BotsPlaceholder({
           </>
         )}
       </div>
+      {pendingFiles.length > 0 && (
+        <div className="attach-chips" aria-label="待发送附件">
+          {pendingFiles.map((file, index) => (
+            <span className="attach-chip" key={`${file.name}-${index}`}>
+              <span className="attach-chip-name">{file.name}</span>
+              <span className="attach-chip-size">{formatAttachmentSize(file.size)}</span>
+              <button
+                type="button"
+                className="attach-chip-remove"
+                aria-label={`移除附件 ${file.name}`}
+                onClick={() =>
+                  setPendingFiles((prev) => prev.filter((_, i) => i !== index))
+                }
+              >
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
       {quoteDraft && (
         <div className="quote-chip">
           <span>
@@ -2378,6 +2479,18 @@ function BotsPlaceholder({
           </button>
         </div>
       )}
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        accept={attachmentAccept()}
+        style={{ display: "none" }}
+        aria-label="选择附件"
+        onChange={(event) => {
+          void readPickedFiles(event.target.files);
+          event.target.value = "";
+        }}
+      />
       <div className="composer">
         <div className="composer-menu-wrap">
           <button
@@ -2399,7 +2512,7 @@ function BotsPlaceholder({
                   className="menu-item"
                   onClick={() => {
                     setPlusOpen(false);
-                    onAttach();
+                    fileInputRef.current?.click();
                   }}
                 >
                   <MenuIcon d="M21 12.5 12.5 21a5 5 0 0 1-7-7l8-8a3.5 3.5 0 0 1 5 5l-8 8a1.8 1.8 0 0 1-2.5-2.5L15 4.5" />
@@ -2471,7 +2584,7 @@ function BotsPlaceholder({
             />
           </svg>
         </span>
-        <button type="button" className="send-btn" aria-label="发送" disabled={!draft.trim()} onClick={send}>
+        <button type="button" className="send-btn" aria-label="发送" disabled={!draft.trim() && pendingFiles.length === 0} onClick={send}>
           ↑
         </button>
       </div>
