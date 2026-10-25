@@ -6192,3 +6192,151 @@ select option {
   --md-tk-fn: #2a5db0;
   --md-tk-type: #0f766e;
 }
+
+/* ============================================================
+   Chat interactions (D14 interaction slice) — mention chips,
+   choice cards, delivery notice with stacked avatars.
+   ============================================================ */
+
+.mention-chip {
+  display: inline-flex;
+  align-items: center;
+  border: none;
+  background: transparent;
+  padding: 0 1px;
+  font: inherit;
+  font-weight: 600;
+  color: var(--mention-color, #6ea8ff);
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.mention-chip:hover {
+  text-decoration: underline;
+  opacity: 0.85;
+}
+
+.mention-chip:focus-visible {
+  outline: 2px solid var(--mention-color, #6ea8ff);
+  outline-offset: 1px;
+}
+
+/* --- choice card (A/B/C/D) --- */
+
+.choice-card {
+  margin-top: 8px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 10px 12px;
+  background: var(--panel);
+  max-width: 420px;
+}
+
+.choice-question {
+  font-size: 0.86rem;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.choice-options {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.choice-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  padding: 7px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--raised);
+  color: inherit;
+  font: inherit;
+  font-size: 0.84rem;
+  cursor: pointer;
+}
+
+.choice-option:hover {
+  border-color: var(--mention-color, #6ea8ff);
+}
+
+.choice-option:focus-visible {
+  outline: 2px solid var(--mention-color, #6ea8ff);
+  outline-offset: 1px;
+}
+
+.choice-key {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: 7px;
+  background: var(--md-inline-bg, rgba(127, 127, 127, 0.16));
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.choice-other .choice-key {
+  font-size: 0.8rem;
+}
+
+.choice-answered {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+/* --- delivery notice (avatar stack) --- */
+
+.deliver-notice {
+  align-self: center;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin: 2px 0;
+}
+
+.deliver-label {
+  white-space: nowrap;
+}
+
+.avatar-stack {
+  display: flex;
+  align-items: center;
+}
+
+.avatar-stack .stack-avatar {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 2px solid var(--bg);
+  border-radius: 999px;
+  background: var(--bg);
+  cursor: pointer;
+}
+
+.avatar-stack .stack-avatar + .stack-avatar {
+  margin-left: -8px;
+}
+
+.avatar-stack .stack-avatar:hover {
+  z-index: 1;
+  border-color: var(--border);
+}
+
+.avatar-stack .stack-avatar:focus-visible {
+  outline: 2px solid var(--mention-color, #6ea8ff);
+  z-index: 1;
+}
+
+.deliver-count {
+  white-space: nowrap;
+}

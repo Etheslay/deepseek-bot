@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useLayoutEffect, useRef, useState, type JSX } from "react";
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type JSX } from "react";
 import { createPortal } from "react-dom";
 import { useBots, type UiBot } from "./features/bots/use-bots.js";
 import { BotForm } from "./features/bots/bot-form.js";
@@ -24,6 +24,7 @@ import {
 import { WorkflowEditor } from "./features/workflow-editor/workflow-editor.js";
 import { RunMonitor } from "./features/run-monitor/run-monitor.js";
 import { ChatMarkdown } from "./features/chat/chat-markdown.js";
+import type { MentionTable } from "./features/chat/mentions.js";
 
 
 type Group = { key: number; name: string };
@@ -44,7 +45,16 @@ type Msg = {
   speakerKey?: number;
   /** Centered bot-to-bot delivery metadata line. */
   notice?: { label: string; otherKey: number } | null;
+  /** Multi-bot delivery: stacked avatar chips, clickable per bot. */
+  deliverTo?: number[];
   peerKey?: number;
+  /** Choice card the bot put to the user (D14 interaction slice). */
+  choices?: {
+    question: string;
+    options: { id: string; label: string }[];
+    other?: boolean;
+    answered?: string | undefined;
+  } | undefined;
   /** System notices (e.g. blocked cross-group requests) render as a centered muted line. */
   system?: boolean;
 };
@@ -593,6 +603,7 @@ export function App(): JSX.Element {
           time: now,
           system: true,
           notice: { label: "已发消息给", otherKey: toKey },
+          deliverTo: [toKey],
           peerKey: toKey,
         },
       ],
@@ -607,7 +618,7 @@ export function App(): JSX.Element {
           mine: [],
           time: now,
           system: true,
-          notice: { label: "消息来自", otherKey: fromKey },
+          notice: { label: "已只回", otherKey: fromKey },
           peerKey: fromKey,
         },
       ],
@@ -659,6 +670,26 @@ $$\\sum_{i=1}^{n} i = \\frac{n(n+1)}{2}$$`,
             time: Date.now(),
             system: false,
             speakerKey: bot.key,
+          },
+          {
+            id: bot.key + 0.5,
+            from: "bot",
+            text: `想先试哪种能力？也可以在输入框里直接提需求，或 @${bot.bot.name} 让我接手。`,
+            quote: null,
+            reactions: {},
+            mine: [],
+            time: Date.now(),
+            system: false,
+            speakerKey: bot.key,
+            choices: {
+              question: "想先试哪种能力？",
+              options: [
+                { id: "A", label: "深度思考一个复杂问题" },
+                { id: "B", label: "帮我起草一个工作流" },
+                { id: "C", label: "查看运行监控" },
+              ],
+              other: true,
+            },
           },
         ],
       };
@@ -1120,6 +1151,14 @@ const logout = (): void => {
               onTalkTo={(otherKey) => talkTo(selectedBot, otherKey)}
               onCopy={(t) => void copyText(t)}
               onAttach={() => setToast("添加附件（后续提供）")}
+              onOpenBot={(botKey) => {
+                const target = bots.find((b) => b.key === botKey);
+                if (target) {
+                  setSelectedBot(botKey);
+                  setQuoteDraft(null);
+                  ensureChat(target);
+                }
+              }}
             />
           ) : (
             <div className="empty-state">
@@ -1612,6 +1651,9 @@ function MessageBubble({
   msg,
   speaker,
   accent,
+  mentions,
+  onMentionClick,
+  onChoice,
   onReact,
   onQuote,
   onCopy,
@@ -1619,6 +1661,9 @@ function MessageBubble({
   msg: Msg;
   speaker: UiBot | null;
   accent: string;
+  mentions?: MentionTable;
+  onMentionClick?: (botKey: number) => void;
+  onChoice?: (msgId: number, optionLabel: string, other: boolean) => void;
   onReact: (msgId: number, emoji: Emoji) => void;
   onQuote: (msg: Msg) => void;
   onCopy: (text: string) => void;
@@ -1683,7 +1728,47 @@ function MessageBubble({
               引用 {msg.quote.name}：{msg.quote.text}
             </div>
           )}
-          {isUser ? msg.text : <ChatMarkdown text={msg.text} />}
+          {isUser ? (
+            msg.text
+          ) : (
+            <ChatMarkdown
+              text={msg.text}
+              mentions={mentions}
+              onMentionClick={onMentionClick}
+            />
+          )}
+          {msg.choices && (
+            <div className="choice-card" role="group" aria-label={msg.choices.question}>
+              <div className="choice-question">{msg.choices.question}</div>
+              {msg.choices.answered ? (
+                <div className="choice-answered">已选择：{msg.choices.answered}</div>
+              ) : (
+                <div className="choice-options">
+                  {msg.choices.options.map((option) => (
+                    <button
+                      key={option.id}
+                      type="button"
+                      className="choice-option"
+                      onClick={() => onChoice?.(msg.id, option.label, false)}
+                    >
+                      <span className="choice-key">{option.id}</span>
+                      <span>{option.label}</span>
+                    </button>
+                  ))}
+                  {msg.choices.other && (
+                    <button
+                      type="button"
+                      className="choice-option choice-other"
+                      onClick={() => onChoice?.(msg.id, "", true)}
+                    >
+                      <span className="choice-key">✎</span>
+                      <span>其他，我说明</span>
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
           {!isUser && EMOJIS.some((e) => (msg.reactions[e] ?? 0) > 0) && (
             <div className="reaction-chips">
               {EMOJIS.filter((e) => (msg.reactions[e] ?? 0) > 0).map((e) => (
@@ -1801,6 +1886,7 @@ function BotsPlaceholder({
   onCopy,
   onAttach,
   onAssistant,
+  onOpenBot,
 }: {
   bots: UiBot[];
   groups: Group[];
@@ -1820,6 +1906,7 @@ function BotsPlaceholder({
   onCopy: (text: string) => void;
   onAttach: () => void;
   onAssistant: (text: string) => void;
+  onOpenBot: (botKey: number) => void;
 }): JSX.Element {
   const service = useService();
   const [draft, setDraft] = useState("");
@@ -1827,9 +1914,29 @@ function BotsPlaceholder({
   const [detailOther, setDetailOther] = useState<number | null>(null);
   const [stream, setStream] = useState<(StreamState & { forKey: number }) | null>(null);
   const [failedText, setFailedText] = useState("");
+  const [answeredChoices, setAnsweredChoices] = useState<Record<number, string>>({});
   const streamRef = useRef<StreamHandle | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
   const me = bots.find((b) => b.key === selectedBot);
+
+  /** @Name chips link to any known bot; color follows its avatar. */
+  const mentionTable = useMemo<MentionTable>(() => {
+    const table: MentionTable = new Map();
+    for (const bot of bots) {
+      table.set(bot.bot.name, { botKey: bot.key, color: avatarColor(bot.avatar) });
+    }
+    return table;
+  }, [bots]);
+
+  const handleChoice = (msgId: number, optionLabel: string, other: boolean): void => {
+    if (other) {
+      inputRef.current?.focus();
+      return;
+    }
+    setAnsweredChoices((prev) => ({ ...prev, [msgId]: optionLabel }));
+    onSend(`我选择：${optionLabel}`);
+  };
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
@@ -2040,7 +2147,35 @@ function BotsPlaceholder({
             <Fragment key={m.id}>
               {showTime && <div className="chat-time">{formatChatTime(m.time)}</div>}
               {m.notice ? (
-                m.id === firstNoticeId ? (
+                m.deliverTo ? (
+                  <div className="deliver-notice" role="status">
+                    <span className="deliver-label">{m.notice.label}</span>
+                    <span className="avatar-stack">
+                      {m.deliverTo.map((key) => {
+                        const target = bots.find((bot) => bot.key === key);
+                        return (
+                          <button
+                            key={key}
+                            type="button"
+                            className="stack-avatar"
+                            title={`打开 ${target?.bot.name ?? "?"} 的会话`}
+                            aria-label={`打开 ${target?.bot.name ?? "?"} 的会话`}
+                            onClick={() => onOpenBot(key)}
+                          >
+                            <AvatarView
+                              avatar={target?.avatar ?? me.avatar}
+                              variant="inline"
+                              size={20}
+                            />
+                          </button>
+                        );
+                      })}
+                    </span>
+                    {m.deliverTo.length > 1 && (
+                      <span className="deliver-count">{m.deliverTo.length} 个 Bot</span>
+                    )}
+                  </div>
+                ) : m.id === firstNoticeId ? (
                   <div className="chat-summary">
                     <span className="chat-summary-label">{pairTotal} 条消息往来：</span>
                     {pairPeers.map((peerKey, peerIndex) => {
@@ -2066,9 +2201,17 @@ function BotsPlaceholder({
                 <div className="sys-line">{m.text}</div>
               ) : (
                 <MessageBubble
-                  msg={m}
+                  msg={{
+                    ...m,
+                    choices: m.choices
+                      ? { ...m.choices, answered: m.choices.answered ?? answeredChoices[m.id] }
+                      : undefined,
+                  }}
                   speaker={speaker}
                   accent={avatarColor(me.avatar)}
+                  mentions={mentionTable}
+                  onMentionClick={onOpenBot}
+                  onChoice={handleChoice}
                   onReact={onReact}
                   onQuote={onQuote}
                   onCopy={onCopy}
@@ -2206,6 +2349,7 @@ function BotsPlaceholder({
           )}
         </div>
         <input
+          ref={inputRef}
           className="composer-input"
           placeholder={`给 ${me.bot.name} 发消息`}
           value={draft}
