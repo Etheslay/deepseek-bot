@@ -12,6 +12,12 @@ files:
 extraResources:
   - from: ../../docs/THIRD_PARTY_NOTICES.md
     to: THIRD_PARTY_NOTICES.md
+  # D12: the Host child process (Node >= 24 entry) ships outside the asar —
+  # the desktop main spawns it via resources/host/main.js. `pack:win` must
+  # build @deepseek-bot/host first (pnpm --filter @deepseek-bot/host build);
+  # the Node >= 24 runtime itself is a D13 packaging item.
+  - from: ../../packages/host/dist
+    to: host
 # D11 (FR-10): per-user NSIS installer. No admin rights, no HKLM, no system
 # service. User data lives under %APPDATA%\DeepSeekBot (packages/storage
 # layout.ts) and is kept on uninstall by default — documented in RELEASE notes.

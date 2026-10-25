@@ -31,9 +31,10 @@ export default tseslint.config(
     },
   },
   {
-    // Node test scaffolding scripts (e.g. the fake harness runtime) are plain
-    // ESM outside TypeScript, so the Node globals must be declared here.
-    files: ["**/src/testing/*.mjs"],
+    // Node test scaffolding scripts (e.g. the fake harness and fake host
+    // runtimes) are plain ESM outside TypeScript, so the Node globals must
+    // be declared here.
+    files: ["**/src/testing/*.mjs", "**/tests/**/fixtures/*.mjs"],
     languageOptions: {
       globals: {
         console: "readonly",

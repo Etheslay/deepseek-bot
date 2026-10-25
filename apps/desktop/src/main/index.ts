@@ -1,11 +1,49 @@
-import { app, BrowserWindow, Menu, Tray, nativeImage, session } from "electron";
+import { app, BrowserWindow, Menu, Tray, nativeImage, safeStorage, session } from "electron";
 import { join } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
 import { createPrimaryWindowSenderGuard } from "./ipc/guards.js";
 import { registerIpcHandlers, unregisterIpcHandlers } from "./ipc/registry.js";
+import {
+  spawnHostProcess,
+  isAllowedHostMethod,
+  type HostProcessClient,
+} from "./host-client.js";
+import { DATA_ROOT_DIR_NAME, HOST_EVENT_MISSED } from "../shared/ipc-channels.js";
 
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let isQuitting = false;
+let hostClient: HostProcessClient | null = null;
+
+/**
+ * Data root mirrors storage's layout (env override first). The storage
+ * package itself is not imported here: its index pulls node:sqlite, which
+ * Electron 38's bundled Node 22 does not provide (ARCHITECTURE §4) — the
+ * Host child owns the database.
+ */
+function resolveDataRoot(): string {
+  const override = process.env["DEEPSEEK_BOT_DATA_ROOT"];
+  if (override !== undefined && override.length > 0) {
+    return override;
+  }
+  return join(app.getPath("appData"), DATA_ROOT_DIR_NAME);
+}
+
+/**
+ * Decrypt one credential ref through DPAPI (safeStorage). The Host only ever
+ * sees the resulting key transiently inside the harness child's environment.
+ */
+async function decryptCredential(credentialRef: string): Promise<string> {
+  if (!/^cred:[0-9a-fA-F-]{36}$/.test(credentialRef)) {
+    throw new Error(`malformed credential ref: ${credentialRef.slice(0, 9)}…`);
+  }
+  if (!safeStorage.isEncryptionAvailable()) {
+    throw new Error("credential encryption is not available on this system");
+  }
+  const fileName = `${credentialRef.slice("cred:".length)}.blob`;
+  const blob = readFileSync(join(resolveDataRoot(), "credentials", fileName));
+  return safeStorage.decryptString(blob);
+}
 
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
@@ -157,6 +195,15 @@ function registerShellIpc(win: BrowserWindow): void {
         version: app.getVersion(),
         platform: process.platform,
       }),
+      hostCall: (method, payload) => {
+        if (!isAllowedHostMethod(method)) {
+          return Promise.reject(new Error(`unknown host method`));
+        }
+        if (hostClient === null) {
+          return Promise.reject(new Error("host process is not running"));
+        }
+        return hostClient.call(method, payload);
+      },
       showWindow: () => {
         win.show();
         win.focus();
@@ -209,6 +256,26 @@ if (gotLock) {
 
     denyAllPermissions();
 
+    // The Host owns the database, engine, scheduler and the pinned Harness
+    // adapter (D12). It starts with the shell and dies with it; renderer
+    // contract calls forward through the HOST_CALL channel. The entry ships
+    // as an extraResource when packaged and falls back to the monorepo build
+    // in development.
+    const hostEntryCandidates = [
+      join(process.resourcesPath, "host", "main.js"),
+      join(app.getAppPath(), "..", "..", "packages", "host", "dist", "main.js"),
+    ];
+    hostClient = spawnHostProcess({
+      entryPath: hostEntryCandidates.find((candidate) => existsSync(candidate)) ?? hostEntryCandidates[0]!,
+      dataRoot: resolveDataRoot(),
+      decryptCredential,
+    });
+    hostClient.onMissed((notices) => {
+      if (mainWindow !== null && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send(HOST_EVENT_MISSED, notices);
+      }
+    });
+
     mainWindow = createMainWindow();
     tray = createTray(mainWindow);
     registerShellIpc(mainWindow);
@@ -228,6 +295,9 @@ if (gotLock) {
     unregisterIpcHandlers();
     tray?.destroy();
     tray = null;
+    // Graceful host teardown: host/shutdown request, exit wait, kill fallback.
+    void hostClient?.shutdown();
+    hostClient = null;
   });
 
   app.on("window-all-closed", () => {
