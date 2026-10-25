@@ -5795,3 +5795,26 @@ select option {
   background: rgba(0, 0, 0, 0.04);
 }
 
+
+/* 15 soft shapes: 5 columns × 3 rows in the compact create dialog. */
+.bot-form.minimal .shape-grid {
+  grid-template-columns: repeat(5, 44px);
+}
+
+.avatar-minimal-svg {
+  display: block;
+  flex: 0 0 auto;
+  overflow: visible;
+}
+
+.color-btn.mono-color {
+  display: grid;
+  place-items: center;
+  padding: 0;
+  overflow: hidden;
+}
+
+.mono-color .avatar-minimal-svg {
+  width: 24px;
+  height: 24px;
+}

@@ -1,7 +1,4 @@
-/**
- * Avatar renderer: theme-aware solid bot and Minimal geometric shapes.
- * UI-only selection; never persisted.
- */
+/** Avatar renderer: rounded Minimal shapes and the theme-aware mono bot. */
 import { useEffect, useRef, useState, type JSX } from "react";
 import type { Avatar } from "./avatar-meta.js";
 import { MINIMAL_SHAPES } from "./avatar-minimal.js";
@@ -12,9 +9,10 @@ function MinimalAvatar(props: {
   size: number;
   mono?: boolean;
 }): JSX.Element {
-  const ref = useRef<HTMLSpanElement | null>(null);
+  const ref = useRef<SVGSVGElement | null>(null);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const shape = MINIMAL_SHAPES[props.shapeIndex] ?? MINIMAL_SHAPES[0]!;
+  const eyeY = shape.eyeY ?? 46;
 
   useEffect(() => {
     const onMove = (event: MouseEvent): void => {
@@ -40,25 +38,31 @@ function MinimalAvatar(props: {
   }, [props.size]);
 
   return (
-    <span
+    <svg
       ref={ref}
-      className={"avatar-minimal" + (props.mono ? " mono" : "")}
-      style={{
-        background: props.color,
-        borderRadius: shape.radius,
-        clipPath: shape.clipPath,
-        width: props.size,
-        height: props.size,
-      }}
+      className="avatar-minimal-svg"
+      width={props.size}
+      height={props.size}
+      viewBox="0 0 100 100"
       aria-hidden="true"
     >
-      <span className="eye left">
-        <span className="pupil" style={{ transform: `translate(${offset.x}px, ${offset.y}px)` }} />
-      </span>
-      <span className="eye right">
-        <span className="pupil" style={{ transform: `translate(${offset.x}px, ${offset.y}px)` }} />
-      </span>
-    </span>
+      <path d={shape.path} fill={props.mono ? "var(--avatar-mono-bg)" : props.color} />
+      {props.mono ? (
+        <g transform={`translate(${offset.x} ${offset.y})`}>
+          <circle cx="32" cy={eyeY} r="7" fill="var(--avatar-mono-eye)" />
+          <circle cx="68" cy={eyeY} r="7" fill="var(--avatar-mono-eye)" />
+        </g>
+      ) : (
+        <>
+          <circle cx="32" cy={eyeY} r="8" fill="#ffffff" />
+          <circle cx="68" cy={eyeY} r="8" fill="#ffffff" />
+          <g transform={`translate(${offset.x} ${offset.y})`}>
+            <circle cx="32" cy={eyeY} r="4" fill="#1b1b1f" />
+            <circle cx="68" cy={eyeY} r="4" fill="#1b1b1f" />
+          </g>
+        </>
+      )}
+    </svg>
   );
 }
 

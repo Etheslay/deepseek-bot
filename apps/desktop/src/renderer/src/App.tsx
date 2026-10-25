@@ -269,6 +269,11 @@ export function App(): JSX.Element {
   }, [theme]);
 
   useEffect(() => {
+    if (modalOpen && !editingBot) {
+      setAvatar({ kind: "mono" });
+    }
+  }, [modalOpen, editingBot]);
+  useEffect(() => {
     if (!historyOpen || selectedBot === null) {
       return;
     }

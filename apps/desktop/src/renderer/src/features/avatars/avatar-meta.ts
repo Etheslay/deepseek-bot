@@ -1,8 +1,7 @@
 /**
  * Avatar metadata (UI-only, never persisted).
  *
- * Only two kinds remain: a theme-aware solid bot and the Minimal geometric
- * shapes. Animal faces and emoji avatars were removed deliberately.
+ * Minimal geometric shapes plus a theme-aware black/white bot.
  */
 import { MINIMAL_COLORS, MINIMAL_SHAPES } from "./avatar-minimal.js";
 
