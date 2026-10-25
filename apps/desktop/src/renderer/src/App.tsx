@@ -21,7 +21,6 @@ import {
   avatarColor,
   type Avatar as AvatarKind,
 } from "./features/avatars/avatar-meta.js";
-import { DOLPHIN_LOGO_URL } from "./features/avatars/preset-urls.js";
 import { WorkflowEditor } from "./features/workflow-editor/workflow-editor.js";
 import { RunMonitor } from "./features/run-monitor/run-monitor.js";
 
@@ -141,7 +140,11 @@ export function App(): JSX.Element {
   const [editingBot, setEditingBot] = useState<UiBot | null>(null);
   const [shape, setShape] = useState(0);
   const [color, setColor] = useState(2);
-  const [avatar, setAvatar] = useState<AvatarKind>(() => ({ kind: "mono" }));
+  const [avatar, setAvatar] = useState<AvatarKind>(() => ({
+    kind: "grok",
+    shape: "blob",
+    color: "#3b93f0",
+  }));
   const [modalGroup, setModalGroup] = useState<number>(UNGROUPED);
 
   const [groups, setGroups] = useState<Group[]>([{ key: UNGROUPED, name: "未分组" }]);
@@ -270,7 +273,7 @@ export function App(): JSX.Element {
 
   useEffect(() => {
     if (modalOpen && !editingBot) {
-      setAvatar({ kind: "mono" });
+      setAvatar({ kind: "grok", shape: "blob", color: "#3b93f0" });
     }
   }, [modalOpen, editingBot]);
   useEffect(() => {
@@ -359,13 +362,13 @@ export function App(): JSX.Element {
     return () => clearTimeout(t);
   }, [toast]);
 
-  const selectedBotName =
-    bots.find((b) => b.key === selectedBot)?.bot.name ?? "DeepSeek Bot";
+  const selectedBotEntry = bots.find((b) => b.key === selectedBot);
+  const selectedBotName = selectedBotEntry?.bot.name ?? "DeepSeek Bot";
 
   const openCreateBotModal = () => {
     setShape(0);
     setColor(2);
-    setAvatar({ kind: "mono" });
+    setAvatar({ kind: "grok", shape: "blob", color: "#3b93f0" });
     setModalGroup(
       groups.find((g) => g.name === "未分组")?.key ?? groups[0]?.key ?? UNGROUPED,
     );
@@ -705,7 +708,11 @@ const logout = (): void => {
     <div className="shell">
       <header className="top">
         <span className="page-chip">
-          <BlobMark />
+          {selectedBotEntry ? (
+            <AvatarView avatar={selectedBotEntry.avatar} variant="message-header" />
+          ) : (
+            <BlobMark />
+          )}
           {selectedBotName}
         </span>
         <button
@@ -875,8 +882,7 @@ const logout = (): void => {
         </div>
         <div className="side-identity">
           <span className="big-avatar">
-            <img className="identity-logo" src={DOLPHIN_LOGO_URL} alt="" draggable={false} />
-            <span className="presence-dot" />
+            <AvatarView avatar={{ kind: "grok", shape: "circle", color: "#3b93f0" }} variant="preview" size={84} />
           </span>
           <span className="identity-name">DeepSeek Bot</span>
         </div>
@@ -945,10 +951,13 @@ const logout = (): void => {
                       setDragging(true);
                       const ghost = document.createElement("div");
                       ghost.className = "drag-ghost";
-                      if (b.avatar.kind === "minimal") {
+                      if (b.avatar.kind === "grok") {
                         const face = document.createElement("span");
                         face.className = "drag-ghost-avatar drag-ghost-minimal";
-                        face.style.background = b.avatar.color;
+                        face.style.background =
+                          b.avatar.color === "mono"
+                            ? "var(--avatar-mono-bg)"
+                            : b.avatar.color;
                         ghost.append(face);
                       } else {
                         const face = document.createElement("span");
@@ -975,7 +984,7 @@ const logout = (): void => {
                       setMenu({ x: e.clientX, y: e.clientY, botKey: b.key });
                     }}
                   >
-                    <AvatarView avatar={b.avatar} size={36} />
+                    <AvatarView avatar={b.avatar} variant="sidebar" size={36} />
                     <span className="tab-label">
                       <span className="tab-title">
                         {b.bot.name}
@@ -1334,10 +1343,10 @@ const logout = (): void => {
                 onCancel={() => setModalOpen(false)}
                 previewSlot={
                   <div className="preview">
-                    <AvatarView avatar={avatar} size={editingBot ? 100 : 80} />
+                    <AvatarView avatar={avatar} variant="preview" size={editingBot ? 100 : 80} />
                   </div>
                 }
-                avatarSlot={<AvatarPicker value={avatar} onChange={setAvatar} />}
+                avatarSlot={<AvatarPicker value={avatar} onChange={setAvatar} theme={theme} />}
                 groupSlot={
                   !editingBot && (
                     <div className="group-pick compact">
@@ -1637,7 +1646,7 @@ function MessageBubble({
   return (
     <div className={"msg-row" + (isUser ? " user" : " bot")}>
       {!isUser && speaker && (
-        <AvatarView avatar={speaker.avatar} size={34} />
+        <AvatarView avatar={speaker.avatar} variant="inline" size={34} />
       )}
       <div className="hover-wrap">
         {!isUser && speaker ? (
@@ -1824,9 +1833,9 @@ function BotsPlaceholder({
       <div className="pair-view">
         <header className="pair-head">
           <span className="pair-title">
-            <AvatarView avatar={me.avatar} size={26} />
+            <AvatarView avatar={me.avatar} variant="inline" size={26} />
             <span className="pair-arrow">⇄</span>
-            <AvatarView avatar={peer?.avatar ?? me.avatar} size={26} />
+            <AvatarView avatar={peer?.avatar ?? me.avatar} variant="inline" size={26} />
             <span>{peer?.bot.name ?? "?"}</span>
           </span>
         </header>
@@ -1835,7 +1844,7 @@ function BotsPlaceholder({
             const speaker = bots.find((bot) => bot.key === turn.speakerKey);
             return (
               <div className="pair-turn" key={turn.id}>
-                <AvatarView avatar={speaker?.avatar ?? me.avatar} size={30} />
+                <AvatarView avatar={speaker?.avatar ?? me.avatar} variant="inline" size={30} />
                 <div className="pair-turn-main">
                   <span
                     className="pair-speaker"
@@ -2027,7 +2036,7 @@ function BotsPlaceholder({
                             title={`查看与 ${peer?.bot.name ?? "?"} 的消息往来`}
                             onClick={() => setDetailOther(peerKey)}
                           >
-                            <AvatarView avatar={peer?.avatar ?? me.avatar} size={16} />
+                            <AvatarView avatar={peer?.avatar ?? me.avatar} variant="inline" size={16} />
                             <span>{peer?.bot.name ?? "?"}</span>
                           </button>
                         </Fragment>
@@ -2165,7 +2174,7 @@ function BotsPlaceholder({
                           setPlusOpen(false);
                         }}
                       >
-                        <AvatarView avatar={b.avatar} size={22} />
+                        <AvatarView avatar={b.avatar} variant="inline" size={22} />
                         <span className="tab-title">{b.bot.name}</span>
                         <span className="composer-menu-hint">
                           {groups.find((g) => g.key === b.group)?.name ?? "?"}
@@ -2211,3 +2220,6 @@ function BotsPlaceholder({
     </div>
   );
 }
+
+
+

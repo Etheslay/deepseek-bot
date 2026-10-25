@@ -1,0 +1,20 @@
+{
+  "capturedAt": "2026-10-25T11:15:18.181Z",
+  "themeFacts": {
+    "shapes": 15,
+    "colors": 11,
+    "theme": "dark",
+    "previewPaths": 1
+  },
+  "monoClicked": true,
+  "images": {
+    "dark": 219881,
+    "zoom": 351958,
+    "light": 232320
+  },
+  "screenshots": [
+    "B-AVATAR-01-r1-picker-dark.png",
+    "B-AVATAR-01-r1-shapes-zoom.png",
+    "B-AVATAR-01-r1-picker-light-mono.png"
+  ]
+}

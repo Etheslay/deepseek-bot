@@ -4192,12 +4192,17 @@ select option {
   --avatar-mono-bg: #ffffff;
   --avatar-mono-eye: #111111;
   --avatar-mono-fg: #111111;
+  /* Eye fill: white on light surfaces, near-black on dark surfaces. */
+  --gb-eye: #111111;
+
 }
 
 :root[data-theme="light"] {
   --avatar-mono-bg: #111111;
   --avatar-mono-eye: #ffffff;
   --avatar-mono-fg: #ffffff;
+  --gb-eye: #ffffff;
+
 }
 
 .avatar-minimal.mono .eye {
@@ -5179,7 +5184,7 @@ select option {
 
 
 /* ============================================================
-   Run monitor (D09) �?FR-06 审批 / FR-07 运行历史
+   Run monitor (D09) —FR-06 审批 / FR-07 运行历史
    ============================================================ */
 
 .rm-shell {
@@ -5337,7 +5342,7 @@ select option {
   text-align: center;
 }
 
-/* status chips �?one class per contract status */
+/* status chips —one class per contract status */
 .rm-status {
   display: inline-flex;
   align-items: center;
@@ -5819,6 +5824,218 @@ select option {
   height: 24px;
 }
 
+/* ---------- Grok Ball avatar ---------- */
+.grok-ball {
+  display: block;
+  flex: 0 0 auto;
+  overflow: visible;
+}
+
+/* ---------- Grok Ball: theme inversion + fixed-slot plaque ---------- */
+/* Light = dark body + light eyes; Dark = light body + dark eyes.
+   The body is a shaded gradient now, so the mono palette is fed through the
+   --gb-mono-* stops instead of a flat fill; eyes still swap via CSS. */
+.grok-ball .gb-body {
+  transition: opacity 200ms ease;
+}
+
+.grok-ball .gb-eye {
+  transition: fill 200ms ease;
+}
+
+.grok-ball .gb-eye {
+  fill: var(--gb-eye);
+}
+
+/* Fixed identity slots never shrink or wrap the ball. */
+.page-chip .grok-ball,
+.tab > .grok-ball {
+  flex: 0 0 auto;
+}
+
+/* ============================================================
+   Grok-style polish layer (feature/ui-grok-polish)
+   Append-only: every rule here wins the cascade over earlier
+   layers; nothing above is edited, so removing this block
+   restores the previous look exactly.
+   ============================================================ */
+
+:root {
+  --bg: #0a0a0b;
+  --sidebar: #0a0a0b;
+  --panel: #17171a;
+  --grok-user-bubble: #26262b;
+}
+
+:root[data-theme="light"] {
+  --grok-user-bubble: #e6e6eb;
+}
+
+/* 1. centered chat column, tighter than before */
+.chat {
+  max-width: 800px;
+  padding: 76px 24px 16px;
+}
+
+.msg-row {
+  max-width: 100%;
+}
+
+.composer {
+  max-width: 800px;
+}
+
+/* 2. assistant messages: plain text, no bubble, no avatar, muted name */
+.msg-row.bot > .grok-ball {
+  display: none;
+}
+
+.msg-row.bot .msg-bubble {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 2px 0 2px 24px;
+  font-size: 0.95rem;
+  line-height: 1.65;
+}
+
+.msg-row.bot.streaming .msg-bubble {
+  padding-bottom: 6px;
+}
+
+.sender-line {
+  font-size: 0.74rem;
+  color: var(--muted);
+}
+
+.sender-name {
+  color: var(--muted) !important;
+  font-weight: 500;
+}
+
+/* 3. user bubble: graphite, Grok-style radius */
+.msg-row.user .msg-bubble {
+  background: var(--grok-user-bubble) !important;
+  color: var(--text) !important;
+  border-radius: 22px;
+  padding: 10px 16px;
+  font-size: 0.95rem;
+  line-height: 1.6;
+}
+
+/* 4. composer: white send circle (dark) / black circle (light) */
+.send-btn {
+  background: #ffffff;
+  color: #0a0a0b;
+}
+
+.send-btn:disabled {
+  background: var(--item-active);
+  color: var(--muted);
+}
+
+[data-theme="light"] .send-btn {
+  background: #1a1a1e;
+  color: #ffffff;
+}
+
+[data-theme="light"] .send-btn:disabled {
+  background: var(--item-active);
+  color: var(--muted);
+}
+
+.composer {
+  border-color: var(--line);
+}
+
+/* 5. header chip: quiet, Grok-like */
+.page-chip {
+  background: transparent;
+  border: 1px solid var(--line);
+  padding: 0.3rem 0.9rem 0.3rem 0.55rem;
+  font-size: 0.85rem;
+}
+
+.page-chip .blob-mark {
+  width: 20px;
+  height: 20px;
+}
+
+/* 6. sidebar: quieter labels */
+.group-label {
+  font-size: 0.7rem;
+  color: var(--muted);
+  letter-spacing: 0.08em;
+}
+
+.group-count {
+  color: var(--muted);
+}
+
+.tab-title {
+  font-size: 0.86rem;
+}
+
+.tab {
+  opacity: 0.92;
+}
+
+.tab.active {
+  opacity: 1;
+}
+
+/* 7. empty state: neutral CTA instead of red/pink */
+.primary-btn {
+  background: #ffffff;
+  color: #0a0a0b;
+}
+
+[data-theme="light"] .primary-btn {
+  background: #1a1a1e;
+  color: #ffffff;
+}
+
+[data-theme="dark"] .empty-state .primary-btn {
+  background: #ffffff;
+  color: #0a0a0b;
+}
+
+[data-theme="light"] .empty-state .primary-btn {
+  background: #1a1a1e;
+  color: #ffffff;
+}
+
+.primary-btn:disabled {
+  background: var(--item-active);
+  color: var(--muted);
+}
+
+.empty-state p {
+  color: var(--muted);
+}
+
+/* 8. message entrance */
+@keyframes grokFadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.msg-row {
+  animation: grokFadeUp 0.18s ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .msg-row {
+    animation: none;
+  }
+}
+
 /* ---------- Reaction corner pill (message reactions) ---------- */
 /* Float the reaction cluster as a raised pill on the bubble's top-right
    corner for both bot and user messages; surfaces reactions on your OWN
@@ -5854,3 +6071,10 @@ select option {
   border-color: var(--settings);
   background: var(--item-hover);
 }
+
+/* Sidebar brand slot: round bot instead of the dolphin mark. */
+.big-avatar .grok-ball {
+  width: 84px;
+  height: 84px;
+}
+
