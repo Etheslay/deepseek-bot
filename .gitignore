@@ -33,3 +33,4 @@ Thumbs.db
 # Desktop local outputs
 apps/desktop/out/
 apps/desktop/release/
+.dev-electron-profile/

@@ -1,40 +1,30 @@
 import { Fragment, useEffect, useLayoutEffect, useRef, useState, type JSX } from "react";
+import { createPortal } from "react-dom";
+import { useBots, type UiBot } from "./features/bots/use-bots.js";
+import { BotForm } from "./features/bots/bot-form.js";
+import { CustomSelect } from "./components/custom-select.js";
+import type { BotDraft } from "./services/desktop-service.js";
+import { useService } from "./services/service-context.jsx";
+import {
+  applyCancelled,
+  applyDelta,
+  applyFailure,
+  applyTool,
+  emptyStream,
+  failureMessage,
+  type StreamState,
+} from "./features/chat/chat-reducer.js";
+import type { StreamHandle } from "./services/desktop-service.js";
+import { Avatar as AvatarView } from "./features/avatars/avatar.js";
+import { AvatarPicker } from "./features/avatars/avatar-picker.js";
+import {
+  avatarColor,
+  type Avatar as AvatarKind,
+} from "./features/avatars/avatar-meta.js";
+import { DOLPHIN_LOGO_URL, PRESET_URLS } from "./features/avatars/preset-urls.js";
 
-const SHAPES: { radius: string }[] = [
-  { radius: "50%" },
-  { radius: "46% 54% 52% 48% / 56% 44% 56% 44%" },
-  { radius: "30%" },
-  { radius: "58% 42% 38% 62% / 44% 58% 42% 56%" },
-  { radius: "40% 60% 60% 40% / 50% 40% 60% 50%" },
-  { radius: "62% 38% 56% 44% / 48% 62% 38% 52%" },
-  { radius: "50% 50% 42% 58% / 60% 44% 56% 40%" },
-  { radius: "44% 56% 48% 52% / 52% 48% 60% 40%" },
-];
-
-const PALETTE = [
-  "#f4f4f5",
-  "#a16207",
-  "#ef4444",
-  "#f97316",
-  "#f59e0b",
-  "#22c55e",
-  "#14b8a6",
-  "#3b82f6",
-  "#8b5cf6",
-  "#ec4899",
-  "#6b7280",
-];
 
 type Group = { key: number; name: string };
-type Bot = {
-  key: number;
-  name: string;
-  shape: number;
-  color: number;
-  group: number;
-  unread: boolean;
-};
-
 const UNGROUPED = 1;
 
 const EMOJIS = ["👍", "👎", "❤️", "😂", "🎉"] as const;
@@ -48,22 +38,65 @@ type Msg = {
   reactions: Partial<Record<Emoji, number>>;
   mine: Emoji[];
   time: number;
-  notice: boolean;
+  /** Which bot spoke; for `from: "bot"` messages defaults to the chat owner. */
+  speakerKey?: number;
+  /** Centered bot-to-bot delivery metadata line. */
+  notice?: { label: string; otherKey: number } | null;
+  peerKey?: number;
+  /** System notices (e.g. blocked cross-group requests) render as a centered muted line. */
+  system?: boolean;
 };
 
 type ChatState = Record<number, Msg[]>;
 
-const FIVE_MINUTES = 5 * 60 * 1000;
-
-function formatTime(t: number): string {
-  const d = new Date(t);
-  return `${d.getHours()}:${String(d.getMinutes()).padStart(2, "0")}`;
-}
 
 type MenuState = { x: number; y: number; botKey: number };
-type DialogState =
-  | { type: "newGroup"; moveBot: number | null }
-  | { type: "rename"; botKey: number };
+type DialogState = { type: "newGroup"; moveBot: number | null };
+
+function pairKeyOf(a: number, b: number): string {
+  return a < b ? `${a}|${b}` : `${b}|${a}`;
+}
+
+function formatChatTime(t: number): string {
+  const d = new Date(t);
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  const time = `${hh}:${mm}`;
+  const now = new Date();
+  const sameDay =
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate();
+  if (sameDay) {
+    return `今天 ${time}`;
+  }
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  if (
+    d.getFullYear() === yesterday.getFullYear() &&
+    d.getMonth() === yesterday.getMonth() &&
+    d.getDate() === yesterday.getDate()
+  ) {
+    return `昨天 ${time}`;
+  }
+  const weekdays = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
+  return `${d.getMonth() + 1}月${d.getDate()}日${weekdays[d.getDay()]} ${time}`;
+}
+
+function readableTextColor(hex: string): string {
+  if (hex.startsWith("var(")) {
+    return "var(--avatar-mono-fg)";
+  }
+  const value = hex.replace("#", "");
+  if (value.length !== 6) {
+    return "#ffffff";
+  }
+  const r = Number.parseInt(value.slice(0, 2), 16);
+  const g = Number.parseInt(value.slice(2, 4), 16);
+  const b = Number.parseInt(value.slice(4, 6), 16);
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > 0.62 ? "#1b1b1f" : "#ffffff";
+}
 
 function BlobMark(): JSX.Element {
   return (
@@ -72,31 +105,22 @@ function BlobMark(): JSX.Element {
         d="M12 2.5c5.1 0 9.5 3.4 9.5 8.2 0 4.9-4.4 8.3-9.5 8.3-1 0-2-.1-2.9-.4l-3.6 1.6c-.5.2-1-.3-.8-.8l1-3C4.2 15 2.5 13 2.5 10.7c0-4.8 4.4-8.2 9.5-8.2Z"
         fill="currentColor"
       />
-      <circle cx="9.2" cy="10.2" r="1.5" fill="#0f0f10" />
-      <circle cx="14.8" cy="10.2" r="1.5" fill="#0f0f10" />
+      <circle cx="9.2" cy="10.2" r="1.5" fill="var(--bg)" />
+      <circle cx="14.8" cy="10.2" r="1.5" fill="var(--bg)" />
     </svg>
   );
 }
 
-function BlobFace({
-  shape,
-  color,
-  size,
-}: {
-  shape: number;
-  color: string;
-  size: number;
-}): JSX.Element {
-  const s = SHAPES[shape] ?? SHAPES[0]!;
+function CloudDecor({ className = "" }: { className?: string }): JSX.Element {
   return (
-    <span
-      className="blob-face"
-      style={{ background: color, borderRadius: s.radius, width: size, height: size }}
-      aria-hidden="true"
-    >
-      <span className="eye" />
-      <span className="eye" />
-    </span>
+    <svg className={"cloud-decor " + className} viewBox="0 0 120 44" aria-hidden="true">
+      <g fill="currentColor">
+        <ellipse cx="52" cy="30" rx="34" ry="13" />
+        <circle cx="36" cy="24" r="12" />
+        <circle cx="56" cy="19" r="14" />
+        <circle cx="74" cy="26" r="10" />
+      </g>
+    </svg>
   );
 }
 
@@ -112,25 +136,56 @@ export function App(): JSX.Element {
   const [version, setVersion] = useState<string>("…");
 
   const [modalOpen, setModalOpen] = useState(false);
-  const [botName, setBotName] = useState("");
+  const [editingBot, setEditingBot] = useState<UiBot | null>(null);
   const [shape, setShape] = useState(0);
   const [color, setColor] = useState(2);
+  const [avatar, setAvatar] = useState<AvatarKind>(() => ({ kind: "mono" }));
   const [modalGroup, setModalGroup] = useState<number>(UNGROUPED);
 
   const [groups, setGroups] = useState<Group[]>([{ key: UNGROUPED, name: "未分组" }]);
-  const [bots, setBots] = useState<Bot[]>([]);
+  const {
+    bots,
+    create: createBotEntity,
+    update: updateBotEntity,
+    duplicate: duplicateBotEntity,
+    setUi,
+    moveToTop,
+    hide,
+  } = useBots(UNGROUPED);
 
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [menuDialog, setMenuDialog] = useState<DialogState | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<UiBot | null>(null);
   const [dialogText, setDialogText] = useState("");
 
   const [selectedBot, setSelectedBot] = useState<number | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [artifactsOpen, setArtifactsOpen] = useState(false);
+  const [historySessions, setHistorySessions] = useState<
+    { sessionId: string; botId: string; title: string; startedAt: string; status: string }[] | null
+  >(null);
+  const [artifactList, setArtifactList] = useState<
+    import("@deepseek-bot/contracts").Artifact[] | null
+  >(null);
+  const [artifactPreview, setArtifactPreview] = useState<
+    { id: string; kind: "text"; content: string } | { id: string; kind: "blocked"; reason: string } | null
+  >(null);
+  const [restoredSession, setRestoredSession] = useState<{
+    sessionId: string;
+    title: string;
+    startedAt: string;
+    status: string;
+  } | null>(null);
 
   const [chats, setChats] = useState<ChatState>({});
+  const [pairTranscripts, setPairTranscripts] = useState<
+    Record<string, { id: number; speakerKey: number; text: string; time: number }[]>
+  >({});
   const [quoteDraft, setQuoteDraft] = useState<{ name: string; text: string } | null>(null);
   const [dragging, setDragging] = useState(false);
   const [dragOverGroup, setDragOverGroup] = useState<number | null>(null);
+  const desktop = useService();
   const [collapsedGroups, setCollapsedGroups] = useState<number[]>([]);
   const [groupMenu, setGroupMenu] = useState<{ x: number; y: number; groupKey: number } | null>(
     null,
@@ -193,11 +248,63 @@ export function App(): JSX.Element {
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [accountName, setAccountName] = useState("本地用户");
   const [editingName, setEditingName] = useState(false);
+  const [keyDraft, setKeyDraft] = useState("");
+  const [testResult, setTestResult] = useState<
+    { result: "success" | "failure" | "unverified"; ok: boolean; errorCode?: string } | null
+  >(null);
   const [nameDraft, setNameDraft] = useState("");
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
+    // 窗口控制条由主进程 titleBarOverlay 绘制，随主题经白名单 IPC 同步颜色
+    const overlay =
+      theme === "light"
+        ? { color: "#ffffff", symbolColor: "#1a1a1e" }
+        : { color: "#0f0f10", symbolColor: "#ececf1" };
+    void window.deepseekBot.window.setTitleBarOverlay(overlay).catch(() => undefined);
   }, [theme]);
+
+  useEffect(() => {
+    if (!historyOpen || selectedBot === null) {
+      return;
+    }
+    const bot = bots.find((b) => b.key === selectedBot);
+    if (!bot) {
+      return;
+    }
+    let cancelled = false;
+    void desktop.chat.listSessions(bot.bot.id).then((sessions) => {
+      if (!cancelled) {
+        setHistorySessions(sessions);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [historyOpen, selectedBot, bots, desktop]);
+
+  useEffect(() => {
+    if (!artifactsOpen || selectedBot === null) {
+      return;
+    }
+    const bot = bots.find((b) => b.key === selectedBot);
+    if (!bot) {
+      return;
+    }
+    let cancelled = false;
+    void desktop.chat
+      .listSessions(bot.bot.id)
+      .then((sessions) => (sessions.length > 0 ? sessions[0]!.sessionId : null))
+      .then((sessionId) => (sessionId ? desktop.artifacts.listBySession(sessionId) : []))
+      .then((list) => {
+        if (!cancelled) {
+          setArtifactList(list);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [artifactsOpen, selectedBot, bots, desktop]);
 
   useEffect(() => {
     let cancelled = false;
@@ -244,79 +351,93 @@ export function App(): JSX.Element {
   }, [toast]);
 
   const selectedBotName =
-    bots.find((b) => b.key === selectedBot)?.name ?? "DeepSeek Bot";
+    bots.find((b) => b.key === selectedBot)?.bot.name ?? "DeepSeek Bot";
 
-  const openModal = () => {
-    setBotName("");
+  const openCreateBotModal = () => {
     setShape(0);
     setColor(2);
+    setAvatar({ kind: "mono" });
     setModalGroup(
       groups.find((g) => g.name === "未分组")?.key ?? groups[0]?.key ?? UNGROUPED,
     );
+    setEditingBot(null);
     setModalOpen(true);
   };
 
-  const createBot = () => {
-    const name = botName.trim();
-    if (!name) {
-      return;
-    }
-    setBots((prev) => [
-      ...prev,
-      { key: Date.now(), name, shape, color, group: modalGroup, unread: false },
-    ]);
-    setModalOpen(false);
+  const openEditBotModal = (bot: UiBot) => {
+    setEditingBot(bot);
+    setAvatar(bot.avatar);
+    setModalOpen(true);
   };
 
-  const withBot = (botKey: number, fn: (b: Bot) => Bot): void => {
-    setBots((prev) => prev.map((b) => (b.key === botKey ? fn(b) : b)));
+  const submitBotDraft = async (
+    draft: BotDraft,
+  ): Promise<{ ok: boolean; errorCode?: string }> => {
+    if (editingBot) {
+      const result = await updateBotEntity(editingBot.bot.id, draft);
+      if (result.ok) {
+        setModalOpen(false);
+        setToast("已保存");
+      }
+      return result;
+    }
+    const result = await createBotEntity(draft);
+    if (result.ok && result.key !== undefined) {
+      setUi(result.key, { avatar, shape, color, group: modalGroup });
+      setModalOpen(false);
+      setToast("已创建");
+    }
+    return result;
   };
 
   const pinBot = (botKey: number): void => {
-    setBots((prev) => {
-      const target = prev.find((b) => b.key === botKey);
-      if (!target) {
-        return prev;
-      }
-      return [target, ...prev.filter((b) => b.key !== botKey)];
-    });
+    moveToTop(botKey);
     setToast("已置顶");
     setMenu(null);
   };
 
   const moveToGroup = (botKey: number, groupKey: number): void => {
     const g = groups.find((x) => x.key === groupKey);
-    withBot(botKey, (b) => ({ ...b, group: groupKey }));
+    setUi(botKey, { group: groupKey });
     setToast(g ? `已移至「${g.name}」` : "已移动");
     setMenu(null);
   };
 
   const toggleUnread = (botKey: number): void => {
-    withBot(botKey, (b) => ({ ...b, unread: !b.unread }));
+    const b = bots.find((x) => x.key === botKey);
+    setUi(botKey, { unread: !(b?.unread ?? false) });
     setMenu(null);
   };
 
-  const renameBot = (botKey: number, name: string): void => {
-    const n = name.trim();
-    if (n) {
-      withBot(botKey, (b) => ({ ...b, name: n }));
-    }
-    setMenuDialog(null);
-  };
-
-  const copyBotId = async (botKey: number): Promise<void> => {
-    const id = `bot-${botKey}`;
+  const copyText = async (text: string): Promise<void> => {
     try {
-      await navigator.clipboard.writeText(id);
-      setToast(`已复制 ${id}`);
+      await navigator.clipboard.writeText(text);
+      setToast("已复制");
     } catch {
-      setToast("复制失败（占位环境限制）");
+      try {
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        ta.style.position = "fixed";
+        ta.style.opacity = "0";
+        document.body.append(ta);
+        ta.select();
+        const ok = document.execCommand("copy");
+        ta.remove();
+        setToast(ok ? "已复制" : "复制失败（占位环境限制）");
+      } catch {
+        setToast("复制失败（占位环境限制）");
+      }
     }
+  };
+  const copyBotId = async (botKey: number): Promise<void> => {
+    const menuTarget = bots.find((b) => b.key === botKey);
+    const id = menuTarget?.bot.id ?? `bot-${botKey}`;
+    await copyText(id);
     setMenu(null);
   };
 
   const removeBot = (botKey: number, why: string): void => {
-    setBots((prev) => prev.filter((b) => b.key !== botKey));
+    hide(botKey);
     if (selectedBot === botKey) {
       setSelectedBot(null);
     }
@@ -324,55 +445,7 @@ export function App(): JSX.Element {
     setMenu(null);
   };
 
-  const submitDialog = (): void => {
-    if (!menuDialog) {
-      return;
-    }
-    const name = dialogText.trim();
-    if (menuDialog.type === "newGroup") {
-      if (!name) {
-        return;
-      }
-      const key = Date.now();
-      setGroups((prev) => [...prev, { key, name }]);
-      if (menuDialog.moveBot !== null) {
-        withBot(menuDialog.moveBot, (b) => ({ ...b, group: key }));
-        setToast(`已创建分组「${name}」并移入`);
-      } else {
-        setToast(`已创建分组「${name}」`);
-      }
-    } else if (name) {
-      renameBot(menuDialog.botKey, name);
-      setToast("已重命名");
-      return;
-    }
-    setMenuDialog(null);
-  };
-
-  const ensureChat = (bot: Bot): void => {
-    setChats((prev) => {
-      if (prev[bot.key]) {
-        return prev;
-      }
-      return {
-        ...prev,
-        [bot.key]: [
-          {
-            id: bot.key,
-            from: "bot",
-            text: `hello，我是 ${bot.name}，有什么可以为你服务的吗`,
-            quote: null,
-            reactions: {},
-            mine: [],
-            time: Date.now(),
-            notice: false,
-          },
-        ],
-      };
-    });
-  };
-
-  const sendUserMessage = (botKey: number, text: string): void => {
+    const sendUserMessage = (botKey: number, text: string): void => {
     const t = text.trim();
     if (!t) {
       return;
@@ -391,13 +464,13 @@ export function App(): JSX.Element {
             reactions: {},
             mine: [],
             time: Date.now(),
-            notice: false,
+            system: false,
           },
         ],
       };
     });
     setQuoteDraft(null);
-    const reply = `(占位) 已收到：「${t.slice(0, 24)}」。真实模型会话将在后续里程碑接入。`;
+    const reply = `（占位回复）已收到：「${t.slice(0, 24)}」。真实模型会话将在后续里程碑接入。`;
     setTimeout(() => {
       setChats((prev) => {
         const list = prev[botKey] ?? [];
@@ -413,7 +486,8 @@ export function App(): JSX.Element {
               reactions: {},
               mine: [],
               time: Date.now(),
-              notice: true,
+              system: false,
+              speakerKey: botKey,
             },
           ],
         };
@@ -439,6 +513,135 @@ export function App(): JSX.Element {
       }),
     }));
   };
+  const talkTo = (fromKey: number, toKey: number): void => {
+    const from = bots.find((b) => b.key === fromKey);
+    const to = bots.find((b) => b.key === toKey);
+    if (!from || !to) {
+      return;
+    }
+    const now = Date.now();
+    if (from.group !== to.group) {
+      const g1 = groups.find((g) => g.key === from.group)?.name ?? "?";
+      const g2 = groups.find((g) => g.key === to.group)?.name ?? "?";
+      setChats((prev) => ({
+        ...prev,
+        [fromKey]: [
+          ...(prev[fromKey] ?? []),
+          {
+            id: now + 2,
+            from: "bot",
+            text: `无法发起：不同分组的 Bot 无法主动交流（${g1} ↔ ${g2}）。`,
+            quote: null,
+            reactions: {},
+            mine: [],
+            time: now,
+            system: true,
+          },
+        ],
+      }));
+      return;
+    }
+    // Bot-to-bot dialogue: the transcript lives in the pair store; each main
+    // timeline only gets a clickable delivery notice.
+    const turns: { speaker: number; text: string }[] = [
+      { speaker: fromKey, text: `${to.bot.name}，在吗？我是 ${from.bot.name}。` },
+      { speaker: toKey, text: `在的 ${from.bot.name}，什么事？` },
+      {
+        speaker: fromKey,
+        text: "先占个位——等真实模型接入后，我们就能这样面对面聊天了。",
+      },
+      { speaker: toKey, text: "好啊，到时候聊个痛快。" },
+    ];
+    const pairKey = pairKeyOf(fromKey, toKey);
+    setPairTranscripts((prev) => ({
+      ...prev,
+      [pairKey]: [
+        ...(prev[pairKey] ?? []),
+        ...turns.map((turn, index) => ({
+          id: now + 1 + index,
+          speakerKey: turn.speaker,
+          text: turn.text,
+          time: now,
+        })),
+      ],
+    }));
+    setChats((prev) => ({
+      ...prev,
+      [fromKey]: [
+        ...(prev[fromKey] ?? []),
+        {
+          id: now + 9,
+          from: "bot",
+          text: "",
+          quote: null,
+          reactions: {},
+          mine: [],
+          time: now,
+          system: true,
+          notice: { label: "已发消息给", otherKey: toKey },
+          peerKey: toKey,
+        },
+      ],
+      [toKey]: [
+        ...(prev[toKey] ?? []),
+        {
+          id: now + 10,
+          from: "bot",
+          text: "",
+          quote: null,
+          reactions: {},
+          mine: [],
+          time: now,
+          system: true,
+          notice: { label: "消息来自", otherKey: fromKey },
+          peerKey: fromKey,
+        },
+      ],
+    }));
+  };
+
+  const submitDialog = (): void => {
+    if (!menuDialog) {
+      return;
+    }
+    const name = dialogText.trim();
+    if (!name) {
+      return;
+    }
+    const key = Date.now();
+    setGroups((prev) => [...prev, { key, name }]);
+    if (menuDialog.moveBot !== null) {
+      setUi(menuDialog.moveBot, { group: key });
+      setToast(`已创建分组「${name}」并移入`);
+    } else {
+      setToast(`已创建分组「${name}」`);
+    }
+    setMenuDialog(null);
+  };
+
+  const ensureChat = (bot: UiBot): void => {
+    setChats((prev) => {
+      if (prev[bot.key]) {
+        return prev;
+      }
+      return {
+        ...prev,
+        [bot.key]: [
+          {
+            id: bot.key,
+            from: "bot",
+            text: `hello，我是 ${bot.bot.name}，有什么可以为你服务的吗`,
+            quote: null,
+            reactions: {},
+            mine: [],
+            time: Date.now(),
+            system: false,
+            speakerKey: bot.key,
+          },
+        ],
+      };
+    });
+  };
 
   const dropBotToGroup = (botKey: number, groupKey: number): void => {
     const b = bots.find((x) => x.key === botKey);
@@ -450,8 +653,8 @@ export function App(): JSX.Element {
       setToast("已在该分组");
       return;
     }
-    withBot(botKey, (x) => ({ ...x, group: groupKey }));
-    setToast(`已将「${b.name}」拖至「${g.name}」`);
+    setUi(botKey, { group: groupKey });
+    setToast(`已将「${b.bot.name}」拖至「${g.name}」`);
   };
 
   const deleteGroup = (groupKey: number): void => {
@@ -471,42 +674,7 @@ export function App(): JSX.Element {
     setGroupMenu(null);
   };
 
-  const talkTo = (fromKey: number, toKey: number): void => {
-    const from = bots.find((b) => b.key === fromKey);
-    const to = bots.find((b) => b.key === toKey);
-    if (!from || !to) {
-      return;
-    }
-    let text: string;
-    if (from.group !== to.group) {
-      const g1 = groups.find((g) => g.key === from.group)?.name ?? "?";
-      const g2 = groups.find((g) => g.key === to.group)?.name ?? "?";
-      text = `无法发起：不同分组的 Bot 无法主动交流（${g1} ↔ ${g2}）。`;
-    } else {
-      text = `已与「${to.name}」建立会话（占位，无后端）。`;
-    }
-    setChats((prev) => {
-      const list = prev[fromKey] ?? [];
-      return {
-        ...prev,
-        [fromKey]: [
-          ...list,
-          {
-            id: Date.now() + 2,
-            from: "bot",
-            text,
-            quote: null,
-            reactions: {},
-            mine: [],
-            time: Date.now(),
-            notice: true,
-          },
-        ],
-      };
-    });
-  };
-
-  const logout = (): void => {
+const logout = (): void => {
     setAccountName("本地用户");
     setTheme("dark");
     setEditingName(false);
@@ -526,8 +694,119 @@ export function App(): JSX.Element {
 
   return (
     <div className="shell">
+      <header className="top">
+        <span className="page-chip">
+          <BlobMark />
+          {selectedBotName}
+        </span>
+        <button
+          type="button"
+          className="top-icon-btn"
+          aria-label="最近会话"
+          title="最近会话"
+          onClick={() => {
+            setArtifactsOpen(false);
+            setHistoryOpen((v) => !v);
+          }}
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
+            <path d="M12 7.5V12l3 2" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          className="top-icon-btn artifacts-btn"
+          aria-label="产物"
+          title="产物"
+          onClick={() => {
+            setHistoryOpen(false);
+            setArtifactsOpen((v) => !v);
+            setArtifactPreview(null);
+          }}
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path
+              d="M21 11.5 12.5 20a5 5 0 0 1-7-7l8-8a3.5 3.5 0 0 1 5 5l-8 8a1.8 1.8 0 0 1-2.5-2.5L15 4.5"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              strokeLinecap="round"
+            />
+          </svg>
+        </button>
+        {historyOpen && (
+          <>
+            <div className="menu-overlay" onClick={() => setHistoryOpen(false)} />
+            <div className="top-popover" role="dialog" aria-label="最近会话">
+              <div className="popover-title">最近会话</div>
+              {(historySessions ?? []).slice(0, 8).map((session) => (
+                <button
+                  key={session.sessionId}
+                  type="button"
+                  className="session-item"
+                  onClick={() => {
+                    setRestoredSession(session);
+                    setHistoryOpen(false);
+                  }}
+                >
+                  <span className="tab-title">{session.title}</span>
+                  <span className="session-meta">
+                    {new Date(session.startedAt).toLocaleString()} ·{" "}
+                    {session.status === "ended" ? "已结束" : "进行中"}
+                  </span>
+                </button>
+              ))}
+              {(historySessions ?? []).length === 0 && (
+                <div className="sys-line">还没有历史会话</div>
+              )}
+            </div>
+          </>
+        )}
+        {artifactsOpen && (
+          <>
+            <div className="menu-overlay" onClick={() => setArtifactsOpen(false)} />
+            <div className="top-popover artifacts-popover" role="dialog" aria-label="产物">
+              <div className="popover-title">产物</div>
+              {(artifactList ?? []).map((artifact) => (
+                <div className="artifact-item" key={artifact.id}>
+                  <div className="artifact-meta">
+                    <div className="tab-title">{artifact.relativePath}</div>
+                    <div className="session-meta">
+                      {artifact.mediaType} · {artifact.size} bytes
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="pill-btn"
+                    onClick={() => {
+                      void desktop.artifacts.preview(artifact).then((result: { kind: "text"; content: string } | { kind: "blocked"; reason: string }) => {
+                        setArtifactPreview(
+                          result.kind === "text"
+                            ? { id: artifact.id, kind: "text", content: result.content }
+                            : { id: artifact.id, kind: "blocked", reason: result.reason },
+                        );
+                      });
+                    }}
+                  >
+                    预览
+                  </button>
+                </div>
+              ))}
+              {(artifactList ?? []).length === 0 && <div className="sys-line">暂无产物</div>}
+              {artifactPreview !== null &&
+                (artifactPreview.kind === "text" ? (
+                  <pre className="artifact-preview">{artifactPreview.content}</pre>
+                ) : (
+                  <p className="form-error">{artifactPreview.reason}</p>
+                ))}
+            </div>
+          </>
+        )}
+      </header>
+      <div className="shell-main">
       <aside className="sidebar">
-        <div className="side-top">
+        <div className="top-left">
           <span className="circle-btn" aria-hidden="true">
             <svg viewBox="0 0 24 24">
               <circle cx="10.5" cy="10.5" r="6" fill="none" stroke="currentColor" strokeWidth="2" />
@@ -539,7 +818,7 @@ export function App(): JSX.Element {
             className="circle-btn clickable"
             aria-label="创建新 Bot"
             title="创建新 Bot"
-            onClick={openModal}
+            onClick={openCreateBotModal}
           >
             <svg viewBox="0 0 24 24">
               <line x1="12" y1="5" x2="12" y2="19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
@@ -549,7 +828,7 @@ export function App(): JSX.Element {
         </div>
         <div className="side-identity">
           <span className="big-avatar">
-            <BlobMark />
+            <img className="identity-logo" src={DOLPHIN_LOGO_URL} alt="" draggable={false} />
             <span className="presence-dot" />
           </span>
           <span className="identity-name">DeepSeek Bot</span>
@@ -619,18 +898,32 @@ export function App(): JSX.Element {
                       setDragging(true);
                       const ghost = document.createElement("div");
                       ghost.className = "drag-ghost";
-                      const face = document.createElement("span");
-                      face.className = "blob-face";
-                      face.style.background = PALETTE[b.color]!;
-                      face.style.borderRadius = (SHAPES[b.shape] ?? SHAPES[0]!).radius;
-                      face.style.width = "52px";
-                      face.style.height = "52px";
-                      const e1 = document.createElement("span");
-                      e1.className = "eye";
-                      const e2 = document.createElement("span");
-                      e2.className = "eye";
-                      face.append(e1, e2);
-                      ghost.append(face);
+                      if (b.avatar.kind === "emoji") {
+                        const emoji = document.createElement("span");
+                        emoji.className = "drag-ghost-emoji";
+                        emoji.textContent = b.avatar.emoji;
+                        ghost.append(emoji);
+                      } else if (b.avatar.kind === "minimal") {
+                        const face = document.createElement("span");
+                        face.className = "drag-ghost-avatar drag-ghost-minimal";
+                        face.style.background = b.avatar.color;
+                        ghost.append(face);
+                      } else if (b.avatar.kind === "mono") {
+                        const face = document.createElement("span");
+                        face.className = "drag-ghost-avatar";
+                        face.style.background = "var(--avatar-mono-bg)";
+                        ghost.append(face);
+                      } else {
+                        const img = document.createElement("img");
+                        img.className = "drag-ghost-avatar";
+                        img.src =
+                          b.avatar.kind === "preset"
+                            ? PRESET_URLS[b.avatar.preset]
+                            : b.avatar.kind === "logo"
+                              ? DOLPHIN_LOGO_URL
+                              : b.avatar.dataUrl;
+                        ghost.append(img);
+                      }
                       document.body.append(ghost);
                       e.dataTransfer.setDragImage(ghost, 26, 26);
                       setTimeout(() => ghost.remove(), 0);
@@ -650,13 +943,13 @@ export function App(): JSX.Element {
                       setMenu({ x: e.clientX, y: e.clientY, botKey: b.key });
                     }}
                   >
-                    <BlobFace shape={b.shape} color={PALETTE[b.color]!} size={36} />
+                    <AvatarView avatar={b.avatar} size={36} />
                     <span className="tab-label">
                       <span className="tab-title">
-                        {b.name}
+                        {b.bot.name}
                         {b.unread && <span className="unread-dot" aria-label="未读" />}
                       </span>
-                      <span className="tab-hint">会话内占位 · 未持久化</span>
+
                     </span>
                   </button>
                 ))}
@@ -668,60 +961,126 @@ export function App(): JSX.Element {
             </div>
           );
         })}
-        <div className="sidebar-foot clickable" title={version}>
+        <div className="sidebar-foot">
           <button
             type="button"
-            className="foot-btn"
-            aria-label="打开设置"
+            className="foot-account"
             title="打开设置"
+            aria-label="打开设置"
             onClick={() => setSettingsOpen(true)}
           >
             <span className="avatar" aria-hidden="true">
               {accountName.slice(0, 1).toUpperCase()}
             </span>
-            <span className="foot-text">{version}</span>
+            <span className="foot-id">
+              <span className="foot-name">{accountName}</span>
+              <span className="foot-sub">本地工作台</span>
+            </span>
+          </button>
+          <button
+            type="button"
+            className="foot-gear"
+            aria-label="打开设置"
+            title="打开设置"
+            onClick={() => setSettingsOpen(true)}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" strokeWidth="1.6" />
+              <path
+                d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.01a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.4"
+                strokeLinejoin="round"
+              />
+            </svg>
           </button>
         </div>
       </aside>
       <section className="content">
-        <header className="top">
-          <span className="page-chip">
-            <BlobMark />
-            {selectedBotName}
-          </span>
-        </header>
         <main className="panel">
-          {selectedBot !== null ? (
+          {restoredSession !== null && selectedBot !== null ? (
+            <div className="restored-view">
+              <header className="pair-head">
+                <span className="page-chip">{restoredSession.title}</span>
+              </header>
+              <div className="pair-body">
+                <div className="msg-notice">
+                  {new Date(restoredSession.startedAt).toLocaleString()} ·{" "}
+                  {restoredSession.status === "ended" ? "已结束" : "进行中"}
+                </div>
+                <div className="sys-line">
+                  该会话暂无可回放的聊天消息：当前夹具只含运行事件，真实消息回放需 D06/D12 接入。
+                </div>
+              </div>
+              <div className="pair-foot">
+                <button
+                  type="button"
+                  className="pill-btn"
+                  onClick={() => setRestoredSession(null)}
+                >
+                  返回当前会话
+                </button>
+              </div>
+            </div>
+          ) : selectedBot !== null ? (
             <BotsPlaceholder
               key={selectedBot}
               bots={bots}
               groups={groups}
               selectedBot={selectedBot}
               msgs={chats[selectedBot] ?? []}
+              pairTranscripts={pairTranscripts}
               quoteDraft={quoteDraft}
               onQuote={(m) => {
                 const sender =
                   m.from === "bot"
-                    ? bots.find((b) => b.key === selectedBot)?.name ?? "Bot"
+                    ? bots.find((b) => b.key === (m.speakerKey ?? selectedBot))?.bot.name ?? "Bot"
                     : "我";
                 setQuoteDraft({ name: sender, text: m.text.slice(0, 60) });
               }}
+              onPairQuote={(name, text) => setQuoteDraft({ name, text: text.slice(0, 60) })}
               onCancelQuote={() => setQuoteDraft(null)}
               onSend={(t) => sendUserMessage(selectedBot, t)}
+              onAssistant={(t) =>
+                setChats((prev) => ({
+                  ...prev,
+                  [selectedBot]: [
+                    ...(prev[selectedBot] ?? []),
+                    {
+                      id: Date.now() + 1,
+                      from: "bot",
+                      text: t,
+                      quote: null,
+                      reactions: {},
+                      mine: [],
+                      time: Date.now(),
+                      system: false,
+                      speakerKey: selectedBot,
+                    },
+                  ],
+                }))
+              }
               onReact={(msgId, emoji) => toggleReaction(selectedBot, msgId, emoji)}
               onTalkTo={(otherKey) => talkTo(selectedBot, otherKey)}
+              onCopy={(t) => void copyText(t)}
+              onAttach={() => setToast("添加附件（后续提供）")}
             />
           ) : (
             <div className="empty-state">
-              <BlobMark />
+              <div className="empty-hero">
+                <BlobMark />
+                <CloudDecor />
+              </div>
               <p>创建一个 Bot 开始使用</p>
-              <button type="button" className="primary-btn" onClick={openModal}>
+              <button type="button" className="primary-btn" onClick={openCreateBotModal}>
                 创建 Bot
               </button>
             </div>
           )}
         </main>
       </section>
+      </div>
 
       {menu && menuBot && (
         <>
@@ -730,7 +1089,7 @@ export function App(): JSX.Element {
             ref={menuRef}
             className="menu"
             role="menu"
-            aria-label={`Bot 操作：${menuBot.name}`}
+            aria-label={`Bot 操作：${menuBot.bot.name}`}
             style={{ left: menu.x, top: menu.y }}
           >
             <button type="button" role="menuitem" className="menu-item" onClick={() => pinBot(menuBot.key)}>
@@ -781,13 +1140,27 @@ export function App(): JSX.Element {
               role="menuitem"
               className="menu-item"
               onClick={() => {
-                setDialogText(menuBot.name);
-                setMenuDialog({ type: "rename", botKey: menuBot.key });
+                openEditBotModal(menuBot);
                 setMenu(null);
               }}
             >
               <MenuIcon d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5Z" />
-              重命名 Bot
+              编辑 Bot
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className="menu-item"
+              onClick={() => {
+                void (async () => {
+                  const result = await duplicateBotEntity(menuBot.bot.id);
+                  setToast(result.ok ? "已复制（副本）" : "复制失败");
+                })();
+                setMenu(null);
+              }}
+            >
+              <MenuIcon d="M9 9h10v12H9zM5 15H3V3h12v2" />
+              复制 Bot
             </button>
             <button type="button" role="menuitem" className="menu-item" onClick={() => void copyBotId(menuBot.key)}>
               <MenuIcon d="M9 9h10v12H9zM5 15H3V3h12v2" />
@@ -798,7 +1171,15 @@ export function App(): JSX.Element {
               <MenuIcon d="M3 3l18 18M10.6 10.6a2 2 0 0 0 2.8 2.8M7 11v-3a5 5 0 0 1 9.9-1M21 16v2a2 2 0 0 1-2 2H7" />
               从侧边栏隐藏
             </button>
-            <button type="button" role="menuitem" className="menu-item danger" onClick={() => removeBot(menuBot.key, "已删除")}>
+            <button
+              type="button"
+              role="menuitem"
+              className="menu-item danger"
+              onClick={() => {
+                setMenu(null);
+                setDeleteTarget(menuBot);
+              }}
+            >
               <MenuIcon d="M4 7h16M9 7V4h6v3m-8 0 1 13h8l1-13" />
               删除
             </button>
@@ -812,11 +1193,11 @@ export function App(): JSX.Element {
             className="modal compact"
             role="dialog"
             aria-modal="true"
-            aria-label={menuDialog.type === "newGroup" ? "创建分组" : "重命名 Bot"}
+            aria-label="创建分组"
             onClick={(e) => e.stopPropagation()}
           >
             <header className="modal-head">
-              <h3>{menuDialog.type === "newGroup" ? "创建分组" : "重命名 Bot"}</h3>
+              <h3>创建分组</h3>
               <button type="button" className="modal-close" aria-label="关闭" onClick={() => setMenuDialog(null)}>
                 ×
               </button>
@@ -824,7 +1205,7 @@ export function App(): JSX.Element {
             <div className="modal-body">
               <input
                 className="name-input"
-                placeholder={menuDialog.type === "newGroup" ? "分组名称" : "Bot 名称"}
+                placeholder="分组名称"
                 value={dialogText}
                 maxLength={40}
                 autoFocus
@@ -848,93 +1229,95 @@ export function App(): JSX.Element {
         </div>
       )}
 
+      {deleteTarget && (
+        <div className="modal-backdrop" onClick={() => setDeleteTarget(null)}>
+          <div
+            className="modal compact delete-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-bot-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <header className="modal-head">
+              <h3 id="delete-bot-title">删除“{deleteTarget.bot.name}”</h3>
+            </header>
+            <div className="modal-body">
+              <p className="delete-copy">这将永久删除 Bot 及其聊天记录。此操作无法撤销。</p>
+            </div>
+            <footer className="modal-foot delete-foot">
+              <button type="button" className="ghost-btn" onClick={() => setDeleteTarget(null)}>
+                取消
+              </button>
+              <button
+                type="button"
+                className="danger-btn"
+                onClick={() => {
+                  removeBot(deleteTarget.key, "已删除");
+                  setDeleteTarget(null);
+                }}
+              >
+                删除
+              </button>
+            </footer>
+          </div>
+        </div>
+      )}
+
       {modalOpen && (
         <div className="modal-backdrop" onClick={() => setModalOpen(false)}>
           <div
             className="modal"
             role="dialog"
             aria-modal="true"
-            aria-label="创建新 Bot"
+            aria-label={editingBot ? "编辑机器人" : "创建新 Bot"}
             onClick={(e) => e.stopPropagation()}
           >
             <header className="modal-head">
-              <h3>创建新 Bot</h3>
+              <h3>{editingBot ? "编辑机器人" : "创建新 Bot"}</h3>
               <button type="button" className="modal-close" aria-label="关闭" onClick={() => setModalOpen(false)}>
                 ×
               </button>
             </header>
             <div className="modal-body">
-              <div className="preview">
-                <BlobFace shape={shape} color={PALETTE[color]!} size={140} />
-              </div>
-              <input
-                className="name-input"
-                placeholder="给你的 Bot 起个名字"
-                value={botName}
-                maxLength={40}
-                autoFocus
-                onChange={(e) => setBotName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    createBot();
-                  }
-                }}
+              <BotForm
+                key={editingBot?.bot.id ?? "new"}
+                {...(editingBot
+                  ? {
+                      initial: {
+                        name: editingBot.bot.name,
+                        instructions: editingBot.bot.instructions,
+                        modelProfileId: editingBot.bot.modelProfileId,
+                        workspaceId: editingBot.bot.workspaceId,
+                        toolPolicyId: editingBot.bot.toolPolicyId,
+                      },
+                    }
+                  : {})}
+                submitLabel={editingBot ? "保存" : "创建"}
+                minimal={!editingBot}
+                onSubmit={submitBotDraft}
+                onCancel={() => setModalOpen(false)}
+                previewSlot={
+                  <div className="preview">
+                    <AvatarView avatar={avatar} size={editingBot ? 100 : 80} />
+                  </div>
+                }
+                avatarSlot={<AvatarPicker value={avatar} onChange={setAvatar} />}
+                groupSlot={
+                  !editingBot && (
+                    <div className="group-pick compact">
+                      <span>分组</span>
+                      <CustomSelect
+                        value={modalGroup}
+                        options={groups.map((g) => ({ value: g.key, label: g.name }))}
+                        onChange={(v) => setModalGroup(Number(v))}
+                        ariaLabel="分组"
+                        disabled={groups.length === 0}
+                      />
+                    </div>
+                  )
+                }
               />
-              <div className="shape-grid" role="radiogroup" aria-label="形状">
-                {SHAPES.map((s, i) => (
-                  <button
-                    key={i}
-                    type="button"
-                    role="radio"
-                    aria-checked={shape === i}
-                    className={shape === i ? "shape-btn selected" : "shape-btn"}
-                    onClick={() => setShape(i)}
-                  >
-                    <BlobFace shape={i} color={PALETTE[color]!} size={44} />
-                  </button>
-                ))}
-              </div>
-              <div className="color-grid" role="radiogroup" aria-label="颜色">
-                {PALETTE.map((c, i) => (
-                  <button
-                    key={c}
-                    type="button"
-                    role="radio"
-                    aria-checked={color === i}
-                    className={color === i ? "color-btn selected" : "color-btn"}
-                    style={{ background: c }}
-                    onClick={() => setColor(i)}
-                  />
-                ))}
-              </div>
-              <label className="group-pick">
-                分组
-                <select
-                  value={modalGroup}
-                  disabled={groups.length === 0}
-                  onChange={(e) => setModalGroup(Number(e.target.value))}
-                >
-                  {groups.map((g) => (
-                    <option key={g.key} value={g.key}>
-                      {g.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
             </div>
-            <footer className="modal-foot">
-              <button type="button" className="ghost-btn" onClick={() => setModalOpen(false)}>
-                取消
-              </button>
-              <button
-                type="button"
-                className="primary-btn"
-                disabled={!botName.trim() || groups.length === 0}
-                onClick={createBot}
-              >
-                创建
-              </button>
-            </footer>
           </div>
         </div>
       )}
@@ -1051,19 +1434,74 @@ export function App(): JSX.Element {
                     </button>
                   </div>
                 </div>
+                <div className="settings-section-title">接入（占位：Key 加密与真实连接由 D04/D08 负责）</div>
+                <div className="settings-card">
+                  <div className="settings-row">
+                    <span>API Key（只写不读）</span>
+                    <span className="key-input-wrap">
+                      <input
+                        type="password"
+                        className="settings-select key-input"
+                        placeholder={desktop.settings.keyConfigured() ? "已配置（输入新值覆盖）" : "未配置"}
+                        value={keyDraft}
+                        onChange={(e) => setKeyDraft(e.target.value)}
+                        aria-label="API Key"
+                      />
+                      <button
+                        type="button"
+                        className="pill-btn"
+                        disabled={keyDraft.length === 0}
+                        onClick={() => {
+                          void desktop.settings.saveKey(keyDraft).then(() => {
+                            setKeyDraft("");
+                            setToast("已保存（不回显）");
+                          });
+                        }}
+                      >
+                        保存
+                      </button>
+                    </span>
+                  </div>
+                  <div className="settings-row">
+                    <span>测试连接</span>
+                    <span className="key-input-wrap">
+                      {testResult ? (
+                        testResult.result === "unverified" ? (
+                          <span className="settings-soon">UNVERIFIED（无真实网络，占位）</span>
+                        ) : (
+                          <span className={testResult.ok ? "settings-ok" : "form-error"}>
+                            {testResult.ok ? "连接成功" : testResult.errorCode}
+                          </span>
+                        )
+                      ) : (
+                        <button
+                          type="button"
+                          className="pill-btn"
+                          onClick={() => {
+                            void desktop.settings
+                              .testConnection({ model: "deepseek-chat", endpoint: "https://api.deepseek.com" })
+                              .then(setTestResult);
+                          }}
+                        >
+                          测试连接
+                        </button>
+                      )}
+                    </span>
+                  </div>
+                </div>
                 <div className="settings-section-title">外观</div>
                 <div className="settings-card">
                   <div className="settings-row">
                     <span>主题</span>
-                    <select
-                      className="settings-select"
+                    <CustomSelect
                       value={theme}
-                      onChange={(e) => setTheme(e.target.value === "light" ? "light" : "dark")}
-                      aria-label="主题"
-                    >
-                      <option value="dark">深色</option>
-                      <option value="light">浅色</option>
-                    </select>
+                      options={[
+                        { value: "dark", label: "深色" },
+                        { value: "light", label: "浅色" },
+                      ]}
+                      onChange={(v) => setTheme(v === "light" ? "light" : "dark")}
+                      ariaLabel="主题"
+                    />
                   </div>
                   <div className="settings-row">
                     <span>强调色</span>
@@ -1072,6 +1510,13 @@ export function App(): JSX.Element {
                   <div className="settings-row">
                     <span>语言</span>
                     <span className="settings-soon">跟随系统</span>
+                  </div>
+                </div>
+                <div className="settings-section-title">关于</div>
+                <div className="settings-card">
+                  <div className="settings-row">
+                    <span>版本</span>
+                    <span className="settings-soon">{version}</span>
                   </div>
                 </div>
                 <div className="settings-section-title">系统</div>
@@ -1102,23 +1547,74 @@ export function App(): JSX.Element {
 
 function MessageBubble({
   msg,
-  shape,
-  color,
+  speaker,
+  accent,
   onReact,
   onQuote,
+  onCopy,
 }: {
   msg: Msg;
-  shape: number;
-  color: string;
+  speaker: UiBot | null;
+  accent: string;
   onReact: (msgId: number, emoji: Emoji) => void;
   onQuote: (msg: Msg) => void;
+  onCopy: (text: string) => void;
 }): JSX.Element {
   const isUser = msg.from === "user";
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const emojiBtnRef = useRef<HTMLButtonElement | null>(null);
+  const pickerRef = useRef<HTMLDivElement | null>(null);
+  const [pickerPos, setPickerPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+
+  useLayoutEffect(() => {
+    if (!pickerOpen || !pickerRef.current || !emojiBtnRef.current) {
+      return;
+    }
+    const btn = emojiBtnRef.current.getBoundingClientRect();
+    const r = pickerRef.current.getBoundingClientRect();
+    const margin = 8;
+    let x = btn.right - r.width;
+    let y = btn.top - r.height - 6;
+    if (y < margin) {
+      y = btn.bottom + 6;
+    }
+    x = Math.min(Math.max(margin, x), Math.max(margin, window.innerWidth - r.width - margin));
+    y = Math.min(Math.max(margin, y), Math.max(margin, window.innerHeight - r.height - margin));
+    setPickerPos({ x, y });
+  }, [pickerOpen]);
+
+  useEffect(() => {
+    if (!pickerOpen) {
+      return;
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setPickerOpen(false);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [pickerOpen]);
+
   return (
-    <div className={"msg-row" + (isUser ? " user" : "")}>
-      {!isUser && <BlobFace shape={shape} color={color} size={34} />}
+    <div className={"msg-row" + (isUser ? " user" : " bot")}>
+      {!isUser && speaker && (
+        <AvatarView avatar={speaker.avatar} size={34} />
+      )}
       <div className="hover-wrap">
-        <div className={"msg-bubble" + (isUser ? " user" : "")}>
+        {!isUser && speaker ? (
+          <div className="sender-line">
+            <span className="sender-name" style={{ color: avatarColor(speaker.avatar) }}>
+              {speaker.bot.name}
+            </span>
+          </div>
+        ) : null}
+        <div
+          className={"msg-bubble" + (isUser ? " user" : "")}
+          style={isUser ? { background: accent, color: readableTextColor(accent) } : undefined}
+        >
           {msg.quote && (
             <div className="msg-quote">
               引用 {msg.quote.name}：{msg.quote.text}
@@ -1141,29 +1637,83 @@ function MessageBubble({
             </div>
           )}
         </div>
-        <div className="hover-actions" role="toolbar" aria-label="消息操作">
-          {EMOJIS.map((e) => (
-            <button
-              key={e}
-              type="button"
-              className="react-btn"
-              data-emoji={e}
-              title={`回应 ${e}`}
-              onClick={() => onReact(msg.id, e)}
-            >
-              {e}
-            </button>
-          ))}
-          <button
-            type="button"
-            className="react-btn"
-            data-action="quote"
-            title="引用"
-            onClick={() => onQuote(msg)}
-          >
-            ↩
-          </button>
-        </div>
+        {pickerOpen &&
+          createPortal(
+            <>
+              <div className="menu-overlay" onClick={() => setPickerOpen(false)} />
+              <div
+                ref={pickerRef}
+                className="emoji-picker"
+                role="menu"
+                aria-label="选择表情"
+                style={{ left: pickerPos.x, top: pickerPos.y }}
+              >
+                {EMOJIS.map((e) => (
+                  <button
+                    key={e}
+                    type="button"
+                    className="react-btn"
+                    data-emoji={e}
+                    title={`回应 ${e}`}
+                    onClick={() => {
+                      onReact(msg.id, e);
+                      setPickerOpen(false);
+                    }}
+                  >
+                    {e}
+                  </button>
+                ))}
+              </div>
+            </>,
+            document.body,
+          )}
+      </div>
+      <div className="msg-actions" role="toolbar" aria-label="消息操作">
+        <button
+          type="button"
+          className={"msg-icon-btn" + (pickerOpen ? " active" : "")}
+          data-action="emoji"
+          title="回应"
+          ref={emojiBtnRef}
+          onClick={() => setPickerOpen((v) => !v)}
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
+            <circle cx="9.2" cy="10" r="1" fill="currentColor" />
+            <circle cx="14.8" cy="10" r="1" fill="currentColor" />
+            <path d="M8.6 14a4.2 4.2 0 0 0 6.8 0" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          className="msg-icon-btn"
+          data-action="quote"
+          title="引用"
+          onClick={() => onQuote(msg)}
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M9.5 14.5 4 9l5.5-5.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M4 9h10a6 6 0 0 1 6 6v5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          className="msg-icon-btn"
+          data-action="copy"
+          title="复制"
+          onClick={() => onCopy(msg.text)}
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="9" y="9" width="11" height="11" rx="2.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
+            <path
+              d="M5 15H4.5A1.5 1.5 0 0 1 3 13.5v-9A1.5 1.5 0 0 1 4.5 3h9A1.5 1.5 0 0 1 15 4.5V5"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              strokeLinecap="round"
+            />
+          </svg>
+        </button>
       </div>
     </div>
   );
@@ -1174,26 +1724,44 @@ function BotsPlaceholder({
   groups,
   selectedBot,
   msgs,
+  pairTranscripts,
   quoteDraft,
   onQuote,
+  onPairQuote,
   onCancelQuote,
   onSend,
   onReact,
   onTalkTo,
+  onCopy,
+  onAttach,
+  onAssistant,
 }: {
-  bots: Bot[];
+  bots: UiBot[];
   groups: Group[];
   selectedBot: number;
   msgs: Msg[];
+  pairTranscripts: Record<
+    string,
+    { id: number; speakerKey: number; text: string; time: number }[]
+  >;
   quoteDraft: { name: string; text: string } | null;
   onQuote: (msg: Msg) => void;
+  onPairQuote: (name: string, text: string) => void;
   onCancelQuote: () => void;
   onSend: (text: string) => void;
   onReact: (msgId: number, emoji: Emoji) => void;
   onTalkTo: (otherKey: number) => void;
+  onCopy: (text: string) => void;
+  onAttach: () => void;
+  onAssistant: (text: string) => void;
 }): JSX.Element {
+  const service = useService();
   const [draft, setDraft] = useState("");
   const [plusOpen, setPlusOpen] = useState(false);
+  const [detailOther, setDetailOther] = useState<number | null>(null);
+  const [stream, setStream] = useState<(StreamState & { forKey: number }) | null>(null);
+  const [failedText, setFailedText] = useState("");
+  const streamRef = useRef<StreamHandle | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
   const me = bots.find((b) => b.key === selectedBot);
 
@@ -1209,16 +1777,183 @@ function BotsPlaceholder({
       </div>
     );
   }
-  const others = bots.filter((b) => b.key !== me.key);
 
-  let lastShownTime = 0;
+  if (detailOther !== null) {
+    const peer = bots.find((bot) => bot.key === detailOther);
+    const turns = pairTranscripts[pairKeyOf(me.key, detailOther)] ?? [];
+    return (
+      <div className="pair-view">
+        <header className="pair-head">
+          <span className="pair-title">
+            <AvatarView avatar={me.avatar} size={26} />
+            <span className="pair-arrow">⇄</span>
+            <AvatarView avatar={peer?.avatar ?? me.avatar} size={26} />
+            <span>{peer?.bot.name ?? "?"}</span>
+          </span>
+        </header>
+        <div className="pair-body">
+          {turns.map((turn) => {
+            const speaker = bots.find((bot) => bot.key === turn.speakerKey);
+            return (
+              <div className="pair-turn" key={turn.id}>
+                <AvatarView avatar={speaker?.avatar ?? me.avatar} size={30} />
+                <div className="pair-turn-main">
+                  <span
+                    className="pair-speaker"
+                    style={{ color: avatarColor(speaker?.avatar ?? me.avatar) }}
+                  >
+                    {speaker?.bot.name ?? "?"}
+                  </span>
+                  <div className="pair-bubble-row">
+                    <div className="msg-bubble">{turn.text}</div>
+                    <div className="pair-actions">
+                      <button
+                        type="button"
+                        className="msg-icon-btn"
+                        title="引用"
+                        aria-label="引用"
+                        onClick={() => {
+                          onPairQuote(speaker?.bot.name ?? "?", turn.text);
+                          setDetailOther(null);
+                        }}
+                      >
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                          <path d="M9.5 14.5 4 9l5.5-5.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                          <path d="M4 9h10a6 6 0 0 1 6 6v5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                        </svg>
+                      </button>
+                      <button
+                        type="button"
+                        className="msg-icon-btn"
+                        title="复制"
+                        aria-label="复制"
+                        onClick={() => onCopy(turn.text)}
+                      >
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                          <rect x="9" y="9" width="11" height="11" rx="2.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
+                          <path
+                            d="M5 15H4.5A1.5 1.5 0 0 1 3 13.5v-9A1.5 1.5 0 0 1 4.5 3h9A1.5 1.5 0 0 1 15 4.5V5"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.6"
+                            strokeLinecap="round"
+                          />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+          {turns.length === 0 && <div className="sys-line">暂无消息往来。</div>}
+        </div>
+        <div className="pair-foot">
+          <button type="button" className="pill-btn" onClick={() => setDetailOther(null)}>
+            关闭聊天
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const others = bots.filter((b) => b.key !== me.key);
+  const pairPeers = Array.from(
+    new Set(
+      msgs.flatMap((message) => (message.notice ? [message.notice.otherKey] : [])),
+    ),
+  );
+  const pairTotal = pairPeers.reduce(
+    (sum, peerKey) => sum + (pairTranscripts[pairKeyOf(me.key, peerKey)]?.length ?? 0),
+    0,
+  );
+  const firstNoticeId = msgs.find((message) => message.notice)?.id ?? null;
 
   const send = (): void => {
-    if (!draft.trim()) {
+    const text = draft.trim();
+    if (!text) {
       return;
     }
-    onSend(draft);
+    onSend(text);
+    setFailedText(text);
     setDraft("");
+    if (streamRef.current) {
+      streamRef.current.cancel();
+    }
+    const forKey = me.key;
+    setStream({ ...emptyStream(), forKey });
+    let acc = "";
+    const handle = service.chat.stream(me.bot.id, text, {
+      onDelta: (chunk) => {
+        acc += chunk;
+        setStream((prev) =>
+          prev && prev.forKey === forKey ? { ...applyDelta(prev, chunk), forKey } : prev,
+        );
+      },
+      onTool: (tool) => {
+        setStream((prev) =>
+          prev && prev.forKey === forKey ? { ...applyTool(prev, tool), forKey } : prev,
+        );
+      },
+    });
+    streamRef.current = handle;
+    void handle.finish().then((result) => {
+      streamRef.current = null;
+      setStream((prev) => {
+        if (!prev || prev.forKey !== forKey) {
+          return prev;
+        }
+        if (result.cancelled) {
+          return { ...applyCancelled(prev), forKey };
+        }
+        if (result.failure) {
+          return { ...applyFailure(prev, result.failure), forKey };
+        }
+        onAssistant(acc);
+        return null;
+      });
+    });
+  };
+
+  const retryStream = (): void => {
+    if (failedText.trim()) {
+      const text = failedText;
+      setFailedText("");
+      onSend(text);
+      const forKey = me.key;
+      setStream({ ...emptyStream(), forKey });
+      let acc = "";
+      const handle = service.chat.stream(me.bot.id, text, {
+        onDelta: (chunk) => {
+          acc += chunk;
+          setStream((prev) =>
+            prev && prev.forKey === forKey ? { ...applyDelta(prev, chunk), forKey } : prev,
+          );
+        },
+        onTool: (tool) => {
+          setStream((prev) =>
+            prev && prev.forKey === forKey ? { ...applyTool(prev, tool), forKey } : prev,
+          );
+        },
+      });
+      streamRef.current = handle;
+      void handle.finish().then((result) => {
+        streamRef.current = null;
+        setStream((prev) => {
+          if (!prev || prev.forKey !== forKey) {
+            return prev;
+          }
+          if (result.cancelled) {
+            return { ...applyCancelled(prev), forKey };
+          }
+          if (result.failure) {
+            return { ...applyFailure(prev, result.failure), forKey };
+          }
+          onAssistant(acc);
+          return null;
+        });
+      });
+    }
   };
 
   return (
@@ -1227,39 +1962,105 @@ function BotsPlaceholder({
         静态占位 · 无网络请求 · 不同分组的 Bot 无法主动交流
       </p>
       <div className="chat" ref={listRef}>
-        {msgs.map((m) => {
-          const showTime = lastShownTime === 0 || m.time - lastShownTime >= FIVE_MINUTES;
-          if (showTime) {
-            lastShownTime = m.time;
-          }
+        {msgs.map((m, index) => {
+          const prev = msgs[index - 1];
+          const showTime =
+            !m.system &&
+            !m.notice &&
+            (!prev || prev.system || m.time - prev.time > 5 * 60 * 1000);
+          const speaker =
+            m.from === "bot" ? bots.find((b) => b.key === (m.speakerKey ?? me.key)) ?? me : null;
           return (
             <Fragment key={m.id}>
-              {showTime && <div className="msg-time">{formatTime(m.time)}</div>}
-              {m.from === "bot" && m.notice && (
-                <div className="msg-notice">
-                  消息来自
-                  <BlobFace shape={me.shape} color={PALETTE[me.color]!} size={14} />
-                  {me.name}
-                </div>
-              )}
-              <MessageBubble
-                msg={m}
-                shape={me.shape}
-                color={PALETTE[me.color]!}
-                onReact={onReact}
-                onQuote={onQuote}
-              />
-              {m.from === "user" && (
-                <div className="msg-notice">
-                  已发消息给
-                  <BlobFace shape={me.shape} color={PALETTE[me.color]!} size={14} />
-                  {me.name}
-                </div>
+              {showTime && <div className="chat-time">{formatChatTime(m.time)}</div>}
+              {m.notice ? (
+                m.id === firstNoticeId ? (
+                  <div className="chat-summary">
+                    <span className="chat-summary-label">{pairTotal} 条消息往来：</span>
+                    {pairPeers.map((peerKey, peerIndex) => {
+                      const peer = bots.find((bot) => bot.key === peerKey);
+                      return (
+                        <Fragment key={peerKey}>
+                          {peerIndex > 0 && <span className="summary-and">和</span>}
+                          <button
+                            type="button"
+                            className="summary-bot"
+                            title={`查看与 ${peer?.bot.name ?? "?"} 的消息往来`}
+                            onClick={() => setDetailOther(peerKey)}
+                          >
+                            <AvatarView avatar={peer?.avatar ?? me.avatar} size={16} />
+                            <span>{peer?.bot.name ?? "?"}</span>
+                          </button>
+                        </Fragment>
+                      );
+                    })}
+                  </div>
+                ) : null
+              ) : m.system ? (
+                <div className="sys-line">{m.text}</div>
+              ) : (
+                <MessageBubble
+                  msg={m}
+                  speaker={speaker}
+                  accent={avatarColor(me.avatar)}
+                  onReact={onReact}
+                  onQuote={onQuote}
+                  onCopy={onCopy}
+                />
               )}
             </Fragment>
           );
         })}
         {msgs.length === 0 && <div className="sys-line">会话为空。</div>}
+        {stream && stream.forKey === me.key && (
+          <>
+            {stream.tools.map((tool) => (
+              <div className="tool-card" key={tool.toolName}>
+                <span className={"tool-state tool-" + tool.state}>
+                  {tool.state === "requested"
+                    ? "请求中"
+                    : tool.state === "running"
+                      ? "执行中"
+                      : tool.state === "succeeded"
+                        ? "已完成"
+                        : "失败"}
+                </span>
+                <span className="tool-name">{tool.toolName}</span>
+                {tool.summary && <span className="tool-summary">{tool.summary}</span>}
+              </div>
+            ))}
+            {(stream.text || (!stream.failure && !stream.cancelled)) && (
+              <div className="msg-row bot streaming">
+                <div className="hover-wrap">
+                  <div className="msg-bubble">
+                    {stream.text || "…"}
+                    {!stream.failure && !stream.cancelled && (
+                      <button
+                        type="button"
+                        className="stream-cancel"
+                        title="取消"
+                        onClick={() => streamRef.current?.cancel()}
+                      >
+                        取消
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+            {stream.failure && (
+              <div className="chat-failure" role="alert">
+                <span className="failure-code">{stream.failure.code}</span>
+                {failureMessage(stream.failure.code)}
+                {stream.failure.retryable && (
+                  <button type="button" className="pill-btn" onClick={retryStream}>
+                    重试
+                  </button>
+                )}
+              </div>
+            )}
+          </>
+        )}
       </div>
       {quoteDraft && (
         <div className="quote-chip">
@@ -1285,39 +2086,65 @@ function BotsPlaceholder({
           {plusOpen && (
             <>
               <div className="menu-overlay" onClick={() => setPlusOpen(false)} />
-              <div className="composer-menu" role="menu" aria-label="发起交流">
-                <div className="composer-menu-title">发起交流</div>
-                {others.length === 0 && (
-                  <div className="composer-menu-empty">还没有其他 Bot。</div>
-                )}
-                {others.map((b) => (
+              <div className="composer-menu" role="menu" aria-label="更多">
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="menu-item"
+                  onClick={() => {
+                    setPlusOpen(false);
+                    onAttach();
+                  }}
+                >
+                  <MenuIcon d="M21 12.5 12.5 21a5 5 0 0 1-7-7l8-8a3.5 3.5 0 0 1 5 5l-8 8a1.8 1.8 0 0 1-2.5-2.5L15 4.5" />
+                  添加附件
+                </button>
+                <div className="menu-sep" />
+                <div className="menu-sub-wrap">
                   <button
-                    key={b.key}
                     type="button"
                     role="menuitem"
                     className="menu-item"
-                    onClick={() => {
-                      onTalkTo(b.key);
-                      setPlusOpen(false);
-                    }}
+                    onClick={(e) => e.currentTarget.focus()}
                   >
-                    <BlobFace shape={b.shape} color={PALETTE[b.color]!} size={26} />
-                    <span className="tab-title">{b.name}</span>
-                    <span className="composer-menu-hint">
-                      {groups.find((g) => g.key === b.group)?.name ?? "?"}
-                    </span>
+                    <MenuIcon d="M8 12h8m-8 0a3 3 0 1 1 3-3m-3 3a3 3 0 0 0 3 3m5-6h3a3 3 0 0 1 0 6h-3m-2 0a3 3 0 1 0 3 3" />
+                    发起交流
+                    <span className="menu-arrow">›</span>
                   </button>
-                ))}
+                  <div className="submenu" role="menu" aria-label="选择 Bot">
+                    {others.length === 0 && (
+                      <div className="composer-menu-empty">还没有其他 Bot。</div>
+                    )}
+                    {others.map((b) => (
+                      <button
+                        key={b.key}
+                        type="button"
+                        role="menuitem"
+                        className="menu-item"
+                        onClick={() => {
+                          onTalkTo(b.key);
+                          setPlusOpen(false);
+                        }}
+                      >
+                        <AvatarView avatar={b.avatar} size={22} />
+                        <span className="tab-title">{b.bot.name}</span>
+                        <span className="composer-menu-hint">
+                          {groups.find((g) => g.key === b.group)?.name ?? "?"}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
             </>
           )}
         </div>
         <input
           className="composer-input"
-          placeholder={`给 ${me.name} 发消息`}
+          placeholder={`给 ${me.bot.name} 发消息`}
           value={draft}
           maxLength={200}
-          aria-label={`给 ${me.name} 发消息`}
+          aria-label={`给 ${me.bot.name} 发消息`}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter") {
@@ -1341,6 +2168,7 @@ function BotsPlaceholder({
           ↑
         </button>
       </div>
+
     </div>
   );
 }

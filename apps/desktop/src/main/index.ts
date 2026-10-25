@@ -178,20 +178,26 @@ function registerShellIpc(win: BrowserWindow): void {
         // Routes through the close handler: hides to tray unless quitting.
         win.close();
       },
+      setTitleBarOverlay: (colors) => {
+        // Renderer re-colors the native window-control strip on theme switch.
+        win.setTitleBarOverlay({ color: colors.color, symbolColor: colors.symbolColor });
+      },
     },
     createPrimaryWindowSenderGuard(() => mainWindow),
   );
 }
 
 function denyAllPermissions(): void {
-  // The shell needs no media, notification, clipboard or similar capabilities.
+  // Only renderer-initiated clipboard WRITES are allowed (user copies message text);
+  // everything else (media, notifications, clipboard read, ...) stays denied.
+  const allowedPermissions = new Set(["clipboard-sanitized-write"]);
   session.defaultSession.setPermissionRequestHandler(
-    (_webContents, _permission, callback) => {
-      callback(false);
+    (_webContents, permission, callback) => {
+      callback(allowedPermissions.has(permission));
     },
   );
   session.defaultSession.setPermissionCheckHandler(
-    (_webContents, _permission) => false,
+    (_webContents, permission) => allowedPermissions.has(permission),
   );
 }
 

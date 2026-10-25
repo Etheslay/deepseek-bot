@@ -12,6 +12,7 @@ type DesktopBridge = {
     minimize: () => Promise<void>;
     toggleMaximize: () => Promise<void>;
     close: () => Promise<void>;
+    setTitleBarOverlay: (colors: { color: string; symbolColor: string }) => Promise<void>;
   };
 };
 
