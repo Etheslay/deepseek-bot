@@ -55,31 +55,29 @@ Etheslay 主责 Harness、Host、执行、权限、存储和调度；Destinyian 
 
 首版由 Destinyian 组织安装包、版本和发布说明，Etheslay 对自己负责的 runtime、数据迁移、测试与回滚提交自审及验证证据。各自负责自己的修改；release 负责人检查最终候选与完整证据，在 PR 记录自审后按发布门槛合并，无需另一人批准。签名和发布凭据不能放进仓库。
 
-## 6. 阶段二任务清单（v0.2，D13 通过后启动）
+## 6. 阶段二任务清单（v0.2，D13 顺延至收官）
 
-下表所有任务从 D13 合并后的 `develop` 创建独立 feature 分支，目标均为 `develop`。阶段二只做本地单机能力，云端、计费、遥测与远程中继不在范围内。契约与依赖变更仍先走小型独立 PR（见 [Git 工作流](GIT_WORKFLOW.md)）。
+下表所有任务从最新 `develop` 创建独立 feature 分支，目标均为 `develop`。阶段二只做本地单机能力，云端、计费、遥测与远程中继不在范围内。契约与依赖变更仍先走小型独立 PR（见 [Git 工作流](GIT_WORKFLOW.md)）。
+
+编号说明：为避免碎片化，原 D24（聊天交互）并入 D14、原 D29（联网搜索）并入 D15、原 D32（生图连接器）与视觉接入并入 D19、原 D26（设置补全）与 D28（应用内更新）合并为新 D24；现行编号连续为 D14–D28。
 
 | 任务 / 分支 | 负责人（开发与自审） | 依赖 | 交付与验收 |
 | --- | --- | --- | --- |
-| D14 `feature/chat-rendering` | Destinyian | D05 | 聊天内 Markdown、代码高亮、KaTeX、流程图与产物预览；资源全部本地打包，不请求远程 CDN |
-| D15 `feature/agent-tools` | Etheslay | D08、D12 | 工具网关与读写工具（读现状、建设计稿）；聊天可生成创建草案，暂不落库；审计字段预留 |
+| D14 `feature/chat-experience` | Destinyian | D05 | 聊天体验一次到位：Markdown/代码高亮/KaTeX/mermaid 渲染（资源全本地）；内联提及跳转、多 bot 交付通知、定向回复、选项卡片（A/B/C/D，供 D16 复用）、自动化状态通知条；用户气泡颜色跟随 bot 主题色（原 D24 并入） |
+| D15 `feature/agent-tools` | Etheslay | D08、D12 | 工具网关：读层（list_bots/list_groups/get_run/get_run_events，默认允许）→ 写层（创建草案不落库、批量创建组内自动分配不重复头像、批量撤销）→ `ask_user` 选项卡 → 内置 `web_search`（免费源，走权限与审计）（原 D29 并入） |
 | D16 `feature/permissions-grants` | Etheslay | D08、D15 | capability/grant/审批三层模型；设置页三档策略；聊天内授权与撤销；审计可查（见 [权限与授权](PERMISSIONS.md)） |
 | D17 `feature/skills-templates` | Destinyian | D05、D15 | 技能定义与复用、bot 模板与本地模板库；导入导出走契约校验 |
 | D18 `feature/memory-knowledge` | Etheslay | D04、D15 | 记忆写入与检索、知识导入；用户可查看与删除；默认不跨 bot 共享 |
-| D19 `feature/connectors-mcp` | Etheslay | D08、D15 | 连接器注册与生命周期、自定义 MCP、凭据引用托管；调用受 grant 与审批约束 |
-| D20 `feature/automation-triggers` | Etheslay | D10、D15 | 事件触发与规则、评审队列；重复触发防护；错过触发可见 |
+| D19 `feature/connectors-mcp` | Etheslay | D08、D15 | 连接器注册与生命周期、自定义 MCP、凭据引用托管；首个官方连接器：本地 Stable Diffusion 生图（免费、吃 GPU）；视觉理解随模型可用接入（原 D32 并入） |
+| D20 `feature/automation-triggers` | Etheslay | D10、D15 | 事件触发与规则、评审队列；重复触发防护；错过触发可见；启停状态在聊天内可见 |
 | D21 `feature/local-exec` | Etheslay | D08、D15 | 本地执行守护、窗口截图与 OCR、设备动作；默认关闭，逐次授权，产物只存本地 |
 | D22 `feature/system-integration` | Destinyian | D02、D11 | 每 bot 托盘图标、Chrome 数据导入、通知设置、中英双语；不引入账户体系 |
 | D23 `feature/platform-acceptance` | Destinyian 主责，Etheslay 复核 | D13、D14–D22 | 对标矩阵、性能预算、可访问性与发布门槛；无 P0/P1；证据与结论一致 |
-| D24 `feature/chat-interactions` | Destinyian | D05、D14、D15 | bot 内联提及（彩色 @name，点击直达该 bot）、多 bot 交付通知（头像栈可点）、定向回复（“已只回某 bot”路由可见）、选项卡片（A/B/C/D 决策卡，点击即回答并回写会话）、自动化状态通知条；**用户气泡颜色跟随当前 bot 主题色**；卡片组件供 D16 授权弹层复用 |
+| D24 `feature/settings-updates` | Destinyian | D04、D11、D22 | 设置补全与持久化：外观强调色、语言切换、数据备份/恢复入口（data.* 契约）、本地用量统计、硬件加速与通知开关，清理全部占位假控件；**应用内更新**：electron-updater 以 GitHub Releases 为源，有新版时左下角弹出更新按钮，点击下载重启安装，SmartScreen 流程写明（原 D26/D28 并入） |
 | D25 `feature/global-search` | Destinyian | D05、D14 | 顶栏搜索落地：跨 bot / 会话 / 产物 / 设置项的本地搜索（渲染层索引先行，host 检索后接）；键盘唤起（Ctrl+K） |
-| D26 `feature/settings-completion` | Destinyian | D04、D22 | 设置补全与持久化：外观强调色、语言切换、数据备份/恢复入口（接 data.* 契约）、本地用量统计、检查更新入口、硬件加速与通知开关；清理全部占位假控件；设置写本地存储不再重启即失 |
-| D27 `feature/chat-attachments` | Destinyian | D08、D15 | 聊天附件：文件/图片经工具网关进入 bot 工作区（受 grant 与审批约束），聊天内附件卡片与产物预览打通；麦克风语音列为候选另行评估 |
-| D28 `feature/auto-update` | Destinyian | D11、D26 | 应用内更新：electron-updater 以 GitHub Releases 为源检查新版本，有新版时**左下角弹出更新按钮**（徽标提示），点击下载并重启安装；未签名流程与 SmartScreen 提示写明；设置页"检查更新"与手动打开 Releases 页兜底；发布流水线同步产出 latest.yml |
-| D29 `feature/web-search` | Etheslay | D08、D15、D19 | 内置 `web_search` / `browse` 工具：优先零订阅路径（本地 SearXNG / DuckDuckGo / 免费档 API 自带 Key）；走 D08 权限与审计；来源引用随答案渲染 |
-| D30 `feature/voice-mode` | Etheslay 主责，Destinyian 语音 UI 联调 | D12 | 本地语音：whisper.cpp 转写 + Windows TTS 播报（全免费、全本地）；按住说话/自动断句；不引入云端转写 |
-| D31 `feature/canvas-cowrite` | Destinyian | D14、D27 | 产物画布从只读预览升级为可共编侧车：bot 写、用户改、bot 续写；版本留痕可回退 |
-| D32 `feature/image-gen-connector` | Etheslay | D19 | 本地 Stable Diffusion 连接器（免费、吃 GPU）作为首个官方连接器；生图产物走产物库与聊天卡片；不接订阅制生图 API |
+| D26 `feature/chat-attachments` | Destinyian | D08、D15 | 聊天附件：文件/图片经工具网关进入 bot 工作区（受 grant 与审批约束），附件卡片与产物预览打通；bot 经 read 工具真正读取附件内容并回答 |
+| D27 `feature/voice-mode` | Etheslay 主责，Destinyian 语音 UI 联调 | D12 | 本地语音：whisper.cpp 转写 + Windows TTS 播报（全免费、全本地）；按住说话/自动断句；不引入云端转写（原 D30 并入，编号前移） |
+| D28 `feature/canvas-cowrite` | Destinyian | D14、D26 | 产物画布从只读预览升级为可共编侧车：bot 写、用户改、bot 续写；版本留痕可回退（原 D31 并入，编号前移） |
 
 ## 7. 阶段二里程碑
 
