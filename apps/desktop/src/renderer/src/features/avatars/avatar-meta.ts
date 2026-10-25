@@ -1,35 +1,45 @@
 /**
  * Avatar metadata (UI-only, never persisted).
  *
- * Minimal geometric shapes plus a theme-aware black/white bot.
+ * The Grok Ball shape set plus the theme-aware black/white bot.
  */
-import { MINIMAL_COLORS, MINIMAL_SHAPES } from "./avatar-minimal.js";
+import {
+  GROK_BALL_COLORS,
+  GROK_BALL_SHAPE_IDS,
+  type GrokBallShapeId,
+  type GrokBallState,
+} from "./grok-ball-model.js";
 
 /** UI accent color derived from the avatar itself. */
 export function avatarColor(avatar: Avatar): string {
   switch (avatar.kind) {
     case "mono":
       return "var(--avatar-mono-bg)";
-    case "minimal":
-      return avatar.color;
+    case "grok":
+      return avatar.color === "mono" ? "var(--avatar-mono-bg)" : avatar.color;
   }
 }
 
 /** UI-only avatar value; NOT a contract field, never persisted. */
 export type Avatar =
   | { kind: "mono" }
-  | { kind: "minimal"; shape: number; color: string };
+  | {
+      kind: "grok";
+      shape: GrokBallShapeId;
+      color: string;
+      state?: GrokBallState;
+    };
 
-/** Stable default mapping: same bot id → same geometric avatar. */
+/** Stable default mapping: same bot id → same Grok Ball avatar. */
 export function defaultAvatarFor(seed: string): Avatar {
   let hash = 0;
   for (let i = 0; i < seed.length; i++) {
     hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
   }
   return {
-    kind: "minimal",
-    shape: hash % MINIMAL_SHAPES.length,
-    color: MINIMAL_COLORS[hash % MINIMAL_COLORS.length]!,
+    kind: "grok",
+    shape: GROK_BALL_SHAPE_IDS[hash % GROK_BALL_SHAPE_IDS.length]!,
+    color: GROK_BALL_COLORS[hash % GROK_BALL_COLORS.length]!,
   };
 }
 
@@ -37,7 +47,7 @@ export function avatarKey(avatar: Avatar): string {
   switch (avatar.kind) {
     case "mono":
       return "mono";
-    case "minimal":
-      return `minimal:${avatar.shape}:${avatar.color}`;
+    case "grok":
+      return `grok:${avatar.shape}:${avatar.color}:${avatar.state ?? "idle"}`;
   }
 }
