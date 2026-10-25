@@ -75,6 +75,11 @@ Etheslay 主责 Harness、Host、执行、权限、存储和调度；Destinyian 
 | D25 `feature/global-search` | Destinyian | D05、D14 | 顶栏搜索落地：跨 bot / 会话 / 产物 / 设置项的本地搜索（渲染层索引先行，host 检索后接）；键盘唤起（Ctrl+K） |
 | D26 `feature/settings-completion` | Destinyian | D04、D22 | 设置补全与持久化：外观强调色、语言切换、数据备份/恢复入口（接 data.* 契约）、本地用量统计、检查更新入口、硬件加速与通知开关；清理全部占位假控件；设置写本地存储不再重启即失 |
 | D27 `feature/chat-attachments` | Destinyian | D08、D15 | 聊天附件：文件/图片经工具网关进入 bot 工作区（受 grant 与审批约束），聊天内附件卡片与产物预览打通；麦克风语音列为候选另行评估 |
+| D28 `feature/auto-update` | Destinyian | D11、D26 | 应用内更新：electron-updater 以 GitHub Releases 为源检查新版本，有新版时**左下角弹出更新按钮**（徽标提示），点击下载并重启安装；未签名流程与 SmartScreen 提示写明；设置页"检查更新"与手动打开 Releases 页兜底；发布流水线同步产出 latest.yml |
+| D29 `feature/web-search` | Etheslay | D08、D15、D19 | 内置 `web_search` / `browse` 工具：优先零订阅路径（本地 SearXNG / DuckDuckGo / 免费档 API 自带 Key）；走 D08 权限与审计；来源引用随答案渲染 |
+| D30 `feature/voice-mode` | Etheslay 主责，Destinyian 语音 UI 联调 | D12 | 本地语音：whisper.cpp 转写 + Windows TTS 播报（全免费、全本地）；按住说话/自动断句；不引入云端转写 |
+| D31 `feature/canvas-cowrite` | Destinyian | D14、D27 | 产物画布从只读预览升级为可共编侧车：bot 写、用户改、bot 续写；版本留痕可回退 |
+| D32 `feature/image-gen-connector` | Etheslay | D19 | 本地 Stable Diffusion 连接器（免费、吃 GPU）作为首个官方连接器；生图产物走产物库与聊天卡片；不接订阅制生图 API |
 
 ## 7. 阶段二里程碑
 
