@@ -8,6 +8,7 @@
  */
 import type { Artifact, Bot, ErrorCode, EventEnvelope } from "@deepseek-bot/contracts";
 import type { WorkflowServiceApi } from "../features/workflow-editor/workflow-service.js";
+import type { RunServiceApi } from "../features/run-monitor/run-service.js";
 
 export type ChatSessionView = {
   sessionId: string;
@@ -114,4 +115,6 @@ export interface DesktopService {
   };
   /** Workflow editor API (D07); fixture-backed, no execution/persistence. */
   workflows: WorkflowServiceApi;
+  /** Run monitor / approval API (D09); fixture playback, no real engine. */
+  runs: RunServiceApi;
 }
