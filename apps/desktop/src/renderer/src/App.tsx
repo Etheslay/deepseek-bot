@@ -23,6 +23,7 @@ import {
 } from "./features/avatars/avatar-meta.js";
 import { WorkflowEditor } from "./features/workflow-editor/workflow-editor.js";
 import { RunMonitor } from "./features/run-monitor/run-monitor.js";
+import { ChatMarkdown } from "./features/chat/chat-markdown.js";
 
 
 type Group = { key: number; name: string };
@@ -639,11 +640,19 @@ export function App(): JSX.Element {
       }
       return {
         ...prev,
-        [bot.key]: [
+            [bot.key]: [
           {
             id: bot.key,
             from: "bot",
-            text: `hello，我是 ${bot.bot.name}，有什么可以为你服务的吗`,
+            text: `hello，我是 ${bot.bot.name}。聊天支持 **Markdown**：
+
+- 列表、\`行内代码\` 与 [链接](https://api.deepseek.com)
+- 代码块带高亮：
+\`\`\`typescript
+const answer = await bot.ask("你好");
+\`\`\`
+- 数学公式：质能方程 $E = mc^2$，以及求和
+$$\\sum_{i=1}^{n} i = \\frac{n(n+1)}{2}$$`,
             quote: null,
             reactions: {},
             mine: [],
@@ -1674,7 +1683,7 @@ function MessageBubble({
               引用 {msg.quote.name}：{msg.quote.text}
             </div>
           )}
-          {msg.text}
+          {isUser ? msg.text : <ChatMarkdown text={msg.text} />}
           {!isUser && EMOJIS.some((e) => (msg.reactions[e] ?? 0) > 0) && (
             <div className="reaction-chips">
               {EMOJIS.filter((e) => (msg.reactions[e] ?? 0) > 0).map((e) => (
