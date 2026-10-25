@@ -7,6 +7,8 @@ import {
   createRun,
   decideApproval,
   expireApprovals,
+  expireApprovalsForRun,
+  markApprovalExpired,
   getApproval,
   listApprovals,
   registerArtifact,
@@ -156,6 +158,52 @@ describe("artifact guard branches", () => {
     const artifact = makeArtifact(runId, nodeRunId);
     registerArtifact(db, artifact);
     expect(() => registerArtifact(db, artifact)).toThrow(/already exists/);
+    db.close();
+  });
+});
+
+describe("approval expiry helpers", () => {
+  it("marks a specific pending approval expired and rejects non-pending ones", () => {
+    const db = openTestDatabase(makeLayout(makeTempRoot()));
+    const { runId, nodeRunId } = seedRunAndNode(db);
+    const approval = makeApproval(runId, nodeRunId);
+    createApproval(db, approval);
+
+    const expired = markApprovalExpired(db, { id: approval.id });
+    expect(expired.status).toBe("expired");
+    expect(() => markApprovalExpired(db, { id: approval.id })).toThrow(/pending/);
+    expect(() => markApprovalExpired(db, { id: randomUUID() })).toThrow(/not found/);
+    db.close();
+  });
+
+  it("expires every pending approval of one run only", () => {
+    const db = openTestDatabase(makeLayout(makeTempRoot()));
+    const { runId, nodeRunId } = seedRunAndNode(db);
+    const first = makeApproval(runId, nodeRunId);
+    const second = makeApproval(runId, nodeRunId);
+    createApproval(db, first);
+    createApproval(db, second);
+    // A pending approval on another run must stay untouched.
+    const otherRun = createRun(db, makeRun(makeWorkflow())).run;
+    const otherNodeRun: NodeRun = {
+      id: randomUUID(),
+      runId: otherRun.id,
+      nodeId: "n1",
+      attempt: 1,
+      status: "pending",
+      inputRefs: [],
+      outputRefs: [],
+      sessionId: null,
+    };
+    createNodeRun(db, otherNodeRun);
+    const other = makeApproval(otherRun.id, otherNodeRun.id);
+    createApproval(db, other);
+
+    expect(expireApprovalsForRun(db, runId)).toBe(2);
+    expect(getApproval(db, first.id)?.status).toBe("expired");
+    expect(getApproval(db, second.id)?.status).toBe("expired");
+    expect(getApproval(db, other.id)?.status).toBe("pending");
+    expect(expireApprovalsForRun(db, runId)).toBe(0);
     db.close();
   });
 });
