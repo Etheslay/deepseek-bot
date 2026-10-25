@@ -5,3 +5,12 @@ packages:
 allowBuilds:
   esbuild: true
   electron: true
+  # D01 §2 policy: install scripts from the pinned Harness runtime tree are
+  # never executed (no scripts from unknown sources). Native binaries ship
+  # as prebuilds and PTY/terminal features are outside the SDK profile path
+  # (verified 2026-10-23/24); keep these denied unless a task re-verifies.
+  "@deepseek-ai/dsh-subprocess-local": false
+  "@google/genai": false
+  koffi: false
+  node-pty: false
+  protobufjs: false
