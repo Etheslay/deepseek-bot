@@ -92,6 +92,7 @@ preload 暴露面：`deepseekBot.getAppInfo()` 与 `deepseekBot.window.{show,hid
 - 键盘可达：Tab 焦点、aria-* 语义、Esc 关闭弹窗/菜单；未引入 UI 组件库。
 - D05 起：机器人工作区（契约服务层、流式聊天、历史回放、产物预览、设置接入）见 [机器人工作区](BOT_WORKSPACE.md)；最近会话/产物为聊天头部 popover；创建表单含语气 chips（UI-only）。
 - D07 起：头部新增「工作流编辑器」图标按钮，主区切换为工作流编辑器视图（工具栏 / 节点面板 / 画布 / 参数检查器 / 校验面板），IPC 白名单不变，见 [工作流编辑器](WORKFLOW_EDITOR.md)。
+- D09 起：头部新增「运行监控与审批」图标按钮（与编辑器互斥），主区切换为运行监控视图（运行列表 / 详情监控·历史双标签 / 审批收件箱），IPC 白名单不变，见 [运行监控](RUN_MONITOR.md)。
 
 ## 已知限制
 
