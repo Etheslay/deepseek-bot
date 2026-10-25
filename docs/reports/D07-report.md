@@ -1,11 +1,11 @@
 # D07 交付报告：工作流编辑器
 
 - 任务：D07（里程碑 M2，FR-04 工作流编辑）
-- 分支：`feature/workflow-editor`（base `develop`）
+- 分支：`feature/workflow-editor`（base `develop`；合并后远端源分支与本地分支均已删除）
 - 基线：`origin/develop` = `4cd6e4d`（2026-10-24 fetch 时点；D05 已随 PR #11 合并，D06 已随 PR #10 合并）
-- 功能提交：`68f2bba` `feat(workflow-editor): implement editor canvas, inspector, validation and template io`（16 文件，+3883）
+- 提交：功能 `68f2bba` `feat(workflow-editor): implement editor canvas, inspector, validation and template io`（16 文件，+3883）；文档 `215f743`（本报告与 WORKFLOW_EDITOR / DESKTOP_SHELL 同步）
+- 合并：PR #12 已合并，merge commit `e6a8bcb`（2026-10-24 23:54 -0700，父提交 `4cd6e4d` + `215f743`）；`git diff 215f743 e6a8bcb` 为空，合并树与验收提交一致
 - 负责人：Destinyian
-- PR：待开（草稿描述见文末；`gh` CLI 不在本机，需 Owner 在 GitHub 创建）
 - 环境：Windows 11 (10.0.26200) · Node v24.16.0 · pnpm v11.28.5 · Electron 38.2.1 / electron-vite 4.0.1 / vitest 3.2.4 / React 19.1.1 · zod 4.6.7（contracts）
 
 ## 0. 开工门禁记录
@@ -99,10 +99,12 @@ apps/desktop/src/renderer/src/features/workflow-editor/
 | 持久化 | 夹具为内存态，重启即失 | D04 接线（storage 已在 develop，未接入 desktop） |
 | 工作流执行 | 编辑器不依赖引擎，未执行任何工作流 | D06（已合并，未接 UI） |
 | 调度 | 未实现 | D10 |
-| 运行监控 / 审批执行 | 未实现 | D09（以本分支为容器基线） |
+| 运行监控 / 审批执行 | 未实现 | D09（基线为含本任务的 `develop` `e6a8bcb`） |
 | 真实双窗口 REVISION_CONFLICT 演示 | 夹具 store 每窗口/每进程独立，单窗口内无法制造真冲突；冲突语义（stale revision 拒绝、不覆盖、横幅+刷新重试 UI）由 21 例服务层测试 + 代码路径覆盖，真实场景需共享后端（D04/Host）接入后人工复验 | 后续 |
 | Electron 壳内人工点检 | 本环境 Electron 无法启动（见 §3）；证据来自同一 renderer 生产 bundle 的浏览器驱动 | Owner 本机 `pnpm --filter @deepseek-bot/desktop dev` 复验 |
-| CI | 分支未推送前无 CI 运行 | 推送后由 GitHub Actions 出证 |
+| CI（GitHub Actions） | 本机无 GitHub API / 网页访问，PR #12 的 Actions 结论未取证；PR #12 已合并 | Owner 从 PR #12 页面补记 |
+
+> 合并后本地复跑（AI 辅助，供自审引用，不代替负责人结论）：`pnpm lint`、`pnpm typecheck` 均 exit 0；`pnpm test` 305 例全过（shared 6 / contracts 64 / desktop 86 / storage 106 / runtime 43，desktop 含 D07 46 例）。复跑环境为 `develop` = `e6a8bcb`（与验收提交 `215f743` 同树）。
 
 ## 6. 已知问题与回退
 
@@ -122,7 +124,7 @@ apps/desktop/src/renderer/src/features/workflow-editor/
 > - 测试：+46 例（reducer 15 / 校验映射 10 / 服务 21），全仓 305 例绿；lint/typecheck/build 绿（构建需 TMP 指向可写目录，报告有说明）。
 > - 证据：12 张截图 + 16 步断言（docs/reports/D07-report.md §3）；执行/持久化/调度/审批执行明确未做。
 >
-> Base: develop。不合并，等 Reviewer 复核与 Owner 自审。
+> Base: develop。已作为 PR #12 以 merge commit `e6a8bcb` 合入 develop（2026-10-24）；负责人自审记录见 §8。
 
 ## 8. 负责人自审记录
 
