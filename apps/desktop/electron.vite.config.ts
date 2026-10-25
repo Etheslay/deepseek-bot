@@ -10,7 +10,10 @@ const cjsOutput = {
 
 export default defineConfig({
   main: {
-    plugins: [externalizeDepsPlugin()],
+    // Workspace packages ship TypeScript sources (packages/*/src/index.ts), so
+    // they cannot be `require`d at runtime. Anything the main process imports
+    // from the workspace must be bundled into out/main/index.cjs.
+    plugins: [externalizeDepsPlugin({ exclude: ["@deepseek-bot/contracts"] })],
     build: {
       outDir: "out/main",
       rollupOptions: {
@@ -46,3 +49,4 @@ export default defineConfig({
     plugins: [react()],
   },
 });
+
