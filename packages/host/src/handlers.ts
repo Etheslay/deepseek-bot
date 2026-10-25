@@ -201,6 +201,16 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
 
     "run.cancel": async (payload) => engine.cancelRun(payload.runId),
 
+    "run.resume": (payload) => {
+      const { run } = engine.resumeRun({
+        runId: payload.runId,
+        ...(payload.idempotencyKey !== undefined
+          ? { idempotencyKey: payload.idempotencyKey }
+          : {}),
+      });
+      return run;
+    },
+
     "run.retryNode": (payload) => {
       const nodeRun = getNodeRun(db, payload.nodeRunId);
       if (nodeRun === undefined) {

@@ -516,6 +516,15 @@ export class RunExecution {
     }
     this.inflight.delete(nodeRunId);
     this.disposeToolGate(nodeRunId);
+    if (this.db.raw.isOpen === false) {
+      // The host was torn down under this in-flight attempt (crash-simulation
+      // tests, a killed host process whose event loop briefly outlives the
+      // database): the settlement has nowhere to land, and throwing would
+      // only surface as an unhandled rejection in a dying process. The
+      // recovery path (recoverInterruptedRuns at next host start) owns the
+      // recorded state from here.
+      return;
+    }
     if (this.cancelRequested) {
       // Late settlement during cancellation (e.g. a tool wait rejected with
       // CANCELLED after the node was already swept) must still release the
