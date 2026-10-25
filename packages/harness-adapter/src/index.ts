@@ -29,3 +29,26 @@ export {
   type RegisteredSessionContext,
   type SessionGateResolver,
 } from "./dsh-executor.js";
+export {
+  decide,
+  startApprovalBridgeServer,
+  type ApprovalBridgeDecision,
+  type ApprovalBridgeRequest,
+  type ApprovalBridgeServerOptions,
+  type BridgeOutcome,
+  type RunningApprovalBridge,
+} from "./approval-bridge-server.js";
+export {
+  mapHarnessToolCall,
+  parseToolArguments,
+  type HarnessToolCall,
+} from "./tool-mapping.js";
+export {
+  BRIDGE_MOUNT_PATCH,
+  TELEMETRY_DISABLED_PATCH,
+  installBridgeIntoProfile,
+  writeProfilePatches,
+  type BridgeInstallOptions,
+  type CommandRunner,
+  type ProfilePatchPaths,
+} from "./profile-assets.js";
