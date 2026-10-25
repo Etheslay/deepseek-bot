@@ -11,6 +11,9 @@ export default tseslint.config(
       "**/out/**",
       "**/release/**",
       "handoff/**",
+      ".ui-profile*/**",
+      ".tmp*/**",
+      ".baoyu-skills/**",
     ],
   },
   eslint.configs.recommended,
@@ -45,3 +48,4 @@ export default tseslint.config(
     },
   },
 );
+

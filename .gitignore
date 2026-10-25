@@ -34,3 +34,10 @@ Thumbs.db
 apps/desktop/out/
 apps/desktop/release/
 .dev-electron-profile/
+
+# Local tool profiles, temp build dirs and handoff material
+.ui-profile*/
+.tmp*/
+.baoyu-skills/
+handoff/
+
