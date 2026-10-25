@@ -25,6 +25,8 @@ import { WorkflowEditor } from "./features/workflow-editor/workflow-editor.js";
 import { RunMonitor } from "./features/run-monitor/run-monitor.js";
 import { ChatMarkdown } from "./features/chat/chat-markdown.js";
 import type { MentionTable } from "./features/chat/mentions.js";
+import { GlobalSearch } from "./features/search/global-search.js";
+import { buildSearchIndex, type SearchItem } from "./features/search/search-core.js";
 
 
 type Group = { key: number; name: string };
@@ -263,6 +265,7 @@ export function App(): JSX.Element {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [workflowOpen, setWorkflowOpen] = useState(false);
   const [monitorOpen, setMonitorOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [accountName, setAccountName] = useState("本地用户");
   const [editingName, setEditingName] = useState(false);
@@ -358,6 +361,10 @@ export function App(): JSX.Element {
         setSettingsOpen(false);
         setEditingName(false);
         setGroupMenu(null);
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setSearchOpen((v) => !v);
       }
     };
     window.addEventListener("keydown", onKey);
@@ -745,6 +752,83 @@ const logout = (): void => {
 
   const menuBot = menu ? bots.find((b) => b.key === menu.botKey) : undefined;
 
+  const searchIndex = useMemo<SearchItem[]>(() => {
+    const messages: {
+      botKey: number;
+      botName: string;
+      text: string;
+      time: number;
+    }[] = [];
+    for (const [botKey, list] of Object.entries(chats)) {
+      const botName =
+        bots.find((b) => b.key === Number(botKey))?.bot.name ?? "Bot";
+      for (const msg of list) {
+        if (msg.system || msg.notice) {
+          continue;
+        }
+        messages.push({
+          botKey: Number(botKey),
+          botName,
+          text: msg.text,
+          time: msg.time,
+        });
+      }
+    }
+    return buildSearchIndex({
+      bots: bots.map((b) => ({
+        key: b.key,
+        name: b.bot.name,
+        group: groups.find((g) => g.key === b.group)?.name ?? "未分组",
+      })),
+      messages,
+      actions: [
+        {
+          id: "action-settings",
+          kind: "action",
+          title: "打开设置",
+          subtitle: "Key、主题、账户",
+          action: "settings",
+        },
+        {
+          id: "action-monitor",
+          kind: "action",
+          title: "打开运行监控与审批",
+          subtitle: "FR-06/07",
+          action: "monitor",
+        },
+        {
+          id: "action-workflow",
+          kind: "action",
+          title: "打开工作流编辑器",
+          subtitle: "FR-04",
+          action: "workflow",
+        },
+      ],
+    });
+  }, [bots, groups, chats]);
+
+  const onSearchSelect = (item: SearchItem): void => {
+    if (item.kind === "bot" || item.kind === "message") {
+      const botKey = item.botKey;
+      const target = bots.find((b) => b.key === botKey);
+      if (botKey !== undefined && target) {
+        setSelectedBot(botKey);
+        setQuoteDraft(null);
+        ensureChat(target);
+      }
+      return;
+    }
+    if (item.action === "settings") {
+      setSettingsOpen(true);
+    } else if (item.action === "monitor") {
+      setWorkflowOpen(false);
+      setMonitorOpen(true);
+    } else if (item.action === "workflow") {
+      setMonitorOpen(false);
+      setWorkflowOpen(true);
+    }
+  };
+
   return (
     <div className="shell">
       <header className="top">
@@ -902,12 +986,18 @@ const logout = (): void => {
       <div className="shell-main">
       <aside className="sidebar">
         <div className="top-left">
-          <span className="circle-btn" aria-hidden="true">
+          <button
+            type="button"
+            className="circle-btn clickable"
+            aria-label="全局搜索（Ctrl+K）"
+            title="全局搜索（Ctrl+K）"
+            onClick={() => setSearchOpen(true)}
+          >
             <svg viewBox="0 0 24 24">
               <circle cx="10.5" cy="10.5" r="6" fill="none" stroke="currentColor" strokeWidth="2" />
               <line x1="15.5" y1="15.5" x2="20" y2="20" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
             </svg>
-          </span>
+          </button>
           <button
             type="button"
             className="circle-btn clickable"
@@ -1643,6 +1733,13 @@ const logout = (): void => {
           {toast}
         </div>
       )}
+
+      <GlobalSearch
+        open={searchOpen}
+        items={searchIndex}
+        onSelect={onSearchSelect}
+        onClose={() => setSearchOpen(false)}
+      />
     </div>
   );
 }

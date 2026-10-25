@@ -6340,3 +6340,107 @@ select option {
 .deliver-count {
   white-space: nowrap;
 }
+
+/* ============================================================
+   Global search overlay (D25) — Ctrl+K
+   ============================================================ */
+
+.gs-backdrop {
+  position: fixed;
+  inset: 0;
+  background: var(--overlay);
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding-top: 12vh;
+  z-index: 260;
+}
+
+.gs-panel {
+  width: min(560px, calc(100vw - 48px));
+  background: var(--modal-bg);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: var(--shadow-3);
+  overflow: hidden;
+}
+
+.gs-input {
+  width: 100%;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.95rem;
+  padding: 14px 16px;
+}
+
+.gs-hint {
+  padding: 14px 16px 18px;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.gs-list {
+  list-style: none;
+  margin: 0;
+  padding: 6px;
+  max-height: 46vh;
+  overflow-y: auto;
+}
+
+.gs-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.gs-item.active,
+.gs-item:focus-visible {
+  background: var(--item-hover);
+  outline: none;
+}
+
+.gs-kind {
+  flex: none;
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 2px 7px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+
+.gs-kind--bot { color: var(--bots, #2dd4a7); border-color: color-mix(in srgb, var(--bots, #2dd4a7) 40%, transparent); }
+.gs-kind--message { color: var(--runs, #ec4899); border-color: color-mix(in srgb, var(--runs, #ec4899) 40%, transparent); }
+.gs-kind--action { color: var(--settings, #3b82f6); border-color: color-mix(in srgb, var(--settings, #3b82f6) 40%, transparent); }
+
+.gs-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.86rem;
+}
+
+.gs-sub {
+  flex: none;
+  font-size: 0.72rem;
+  color: var(--muted);
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
