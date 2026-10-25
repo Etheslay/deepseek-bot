@@ -35,7 +35,7 @@ flowchart LR
 | `packages/storage/` | 应用数据库、迁移、备份、查询 | 自定义修改 Harness 日志格式 | Etheslay |
 | `packages/ui/` | 可复用界面与可访问性组件 | 本地数据授权判断 | Destinyian |
 
-桌面壳（D02）、共享契约（D03）、本地存储（D04）、工作流引擎（D06，`packages/runtime/`，经 `NodeExecutor` 端口与 Harness 适配层解耦）与后端工具权限层（D08，`packages/runtime/src/permissions/`：路径规范化/包含校验、策略评估、一次性审批门、MCP 授权检查；storage 增加 `tool_policies` 表与启动代次）已按此布局落地；`packages/harness-adapter/`、`packages/ui/` 仍是规划，本次不创建。
+桌面壳（D02）、共享契约（D03）、本地存储（D04）、工作流引擎（D06，`packages/runtime/`，经 `NodeExecutor` 端口与 Harness 适配层解耦）、后端工具权限层（D08，`packages/runtime/src/permissions/`：路径规范化/包含校验、策略评估、一次性审批门、MCP 授权检查；storage 增加 `tool_policies` 表与启动代次）与本地调度器（D10，`packages/runtime/src/scheduler/`：时区感知 cron 触发、occurrence 去重、skip-and-notify misfire、恢复重启中断的运行；storage 增加 `schedule_misses` 表与节点输出持久化）已按此布局落地；`packages/harness-adapter/`、`packages/ui/` 仍是规划，本次不创建。
 
 ## 3. 数据与调用链
 
@@ -66,7 +66,7 @@ flowchart LR
 
 工作流是有向无环图。保存时校验环、悬空引用、端口类型与预算；执行前再次验证。并发上限默认 2，可配置上限须在压力测试后确定；同一文件写目标与桌面交互工具使用资源锁。
 
-状态机、失败后的后继处理、重试、人工确认、调度去重均以[接口契约](CONTRACTS.md)为准。D06 起可执行实现位于 `packages/runtime/`：stop-descendants 失败传播、有界重试（指数退避 + Retry-After）、两阶段取消与 `recoverInterruptedRuns` 已按契约状态机落地；调度去重与 misfire 属 D10。工作流版本与机器人配置在运行开始时形成不可变快照，执行中修改不影响已有运行。
+状态机、失败后的后继处理、重试、人工确认、调度去重均以[接口契约](CONTRACTS.md)为准。D06 起可执行实现位于 `packages/runtime/`：stop-descendants 失败传播、有界重试（指数退避 + Retry-After）、两阶段取消与 `recoverInterruptedRuns` 已按契约状态机落地。D10 补齐调度与恢复：宿主运行期间（应用打开或驻留托盘）按各 schedule 的 IANA 时区计算 cron 触发时刻；同一 (scheduleId, occurrenceUtc) 由 runs 唯一索引保证至多一个 Run（触发后崩溃重放为 duplicate）；错过时刻超过宽限窗按 skip-and-notify 逐条登记 `schedule_misses` 并推进到下一未来时刻，不批量静默补跑（FR-08/QA-10）；`engine.resumeRun` 以新 Run 关联 `resumedFromRunId` 恢复重启中断的运行，已成功节点携带会话与输出不再重复执行。工作流版本与机器人配置在运行开始时形成不可变快照，执行中修改不影响已有运行。
 
 ## 7. 需要技术验证的边界
 

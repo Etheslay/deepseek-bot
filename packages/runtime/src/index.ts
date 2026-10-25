@@ -1,5 +1,5 @@
 /**
- * @deepseek-bot/runtime — workflow engine for DeepSeekBot (D06/D08).
+ * @deepseek-bot/runtime — workflow engine for DeepSeekBot (D06/D08/D10).
  *
  * Owns: DAG validation at start, sequential/parallel dispatch with a
  * concurrency limit, stop-descendants failure policy, bounded retries,
@@ -7,9 +7,12 @@
  * and persistent event emission with sequence continuity. D08 adds the
  * backend tool-permission layer: path canonicalization/containment, tool
  * policy evaluation, one-time approvals bound to action digests and the
- * host boot generation, and MCP server/tool authorization.
- * Does NOT own: the Harness adapter process (plugs in via NodeExecutor),
- * scheduling (D10) or the desktop IPC surface.
+ * host boot generation, and MCP server/tool authorization. D10 adds local
+ * scheduling: timezone-aware cron occurrences, duplicate-trigger
+ * protection, skip-and-notify misfire handling and resume of
+ * restart-interrupted runs via resumedFromRunId.
+ * Does NOT own: the Harness adapter process (plugs in via NodeExecutor)
+ * or the desktop IPC surface.
  */
 export * from "./errors.js";
 export * from "./executor.js";
@@ -22,3 +25,5 @@ export * from "./permissions/actions.js";
 export * from "./permissions/paths.js";
 export * from "./permissions/policy.js";
 export * from "./permissions/gate.js";
+export * from "./scheduler/cron.js";
+export * from "./scheduler/scheduler.js";

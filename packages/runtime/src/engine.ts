@@ -7,7 +7,7 @@
  * immutable Run record, and deduplicates submissions by idempotencyKey
  * (CONTRACTS §3). Runs found active in storage without a live execution are
  * interrupted by recoverInterruptedRuns at host startup; resuming them is a
- * new Run linked via resumedFromRunId (D10).
+ * new Run linked via resumedFromRunId (resumeRun, D10).
  */
 import { randomUUID } from "node:crypto";
 import {
@@ -15,6 +15,7 @@ import {
   RunTriggerSchema,
   validateWorkflowDraft,
   type Bot,
+  type NodeRun,
   type Run,
   type ToolPolicy,
   type Workspace,
@@ -25,6 +26,7 @@ import {
   expireApprovalsForRun,
   getApproval,
   getBot,
+  getNodeRunOutputs,
   getRun,
   getToolPolicy,
   getWorkflow,
@@ -40,7 +42,12 @@ import {
 import type { NodeExecutor } from "./executor.js";
 import { invalidInput, workflowIssueError } from "./errors.js";
 import { RunEventEmitter } from "./run-events.js";
-import { RunExecution, type RunExecutionOptions } from "./run-execution.js";
+import {
+  RunExecution,
+  type ResumeSeed,
+  type ResumeSeedEntry,
+  type RunExecutionOptions,
+} from "./run-execution.js";
 
 export interface WorkflowEngineOptions {
   readonly db: OpenedDatabase;
@@ -125,28 +132,7 @@ export class WorkflowEngine {
 
     // Resolve and pin permission inputs for the whole run (ARCHITECTURE §6:
     // mid-run policy/workspace edits never affect a running run).
-    const permissionPins = new Map<
-      string,
-      { policy: ToolPolicy; workspace: Workspace | undefined }
-    >();
-    for (const bot of bots) {
-      const policy = getToolPolicy(db, bot.toolPolicyId);
-      if (policy === undefined) {
-        // Least privilege: no policy record, no execution.
-        throw invalidInput("tool policy not found for bot", {
-          botId: bot.id,
-          toolPolicyId: bot.toolPolicyId,
-        });
-      }
-      const workspace = getWorkspace(db, bot.workspaceId);
-      if (workspace === undefined) {
-        throw invalidInput("workspace not found for bot", {
-          botId: bot.id,
-          workspaceId: bot.workspaceId,
-        });
-      }
-      permissionPins.set(bot.id, { policy, workspace });
-    }
+    const permissionPins = this.resolvePermissionPins(bots);
 
     const trigger = RunTriggerSchema.safeParse(input.trigger);
     if (!trigger.success) {
@@ -309,6 +295,125 @@ export class WorkflowEngine {
       });
     }
     return results;
+  }
+
+  /**
+   * Resume a restart-interrupted run (D10, CONTRACTS §5): creates a NEW run
+   * from the original's immutable snapshots, linked via resumedFromRunId,
+   * with a manual trigger. Work that already succeeded before the restart is
+   * carried over — status, Harness session and persisted outputs — and is
+   * not re-executed (QA-09: 不重做未知副作用); interrupted, failed, pending
+   * and previously-skipped nodes restart fresh. Permission inputs are
+   * re-resolved from current storage like any other run start. An
+   * idempotencyKey given by the caller makes repeated resume calls return
+   * the same resumed run; without one each call creates a new run.
+   */
+  resumeRun(input: { runId: string; idempotencyKey?: string }): { run: Run; created: boolean } {
+    const db = this.options.db;
+    const original = getRun(db, input.runId);
+    if (original === undefined) {
+      throw invalidInput("run not found", { runId: input.runId });
+    }
+    if (original.status !== "interrupted") {
+      throw invalidInput("only interrupted runs can be resumed", {
+        runId: input.runId,
+        status: original.status,
+      });
+    }
+    for (const snapshot of original.botSnapshots) {
+      const bot = getBot(db, snapshot.id);
+      if (bot === undefined) {
+        throw invalidInput("bot not found for workflow node", { botId: snapshot.id });
+      }
+      if (bot.archivedAt !== null) {
+        throw invalidInput("archived bots cannot start new executions", { botId: snapshot.id });
+      }
+    }
+    const permissionPins = this.resolvePermissionPins(original.botSnapshots);
+    const now = this.options.now ?? (() => new Date());
+    const { run, created } = createRun(db, {
+      id: randomUUID(),
+      workflowSnapshot: original.workflowSnapshot,
+      botSnapshots: original.botSnapshots,
+      status: "queued",
+      trigger: RunTriggerSchema.parse({
+        kind: "manual",
+        idempotencyKey: input.idempotencyKey ?? randomUUID(),
+      }),
+      createdAt: now().toISOString(),
+      finishedAt: null,
+      resumedFromRunId: original.id,
+    });
+    if (!created) {
+      return { run, created: false };
+    }
+    const execution = new RunExecution({
+      ...this.executionOptions(run, permissionPins),
+      ...(this.resumeSeedFor(original.id)),
+    });
+    this.executions.set(run.id, execution);
+    execution.start();
+    const started = getRun(db, run.id);
+    return { run: started ?? run, created: true };
+  }
+
+  /**
+   * Terminal state of the interrupted run, expressed as a seed for the new
+   * execution: succeeded nodes with their sessions and outputs, skipped
+   * nodes as pending-again markers.
+   */
+  private resumeSeedFor(originalRunId: string): { resumeSeed: ResumeSeed } | Record<string, never> {
+    const db = this.options.db;
+    const latestByNode = new Map<string, NodeRun>();
+    for (const nodeRun of listNodeRuns(db, originalRunId)) {
+      const current = latestByNode.get(nodeRun.nodeId);
+      if (current === undefined || nodeRun.attempt > current.attempt) {
+        latestByNode.set(nodeRun.nodeId, nodeRun);
+      }
+    }
+    const succeeded: ResumeSeedEntry[] = [];
+    const skippedNodeIds: string[] = [];
+    for (const [nodeId, nodeRun] of latestByNode) {
+      if (nodeRun.status === "succeeded") {
+        succeeded.push({
+          nodeId,
+          sessionId: nodeRun.sessionId,
+          outputs: getNodeRunOutputs(db, nodeRun.id),
+        });
+      } else if (nodeRun.status === "skipped") {
+        skippedNodeIds.push(nodeId);
+      }
+    }
+    if (succeeded.length === 0 && skippedNodeIds.length === 0) {
+      return {};
+    }
+    return { resumeSeed: { succeeded, skippedNodeIds } };
+  }
+
+  private resolvePermissionPins(
+    bots: ReadonlyArray<Bot>,
+  ): Map<string, { policy: ToolPolicy; workspace: Workspace | undefined }> {
+    const db = this.options.db;
+    const pins = new Map<string, { policy: ToolPolicy; workspace: Workspace | undefined }>();
+    for (const bot of bots) {
+      const policy = getToolPolicy(db, bot.toolPolicyId);
+      if (policy === undefined) {
+        // Least privilege: no policy record, no execution.
+        throw invalidInput("tool policy not found for bot", {
+          botId: bot.id,
+          toolPolicyId: bot.toolPolicyId,
+        });
+      }
+      const workspace = getWorkspace(db, bot.workspaceId);
+      if (workspace === undefined) {
+        throw invalidInput("workspace not found for bot", {
+          botId: bot.id,
+          workspaceId: bot.workspaceId,
+        });
+      }
+      pins.set(bot.id, { policy, workspace });
+    }
+    return pins;
   }
 
   private activeExecution(runId: string): RunExecution | undefined {
