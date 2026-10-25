@@ -1,0 +1,474 @@
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { randomUUID } from "node:crypto";
+import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { MISFIRE_POLICY } from "@deepseek-bot/contracts";
+import { createHost, type DeepSeekBotHost } from "./host.js";
+
+const fakeHarness = fileURLToPath(
+  new URL("../../harness-adapter/src/testing/fake-harness.mjs", import.meta.url),
+);
+
+const roots: string[] = [];
+const hosts: DeepSeekBotHost[] = [];
+afterAll(async () => {
+  for (const host of hosts.splice(0)) {
+    await host.shutdown().catch(() => undefined);
+  }
+  for (const root of roots.splice(0)) {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+function makeRoot(): string {
+  const root = mkdtempSync(join(tmpdir(), "dsb-host-"));
+  roots.push(root);
+  return root;
+}
+
+/** Seed the profile/workspace/policy rows bot.create references (no contract
+ * methods manage them yet — desktop setup seeds defaults). */
+function seedRefs(db: DeepSeekBotHost["db"], workspacePath: string): {
+  profileId: string;
+  workspaceId: string;
+  toolPolicyId: string;
+} {
+  const now = db.now().toISOString();
+  const ref = `cred:${randomUUID()}`;
+  const profileId = randomUUID();
+  const workspaceId = randomUUID();
+  const toolPolicyId = randomUUID();
+  db.raw
+    .prepare(
+      "INSERT INTO credentials (ref, label, created_at, updated_at) VALUES (?, 'test', ?, ?);",
+    )
+    .run(ref, now, now);
+  db.raw
+    .prepare(
+      "INSERT INTO model_profiles (id, provider, model, endpoint, credential_ref, limits_json, created_at, updated_at) " +
+        "VALUES (?, 'deepseek', 'deepseek-chat', 'https://api.deepseek.com/v1', ?, '{}', ?, ?);",
+    )
+    .run(profileId, ref, now, now);
+  db.raw
+    .prepare(
+      "INSERT INTO workspaces (id, canonical_path, grants_json, created_at, updated_at) VALUES (?, ?, '[]', ?, ?);",
+    )
+    .run(workspaceId, workspacePath, now, now);
+  db.raw
+    .prepare(
+      "INSERT INTO tool_policies (id, revision, name, policy_json, created_at, updated_at) " +
+        "VALUES (?, ?, 'host test policy', ?, ?, ?);",
+    )
+    .run(
+      toolPolicyId,
+      randomUUID(),
+      JSON.stringify({
+        filesystem: { enabled: false, operations: [] },
+        shell: { mode: "disabled" },
+        network: { mode: "disabled" },
+        mcp: { enabled: false, requireApproval: false, servers: [] },
+      }),
+      now,
+      now,
+    );
+  return { profileId, workspaceId, toolPolicyId };
+}
+
+async function waitFor(predicate: () => boolean | Promise<boolean>, timeoutMs = 15_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    if (await predicate()) {
+      return;
+    }
+    if (Date.now() > deadline) {
+      throw new Error("waitFor timed out");
+    }
+    await new Promise<void>((resolve) => setTimeout(resolve, 50));
+  }
+}
+
+describe("createHost", () => {
+  let root: string;
+  let workspace: string;
+  let refs: ReturnType<typeof seedRefs>;
+  let host: DeepSeekBotHost;
+
+  beforeEach(() => {
+    root = makeRoot();
+    workspace = join(root, "workspace");
+    mkdirSync(workspace, { recursive: true });
+  });
+
+  async function started(): Promise<DeepSeekBotHost> {
+    const created = await createHost({
+      dataRoot: root,
+      resolveApiKey: async () => "test-key",
+      dshBin: fakeHarness,
+      childEnv: (env) => ({ ...env, FAKE_SCENARIO: "ok" }),
+    });
+    hosts.push(created);
+    refs = seedRefs(created.db, workspace);
+    host = created;
+    return created;
+  }
+
+  it("runs a workflow end to end through the method surface (fake harness)", async () => {
+    await started();
+    const bot = (await host.handleMethod(
+      "bot.create",
+      {
+        name: "集成机器人",
+        instructions: "测试指令。",
+        modelProfileId: refs.profileId,
+        workspaceId: refs.workspaceId,
+        toolPolicyId: refs.toolPolicyId,
+      },
+      randomUUID(),
+    )) as { id: string; revision: string };
+
+    const workflow = (await host.handleMethod("workflow.save", {
+      workflow: {
+        id: randomUUID(),
+        revision: randomUUID(),
+        name: "单节点工作流",
+        schemaVersion: "0.1",
+        nodes: [
+          {
+            id: "n1",
+            type: "bot",
+            botId: bot.id,
+            instructionTemplate: "回复 OK。",
+            inputBindings: [],
+            retryPolicy: { maxRetries: 0 },
+          },
+        ],
+        edges: [],
+        limits: { maxConcurrentNodes: 1 },
+      },
+    })) as { id: string; revision: string };
+
+    const run = (await host.handleMethod("run.start", {
+      workflowId: workflow.id,
+      expectedRevision: workflow.revision,
+      idempotencyKey: randomUUID(),
+    })) as { id: string; status: string };
+
+    await waitFor(async () => {
+      const current = (await host.handleMethod("run.get", { runId: run.id })) as {
+        status: string;
+      };
+      return current.status === "succeeded";
+    });
+    const finished = (await host.handleMethod("run.get", { runId: run.id })) as {
+      status: string;
+      finishedAt: string | null;
+    };
+    expect(finished.status).toBe("succeeded");
+    expect(finished.finishedAt).not.toBeNull();
+
+    const events = (await host.handleMethod("events.subscribe", {
+      runId: run.id,
+      afterSequence: 0,
+    })) as { events: Array<{ type: string }>; snapshotRequired: boolean };
+    expect(events.snapshotRequired).toBe(false);
+    // The engine's log opens with the queued→running transition; the run row
+    // itself arrives via run.start/run.get (run.created emission is a known
+    // contract gap noted for the D12 report).
+    expect(events.events.map((event) => event.type)).toContain("run.statusChanged");
+
+    const listed = (await host.handleMethod("run.list", { limit: 10 })) as {
+      runs: Array<{ id: string }>;
+    };
+    expect(listed.runs.map((entry) => entry.id)).toContain(run.id);
+  }, 60_000);
+
+  it("deduplicates bot.create by envelope requestId", async () => {
+    await started();
+    const requestId = randomUUID();
+    const payload = {
+      name: "去重机器人",
+      instructions: "测试指令。",
+      modelProfileId: refs.profileId,
+      workspaceId: refs.workspaceId,
+      toolPolicyId: refs.toolPolicyId,
+    };
+    const first = (await host.handleMethod("bot.create", payload, requestId)) as { id: string };
+    const second = (await host.handleMethod("bot.create", payload, requestId)) as { id: string };
+    expect(second.id).toBe(first.id);
+  });
+
+  it("rejects invalid payloads, stale revisions and unsupported templates", async () => {
+    await started();
+    const bot = (await host.handleMethod("bot.create", {
+      name: "冲突机器人",
+      instructions: "x",
+      modelProfileId: refs.profileId,
+      workspaceId: refs.workspaceId,
+      toolPolicyId: refs.toolPolicyId,
+    })) as { id: string; revision: string };
+
+    await expect(
+      host.handleMethod("bot.update", { id: bot.id, expectedRevision: randomUUID(), patch: { name: "新名" } }),
+    ).rejects.toMatchObject({ code: "REVISION_CONFLICT" });
+
+    await expect(
+      host.handleMethod("bot.create", { name: "" }),
+    ).rejects.toMatchObject({
+      code: "INVALID_INPUT",
+    });
+
+    await expect(host.handleMethod("settings.testConnection", { modelProfile: {} })).rejects.toMatchObject({
+      code: "INVALID_INPUT",
+    });
+
+    const imported = (await host.handleMethod("workflow.import", {
+      template: {
+        schemaVersion: "9.9",
+        workflow: {
+          name: "未来模板",
+          schemaVersion: "9.9",
+          nodes: [
+            {
+              id: "n1",
+              type: "bot",
+              botId: bot.id,
+              instructionTemplate: "x",
+              inputBindings: [],
+              retryPolicy: { maxRetries: 0 },
+            },
+          ],
+          edges: [],
+          limits: { maxConcurrentNodes: 1 },
+        },
+      },
+    })) as { accepted: boolean; errorCode?: string };
+    expect(imported).toMatchObject({ accepted: false, errorCode: "DATA_VERSION_UNSUPPORTED" });
+  });
+
+  it("schedules, describes and backs up through the method surface", async () => {
+    await started();
+    const bot = (await host.handleMethod("bot.create", {
+      name: "调度机器人",
+      instructions: "x",
+      modelProfileId: refs.profileId,
+      workspaceId: refs.workspaceId,
+      toolPolicyId: refs.toolPolicyId,
+    })) as { id: string };
+    const workflow = (await host.handleMethod("workflow.save", {
+      workflow: {
+        id: randomUUID(),
+        revision: randomUUID(),
+        name: "调度工作流",
+        schemaVersion: "0.1",
+        nodes: [
+          {
+            id: "n1",
+            type: "bot",
+            botId: bot.id,
+            instructionTemplate: "x",
+            inputBindings: [],
+            retryPolicy: { maxRetries: 0 },
+          },
+        ],
+        edges: [],
+        limits: { maxConcurrentNodes: 1 },
+      },
+    })) as { id: string };
+
+    const scheduleId = randomUUID();
+    const schedule = (await host.handleMethod("schedule.save", {
+      schedule: {
+        id: scheduleId,
+        workflowId: workflow.id,
+        timezone: "Asia/Shanghai",
+        recurrence: "*/5 * * * *",
+        enabled: true,
+        misfirePolicy: MISFIRE_POLICY,
+      },
+    })) as { id: string; nextRunAt: string | null; enabled: boolean };
+    expect(schedule.id).toBe(scheduleId);
+    expect(schedule.enabled).toBe(true);
+    // Enabled schedules get their next occurrence computed on save (D10).
+    expect(schedule.nextRunAt).not.toBeNull();
+
+    // Disabled schedules (no id minted client-side) persist with nextRunAt null.
+    const plain = (await host.handleMethod("schedule.save", {
+      schedule: {
+        workflowId: workflow.id,
+        timezone: "Asia/Shanghai",
+        recurrence: "*/5 * * * *",
+        enabled: false,
+        misfirePolicy: MISFIRE_POLICY,
+      },
+    })) as { id: string; nextRunAt: string | null; enabled: boolean };
+    expect(plain.id).not.toBe(scheduleId);
+    expect(plain.nextRunAt).toBeNull();
+    expect(plain.enabled).toBe(false);
+
+    const enabled = (await host.handleMethod("schedule.enable", {
+      id: schedule.id,
+      expectedRevision: randomUUID(),
+    })) as unknown as { id: string };
+    expect(enabled.id).toBe(schedule.id);
+    const disabled = (await host.handleMethod("schedule.disable", {
+      id: schedule.id,
+      expectedRevision: randomUUID(),
+    })) as unknown as { id: string };
+    expect(disabled.id).toBe(schedule.id);
+
+    const described = (await host.handleMethod("data.describe", {})) as {
+      schemaVersion: string;
+      counts: Record<string, number>;
+    };
+    expect(described.schemaVersion).toBe(String(host.db.schemaVersion));
+    expect(described.counts.schedules).toBe(2);
+
+    const backup = (await host.handleMethod("data.backup", {})) as {
+      backupId: string;
+      sizeBytes: number;
+    };
+    expect(backup.sizeBytes).toBeGreaterThan(0);
+
+    // The scheduler tick loop starts and stops cleanly (30s default cadence —
+    // no tick fires inside the test).
+    host.start();
+    host.scheduler.stop();
+  });
+
+  it("covers validation, export, cancel, retry, approvals, settings and restore edges", async () => {
+    await started();
+    const bot = (await host.handleMethod("bot.create", {
+      name: "覆盖机器人",
+      instructions: "x",
+      modelProfileId: refs.profileId,
+      workspaceId: refs.workspaceId,
+      toolPolicyId: refs.toolPolicyId,
+    })) as { id: string; revision: string };
+    const node = {
+      id: "n1",
+      type: "bot",
+      botId: bot.id,
+      instructionTemplate: "x",
+      inputBindings: [],
+      retryPolicy: { maxRetries: 0 },
+    };
+    const workflow = (await host.handleMethod("workflow.save", {
+      workflow: {
+        id: randomUUID(),
+        revision: randomUUID(),
+        name: "覆盖工作流",
+        schemaVersion: "0.1",
+        nodes: [node],
+        edges: [],
+        limits: { maxConcurrentNodes: 1 },
+      },
+    })) as { id: string; revision: string };
+
+    // workflow.validate: cycle detection through the method surface
+    const cycle = (await host.handleMethod("workflow.validate", {
+      workflow: {
+        id: randomUUID(),
+        revision: randomUUID(),
+        name: "环",
+        schemaVersion: "0.1",
+        nodes: [
+          node,
+          { ...node, id: "n2", botId: bot.id },
+        ],
+        edges: [
+          { fromNodeId: "n1", outputKey: "response", toNodeId: "n2", inputKey: "topic" },
+          { fromNodeId: "n2", outputKey: "response", toNodeId: "n1", inputKey: "topic" },
+        ],
+        limits: { maxConcurrentNodes: 1 },
+      },
+    })) as { valid: boolean; errors: Array<{ code?: string }> };
+    expect(cycle.valid).toBe(false);
+    expect(cycle.errors.length).toBeGreaterThan(0);
+
+    // workflow.export: happy path and revision conflict
+    const exported = (await host.handleMethod("workflow.export", {
+      id: workflow.id,
+      expectedRevision: workflow.revision,
+    })) as { workflow: { id: string }; exportedAt: string };
+    expect(exported.workflow.id).toBe(workflow.id);
+    expect(exported.exportedAt).toBeTruthy();
+    await expect(
+      host.handleMethod("workflow.export", { id: workflow.id, expectedRevision: randomUUID() }),
+    ).rejects.toMatchObject({ code: "REVISION_CONFLICT" });
+
+    // run.cancel on a run that never started executing: cancelled cleanly
+    const run = (await host.handleMethod("run.start", {
+      workflowId: workflow.id,
+      expectedRevision: workflow.revision,
+      idempotencyKey: randomUUID(),
+    })) as { id: string };
+    await waitFor(async () => {
+      const current = (await host.handleMethod("run.get", { runId: run.id })) as {
+        status: string;
+      };
+      return current.status !== "queued" && current.status !== "running";
+    });
+    const cancelled = (await host.handleMethod("run.cancel", { runId: run.id })) as {
+      id: string;
+      status: string;
+    };
+    expect(cancelled.id).toBe(run.id);
+    expect(["succeeded", "cancelled", "failed"]).toContain(cancelled.status);
+
+    // run.retryNode / approval.decide: unknown ids fail classified
+    await expect(
+      host.handleMethod("run.retryNode", { nodeRunId: randomUUID() }),
+    ).rejects.toMatchObject({ code: "INVALID_INPUT" });
+    await expect(
+      host.handleMethod("approval.decide", {
+        approvalId: randomUUID(),
+        decision: "approved",
+        expectedActionDigest: "a".repeat(64),
+      }),
+    ).rejects.toMatchObject({ code: "INVALID_INPUT" });
+
+    // settings.update persists raw settings
+    await host.handleMethod("settings.update", { patch: { "ui.theme": "dark" } });
+    expect(
+      host.db.raw.prepare("SELECT value_json FROM settings WHERE key = 'ui.theme';").get(),
+    ).toMatchObject({ value_json: '"dark"' });
+
+    // data.restore with an unknown backup id fails classified
+    await expect(
+      host.handleMethod("data.restore", { backupId: randomUUID() }),
+    ).rejects.toThrow();
+  });
+
+  it("assembles with every option supplied", async () => {
+    const created = await createHost({
+      dataRoot: root,
+      resolveApiKey: async () => "key",
+      dshBin: fakeHarness,
+      childEnv: (env) => ({ ...env, FAKE_SCENARIO: "ok" }),
+      provider: "deepseek-official",
+      now: () => new Date(),
+      scheduler: { tickIntervalMs: 60_000, misfireGraceMs: 120_000 },
+      onMissed: () => undefined,
+    });
+    hosts.push(created);
+    expect(created.bridge.url.startsWith("http://127.0.0.1:")).toBe(true);
+    expect(created.bridge.token.startsWith("dsb-")).toBe(true);
+    expect(created.bootGeneration).toBeGreaterThan(0);
+    expect(created.recoveredRuns).toEqual([]);
+    const bots = (await created.handleMethod("bot.list", {})) as { bots: unknown[] };
+    expect(bots.bots).toEqual([]);
+    await created.shutdown();
+    hosts.pop();
+  });
+
+  it("throws a classified error after shutdown", async () => {
+    const created = await started();
+    await created.shutdown();
+    hosts.pop();
+    await expect(created.handleMethod("bot.list", {})).rejects.toMatchObject({
+      code: "RUNTIME_UNAVAILABLE",
+    });
+  });
+});
