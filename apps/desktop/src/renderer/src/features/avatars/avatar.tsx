@@ -74,7 +74,7 @@ export function Avatar(props: { avatar: Avatar; size: number }): JSX.Element {
       return (
         <MinimalAvatar
           mono
-          shapeIndex={0}
+          shapeIndex={avatar.shape}
           color="var(--avatar-mono-bg)"
           size={size}
         />

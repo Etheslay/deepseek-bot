@@ -1,6 +1,6 @@
 /**
- * Minimal avatar picker: rounded shapes, colors and theme-aware mono bot.
- * Controlled by the parent so create/edit always reflects the real avatar.
+ * Minimal avatar picker: rounded shapes, colors and theme-aware mono.
+ * Mono and colored avatars share the same shape selection.
  */
 import type { JSX } from "react";
 import type { Avatar } from "./avatar-meta.js";
@@ -11,11 +11,15 @@ export function AvatarPicker(props: {
   value: Avatar;
   onChange: (avatar: Avatar) => void;
 }): JSX.Element {
-  const shape = props.value.kind === "minimal" ? props.value.shape : 0;
+  const shape = props.value.shape;
   const color = props.value.kind === "minimal" ? props.value.color : "#3b82f6";
 
-  const pickMinimal = (nextShape: number, nextColor: string): void => {
-    props.onChange({ kind: "minimal", shape: nextShape, color: nextColor });
+  const pickShape = (nextShape: number): void => {
+    if (props.value.kind === "mono") {
+      props.onChange({ kind: "mono", shape: nextShape });
+    } else {
+      props.onChange({ kind: "minimal", shape: nextShape, color });
+    }
   };
 
   return (
@@ -26,14 +30,18 @@ export function AvatarPicker(props: {
             key={i}
             type="button"
             role="radio"
-            aria-checked={props.value.kind === "minimal" && shape === i}
-            className={
-              "shape-btn" +
-              (props.value.kind === "minimal" && shape === i ? " selected" : "")
-            }
-            onClick={() => pickMinimal(i, color)}
+            aria-checked={shape === i}
+            className={"shape-btn" + (shape === i ? " selected" : "")}
+            onClick={() => pickShape(i)}
           >
-            <AvatarView avatar={{ kind: "minimal", shape: i, color }} size={34} />
+            <AvatarView
+              avatar={
+                props.value.kind === "mono"
+                  ? { kind: "mono", shape: i }
+                  : { kind: "minimal", shape: i, color }
+              }
+              size={34}
+            />
           </button>
         ))}
       </div>
@@ -47,9 +55,9 @@ export function AvatarPicker(props: {
           className={
             "color-btn mono-color" + (props.value.kind === "mono" ? " selected" : "")
           }
-          onClick={() => props.onChange({ kind: "mono" })}
+          onClick={() => props.onChange({ kind: "mono", shape })}
         >
-          <AvatarView avatar={{ kind: "mono" }} size={24} />
+          <AvatarView avatar={{ kind: "mono", shape }} size={24} />
         </button>
         {MINIMAL_COLORS.map((c) => (
           <button
@@ -62,7 +70,7 @@ export function AvatarPicker(props: {
               (props.value.kind === "minimal" && color === c ? " selected" : "")
             }
             style={{ background: c }}
-            onClick={() => pickMinimal(shape, c)}
+            onClick={() => props.onChange({ kind: "minimal", shape, color: c })}
             aria-label={`颜色 ${c}`}
           />
         ))}

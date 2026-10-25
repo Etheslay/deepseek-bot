@@ -141,7 +141,7 @@ export function App(): JSX.Element {
   const [editingBot, setEditingBot] = useState<UiBot | null>(null);
   const [shape, setShape] = useState(0);
   const [color, setColor] = useState(2);
-  const [avatar, setAvatar] = useState<AvatarKind>(() => ({ kind: "mono" }));
+  const [avatar, setAvatar] = useState<AvatarKind>(() => ({ kind: "mono", shape: 0 }));
   const [modalGroup, setModalGroup] = useState<number>(UNGROUPED);
 
   const [groups, setGroups] = useState<Group[]>([{ key: UNGROUPED, name: "未分组" }]);
@@ -270,7 +270,7 @@ export function App(): JSX.Element {
 
   useEffect(() => {
     if (modalOpen && !editingBot) {
-      setAvatar({ kind: "mono" });
+      setAvatar({ kind: "mono", shape: 0 });
     }
   }, [modalOpen, editingBot]);
   useEffect(() => {
@@ -365,7 +365,7 @@ export function App(): JSX.Element {
   const openCreateBotModal = () => {
     setShape(0);
     setColor(2);
-    setAvatar({ kind: "mono" });
+    setAvatar({ kind: "mono", shape: 0 });
     setModalGroup(
       groups.find((g) => g.name === "未分组")?.key ?? groups[0]?.key ?? UNGROUPED,
     );

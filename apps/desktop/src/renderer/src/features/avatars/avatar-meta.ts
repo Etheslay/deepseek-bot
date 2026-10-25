@@ -17,7 +17,7 @@ export function avatarColor(avatar: Avatar): string {
 
 /** UI-only avatar value; NOT a contract field, never persisted. */
 export type Avatar =
-  | { kind: "mono" }
+  | { kind: "mono"; shape: number }
   | { kind: "minimal"; shape: number; color: string };
 
 /** Stable default mapping: same bot id → same geometric avatar. */
@@ -36,7 +36,7 @@ export function defaultAvatarFor(seed: string): Avatar {
 export function avatarKey(avatar: Avatar): string {
   switch (avatar.kind) {
     case "mono":
-      return "mono";
+      return `mono:${avatar.shape}`;
     case "minimal":
       return `minimal:${avatar.shape}:${avatar.color}`;
   }
