@@ -21,6 +21,7 @@ import { join } from "node:path";
 
 const scenario = process.env["FAKE_SCENARIO"] ?? "ok";
 const recordDir = process.env["FAKE_RECORD_DIR"];
+const fakeState = { turns: 0 };
 let sessionId = null;
 let lastPrompt = null;
 let initializeParams = null;
@@ -123,6 +124,17 @@ lines.on("line", (line) => {
         status("running");
         return;
       }
+      if (scenario === "first-ok-then-hang") {
+        // First turn completes (resume seed material); later turns hang.
+        if (fakeState.turns === 0) {
+          fakeState.turns += 1;
+          emitTurnCompletion(messageId, "first turn ok");
+          return;
+        }
+        sessionEvent({ type: "agent/inbox/spliced", data: { inserted: [{ id: messageId }] } });
+        status("running");
+        return;
+      }
       const text =
         scenario === "echo-model"
           ? `model=${initializeParams.model} provider=${initializeParams.provider} cwd=${initializeParams.cwd}\n${lastPrompt}`
@@ -161,3 +173,6 @@ if (scenario === "stderr-noise") {
 }
 
 process.on("SIGTERM", () => process.exit(0));
+// The parent's pipes close when the test/spawning process goes away.
+process.stdin.on("end", () => process.exit(0));
+process.stdin.on("close", () => process.exit(0));

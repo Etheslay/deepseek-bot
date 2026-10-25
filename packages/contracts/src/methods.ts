@@ -65,6 +65,7 @@ export const METHODS = [
   "run.list",
   "run.cancel",
   "run.retryNode",
+  "run.resume",
   "events.subscribe",
   "approval.decide",
   "schedule.save",
@@ -226,6 +227,19 @@ export const METHOD_CONTRACTS = {
   "run.retryNode": {
     request: z.object({ nodeRunId: UuidSchema }),
     response: NodeRunSchema,
+  },
+  /**
+   * Resume a restart-interrupted run as a new run (CONTRACTS §5, D10
+   * engine.resumeRun). Additive v0.1 extension: interrupted runs were
+   * otherwise unreachable through the method surface, leaving the recovery
+   * leg of QA-09 without a caller.
+   */
+  "run.resume": {
+    request: z.object({
+      runId: UuidSchema,
+      idempotencyKey: UuidSchema.optional(),
+    }),
+    response: RunSchema,
   },
   "events.subscribe": {
     request: z.object({
