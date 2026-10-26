@@ -122,10 +122,56 @@ describe("ask_user desktop answer return", () => {
       result: { requestId: listed.requestId, optionId: "A", text: "Alpha" },
     });
     expect(await host.handleMethod("chat.history", { botId: bot.id })).toMatchObject({
-      messages: [{ id: answered.messageId, role: "user", text: "Alpha" }],
+      messages: [
+        { role: "assistant", text: expect.stringContaining("Which first?") },
+        { id: answered.messageId, role: "user", text: "Alpha" },
+      ],
     });
     expect(await host.handleMethod("question.list", { botId: bot.id })).toEqual({ questions: [] });
     expect(await host.handleMethod("chat.history", { botId: other.id })).toEqual({ messages: [] });
+  });
+
+  it("forces the fallback label for D and persists the question with the answer", async () => {
+    const { host, request, bot, sessionId } = await setup();
+    const pending = request("/ask-user/call", {
+      sessionId,
+      callId: randomUUID(),
+      tool: "ask_user",
+      params: {
+        question: "整理什么？",
+        options: [
+          { id: "A", label: "整理桌面文件" },
+          { id: "D", label: "都不对" },
+        ],
+        allowOther: false,
+      },
+    });
+    const listed = await vi.waitFor(async () => {
+      const response = (await host.handleMethod("question.list", { botId: bot.id })) as {
+        questions: Array<{ options: Array<{ id: string; label: string }> }>;
+      };
+      expect(response.questions).toHaveLength(1);
+      return response.questions[0]!;
+    });
+    // The Host never renders the model's own label for D.
+    expect(listed.options).toContainEqual({ id: "D", label: "以上都不是" });
+    expect(listed.options).not.toContainEqual({ id: "D", label: "都不对" });
+
+    const answered = (await host.handleMethod("question.answer", {
+      botId: bot.id,
+      requestId: listed.requestId,
+      optionId: "D",
+    })) as { text: string };
+    await pending;
+    const history = (await host.handleMethod("chat.history", { botId: bot.id })) as {
+      messages: Array<{ role: string; text: string }>;
+    };
+    expect(history.messages).toHaveLength(2);
+    expect(history.messages[0]).toMatchObject({ role: "assistant" });
+    expect(history.messages[0]!.text).toContain("【向用户提问】整理什么？");
+    expect(history.messages[0]!.text).toContain("D. 以上都不是");
+    expect(history.messages[0]!.text).not.toContain("都不对");
+    expect(history.messages[1]).toMatchObject({ role: "user", text: answered.text });
   });
 
   it("stores free text and rejects it when the question disallows other answers", async () => {
@@ -177,7 +223,10 @@ describe("ask_user desktop answer return", () => {
       result: { requestId: free.requestId, text: "Later today" },
     });
     expect(await host.handleMethod("chat.history", { botId: bot.id })).toMatchObject({
-      messages: [{ role: "user", text: "Later today" }],
+      messages: [
+        { role: "assistant", text: expect.stringContaining("Which first?") },
+        { role: "user", text: "Later today" },
+      ],
     });
     await host.handleMethod("question.answer", {
       botId: bot.id,
