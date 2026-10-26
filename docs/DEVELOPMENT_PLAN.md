@@ -78,6 +78,7 @@ Etheslay 主责 Harness、Host、执行、权限、存储和调度；Destinyian 
 | D26 `feature/chat-attachments` | Destinyian | D08、D15 | 聊天附件：文件/图片经工具网关进入 bot 工作区（受 grant 与审批约束），附件卡片与产物预览打通；bot 经 read 工具真正读取附件内容并回答 |
 | D27 `feature/voice-mode` | Etheslay 主责，Destinyian 语音 UI 联调 | D12 | 本地语音：whisper.cpp 转写 + Windows TTS 播报（全免费、全本地）；按住说话/自动断句；不引入云端转写（原 D30 并入，编号前移） |
 | D28 `feature/canvas-cowrite` | Destinyian | D14、D26 | 产物画布从只读预览升级为可共编侧车：bot 写、用户改、bot 续写；版本留痕可回退（原 D31 并入，编号前移） |
+| D30 `feature/chat-runtime` | Etheslay | D12、D15 | 聊天运行时：契约 `chat.send/history/cancel`；Host 每 bot 一个 Harness 会话（`session/resume` 续轮）；`chat_messages` 持久化；渲染层聊天走 Host，删除占位回复 |
 
 ## 7. 阶段二里程碑
 
