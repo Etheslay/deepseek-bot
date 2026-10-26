@@ -471,6 +471,19 @@ BEGIN SELECT RAISE(ABORT, 'permission audit is append-only'); END;
 CREATE TRIGGER permission_audit_no_delete BEFORE DELETE ON permission_audit
 BEGIN SELECT RAISE(ABORT, 'permission audit is append-only'); END;
 `,
-  }
+  },
+  {
+    id: 8,
+    name: "0008-memories",
+    sql: /* sql */ `
+CREATE TABLE memories (
+  id TEXT PRIMARY KEY,
+  bot_id TEXT NOT NULL REFERENCES bots(id),
+  text TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX memories_bot_created ON memories(bot_id, created_at);
+`,
+  },
 ];
 

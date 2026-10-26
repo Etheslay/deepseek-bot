@@ -30,10 +30,14 @@
 | `screen.capture` | 窗口截图 / OCR | 高 | 从不允许（需显式开启） |
 | `connector.invoke` | 调用连接器 / MCP 工具 | 中 | 每次询问 |
 | `network.search` / D08 `network.request` | web_search 向受信配置的 SearXNG 端点提交搜索 | 中 | D16 每次询问，另需 D08 网络策略放行；缺少受信权限句柄拒绝 |
+| `memory.read` | 检索当前 bot 的记忆 | 低 | 始终允许，但仍必须绑定该 bot |
+| `memory.write` | 写入当前 bot 的记忆 | 中 | 每次询问；模型不能删除 |
 
 能力注册表包含未来能力，不会自动产生对应工具；新增工具必须显式绑定能力并同步本文、契约与审计字段。`create_bots_batch` 有 newGroup 时同时需要 create_bot/create_group。草案生成仅回显、不落库，属于 app.read。
 
 `web_search` 先通过 D16 network.search，再通过现有 ToolPolicy.network 及 D08 精确动作授权。工具模型参数不能指定服务地址或传入权限对象；受信调用方经 ToolCallOptions.networkPermissions 绑定句柄。工作流节点仍使用真实 D08 句柄：禁止网络时不发请求，要求审批时先等真实审批。聊天回合没有工作流运行，Host 自有句柄在 allowed 时放行，disabled 时拒绝，approval-required 时以 APPROVAL_REQUIRED 失败且不发请求。网关 JSONL 存摘要；D08 本地 tool.requested 事件按已有规范保存精确搜索参数用于审批。聊天结果卡只渲染已去掉标记的文本。
+
+`memory_search` 绑定 `memory.read`，`memory_write` 绑定 `memory.write`。两者都只使用受信 `ToolCaller.botId`，模型参数不能指定 bot。默认不跨 bot 共享，也没有共享开关。用户经受信方法 `memory.list` / `memory.write` / `memory.delete` 查看、写入和删除当前 bot 的记忆；删除是物理删除，模型目录没有删除工具。网关 JSONL 仍只存摘要。知识导入不在这一切片。
 
 ## 3. 三档策略
 

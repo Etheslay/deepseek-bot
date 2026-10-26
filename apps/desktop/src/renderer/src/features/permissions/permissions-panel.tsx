@@ -29,6 +29,8 @@ const CAPABILITY_LABELS: Record<CapabilityId, string> = {
   "app.revoke_creation": "撤销创建批次",
   "interaction.ask_user": "向用户提问",
   "network.search": "联网搜索",
+  "memory.read": "检索记忆",
+  "memory.write": "写入记忆",
   "fs.read": "读取工作目录文件",
   "fs.write": "写入工作目录文件",
   "exec.shell": "执行本地命令",

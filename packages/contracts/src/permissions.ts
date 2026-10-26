@@ -13,6 +13,8 @@ export const CAPABILITY_IDS = [
   "app.revoke_creation",
   "interaction.ask_user",
   "network.search",
+  "memory.read",
+  "memory.write",
   "fs.read",
   "fs.write",
   "exec.shell",
@@ -27,7 +29,12 @@ export const GrantScopeSchema = z.enum(["policy", "once", "session", "permanent"
 export type GrantScope = z.infer<typeof GrantScopeSchema>;
 
 export function defaultPermissionMode(capability: CapabilityId): PermissionMode {
-  if (capability === "app.read" || capability === "interaction.ask_user") return "allow";
+  if (
+    capability === "app.read" ||
+    capability === "interaction.ask_user" ||
+    capability === "memory.read"
+  )
+    return "allow";
   return capability === "screen.capture" ? "deny" : "ask";
 }
 

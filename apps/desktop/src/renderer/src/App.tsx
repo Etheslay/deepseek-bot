@@ -4,6 +4,7 @@ import { useBots, type UiBot } from "./features/bots/use-bots.js";
 import { PermissionChatCards } from "./features/permissions/permission-chat.js";
 import { QuestionChatCards } from "./features/questions/question-chat.js";
 import { SearchResultCards } from "./features/search/search-results.js";
+import { MemoryPanel } from "./features/memory/memory-panel.js";
 import { SearchSettings } from "./features/search/search-settings.js";
 import { PermissionsPanel } from "./features/permissions/permissions-panel.js";
 import { BotForm } from "./features/bots/bot-form.js";
@@ -2682,6 +2683,7 @@ function BotsPlaceholder({
         )}
         <QuestionChatCards botId={me.bot.id} />
         <SearchResultCards botId={me.bot.id} />
+        <MemoryPanel botId={me.bot.id} />
         <PermissionChatCards botId={me.bot.id} />
       </div>
       {pendingFiles.length > 0 && (
