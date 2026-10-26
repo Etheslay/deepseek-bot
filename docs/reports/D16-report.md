@@ -1,3 +1,4 @@
+
 # D16 权限与授权：后端切片
 
 日期：2026-10-26（Asia/Shanghai）。负责人：Etheslay。分支：`feature/permissions-grants`，从最新 `origin/develop` 的 `b693c5b` 创建；该基线已含 PR #42（D15 web_search）、#41（Destinyian bot 模板）和 #40（桌面设置/搜索/附件等）。本报告不代表负责人的真人自审或合并决定。
@@ -62,3 +63,9 @@
 - [ ] 测试与错误路径证据：＿＿＿＿
 - [ ] 远程 CI 与已知限制：＿＿＿＿
 - [ ] 自审结论：＿＿＿＿
+
+## 6. Develop 合并补记（2026-10-26）
+
+本分支同步 `origin/develop`（PR #46，merge base 后提交 `68229fa`）时，与该分支内另一套 D16 后端发生语义冲突。保留 develop 的聊天/设置 UI、聊天存储与 grants 迁移 5/6，并将本报告所述精确授权后端以迁移 7 追加；没有重写既有迁移校验和。`tool.invoke` 未从请求体伪造可信 bot 身份，因此 PR #45 的旧式 `policy.*` / `grant.*` 控制不能授权此安全网关；没有接入受信 Harness 调用方仍会 fail closed。旧设置/聊天授权 UI 与本权限控制面的完整适配未验证，不能视作已验收。
+
+合并后检查：`pnpm lint`、`pnpm typecheck`、`pnpm test`、`git diff --check` 均退出 0。全仓测试包结果：contracts 83、storage 147、agent-tools 69、desktop 179、host 61 通过 + 1 跳过；其他包按命令输出通过。真实 API smoke 保持跳过，真实聊天 Harness 工具链、权限 UI 到新授权后端的端到端流程和远程 CI 未验证。迁移测试确认 0001–0004 校验和和数据保留，并验证新 schema 版本为 7。

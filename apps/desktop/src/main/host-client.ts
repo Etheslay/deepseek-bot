@@ -113,8 +113,12 @@ export function spawnHostProcess(options: HostProcessClientOptions): HostProcess
   };
 
   child.stderr.setEncoding("utf8");
-  child.stderr.on("data", () => {
+  child.stderr.on("data", (chunk: string) => {
     // Diagnostics stay local; the host's error frames carry the wire facts.
+    // DSB_HOST_DEBUG=1 mirrors them to the main process console for support runs.
+    if (process.env.DSB_HOST_DEBUG === "1") {
+      process.stderr.write(`[host] ${String(chunk)}`);
+    }
   });
   child.once("exit", (code) => {
     exited = true;

@@ -30,3 +30,5 @@ export * from "./repos/approvals.js";
 export * from "./repos/artifacts.js";
 export * from "./repos/settings.js";
 export * from "./repos/permissions.js";
+export * from "./repos/chat.js";
+export * from "./repos/grants.js";

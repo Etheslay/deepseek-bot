@@ -48,7 +48,7 @@ afterEach(() => {
 describe("D16 permissions persistence", () => {
   it("adds migration 0005 and global default policies", () => {
     const { db } = fixture();
-    expect(db.schemaVersion).toBe(5);
+    expect(db.schemaVersion).toBe(7);
     expect(storage.listPermissionPolicies(db)).toContainEqual({
       capability: "app.read",
       mode: "allow",

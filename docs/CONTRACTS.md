@@ -86,3 +86,12 @@ NodeRun：`pending → running ↔ waiting_approval → succeeded / failed / can
 新增可选字段可兼容扩展；删除/更名必需字段、状态语义或事件顺序变化需提升 protocolVersion / schemaVersion、提供迁移说明，由变更负责人自审并同步使用方。拒绝未知更高版本，不能默默丢字段。
 
 契约夹具至少覆盖成功、限流、取消、审批拒绝、重复消息、并发编辑、崩溃重连、循环图、路径越界和过期审批。前端可用这些夹具开发；集成验收必须使用真实适配层。
+
+## 8. 库导出文件（协议面之外）
+
+D17 新增：技能/模板库的统一导出文件格式，定义见 `packages/contracts/src/library-export.ts`，设计见 `docs/superpowers/specs/2026-10-25-skill-library-design.md`。该格式**不进入 Host 协议面**：不经 IPC envelope、不参与 `PROTOCOL_VERSION` 协商，只用于导入/导出文件校验。
+
+- `format` 固定 `"deepseek-bot-library"`、`formatVersion` 固定 `1`；导入先整份校验，不过即整份拒绝，不做部分导入；
+- `skills[]` 镜像渲染层 `SkillDefinition`（id/name/instructions/capabilities/version/createdAt/updatedAt）；`capabilities` 仅为声明元数据，强制校验归 D16 三层模型；
+- `templates[]` 镜像渲染层模板条目（name + bot{name, instructions, avatarUi}）；`avatarUi` 为渲染层头像派生快照，**不是**契约 `Avatar` 规范池 id；
+- 未知对象键按 zod object 默认行为剥离（由契约测试固定）；文件格式升级需契约 PR 提升 `formatVersion` 并写明兼容策略。

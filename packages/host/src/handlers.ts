@@ -50,6 +50,8 @@ import {
   saveWorkflow,
   setSetting,
   getSettingRaw,
+  appendChatMessage,
+  listChatMessages,
   updateBot,
   type BotPatch,
   type DataLayout,
@@ -59,6 +61,15 @@ import {
 } from "@deepseek-bot/storage";
 import type { AgentPermissionService } from "./agent-permissions.js";
 import { DEFAULT_MODEL_PROFILE_ID, backupDirFor, newBackupId } from "./host.js";
+import { chatSessionIdFor, type ChatManager } from "./chat.js";
+import { KNOWN_CAPABILITIES, policyKey, readPolicy, type PolicyLevel } from "./permissions.js";
+import {
+  createGrant,
+  listGrants,
+  revokeGrant,
+  type GrantRow,
+} from "@deepseek-bot/storage";
+import type { ToolGateway } from "@deepseek-bot/agent-tools";
 
 export interface HostContext {
   readonly permissions: AgentPermissionService;
@@ -69,6 +80,34 @@ export interface HostContext {
   readonly now: () => Date;
   /** Desktop main decrypts credential blobs with safeStorage; Host never sees them. */
   readonly resolveApiKey: (credentialRef: string) => Promise<string>;
+  /** Chat runtime (D30): one Harness session per bot. */
+  readonly chat: ChatManager;
+  /** D15 agent tool gateway; `tool.invoke` routes model calls through it. */
+  readonly agentTools: ToolGateway;
+}
+
+function grantResponse(row: GrantRow): {
+  id: string;
+  capability: string;
+  botId: string | null;
+  scope: "once" | "session" | "persistent";
+  maxUses: number;
+  used: number;
+  expiresAt: string | null;
+  revokedAt: string | null;
+  createdAt: string;
+} {
+  return {
+    id: row.id,
+    capability: row.capability,
+    botId: row.botId,
+    scope: row.scope,
+    maxUses: row.maxUses,
+    used: row.used,
+    expiresAt: row.expiresAt,
+    revokedAt: row.revokedAt,
+    createdAt: row.createdAt,
+  };
 }
 
 export interface HandlerCallContext {
@@ -106,7 +145,7 @@ function requireGroup(db: OpenedDatabase, groupId: string): void {
  * method whitelist at build time.
  */
 export function buildHandlers(context: HostContext): { [M in Method]: Handler<M> } {
-  const { db, engine, scheduler, layout, now, resolveApiKey } = context;
+  const { db, engine, scheduler, layout, now, resolveApiKey, chat } = context;
   return {
     "permission.policy.list": () => ({ policies: listPermissionPolicies(db) }),
     "permission.policy.set": (payload) => {
@@ -397,6 +436,91 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
 
     "schedule.disable": (payload) => scheduler.setEnabled({ id: payload.id, enabled: false }),
 
+    "grant.create": (payload) =>
+      grantResponse(
+        createGrant(db, {
+          capability: payload.capability,
+          ...(payload.botId !== undefined ? { botId: payload.botId } : {}),
+          scope: payload.scope,
+          ...(payload.maxUses !== undefined ? { maxUses: payload.maxUses } : {}),
+          ...(payload.expiresInSeconds !== undefined && payload.expiresInSeconds !== null
+            ? { expiresInSeconds: payload.expiresInSeconds }
+            : {}),
+        }),
+      ),
+
+    "grant.list": (payload) => ({
+      grants: listGrants(db, payload.capability).map(grantResponse),
+    }),
+
+    "grant.revoke": (payload) => ({ revoked: revokeGrant(db, payload.id) }),
+
+    "policy.get": () => ({
+      policies: Object.fromEntries(
+        KNOWN_CAPABILITIES.map((capability) => [capability, readPolicy(db, capability)]),
+      ) as Record<string, PolicyLevel>,
+    }),
+
+    "policy.set": (payload) => {
+      setSetting(db, policyKey(payload.capability), payload.policy);
+      return { ok: true as const };
+    },
+
+    "tool.invoke": async (payload) => ({
+      result: await context.agentTools.call(
+        { id: `agent:${payload.callerBotId ?? "unknown"}` },
+        payload.tool,
+        payload.params ?? {},
+      ),
+    }),
+
+    "chat.send": async (payload) => {
+      const bot = getBot(db, payload.botId);
+      if (bot === undefined) {
+        throw invalid(`bot '${payload.botId}' was not found`);
+      }
+      if (bot.archivedAt !== null) {
+        throw invalid("archived bots cannot chat");
+      }
+      const sessionId = chatSessionIdFor(bot.id);
+      const history = listChatMessages(db, bot.id, 20).map((row) => ({
+        role: row.role,
+        text: row.text,
+      }));
+      appendChatMessage(db, {
+        botId: bot.id,
+        sessionId,
+        role: "user",
+        text: payload.text,
+      });
+      const outcome = await chat.send(bot, payload.text, history);
+      const assistant = appendChatMessage(db, {
+        botId: bot.id,
+        sessionId,
+        role: "assistant",
+        text: outcome.finalResponse,
+      });
+      return {
+        sessionId: outcome.sessionId,
+        messageId: assistant.id,
+        text: outcome.finalResponse,
+        at: assistant.createdAt,
+      };
+    },
+
+    "chat.history": (payload) => ({
+      messages: listChatMessages(db, payload.botId, payload.limit).map((row) => ({
+        id: row.id,
+        botId: row.botId,
+        sessionId: row.sessionId,
+        role: row.role,
+        text: row.text,
+        at: row.createdAt,
+      })),
+    }),
+
+    "chat.cancel": (payload) => ({ cancelled: chat.cancel(payload.sessionId) }),
+
     "settings.testConnection": async (payload) => {
       const credentialRef = getSettingRaw(db, "apiKeyRef");
       if (typeof credentialRef !== "string" || !credentialRef.startsWith("cred:")) {
@@ -488,6 +612,8 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
     }),
   };
 }
+
+
 
 
 

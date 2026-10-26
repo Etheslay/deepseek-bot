@@ -407,7 +407,40 @@ CREATE UNIQUE INDEX creation_batches_request_id
   },
   {
     id: 5,
-    name: "0005-permissions-grants",
+    name: "0005-chat-messages",
+    sql: /* sql */ `
+CREATE TABLE chat_messages (
+  id TEXT PRIMARY KEY,
+  bot_id TEXT NOT NULL REFERENCES bots(id),
+  session_id TEXT NOT NULL,
+  role TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
+  text TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX chat_messages_bot_created ON chat_messages(bot_id, created_at);
+`,
+  },
+  {
+    id: 6,
+    name: "0006-grants",
+    sql: /* sql */ `
+CREATE TABLE grants (
+  id TEXT PRIMARY KEY,
+  capability TEXT NOT NULL,
+  bot_id TEXT,
+  scope TEXT NOT NULL CHECK (scope IN ('once', 'session', 'persistent')),
+  max_uses INTEGER NOT NULL DEFAULT 1,
+  used INTEGER NOT NULL DEFAULT 0,
+  expires_at TEXT,
+  revoked_at TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX grants_lookup ON grants(capability, bot_id, revoked_at, expires_at);
+`,
+  },
+  {
+    id: 7,
+    name: "0007-permissions-grants",
     sql: /* sql */ `
 CREATE TABLE permission_grants (
   id TEXT PRIMARY KEY,
@@ -438,5 +471,6 @@ BEGIN SELECT RAISE(ABORT, 'permission audit is append-only'); END;
 CREATE TRIGGER permission_audit_no_delete BEFORE DELETE ON permission_audit
 BEGIN SELECT RAISE(ABORT, 'permission audit is append-only'); END;
 `,
-  },
+  }
 ];
+

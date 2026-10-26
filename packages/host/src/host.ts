@@ -25,8 +25,10 @@ import {
   SessionRegistry,
   startApprovalBridgeServer,
   writeProfilePatches,
+  type DshSdkExecutorOptions,
   type RunningApprovalBridge,
 } from "@deepseek-bot/harness-adapter";
+import { ChatManager } from "./chat.js";
 import { EngineError, WorkflowEngine, LocalScheduler, type ScheduleMissNotice } from "@deepseek-bot/runtime";
 import {
   ensureDataLayout,
@@ -166,8 +168,7 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
   // goes through a holder filled right after the bridge binds.
   const bridgeRef: { current?: RunningApprovalBridge } = {};
   const sessionRegistry = new SessionRegistry();
-  const executor = new DshSdkExecutor(
-    {
+  const executorOptions: DshSdkExecutorOptions = {
       ...(options.dshBin !== undefined ? { dshBin: options.dshBin } : {}),
       dshHome: layout.harnessHome,
       patches: [patches.telemetryPatchPath, patches.bridgePatchPath],
@@ -197,9 +198,9 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
           apiKey: await options.resolveApiKey(profile.credentialRef),
         };
       },
-    },
-    { sessionRegistry },
-  );
+  };
+  const executor = new DshSdkExecutor(executorOptions, { sessionRegistry });
+  const chat = new ChatManager(executorOptions);
   const bridge = await startApprovalBridgeServer({
     sessions: (sessionId) => sessionRegistry.resolve(sessionId),
   });
@@ -227,7 +228,23 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
   const recoveredRuns = engine.recoverInterruptedRuns();
 
   let closed = false;
-  const context: HostContext = { db, engine, scheduler, layout, now, permissions, resolveApiKey: options.resolveApiKey };
+  const agentToolsHolder: { current?: ToolGateway } = {};
+  const context: HostContext = {
+    db,
+    engine,
+    scheduler,
+    layout,
+    now,
+    resolveApiKey: options.resolveApiKey,
+    permissions,
+    chat,
+    get agentTools(): ToolGateway {
+      if (agentToolsHolder.current === undefined) {
+        throw new Error("agent tools gateway is not ready yet");
+      }
+      return agentToolsHolder.current;
+    },
+  };
   const handlers = buildHandlers(context);
 
   // D15: the agent tool gateway is the only sanctioned side-effect path for
@@ -304,6 +321,7 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
     audit: new JsonlAuditSink(join(layout.logs, "agent-tools-audit.jsonl")),
     grants: permissions,
   });
+  agentToolsHolder.current = agentTools;
 
   return {
     layout,
@@ -333,7 +351,11 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
       try {
         await bridge.close();
       } finally {
-        db.close();
+        try {
+          await chat.disposeAll();
+        } finally {
+          db.close();
+        }
       }
     },
   };
@@ -348,6 +370,9 @@ export function backupDirFor(layout: DataLayout, backupId: string): string {
 export function newBackupId(): string {
   return randomUUID();
 }
+
+
+
 
 
 

@@ -123,3 +123,57 @@ describe("host-backed DesktopService", () => {
   });
 });
 
+describe("host-backed chat", () => {
+  it("streams the reply in chunks and resolves finish", async () => {
+    const { bridge, calls } = makeBridge({
+      "chat.send": () => ({
+        sessionId: "chat:x",
+        messageId: "m",
+        text: "hello world",
+        at: "2026-01-01T00:00:00.000Z",
+      }),
+      "chat.cancel": () => ({ cancelled: true }),
+    });
+    const service = createHostService(bridge);
+    const deltas: string[] = [];
+    const handle = service.chat.stream("bot-1", "hi", {
+      onDelta: (chunk) => deltas.push(chunk),
+      onTool: () => undefined,
+    });
+    const result = await handle.finish();
+    expect(result.failure).toBeNull();
+    expect(deltas.join("")).toBe("hello world");
+    expect(calls[0]).toMatchObject({ method: "chat.send", payload: { botId: "bot-1", text: "hi" } });
+  });
+
+  it("surfaces host failures as chat failures", async () => {
+    const { bridge } = makeBridge({
+      "chat.send": () => {
+        throw Object.assign(new Error("no key"), { code: "AUTH_FAILED" });
+      },
+      "chat.cancel": () => ({ cancelled: false }),
+    });
+    const service = createHostService(bridge);
+    const handle = service.chat.stream("b", "x", {
+      onDelta: () => undefined,
+      onTool: () => undefined,
+    });
+    const result = await handle.finish();
+    expect(result.failure).toMatchObject({ code: "AUTH_FAILED" });
+  });
+
+  it("cancel forwards to chat.cancel", async () => {
+    const { bridge, calls } = makeBridge({
+      "chat.send": () => new Promise(() => undefined),
+      "chat.cancel": () => ({ cancelled: true }),
+    });
+    const service = createHostService(bridge);
+    const handle = service.chat.stream("b", "x", {
+      onDelta: () => undefined,
+      onTool: () => undefined,
+    });
+    handle.cancel();
+    expect(calls.some((call) => call.method === "chat.cancel")).toBe(true);
+  });
+});
+
