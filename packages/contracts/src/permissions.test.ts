@@ -40,6 +40,8 @@ describe("permission schemas", () => {
     expect(new Set(CAPABILITY_IDS).size).toBe(CAPABILITY_IDS.length);
     expect(defaultPermissionMode("app.read")).toBe("allow");
     expect(defaultPermissionMode("interaction.ask_user")).toBe("allow");
+    expect(defaultPermissionMode("memory.read")).toBe("allow");
+    expect(defaultPermissionMode("memory.write")).toBe("ask");
     expect(defaultPermissionMode("app.create_bot")).toBe("ask");
     expect(defaultPermissionMode("screen.capture")).toBe("deny");
     expect(requiresPerActionApproval("app.start_run")).toBe(true);

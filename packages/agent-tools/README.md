@@ -64,6 +64,12 @@ const result = await host.agentTools.call(caller, "web_search", {
 
 独立 Host 进程可在启动前配置 `DEEPSEEK_BOT_SEARXNG_URL`，见[开发环境说明](../../docs/DEVELOPMENT_SETUP.md)。桌面可用受信方法保存或清空该地址；已保存的值在下次启动时覆盖环境变量，显式空值也会覆盖。聊天调用由 Host 绑定该 bot 的网络策略句柄，不由模型传入。`/app-tools` 仍只登记八个应用工具，`web_search` 走单独的 `/web-search` 路由。成功结果可记入该聊天 bot 的助手记录；工作流调用不写聊天记录。真实公共 SearXNG 与付费模型验收仍未执行。
 
+## 记忆
+
+`memory_write` 保存一条只属于当前 bot 的笔记，`memory_search` 在该 bot 的笔记里做不区分大小写的子串检索。空查询返回最新记录。参数只有 `text`，或可选的 `query` 与 `limit`（1–50，默认 20）。不能传入 botId，也没有删除工具。调用方必须带受信 `caller.botId`；缺失时返回 `UNAUTHORIZED_PATH`。
+
+`memory.read` 默认允许，`memory.write` 默认询问。允许检索时仍然必须是有效 bot。桌面用 `memory.list` / `memory.write` / `memory.delete` 查看、写入和删除当前 bot 的笔记；删的是那一行，没有墓碑。其他 bot 的列表为空，用别人的 id 删除会得到 `INVALID_INPUT`，原记录还在。`/app-tools` 仍只登记八个应用工具，记忆走单独的 `/memory` 路由。网关 JSONL 只记摘要。知识导入不在这一切片。
+
 ## 检查
 
 `pnpm --filter @deepseek-bot/agent-tools test`（含覆盖率）与 `pnpm --filter @deepseek-bot/agent-tools typecheck`。Host 集成验证位于 `packages/host/src/ask-user.test.ts` 与 `web-search.test.ts`；后者覆盖真实 D08 的网络允许、禁用与审批后出站。

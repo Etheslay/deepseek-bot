@@ -31,3 +31,10 @@ export {
   type WebSearchOptions,
   type WebSearchResult,
 } from "./web-search.js";
+export {
+  bindMemoryTools,
+  MemorySearchInputSchema,
+  MemoryWriteInputSchema,
+  type MemoryRecord,
+  type MemoryStore,
+} from "./memory.js";

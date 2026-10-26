@@ -38,6 +38,8 @@ const CAPABILITIES: Readonly<Record<string, readonly CapabilityId[]>> = {
   revoke_batch: ["app.revoke_creation"],
   ask_user: ["interaction.ask_user"],
   web_search: ["network.search"],
+  memory_search: ["memory.read"],
+  memory_write: ["memory.write"],
 };
 function digest(call: Omit<PermissionCall, "actionDigest">): string {
   return createHash("sha256").update(stableStringify(call)).digest("hex");

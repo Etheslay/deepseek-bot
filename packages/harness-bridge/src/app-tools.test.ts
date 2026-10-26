@@ -53,6 +53,23 @@ async function fixture(
           },
         }),
       );
+    } else if (request.url === "/memory") {
+      response.end(
+        JSON.stringify({
+          tools: [
+            {
+              name: "memory_write",
+              description: "memory_write",
+              parameters: { type: "object", additionalProperties: false, properties: {} },
+            },
+            {
+              name: "memory_search",
+              description: "memory_search",
+              parameters: { type: "object", additionalProperties: false, properties: {} },
+            },
+          ],
+        }),
+      );
     } else if (request.url === "/ask-user") {
       response.end(
         JSON.stringify({
@@ -115,7 +132,13 @@ describe("application tool plugin", () => {
   it("registers the eight Host schemas before readiness and forwards exact runtime identity", async () => {
     const { ctx, tools, calls, requests } = await fixture();
     await apply(ctx);
-    expect(tools.map((tool) => tool.name)).toEqual([...names, "ask_user", "web_search"]);
+    expect(tools.map((tool) => tool.name)).toEqual([
+      ...names,
+      "ask_user",
+      "memory_write",
+      "memory_search",
+      "web_search",
+    ]);
     expect(calls).toEqual([{ tools: names }]);
     const tool = tools.find((item) => item.name === "create_group")!;
     expect(tool.timeoutMs).toBeGreaterThan(600_000);
@@ -163,6 +186,7 @@ describe("application tool plugin", () => {
     expect(requests).toEqual([
       "/app-tools",
       "/ask-user",
+      "/memory",
       "/web-search",
       "/app-tools/ready",
       "/app-tools/call",
@@ -223,7 +247,12 @@ describe("application tool plugin", () => {
       return register(tool);
     };
     await apply(ctx);
-    expect(tools.map((tool) => tool.name)).toEqual([...names, "ask_user"]);
+    expect(tools.map((tool) => tool.name)).toEqual([
+      ...names,
+      "ask_user",
+      "memory_write",
+      "memory_search",
+    ]);
     expect(calls[0]).toEqual({ tools: names });
     const agentTools: Definition[] = [];
     listeners.get("agent/created")?.({

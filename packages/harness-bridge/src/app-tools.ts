@@ -110,6 +110,27 @@ function askUserTool(value: unknown): ToolSchema {
   };
 }
 
+const MEMORY_TOOL_NAMES = ["memory_write", "memory_search"] as const;
+
+function memoryTools(value: unknown): ToolSchema[] {
+  if (!object(value) || !Array.isArray(value.tools) || value.tools.length !== MEMORY_TOOL_NAMES.length) {
+    throw new Error("invalid catalog");
+  }
+  const tools: unknown[] = value.tools;
+  return MEMORY_TOOL_NAMES.map((name) => {
+    const tool = tools.find((item) => object(item) && item.name === name);
+    if (
+      !object(tool) ||
+      typeof tool.description !== "string" ||
+      !object(tool.parameters) ||
+      tool.parameters.type !== "object"
+    ) {
+      throw new Error("invalid catalog");
+    }
+    return { name, description: tool.description, parameters: tool.parameters };
+  });
+}
+
 function webSearchTool(value: unknown): ToolSchema {
   if (
     !object(value) ||
@@ -210,6 +231,9 @@ export async function applyApplicationTools(ctx: ApplicationToolContext): Promis
     const askUser = askUserTool(
       await request(origin, token, "/ask-user", AbortSignal.timeout(STARTUP_TIMEOUT_MS)),
     );
+    const memory = memoryTools(
+      await request(origin, token, "/memory", AbortSignal.timeout(STARTUP_TIMEOUT_MS)),
+    );
     const webSearch = webSearchTool(
       await request(origin, token, "/web-search", AbortSignal.timeout(STARTUP_TIMEOUT_MS)),
     );
@@ -274,6 +298,7 @@ export async function applyApplicationTools(ctx: ApplicationToolContext): Promis
     };
     for (const schema of schemas) bindRemote(schema, "/app-tools/call", CALL_TIMEOUT_MS);
     bindRemote(askUser, "/ask-user/call", ASK_USER_TIMEOUT_MS);
+    for (const schema of memory) bindRemote(schema, "/memory/call", CALL_TIMEOUT_MS);
     // Harness already publishes a global web_search. A second global name
     // aborts plugin startup, so the chat tool is registered on each agent and
     // shadows that built-in for the session.

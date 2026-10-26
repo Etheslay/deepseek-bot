@@ -52,6 +52,9 @@ import {
   getSettingRaw,
   appendChatMessage,
   listChatMessages,
+  deleteMemory,
+  listMemories,
+  writeMemory,
   updateBot,
   type BotPatch,
   type DataLayout,
@@ -615,6 +618,34 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
     "search.results.list": (payload) => {
       const bot = requireLiveBot(db, payload.botId);
       return { searches: context.searchResults.list(bot.id) };
+    },
+
+    "memory.list": (payload) => {
+      const bot = requireLiveBot(db, payload.botId);
+      return {
+        memories: listMemories(db, {
+          botId: bot.id,
+          ...(payload.query !== undefined ? { query: payload.query } : {}),
+          limit: payload.limit,
+        }).map((row) => ({
+          id: row.id,
+          botId: row.botId,
+          text: row.text,
+          at: row.createdAt,
+        })),
+      };
+    },
+
+    "memory.write": (payload) => {
+      const bot = requireLiveBot(db, payload.botId);
+      const row = writeMemory(db, { botId: bot.id, text: payload.text });
+      return { id: row.id, botId: row.botId, text: row.text, at: row.createdAt };
+    },
+
+    "memory.delete": (payload) => {
+      const bot = requireLiveBot(db, payload.botId);
+      deleteMemory(db, { botId: bot.id, memoryId: payload.memoryId });
+      return { deleted: true as const };
     },
 
     "settings.testConnection": async (payload) => {

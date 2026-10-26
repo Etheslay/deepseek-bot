@@ -40,6 +40,8 @@ import {
   getSettingRaw,
   getToolPolicy,
   getWorkspace,
+  listMemories,
+  writeMemory,
   incrementBootGeneration,
   openDatabase,
   type DataLayout,
@@ -51,6 +53,7 @@ import { AskUserCoordinator, JsonlAuditSink, ToolGateway, ToolRegistry, bindAskU
 import {
   ToolRejectionError,
   WebSearchService,
+  bindMemoryTools,
   bindWebSearchTool,
   type ToolCaller,
   type ToolNetworkPermissions,
@@ -366,6 +369,27 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
     ...bindWriteTools((method, payload) => dispatch(method as Method, payload)),
     bindAskUserTool(questions),
     bindWebSearchTool(webSearch),
+    ...bindMemoryTools({
+      write(botId, text) {
+        const bot = getBot(db, botId);
+        if (bot === undefined || bot.archivedAt !== null) {
+          throw new ToolRejectionError("UNAUTHORIZED_PATH", "memory bot is not available");
+        }
+        const row = writeMemory(db, { botId, text });
+        return { id: row.id, text: row.text, at: row.createdAt };
+      },
+      search(botId, query, limit) {
+        const bot = getBot(db, botId);
+        if (bot === undefined || bot.archivedAt !== null) {
+          throw new ToolRejectionError("UNAUTHORIZED_PATH", "memory bot is not available");
+        }
+        return listMemories(db, { botId, query, limit }).map((row) => ({
+          id: row.id,
+          text: row.text,
+          at: row.createdAt,
+        }));
+      },
+    }),
   ]) {
     agentRegistry.register(capability);
   }

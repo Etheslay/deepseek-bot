@@ -83,6 +83,9 @@ export const METHODS = [
   "search.config.get",
   "search.config.set",
   "search.results.list",
+  "memory.list",
+  "memory.write",
+  "memory.delete",
   "grant.create",
   "grant.list",
   "grant.revoke",
@@ -506,6 +509,48 @@ export const METHOD_CONTRACTS = {
         }),
       ),
     }),
+  },
+  "memory.list": {
+    request: z
+      .object({
+        botId: UuidSchema,
+        query: z.string().trim().max(4_000).optional(),
+        limit: z.int().min(1).max(50).default(20),
+      })
+      .strict(),
+    response: z.object({
+      memories: z.array(
+        z.object({
+          id: UuidSchema,
+          botId: UuidSchema,
+          text: z.string().min(1).max(4_000),
+          at: IsoDateTimeUtcSchema,
+        }),
+      ),
+    }),
+  },
+  "memory.write": {
+    request: z
+      .object({
+        botId: UuidSchema,
+        text: z.string().trim().min(1).max(4_000),
+      })
+      .strict(),
+    response: z.object({
+      id: UuidSchema,
+      botId: UuidSchema,
+      text: z.string().min(1).max(4_000),
+      at: IsoDateTimeUtcSchema,
+    }),
+  },
+  "memory.delete": {
+    request: z
+      .object({
+        botId: UuidSchema,
+        memoryId: UuidSchema,
+      })
+      .strict(),
+    response: z.object({ deleted: z.literal(true) }),
   },
   "grant.create": {
     request: z.object({
