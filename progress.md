@@ -200,3 +200,9 @@
 - 全仓 lint/typecheck/test 全绿（连续两轮）：shared 6、bridge 16、contracts 90、agent-tools 78、storage 163、desktop 229、runtime 128、adapter 58、host 92（+1 跳过）。
 - 过程修复：跨分支迁移编号协调（connector-invoke 持 0011-connectors-endpoint，本分支 0011-automation-triggers，合并时后到者重编号）；host 测试清理遇 Windows 文件锁改尽力而为重试。
 - 未验证（docs/reports/D20-triggers-report.md §3）：真实 Electron 手测、真实 Harness 人工闭环、聊天内通知条（B 线 D14 组件）、远程 CI。自审留空待负责人签署；PR 由本人确认合并。
+
+## 2026-10-27：D20 第二片——list_automations 聊天可见性工具
+
+- 只读模型工具 `list_automations`（能力 app.read 默认允许，新 /triggers 通道 + 桥接目录）：模型可汇报规则清单/启停状态/待评审条目；无写入参数（空参严格 schema）。对标 #5 的通知条渲染仍归 B 线。
+- 全仓 lint/typecheck/test 全绿：shared 6、bridge 16、contracts 90、agent-tools 80、storage 163、desktop 229、runtime 128、adapter 58、host 92（+1 跳过）。
+- 自审留空待负责人签署；与 D20 第一片同一分支（feature/automation-triggers），随该片 PR 一并交付。
