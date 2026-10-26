@@ -1,7 +1,12 @@
 /** Private per-turn Harness -> Host application tools. Never a desktop contract. */
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { randomBytes, createHash, timingSafeEqual } from "node:crypto";
-import { ToolRejectionError, type ToolCaller, type ToolGateway } from "@deepseek-bot/agent-tools";
+import {
+  ToolRejectionError,
+  type ToolCaller,
+  type ToolGateway,
+  type ToolNetworkPermissions,
+} from "@deepseek-bot/agent-tools";
 import { stableStringify } from "@deepseek-bot/runtime";
 
 const APPLICATION_TOOLS = [
@@ -76,12 +81,19 @@ function matches(received: string, token: string): boolean {
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
+export interface ApplicationToolChannelOptions {
+  /** Bound only for web_search. Eight-tool and ask_user calls omit it. */
+  readonly networkPermissions?: (caller: ToolCaller) => ToolNetworkPermissions | undefined;
+}
+
 export async function startApplicationToolServer(
   gateway: ToolGateway,
+  options: ApplicationToolChannelOptions = {},
 ): Promise<ApplicationToolServer> {
   const turns = new Map<string, TurnState>();
   const schemas = gateway.capabilities.schemas(APPLICATION_TOOLS);
   const askUserSchema = gateway.capabilities.schemas(["ask_user"])[0];
+  const webSearchSchema = gateway.capabilities.schemas(["web_search"])[0];
   let closed = false;
   const server = createServer((request, response) => {
     void handle(request, response).catch(() =>
@@ -113,11 +125,16 @@ export async function startApplicationToolServer(
       send(response, 200, { tool: askUserSchema });
       return;
     }
+    if (request.method === "GET" && request.url === "/web-search") {
+      send(response, 200, { tool: webSearchSchema });
+      return;
+    }
     if (
       request.method !== "POST" ||
       (request.url !== "/app-tools/ready" &&
         request.url !== "/app-tools/call" &&
-        request.url !== "/ask-user/call")
+        request.url !== "/ask-user/call" &&
+        request.url !== "/web-search/call")
     ) {
       send(response, 404, failure("INVALID_INPUT", "unknown application tool route"));
       return;
@@ -154,11 +171,13 @@ export async function startApplicationToolServer(
       send(response, 403, failure("UNAUTHORIZED_PATH", "application tool session mismatch"));
       return;
     }
-    if (
+    const toolAllowed =
       request.url === "/ask-user/call"
-        ? parsed.tool !== "ask_user"
-        : !(APPLICATION_TOOLS as readonly string[]).includes(parsed.tool)
-    ) {
+        ? parsed.tool === "ask_user"
+        : request.url === "/web-search/call"
+          ? parsed.tool === "web_search"
+          : (APPLICATION_TOOLS as readonly string[]).includes(parsed.tool);
+    if (!toolAllowed) {
       send(response, 400, failure("INVALID_INPUT", "tool is not available in chat"));
       return;
     }
@@ -179,8 +198,17 @@ export async function startApplicationToolServer(
       const abort = () => controller.abort();
       turn.controller.signal.addEventListener("abort", abort, { once: true });
       // The ledger is populated synchronously before another HTTP request can dispatch.
+      const networkPermissions =
+        parsed.tool === "web_search" ? options.networkPermissions?.(turn.caller) : undefined;
       const result = gateway
-        .call(turn.caller, parsed.tool, parsed.params, { signal: controller.signal })
+        .call(
+          turn.caller,
+          parsed.tool,
+          parsed.params,
+          networkPermissions === undefined
+            ? { signal: controller.signal }
+            : { signal: controller.signal, networkPermissions },
+        )
         .then((value): Result => ({ ok: true, result: value }))
         .catch(
           (error: unknown): Result =>

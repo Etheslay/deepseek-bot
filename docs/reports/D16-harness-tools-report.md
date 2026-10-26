@@ -56,7 +56,7 @@
 - 未调用真实付费 DeepSeek API，未验证真实供应商的工具选择可靠性。本地模型验证的是实际运行时协议、审批和执行路径。
 - 未接入 `ask_user` / `web_search` 聊天能力或新增工具；原生聊天 D08 工具审批仍待接线，原本需要审批的原生调用继续拒绝，不宣称所有原生工具均受本轮 D16 控制。
 - 未执行安装包、签名、干净机、升级或远程 CI；GitHub 服务端保护规则未重新核验。开发态 Electron 不能代替发行验收。
-- 后续先完成 `ask_user` 桌面回答回传，再完成 `web_search` 的受信 D08 句柄、SearXNG 配置与结果呈现，然后推进 D18。该顺序的第一项由后续 `feature/ask-user-chat` 交付，见 [ask_user 回传报告](D16-ask-user-chat-report.md)。
+- 后续先完成 `ask_user` 桌面回答回传，再完成 `web_search` 的受信 D08 句柄、SearXNG 配置与结果呈现，然后推进 D18。该顺序的第一项由后续 `feature/ask-user-chat` 交付，见 [ask_user 回传报告](D16-ask-user-chat-report.md)。第二项由后续 `feature/web-search-chat` 交付，见 [web_search 聊天报告](D16-web-search-chat-report.md)。
 
 ## 5. Etheslay 本人自审
 

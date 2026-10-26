@@ -353,4 +353,28 @@ describe("SearXNG web_search", () => {
     ).rejects.toMatchObject({ code: "CANCELLED" });
     expect(authorize).not.toHaveBeenCalled();
   });
+
+  it("lets the host replace the endpoint and observes only a completed result", async () => {
+    const url = await endpoint((_request, response) => {
+      response.setHeader("Content-Type", "application/json");
+      response.end(
+        JSON.stringify({ results: [{ title: "T", url: "https://example.org/a", content: "S" }] }),
+      );
+    });
+    const { search, gateway } = setup();
+    expect(() => search.setEndpoint("http://example.com/search")).toThrow(/HTTPS/);
+    expect(search.currentEndpoint()).toBeUndefined();
+    const seen: string[] = [];
+    search.observe((who, result) => seen.push(`${who.id}:${result.results[0]?.title ?? ""}`));
+    search.setEndpoint(url);
+    expect(search.currentEndpoint()).toBe(url);
+    await gateway.call(caller, "web_search", { query: "q" }, { networkPermissions: allow });
+    expect(seen).toEqual(["chat:search-session/bot:T"]);
+    search.setEndpoint(undefined);
+    expect(search.currentEndpoint()).toBeUndefined();
+    await expect(
+      gateway.call(caller, "web_search", { query: "q" }, { networkPermissions: allow }),
+    ).rejects.toMatchObject({ code: "RUNTIME_UNAVAILABLE" });
+    expect(seen).toEqual(["chat:search-session/bot:T"]);
+  });
 });

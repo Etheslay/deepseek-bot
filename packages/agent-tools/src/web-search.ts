@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   ToolRejectionError,
   type GatewayRejectionCode,
+  type ToolCaller,
   type ToolCapability,
   type ToolContext,
 } from "./types.js";
@@ -165,7 +166,8 @@ function normalize(body: unknown, input: SearchInput): WebSearchResult {
 
 /** One Host-owned service; every outbound request requires a trusted D08-compatible handle. */
 export class WebSearchService {
-  private readonly endpoint: string | undefined;
+  private endpoint: string | undefined;
+  private onResult: ((caller: ToolCaller, result: WebSearchResult) => void) | undefined;
   private readonly timeoutMs: number;
   private readonly lifetime = new AbortController();
 
@@ -178,6 +180,20 @@ export class WebSearchService {
         "web_search timeout must be between 1 and 60000 ms",
       );
     }
+  }
+
+  /** Trusted Host configuration. `undefined` clears the endpoint. */
+  setEndpoint(value: string | undefined): void {
+    this.endpoint = value === undefined ? undefined : parseEndpoint(value);
+  }
+
+  currentEndpoint(): string | undefined {
+    return this.endpoint;
+  }
+
+  /** Called only after a successful normalize. The host must not throw. */
+  observe(handler: (caller: ToolCaller, result: WebSearchResult) => void): void {
+    this.onResult = handler;
   }
 
   async search(input: SearchInput, context: ToolContext): Promise<WebSearchResult> {
@@ -268,7 +284,9 @@ export class WebSearchService {
         throw unavailable("SearXNG did not return JSON");
       }
       const text = await readBoundedBody(response, httpSignal);
-      return normalize(JSON.parse(text) as unknown, input);
+      const result = normalize(JSON.parse(text) as unknown, input);
+      this.onResult?.(context.caller, result);
+      return result;
     } catch (error) {
       if (httpSignal.aborted) throw interrupted(httpSignal);
       if (error instanceof ToolRejectionError) throw error;

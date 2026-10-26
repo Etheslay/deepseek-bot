@@ -48,6 +48,8 @@ export interface ApplicationToolDefinition extends ToolSchema {
 }
 export interface ApplicationToolContext {
   readonly tools?: { register(definition: ApplicationToolDefinition): () => void };
+  /** Present on the Harness plugin context. Unit fixtures may omit it. */
+  on?(event: string, handler: (payload: unknown) => void): void;
 }
 
 class ApplicationToolError extends Error {
@@ -58,6 +60,10 @@ class ApplicationToolError extends Error {
 }
 function object(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function alreadyRegistered(error: unknown): boolean {
+  return error instanceof Error && error.message.includes("already registered");
 }
 
 function catalog(value: unknown): ToolSchema[] {
@@ -99,6 +105,24 @@ function askUserTool(value: unknown): ToolSchema {
   }
   return {
     name: "ask_user",
+    description: value.tool.description,
+    parameters: value.tool.parameters,
+  };
+}
+
+function webSearchTool(value: unknown): ToolSchema {
+  if (
+    !object(value) ||
+    !object(value.tool) ||
+    value.tool.name !== "web_search" ||
+    typeof value.tool.description !== "string" ||
+    !object(value.tool.parameters) ||
+    value.tool.parameters.type !== "object"
+  ) {
+    throw new Error("invalid catalog");
+  }
+  return {
+    name: "web_search",
     description: value.tool.description,
     parameters: value.tool.parameters,
   };
@@ -186,9 +210,18 @@ export async function applyApplicationTools(ctx: ApplicationToolContext): Promis
     const askUser = askUserTool(
       await request(origin, token, "/ask-user", AbortSignal.timeout(STARTUP_TIMEOUT_MS)),
     );
-    const bindRemote = (schema: ToolSchema, path: string, timeoutMs: number): void => {
+    const webSearch = webSearchTool(
+      await request(origin, token, "/web-search", AbortSignal.timeout(STARTUP_TIMEOUT_MS)),
+    );
+    const bindRemote = (
+      schema: ToolSchema,
+      path: string,
+      timeoutMs: number,
+      register: (definition: ApplicationToolDefinition) => () => void = (definition) =>
+        tools.register(definition),
+    ): void => {
       unregister.push(
-        tools.register({
+        register({
           ...schema,
           timeoutMs,
           output: {
@@ -241,6 +274,31 @@ export async function applyApplicationTools(ctx: ApplicationToolContext): Promis
     };
     for (const schema of schemas) bindRemote(schema, "/app-tools/call", CALL_TIMEOUT_MS);
     bindRemote(askUser, "/ask-user/call", ASK_USER_TIMEOUT_MS);
+    // Harness already publishes a global web_search. A second global name
+    // aborts plugin startup, so the chat tool is registered on each agent and
+    // shadows that built-in for the session.
+    try {
+      bindRemote(webSearch, "/web-search/call", CALL_TIMEOUT_MS);
+    } catch (error) {
+      if (!alreadyRegistered(error)) throw error;
+      ctx.on?.("agent/created", (payload: unknown) => {
+        if (!object(payload) || !object(payload.agent)) return;
+        const agentCtx = payload.agent.ctx;
+        if (!object(agentCtx) || !object(agentCtx.tools) || typeof agentCtx.tools.register !== "function") {
+          return;
+        }
+        const scoped = agentCtx.tools as {
+          register(definition: ApplicationToolDefinition): () => void;
+        };
+        try {
+          bindRemote(webSearch, "/web-search/call", CALL_TIMEOUT_MS, (definition) =>
+            scoped.register(definition),
+          );
+        } catch (shadowError) {
+          if (!alreadyRegistered(shadowError)) throw shadowError;
+        }
+      });
+    }
     const ready = await request(origin, token, "/app-tools/ready", startupSignal, {
       tools: schemas.map((schema) => schema.name),
     });
