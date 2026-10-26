@@ -13,7 +13,7 @@
 
 | 验收项（FR-19） | 实现 | 落点 |
 | --- | --- | --- |
-| 中英双语可切换 | 零依赖类型化字典：`shared/i18n`（`locale` 解析、`translate` 位置参数 + 英文单复数、14 个 domain 文件 **660 条 key**）；渲染层模块级 store（`useSyncExternalStore`）+ 主进程语言镜像；`system`/`zh`/`en` 三档偏好，`system` 取 `app.getLocale()` | [shared/i18n](../../apps/desktop/src/shared/i18n/)、[renderer/src/i18n.ts](../../apps/desktop/src/renderer/src/i18n.ts)、[main/i18n.ts](../../apps/desktop/src/main/i18n.ts) |
+| 中英双语可切换 | 零依赖类型化字典：`shared/i18n`（`locale` 解析、`translate` 位置参数 + 英文单复数、14 个 domain 文件 **662 条 key**）；渲染层模块级 store（`useSyncExternalStore`）+ 主进程语言镜像；`system`/`zh`/`en` 三档偏好，`system` 取 `app.getLocale()` | [shared/i18n](../../apps/desktop/src/shared/i18n/)、[renderer/src/i18n.ts](../../apps/desktop/src/renderer/src/i18n.ts)、[main/i18n.ts](../../apps/desktop/src/main/i18n.ts) |
 | 每 bot 托盘图标 | 单托盘：图标 = 活跃 bot 的 Grok Ball（渲染层 SVG→canvas 32px PNG，经校验的 `tray:sync` 推送）；菜单逐 bot 一项、带各自图标、活跃标记、按"活跃→等待审批→运行中→未读→其余"排序；菜单/tooltip 随界面语言 | [main/tray.ts](../../apps/desktop/src/main/tray.ts)、[main/tray-menu.ts](../../apps/desktop/src/main/tray-menu.ts)、[features/system/tray-avatar.ts](../../apps/desktop/src/renderer/src/features/system/tray-avatar.ts)、[tray-sync.ts](../../apps/desktop/src/renderer/src/features/system/tray-sync.ts) |
 | 通知设置 | 主进程 `Notification`（4 秒同文去重、点击回主窗口并通知渲染层定位 bot）；策略在渲染层：总开关、**仅窗口不在前台时提醒**（默认开）、按 Bot 静音、测试通知按钮（如实回报"系统无通知通道"）；触发点＝回复完成 / 待审批 / 错过定时（FR-08） | [main/notifications.ts](../../apps/desktop/src/main/notifications.ts)、[features/system/notify.ts](../../apps/desktop/src/renderer/src/features/system/notify.ts)、[notifications-panel.tsx](../../apps/desktop/src/renderer/src/features/system/notifications-panel.tsx) |
 | Chrome 数据导入 | **只读书签**（口径见 §2）：扫描 `<User Data>/*/Bookmarks` + `Local State` 取显示名 → 预览条数与样例 → 导入到 `<数据根>/imports/chrome/bookmarks.json` → 查看/导出 Markdown/一键删除；仅 `http(s)`、URL 去重、单文件 >8 MiB 拒绝、上限 5000 条、token 拒绝分隔符与 `..` | [main/chrome-bookmarks.ts](../../apps/desktop/src/main/chrome-bookmarks.ts)、[chrome-panel.tsx](../../apps/desktop/src/renderer/src/features/system/chrome-panel.tsx) |
@@ -42,7 +42,7 @@
 | 去重后唯一文案 | 608 |
 | 自动替换 | 644 处 / 31 个文件 |
 | 需人工改造（模块级常量表 / 数据比较值） | 114 处 / 8 个文件 |
-| 迁移后字典 | 660 key / 14 domain |
+| 迁移后字典 | 662 key / 14 domain（合入 develop #52 后新增 2 条待执行参数文案） |
 | 残留未翻译界面文案 | **0**（`i18n` 扫描器：字符串字面量、模板串、`+` 拼接链、JSX 文本段） |
 
 人工改造的关键点（模块级常量在 import 期求值，会冻结启动语言）：`RUN_STATUS_LABELS`、`NODE_STATUS_LABELS`、`DECISION_LABELS`、`CAPABILITY_LABELS`（两份重复表合并为 [capability-labels.ts](../../apps/desktop/src/renderer/src/features/permissions/capability-labels.ts)）、`TONE_PRESETS`、`WORKSPACE_OPTIONS`/`TOOL_POLICY_OPTIONS`、`SEARCH_KIND_LABELS`、夹具会话标题——全部改成"key 表 + 取值函数"。`APPROVAL_TTL_COPY` 由常量改为 `approvalTtlCopy()`。
@@ -55,7 +55,7 @@
 
 | 检查 | 提交 / 环境 | 命令 | 结果 |
 | --- | --- | --- | --- |
-| 全仓测试 | `377a37b` / Win11 x64 + Node 24.16.0 | `pnpm test` | exit 0：desktop 31 文件 / **323** 用例（基线 23/206）、contracts 86、storage 147、runtime 128、agent-tools 69、host 61(+1 skip)、harness-adapter 52、shared 6、harness-bridge 10 |
+| 全仓测试 | `56d07fc`（已合 develop #52）/ Win11 x64 + Node 24.16.0 | `pnpm test` | exit 0：desktop 31 文件 / **325** 用例（基线 23/206）、contracts 86、storage 147、runtime 128、agent-tools 69、host 61(+1 skip)、harness-adapter 52、shared 6、harness-bridge 10 |
 | 静态检查 | 同上 | `pnpm run lint`；`pnpm run typecheck` | 均 exit 0（10 包） |
 | 未翻译文案扫描 | 同上 | `node d22-tools/i18n.mjs check` | `no untranslated UI copy left in apps/desktop/src` |
 | 双语内核专项 | 同上 | `tests/features/i18n.test.ts`（14 例） | locale 解析、位置参数、英文单复数、未知 key 回退、字典 zh/en 占位符一致、英文不含中文、key 命名空间 |
@@ -131,6 +131,8 @@
 
 ## 9. 提交范围与 PR
 
-代码 head：`377a37b`；文档 head：本 docs 提交。自审需覆盖 `2ecb2f9..HEAD` 的全部提交（`git log --oneline 2ecb2f9..HEAD`）。
+代码 head：`377a37b`；随后 `d9f4a38`/`84b0f1d` 为文档提交，`56d07fc` 合入 `origin/develop`（#52 工具网关，冲突见下）。自审需覆盖 `2ecb2f9..HEAD` 的全部提交（`git log --oneline 2ecb2f9..HEAD`）。
+
+与 develop 的冲突处理：`App.tsx` 取 develop 侧（#52 把聊天内联授权卡移进审批网关路径）；`permission-chat.tsx` 保留 #52 的按 bot 生命周期守卫、`botId` 过滤与新增的「待执行参数」块，并重新套用 D22 文案层（能力表改由 `capability-labels.ts` 提供、选项与提示存 message key、新增 2 条 key）；`docs/SPRINTS.md` 保留 develop 的 D17 行并追加 D22 行。合并后 `pnpm test` / `pnpm run lint` / `pnpm --dir apps/desktop run typecheck` 与未翻译扫描全部通过，§5 证据在合并后的构建上重新采集。
 
 分支已推送 `origin/feature/system-integration`。本机无 `gh` CLI，PR 需由负责人在浏览器创建：<https://github.com/Etheslay/deepseek-bot/pull/new/feature/system-integration>（base = `develop`）。按 [Git 工作流 §4](GIT_WORKFLOW.md)（必需批准数 0、负责人自审后自行合并），填写 §8 后以 merge commit 合入；本次未执行任何合并动作。
