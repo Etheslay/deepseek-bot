@@ -44,3 +44,13 @@ export {
   type KnowledgeSearchHit,
   type KnowledgeStore,
 } from "./knowledge.js";
+export {
+  bindTaskTools,
+  DispatchTaskInputSchema,
+  ListTasksInputSchema,
+  type TaskToolBotView,
+  type TaskToolDeps,
+  type DispatchTaskInput,
+  type ListTasksInput,
+} from "./task-tools.js";
+export { bindWorkflowTools } from "./workflow-tools.js";

@@ -117,8 +117,7 @@ export class ToolGateway {
       caller,
       ...(options.signal !== undefined ? { signal: options.signal } : {}),
       ...(options.networkPermissions !== undefined ? { networkPermissions: options.networkPermissions } : {}),
-    };
-    let grant: GrantCheckResult | undefined;
+    };    let grant: GrantCheckResult | undefined;
     let executing = false;
     try {
       grant = await this.options.grants?.check(tool, caller, parsed.data, options)
@@ -127,7 +126,17 @@ export class ToolGateway {
       if (options.signal?.aborted) throw new ToolRejectionError("CANCELLED", "tool call was cancelled");
       grant.revalidate?.();
       executing = true;
-      const result = await capability.handler(parsed.data, context);
+      const contextWithGrant: ToolContext =
+        grant.approvalId !== undefined || grant.grantIds !== undefined
+          ? {
+              ...context,
+              authorization: {
+                ...(grant.approvalId !== undefined ? { approvalId: grant.approvalId } : {}),
+                ...(grant.grantIds !== undefined ? { grantIds: grant.grantIds } : {}),
+              },
+            }
+          : context;
+      const result = await capability.handler(parsed.data, contextWithGrant);
       await this.audit(caller.id, tool, parsed.data, result, "ok", undefined, undefined, now, undefined, caller, grant);
       return result;
     } catch (error) {
