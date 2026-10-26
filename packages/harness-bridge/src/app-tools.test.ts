@@ -11,6 +11,9 @@ const names = [
   "create_group",
   "create_bots_batch",
   "revoke_batch",
+  "save_workflow",
+  "dispatch_task",
+  "list_tasks",
 ];
 interface Definition {
   name: string;

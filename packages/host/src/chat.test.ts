@@ -81,6 +81,7 @@ async function hostWithBot(
       modelProfileId: profileId,
       workspaceId,
       toolPolicyId: policyId,
+      role: "standard",
       archivedAt: null,
     },
   });

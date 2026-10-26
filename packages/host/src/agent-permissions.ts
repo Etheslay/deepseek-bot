@@ -41,6 +41,13 @@ const CAPABILITIES: Readonly<Record<string, readonly CapabilityId[]>> = {
   memory_search: ["memory.read"],
   memory_write: ["memory.write"],
   knowledge_search: ["memory.read"],
+  // v0.5 manager orchestration: workflow creation rides the existing
+  // app.create_workflow capability; dispatching gets its own capability
+  // (default ask, permanent grants allowed — see PERMISSIONS.md §8);
+  // list_tasks is read-only (app.read, allow by default).
+  save_workflow: ["app.create_workflow"],
+  dispatch_task: ["app.dispatch_task"],
+  list_tasks: ["app.read"],
 };
 function digest(call: Omit<PermissionCall, "actionDigest">): string {
   return createHash("sha256").update(stableStringify(call)).digest("hex");
