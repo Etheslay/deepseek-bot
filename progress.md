@@ -141,3 +141,12 @@
 - 根目录 lint / typecheck / test 全绿：desktop 147、shared 6、contracts 71、storage 124、agent-tools 17、runtime 128、harness-adapter 52、harness-bridge 10、host 26+1 skipped。
 - 未做（记录于 docs/reports/D15-report.md §5）：grant/审批（D16 接入网关桩）、聊天侧调用方、assign_bot_group/update_bot/create_workflow 等写工具、get_workflow 读方法、batch.created 事件（run 域事件模型需先扩展）、真实 Harness/端到端验证。
 - 自审记录留空待负责人 Etheslay 填写；PR 合并由本人确认。
+
+## 2026-10-26：D16 权限与授权后端
+
+- 用户确认先做契约、存储、网关、Host；session 授权重启失效，永久授权保留，pending 始终失效。分支 feature/permissions-grants 来自 origin/develop b693c5b，含 D15 web_search 与 Destinyian 最新合并。
+- 交付 protocol 0.3（兼容 0.1/0.2，工作流仍 0.1）、migration 0005、三档全局策略、once/session/permanent bot 授权、精确参数审批、追加式审计与 7 个受信人类 permission.* 方法；模型工具列表不暴露控制面。
+- 网关移除默认放行，校验参数后授权，执行前重验；多能力事务预扣次数、失败不退款；策略 deny 优先，缺少身份拒绝写入。D08 网络资源权限继续独立生效。
+- 独立 AI 审查修复撤销后策略改 allow 绕过、bot 撤销审计缺失、异常/校验消息原文审计泄漏，以及只读数据库导致取消/关闭清理中断；AI 复查无未解决发现，不等于真人自审。
+- 最终 pnpm lint/typecheck/test、Host build、git diff --check 均退出 0；712 通过、1 跳过。包计数与覆盖率、实际命令、迁移兼容证据见 docs/reports/D16-report.md。
+- 未提交/推送。未做权限 UI、真实聊天/Harness 工具接线或付费 API；真实 API smoke 按未启用开关跳过；远程 CI 与服务端保护未核验。Etheslay 自审栏留空。

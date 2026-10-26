@@ -31,7 +31,7 @@ function setup(url?: string, timeoutMs?: number, grants?: { allowed: boolean }) 
   const gateway = new ToolGateway({
     registry,
     audit,
-    ...(grants !== undefined ? { grants: { check: async () => grants } } : {}),
+    grants: { check: async () => grants ?? { allowed: true } },
   });
   return { search, gateway, audit };
 }

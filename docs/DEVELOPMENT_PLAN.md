@@ -1,6 +1,6 @@
 # 双人开发任务与里程碑
 
-日期：2026-10-22。状态：计划，所有 Dxx 开发任务尚未开始。开发者：Etheslay、Destinyian。
+日期：2026-10-22。状态：任务规划基线；实际实现进度与检查证据见各任务报告，不能将本表视为完成清单。开发者：Etheslay、Destinyian。
 
 ## 1. 分工
 
@@ -78,6 +78,8 @@ Etheslay 主责 Harness、Host、执行、权限、存储和调度；Destinyian 
 | D26 `feature/chat-attachments` | Destinyian | D08、D15 | 聊天附件：文件/图片经工具网关进入 bot 工作区（受 grant 与审批约束），附件卡片与产物预览打通；bot 经 read 工具真正读取附件内容并回答 |
 | D27 `feature/voice-mode` | Etheslay 主责，Destinyian 语音 UI 联调 | D12 | 本地语音：whisper.cpp 转写 + Windows TTS 播报（全免费、全本地）；按住说话/自动断句；不引入云端转写（原 D30 并入，编号前移） |
 | D28 `feature/canvas-cowrite` | Destinyian | D14、D26 | 产物画布从只读预览升级为可共编侧车：bot 写、用户改、bot 续写；版本留痕可回退（原 D31 并入，编号前移） |
+
+D16 当前切片仅交付契约、存储、网关与 Host 授权后端；会话授权重启失效、永久授权保留。设置页、聊天卡片及真实 Harness 工具调用接线未交付，完整 D16 仍未验收，详见 [D16 报告](reports/D16-report.md)。
 
 ## 7. 阶段二里程碑
 

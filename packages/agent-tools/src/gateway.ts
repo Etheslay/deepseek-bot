@@ -13,6 +13,7 @@ import {
   type AuditSink,
   type GatewayRejectionCode,
   type GrantCheckpoint,
+  type GrantCheckResult,
   type ToolCaller,
   type ToolCapability,
   type ToolContext,
@@ -55,7 +56,7 @@ export class ToolRegistry {
 export interface ToolGatewayOptions {
   readonly registry: ToolRegistry;
   readonly audit: AuditSink;
-  /** Defaults to the read-layer allow-all stub (D16 replaces this). */
+  /** Missing checkpoint fails closed; the Host installs D16 authorization. */
   readonly grants?: GrantCheckpoint;
   /** Wall clock for audit timestamps (tests inject). */
   readonly now?: () => Date;
@@ -79,19 +80,12 @@ export class ToolGateway {
     params: unknown,
     options: ToolCallOptions = {},
   ): Promise<unknown> {
+    caller = Object.freeze({ ...caller });
     const now = this.options.now ?? (() => new Date());
     const capability = this.lookup(tool);
     if (capability === undefined) {
-      await this.audit(caller.id, tool, params, undefined, "rejected", "INVALID_INPUT", `unknown capability '${tool}'`, now);
+      await this.audit(caller.id, tool, params, undefined, "rejected", "INVALID_INPUT", `unknown capability '${tool}'`, now, undefined, caller);
       throw new ToolRejectionError("INVALID_INPUT", `unknown capability '${tool}'`);
-    }
-    const grant = await this.options.grants?.check(tool, caller) ?? { allowed: true };
-    if (!grant.allowed) {
-      await this.audit(caller.id, tool, params, undefined, "rejected", "UNAUTHORIZED_PATH", grant.reason ?? "grant denied", now);
-      throw new ToolRejectionError(
-        "UNAUTHORIZED_PATH",
-        grant.reason ?? `tool '${tool}' is not granted for caller '${caller.id}'`,
-      );
     }
     const parsed = capability.inputSchema.safeParse(params ?? {});
     if (!parsed.success) {
@@ -99,7 +93,10 @@ export class ToolGateway {
         path: issue.path.join("."),
         message: issue.message,
       }));
-      await this.audit(caller.id, tool, params, undefined, "rejected", "INVALID_INPUT", "parameters failed schema validation", now, { issues });
+      // Zod messages and paths can contain attacker-supplied object keys.
+      // Persist only issue codes; detailed validation stays in the response.
+      const auditIssues = parsed.error.issues.map((issue) => ({ code: issue.code }));
+      await this.audit(caller.id, tool, params, undefined, "rejected", "INVALID_INPUT", "parameters failed schema validation", now, { issues: auditIssues }, caller);
       throw new ToolRejectionError("INVALID_INPUT", `parameters for '${tool}' failed validation`, { issues });
     }
     const context: ToolContext = {
@@ -107,15 +104,24 @@ export class ToolGateway {
       ...(options.signal !== undefined ? { signal: options.signal } : {}),
       ...(options.networkPermissions !== undefined ? { networkPermissions: options.networkPermissions } : {}),
     };
+    let grant: GrantCheckResult | undefined;
+    let executing = false;
     try {
+      grant = await this.options.grants?.check(tool, caller, parsed.data, options)
+        ?? { allowed: false, code: "UNAUTHORIZED_PATH", reason: "authorization checkpoint is not configured", decision: "denied" };
+      if (!grant.allowed) throw new ToolRejectionError(grant.code ?? "UNAUTHORIZED_PATH", grant.reason ?? "tool authorization denied");
+      if (options.signal?.aborted) throw new ToolRejectionError("CANCELLED", "tool call was cancelled");
+      grant.revalidate?.();
+      executing = true;
       const result = await capability.handler(parsed.data, context);
-      await this.audit(caller.id, tool, parsed.data, result, "ok", undefined, undefined, now);
+      await this.audit(caller.id, tool, parsed.data, result, "ok", undefined, undefined, now, undefined, caller, grant);
       return result;
     } catch (error) {
-      const reason = error instanceof Error ? error.message : String(error);
       const code: GatewayRejectionCode | "RUNTIME_ERROR" =
         error instanceof ToolRejectionError ? error.code : "RUNTIME_ERROR";
-      await this.audit(caller.id, tool, parsed.data, undefined, "error", code, reason, now);
+      // Handler/checkpoint exception text can echo raw tool arguments.
+      const reason = executing ? "tool execution failed" : "tool authorization failed";
+      await this.audit(caller.id, tool, parsed.data, undefined, executing ? "error" : "rejected", code, reason, now, undefined, caller, grant);
       throw error;
     }
   }
@@ -134,6 +140,8 @@ export class ToolGateway {
     reason: string | undefined,
     now: () => Date,
     extraDetails?: Record<string, unknown>,
+    principal?: ToolCaller,
+    authorization?: GrantCheckResult,
   ): Promise<void> {
     const record: AuditRecord & Record<string, unknown> = {
       timestamp: now().toISOString(),
@@ -145,6 +153,12 @@ export class ToolGateway {
       ...(code !== undefined ? { code } : {}),
       ...(reason !== undefined ? { reason } : {}),
       ...(extraDetails !== undefined ? { details: extraDetails } : {}),
+      ...(principal?.botId !== undefined ? { botId: principal.botId } : {}),
+      ...(principal?.sessionId !== undefined ? { sessionId: principal.sessionId } : {}),
+      ...(authorization?.capabilities !== undefined ? { capabilities: authorization.capabilities } : {}),
+      ...(authorization?.grantIds !== undefined ? { grantIds: authorization.grantIds } : {}),
+      ...(authorization?.approvalId !== undefined ? { approvalId: authorization.approvalId } : {}),
+      ...(authorization?.decision !== undefined ? { decision: authorization.decision } : {}),
     };
     await this.options.audit.append(record);
   }

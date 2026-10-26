@@ -405,4 +405,38 @@ CREATE UNIQUE INDEX creation_batches_request_id
   ON creation_batches(request_id) WHERE request_id IS NOT NULL;
 `,
   },
+  {
+    id: 5,
+    name: "0005-permissions-grants",
+    sql: /* sql */ `
+CREATE TABLE permission_grants (
+  id TEXT PRIMARY KEY,
+  capability TEXT NOT NULL,
+  scope TEXT NOT NULL CHECK (scope IN ('policy', 'once', 'session', 'permanent')),
+  bot_id TEXT REFERENCES bots(id),
+  payload_json TEXT NOT NULL
+);
+CREATE UNIQUE INDEX permission_policy_capability ON permission_grants(capability) WHERE scope = 'policy';
+CREATE INDEX permission_grants_bot ON permission_grants(bot_id);
+CREATE TABLE app_approvals (
+  id TEXT PRIMARY KEY,
+  invocation_id TEXT NOT NULL UNIQUE,
+  payload_json TEXT NOT NULL
+);
+CREATE TABLE permission_authorizations (
+  invocation_id TEXT PRIMARY KEY,
+  call_json TEXT NOT NULL,
+  authorization_json TEXT NOT NULL
+);
+CREATE TABLE permission_audit (
+  sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+  id TEXT NOT NULL UNIQUE,
+  payload_json TEXT NOT NULL
+);
+CREATE TRIGGER permission_audit_no_update BEFORE UPDATE ON permission_audit
+BEGIN SELECT RAISE(ABORT, 'permission audit is append-only'); END;
+CREATE TRIGGER permission_audit_no_delete BEFORE DELETE ON permission_audit
+BEGIN SELECT RAISE(ABORT, 'permission audit is append-only'); END;
+`,
+  },
 ];

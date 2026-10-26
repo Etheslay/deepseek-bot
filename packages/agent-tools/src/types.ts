@@ -2,12 +2,11 @@
  * Gateway core types (D15, AGENT_PLATFORM §2/§3).
  *
  * 模型只能通过工具网关产生副作用；网关之外没有任何"后门"写入路径。Every
- * dispatch flows: capability lookup → grant checkpoint → parameter schema →
- * execute → audit. The grant checkpoint is a D15 stub (read layer default
- * allow) with the D16 three-layer grant/审批 model as its caller.
+ * dispatch flows: capability lookup → parameter schema → authorization →
+ * revalidation → execute → audit. An absent checkpoint denies every call.
  */
 import type { z } from "zod";
-import type { ErrorCode } from "@deepseek-bot/contracts";
+import type { CapabilityId, ErrorCode } from "@deepseek-bot/contracts";
 
 /** Stable gateway rejection codes (CONTRACTS §6 vocabulary). */
 export type GatewayRejectionCode = Extract<
@@ -20,6 +19,9 @@ export type GatewayRejectionCode = Extract<
 export interface ToolCaller {
   /** e.g. "chat:<sessionId>/<botId>" or "ui:<windowId>" — opaque string. */
   readonly id: string;
+  /** Bound by the trusted Host caller, never parsed from id or model params. */
+  readonly botId?: string;
+  readonly sessionId?: string;
 }
 
 /** Context handed to a capability handler after validation. */
@@ -75,16 +77,21 @@ export interface ToolCapability<S extends z.ZodType = z.ZodType> {
   readonly handler: (params: z.output<S>, context: ToolContext) => Promise<unknown> | unknown;
 }
 
-/** Grant checkpoint (D15 stub): read layer default-allow; D16 layers here. */
-export interface GrantCheckpoint {
-  check(tool: string, caller: ToolCaller): Promise<{ allowed: boolean; reason?: string }>;
+export interface GrantCheckResult {
+  readonly allowed: boolean;
+  readonly code?: GatewayRejectionCode;
+  readonly reason?: string;
+  readonly capabilities?: readonly CapabilityId[];
+  readonly grantIds?: readonly string[];
+  readonly approvalId?: string;
+  readonly decision?: "policy" | "grant" | "approval" | "denied";
+  /** Synchronous lease check immediately before dispatch; no second use charge. */
+  readonly revalidate?: () => void;
 }
 
-/** Default read-layer grant: everything registered is allowed (D15 阶段一). */
-export class AllowAllGrants implements GrantCheckpoint {
-  async check(): Promise<{ allowed: true }> {
-    return { allowed: true };
-  }
+/** Host supplies the persistent D16 policy/grant/approval checkpoint. */
+export interface GrantCheckpoint {
+  check(tool: string, caller: ToolCaller, params: unknown, options: ToolCallOptions): Promise<GrantCheckResult>;
 }
 
 /** One audit record (谁/何时/调了什么/参数摘要/结果摘要). */
@@ -99,6 +106,12 @@ export interface AuditRecord {
   readonly outcome: "ok" | "rejected" | "error";
   readonly code?: GatewayRejectionCode | "RUNTIME_ERROR";
   readonly reason?: string;
+  readonly botId?: string;
+  readonly sessionId?: string;
+  readonly capabilities?: readonly CapabilityId[];
+  readonly grantIds?: readonly string[];
+  readonly approvalId?: string;
+  readonly decision?: GrantCheckResult["decision"];
 }
 
 export interface AuditSink {

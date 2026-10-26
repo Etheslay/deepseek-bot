@@ -38,6 +38,7 @@ import {
   type OpenedDatabase,
 } from "@deepseek-bot/storage";
 import { buildHandlers, type HostContext } from "./handlers.js";
+import { AgentPermissionService } from "./agent-permissions.js";
 import { AskUserCoordinator, JsonlAuditSink, ToolGateway, ToolRegistry, bindAskUserTool, bindReadTools, bindWriteTools, type UserQuestionControls } from "@deepseek-bot/agent-tools";
 import { WebSearchService, bindWebSearchTool, type WebSearchOptions } from "@deepseek-bot/agent-tools";
 
@@ -153,9 +154,10 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
   // Validate configuration before allocating the database or approval server.
   const webSearch = new WebSearchService(options.webSearch);
   const layout = ensureDataLayout(options.dataRoot);
-  const db = openDatabase(layout.dbFile);
+  const db = openDatabase(layout.dbFile, options.now !== undefined ? { now: options.now } : {});
   seedDefaults(db, layout);
   const bootGeneration = incrementBootGeneration(db);
+  const permissions = new AgentPermissionService(db, bootGeneration);
   const patches = writeProfilePatches(layout.harnessHome);
   const now = options.now ?? (() => new Date());
 
@@ -225,7 +227,7 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
   const recoveredRuns = engine.recoverInterruptedRuns();
 
   let closed = false;
-  const context: HostContext = { db, engine, scheduler, layout, now, resolveApiKey: options.resolveApiKey };
+  const context: HostContext = { db, engine, scheduler, layout, now, permissions, resolveApiKey: options.resolveApiKey };
   const handlers = buildHandlers(context);
 
   // D15: the agent tool gateway is the only sanctioned side-effect path for
@@ -268,6 +270,7 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
       const result = await handler(parsed.data, {
         ...(requestId !== undefined ? { requestId } : {}),
       });
+      if (method === "data.restore") permissions.close();
       const validated = contract.response.safeParse(result);
       if (!validated.success) {
         throw new EngineError({
@@ -287,9 +290,7 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
 
   const agentRegistry = new ToolRegistry();
   const questions = new AskUserCoordinator();
-  // D15: read layer (default-allow) plus the write layer (draft / group /
-  // batch create / revoke). D16 replaces AllowAllGrants with the three-layer
-  // grant/审批 checkpoint — until then write calls ride the same stub.
+  // D16: every registered tool crosses the Host authorization checkpoint.
   for (const capability of [
     ...bindReadTools((method, payload) => dispatch(method as Method, payload)),
     ...bindWriteTools((method, payload) => dispatch(method as Method, payload)),
@@ -301,6 +302,7 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
   const agentTools = new ToolGateway({
     registry: agentRegistry,
     audit: new JsonlAuditSink(join(layout.logs, "agent-tools-audit.jsonl")),
+    grants: permissions,
   });
 
   return {
@@ -322,12 +324,17 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
       scheduler.start();
     },
     async shutdown(): Promise<void> {
+      if (closed) return;
       closed = true;
+      permissions.close();
       questions.close();
       webSearch.close();
       scheduler.stop();
-      await bridge.close();
-      db.close();
+      try {
+        await bridge.close();
+      } finally {
+        db.close();
+      }
     },
   };
 }

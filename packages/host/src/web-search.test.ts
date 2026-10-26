@@ -50,7 +50,21 @@ async function makeHost(endpoint?: string) {
     ...(endpoint !== undefined ? { webSearch: { endpoint } } : {}),
   });
   hosts.push(host);
+  // These tests exercise the independent D08 network boundary. Supply the
+  // trusted D16 actor and explicit human policy before reaching that boundary.
+  await host.handleMethod("permission.policy.set", { capability: "network.search", mode: "allow" });
+  await host.handleMethod("bot.create", {
+    name: "search actor", instructions: "Research",
+    modelProfileId: "44444444-4444-4444-8444-444444444444",
+    workspaceId: "55555555-5555-4555-8555-555555555555",
+    toolPolicyId: "66666666-6666-4666-8666-666666666666",
+  });
   return host;
+}
+
+function searchCaller(host: DeepSeekBotHost) {
+  const bot = host.db.raw.prepare("SELECT id FROM bots LIMIT 1").get() as { id: string };
+  return { id: "chat:one", botId: bot.id, sessionId: "search-session" };
 }
 
 afterEach(async () => {
@@ -67,7 +81,7 @@ describe("Host web_search", () => {
     const host = await makeHost();
     expect(host.agentTools.capabilities.list().map((tool) => tool.name)).toContain("web_search");
     await expect(
-      host.agentTools.call({ id: "chat:one" }, "web_search", { query }),
+      host.agentTools.call(searchCaller(host), "web_search", { query }),
     ).rejects.toMatchObject({ code: "RUNTIME_UNAVAILABLE" });
   });
 
@@ -75,7 +89,7 @@ describe("Host web_search", () => {
     const { endpoint, requests } = await searchEndpoint();
     const host = await makeHost(endpoint);
     await expect(
-      host.agentTools.call({ id: "chat:one" }, "web_search", { query }),
+      host.agentTools.call(searchCaller(host), "web_search", { query }),
     ).rejects.toMatchObject({ code: "UNAUTHORIZED_PATH" });
     expect(requests).toHaveLength(0);
   });
@@ -128,7 +142,7 @@ describe("Host web_search", () => {
         executor: {
           async executeBotNode(context) {
             const result = await host.agentTools.call(
-              { id: `run:${context.run.id}` },
+              { id: `run:${context.run.id}`, botId: bot.id, sessionId: context.run.id },
               "web_search",
               { query },
               {

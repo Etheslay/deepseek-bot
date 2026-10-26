@@ -92,7 +92,7 @@ AGENT_PLATFORM §4 写（应用）层的本切片：`create_group`（=工具 cre
 
 ## 5. 未做项与边界
 
-- **grant/审批**：写层当前走读层同一个 default-allow 桩——本地单机下任何会话可建组/批量建 bot/撤销。D16 三层模型落地前这是**已知缺口**，接入口即网关 `GrantCheckpoint`（接口已就位，拒绝与审计路径均有测试）。
+- **grant/审批（D15 交付时）**：写层走读层同一个 default-allow 桩——本地单机下任何会话可建组/批量建 bot/撤销，接入口为 `GrantCheckpoint`。后续 D16 feature 分支已替换为默认拒绝及真实授权后端，进度与未完成 UI 边界见 [D16 报告](D16-report.md)；本段保留 D15 当时的验收事实。
 - **聊天接线**：网关尚无聊天侧调用方（D14 交互片/D16 授权弹层）；`handleMethod` 面（group.list 等）已对渲染层可用，头像/组的 UI 呈现归 B 线（渲染层仍按 bot id 哈希派生，直到接入 `bot.avatar`）。
 - **未实现的写工具**：`assign_bot_group`（=bot.update patch 已可改组，未包成独立工具）、`update_bot`、`create_workflow`/`add_node`/`add_edge`；读工具 `get_workflow` 需新增 `workflow.get` 契约方法，顺延。
 - **`batch.created` 事件**：见 §2，需事件模型扩展后另立小 PR。

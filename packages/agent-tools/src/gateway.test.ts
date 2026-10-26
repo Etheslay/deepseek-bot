@@ -11,6 +11,7 @@ import { z } from "zod";
 import { ToolGateway, ToolRegistry } from "./gateway.js";
 import { JsonlAuditSink, MemoryAuditSink } from "./audit.js";
 import { bindReadTools } from "./read-tools.js";
+import { ToolRejectionError } from "./types.js";
 
 const roots: string[] = [];
 afterAll(() => {
@@ -41,6 +42,43 @@ function makeGateway(grants?: { allowed: boolean; reason?: string }) {
 }
 
 describe("ToolGateway dispatch", () => {
+  it("fails closed when no authorization checkpoint is installed", async () => {
+    const registry = new ToolRegistry();
+    const handler = vi.fn(() => "should not execute");
+    registry.register({ name: "write", description: "write", inputSchema: z.object({}).strict(), handler });
+    const audit = new MemoryAuditSink();
+    const gateway = new ToolGateway({ registry, audit });
+    await expect(gateway.call({ id: "model" }, "write", {})).rejects.toMatchObject({ code: "UNAUTHORIZED_PATH" });
+    expect(handler).not.toHaveBeenCalled();
+    expect(audit.records).toMatchObject([{ outcome: "rejected", code: "UNAUTHORIZED_PATH" }]);
+  });
+
+  it("does not consume authorization for schema-invalid requests", async () => {
+    const { gateway, grantCheck } = makeGateway();
+    await expect(gateway.call({ id: "model" }, "get_run", { runId: "bad" })).rejects.toMatchObject({ code: "INVALID_INPUT" });
+    expect(grantCheck).not.toHaveBeenCalled();
+  });
+
+  it("does not persist unrecognized parameter keys from validation messages", async () => {
+    const { gateway, audit } = makeGateway();
+    await expect(gateway.call({ id: "model" }, "list_bots", { "private question text": "private answer text" })).rejects.toMatchObject({ code: "INVALID_INPUT" });
+    expect(JSON.stringify(audit.records)).not.toContain("private question text");
+    expect(JSON.stringify(audit.records)).not.toContain("private answer text");
+  });
+
+  it("revalidates a grant before the handler and audits checkpoint failures", async () => {
+    const registry = new ToolRegistry();
+    const handler = vi.fn(() => "not called");
+    registry.register({ name: "write", description: "write", inputSchema: z.object({}).strict(), handler });
+    const audit = new MemoryAuditSink();
+    const gateway = new ToolGateway({ registry, audit, grants: { check: async () => ({ allowed: true, revalidate: () => { throw new ToolRejectionError("UNAUTHORIZED_PATH", "revoked"); } }) } });
+    await expect(gateway.call({ id: "model" }, "write", {})).rejects.toMatchObject({ code: "UNAUTHORIZED_PATH" });
+    expect(handler).not.toHaveBeenCalled();
+    expect(audit.records).toMatchObject([{ outcome: "rejected" }]);
+    const failed = new ToolGateway({ registry, audit, grants: { check: async () => { throw new Error("checkpoint failed"); } } });
+    await expect(failed.call({ id: "model" }, "write", {})).rejects.toThrow("checkpoint failed");
+    expect(audit.records[1]).toMatchObject({ code: "RUNTIME_ERROR", outcome: "rejected" });
+  });
   it("forwards a valid call to the contract method and audits ok with digests", async () => {
     const { gateway, audit, caller } = makeGateway();
     const result = await gateway.call({ id: "chat:s1/bot-1" }, "get_run", {
@@ -85,7 +123,7 @@ describe("ToolGateway dispatch", () => {
     await expect(
       gateway.call({ id: "ui:1" }, "list_bots", {}),
     ).rejects.toMatchObject({ code: "UNAUTHORIZED_PATH", message: "denied by policy" });
-    expect(grantCheck).toHaveBeenCalledWith("list_bots", { id: "ui:1" });
+    expect(grantCheck).toHaveBeenCalledWith("list_bots", { id: "ui:1" }, {}, {});
     expect(audit.records[0]).toMatchObject({ outcome: "rejected", code: "UNAUTHORIZED_PATH" });
   });
 
@@ -97,12 +135,13 @@ describe("ToolGateway dispatch", () => {
       description: "always fails",
       inputSchema: z.object({}).strict(),
       handler: () => {
-        throw new Error("host exploded");
+        throw new Error("host exploded: private argument text");
       },
     });
-    const gateway = new ToolGateway({ registry, audit, now: () => new Date() });
+    const gateway = new ToolGateway({ registry, audit, grants: { check: async () => ({ allowed: true }) }, now: () => new Date() });
     await expect(gateway.call({ id: "ui:1" }, "boom", {})).rejects.toThrow("host exploded");
     expect(audit.records[0]).toMatchObject({ outcome: "error", code: "RUNTIME_ERROR" });
+    expect(JSON.stringify(audit.records)).not.toContain("private argument text");
   });
 });
 

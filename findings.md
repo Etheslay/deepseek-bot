@@ -58,3 +58,11 @@
 - https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches
 - https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
 - https://docs.github.com/en/pull-requests/how-tos/review-pull-requests/approving-a-pull-request-with-required-reviews
+
+## D16 权限后端（2026-10-26）
+
+- 已同步 develop b693c5b：PR #42 搜索、#41 bot 模板与 #40 桌面改动在基线。独立 feature/permissions-grants 工作，不修改 main/develop。
+- D15 网关原先缺少授权检查器时允许执行；D16 改为 schema 校验后授权、缺少检查器拒绝、执行前重验。真实聊天调用方还未接入，可信 bot/session 身份由未来 Host 接线负责绑定。
+- 复用 D08 网络授权，D16 network.search 仅为前置能力授权，不替代精确网络动作检查。
+- 审查发现并修复方向：撤销必须检查原执行票据引用的 grant，即使当前策略改 allow；撤销审计须携带 botId；Zod 多余键与 handler 异常文本不能复制到 JSONL。
+- AppApproval 保存精确参数供受信人类预览；permission_audit / JSONL 只保存摘要与元数据。备份包含审批表，因此包含预览原文。

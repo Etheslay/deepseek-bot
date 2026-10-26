@@ -1,5 +1,13 @@
 # 项目规范化工作计划
 
+## 2026-10-26：D16 权限与授权后端
+
+- 分支：feature/permissions-grants，基线 origin/develop b693c5b（含 D15 搜索与 Destinyian 最新合并）。
+- 用户确认范围：契约、存储、网关、Host；会话授权重启失效，永久授权保留，未决审批失效。
+- 详细实现与检查清单：[D16 plan](docs/superpowers/plans/2026-10-26-d16-permissions-grants.md)。
+- 契约、存储、网关与 Host 路径完成；独立审查发现项已修复并复核。最终 lint/typecheck/test/build/diff --check 均退出 0，全仓 712 通过、1 跳过，详见 D16 报告。
+- 本轮不含权限 UI、真实聊天/Harness 接线，不冒充 Etheslay 自审，不自动提交推送。
+
 ## 2026-10-26：D15 `web_search` 后端切片（用户明确授权实现）
 
 - 用户已确认免费来源采用 SearXNG JSON API，需配置地址；仅实现后端网关与 Host，真实聊天接线后续。

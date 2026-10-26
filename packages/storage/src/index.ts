@@ -29,3 +29,4 @@ export * from "./repos/events.js";
 export * from "./repos/approvals.js";
 export * from "./repos/artifacts.js";
 export * from "./repos/settings.js";
+export * from "./repos/permissions.js";

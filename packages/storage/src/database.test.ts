@@ -8,6 +8,32 @@ import { ensureDataLayout } from "./layout.js";
 import { makeTestClock, makeTempRoot } from "./test-support.js";
 
 describe("openDatabase migrations", () => {
+  it("upgrades a real v4 database without changing earlier checksums or data", () => {
+    const layout = ensureDataLayout(makeTempRoot());
+    const raw = new DatabaseSync(layout.dbFile);
+    raw.exec("CREATE TABLE schema_migrations (id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE, checksum TEXT NOT NULL, applied_at TEXT NOT NULL)");
+    const checksums = [
+      "78e33861768f8e64eb1dc26b3b3c5f3c815f194a0b93529233741e6dc6770eac",
+      "38d11c3bd0aebb2ebe34a28008a0c8755a8b55986f10813e1a187f5d80061936",
+      "787b099bb39d3f8ace581b3549ddc37c1d617a4f7b0341a3910aa74b29f6becf",
+      "916122a69dd72e858788ec4561dd732b34c7c72bec36a34a89fcfb0b47795b23",
+    ];
+    // These are hashes of the committed migration 0001–0004 SQL, not
+    // recalculated expectations from the implementation under test.
+    for (const migration of MIGRATIONS.slice(0, 4)) {
+      expect(checksumMigration(migration)).toBe(checksums[migration.id - 1]);
+      raw.exec(migration.sql);
+      raw.prepare("INSERT INTO schema_migrations VALUES (?, ?, ?, ?)").run(migration.id, migration.name, checksums[migration.id - 1]!, "2026-10-24T00:00:00.000Z");
+    }
+    raw.exec("INSERT INTO settings VALUES ('preserved', '{\"value\":42}', '2026-10-24T00:00:00.000Z')");
+    raw.close();
+    const upgraded = openDatabase(layout.dbFile);
+    expect(upgraded.schemaVersion).toBe(5);
+    expect(upgraded.raw.prepare("SELECT value_json FROM settings WHERE key = 'preserved'").get()).toMatchObject({ value_json: '{"value":42}' });
+    expect(upgraded.raw.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('permission_grants','permission_audit','app_approvals','permission_authorizations')").all()).toHaveLength(4);
+    expect(upgraded.raw.prepare("SELECT checksum FROM schema_migrations WHERE id <= 4 ORDER BY id").all().map(row => row.checksum)).toEqual(checksums);
+    upgraded.close();
+  });
   it("applies all migrations on a fresh database", () => {
     const layout = ensureDataLayout(makeTempRoot());
     const db = openDatabase(layout.dbFile, { now: makeTestClock().now });

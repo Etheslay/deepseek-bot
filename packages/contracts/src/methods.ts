@@ -38,6 +38,7 @@ import {
   EventEnvelopeSchema,
 } from "./events.js";
 import { WorkflowIssueSchema } from "./workflow.js";
+import { PERMISSION_METHODS } from "./permissions.js";
 
 export const MAX_MESSAGE_BYTES = 1_048_576;
 
@@ -82,6 +83,13 @@ export const METHODS = [
   "data.backup",
   "data.restore",
   "data.describe",
+  "permission.policy.list",
+  "permission.policy.set",
+  "permission.grant.list",
+  "permission.grant.revoke",
+  "permission.approval.list",
+  "permission.approval.decide",
+  "permission.audit.list",
 ] as const;
 
 export type Method = (typeof METHODS)[number];
@@ -402,6 +410,7 @@ export const METHOD_CONTRACTS = {
       counts: z.record(z.string(), z.int()),
     }),
   },
+  ...PERMISSION_METHODS,
 } as const satisfies Record<
   Method,
   { request: z.ZodType; response: z.ZodType }

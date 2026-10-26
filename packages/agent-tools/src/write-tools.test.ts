@@ -33,6 +33,7 @@ function makeGateway() {
   const gateway = new ToolGateway({
     registry,
     audit,
+    grants: { check: async () => ({ allowed: true }) },
     now: () => new Date("2026-10-25T00:00:00Z"),
   });
   return { gateway, audit, caller };

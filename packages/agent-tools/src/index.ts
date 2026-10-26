@@ -1,10 +1,10 @@
 export {
-  AllowAllGrants,
   ToolRejectionError,
   type AuditRecord,
   type AuditSink,
   type GatewayRejectionCode,
   type GrantCheckpoint,
+  type GrantCheckResult,
   type ToolCaller,
   type ToolCapability,
   type ToolContext,

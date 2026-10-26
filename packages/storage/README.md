@@ -52,3 +52,13 @@
 pnpm --filter @deepseek-bot/storage test     # vitest + v8 覆盖率门槛
 pnpm --filter @deepseek-bot/storage typecheck
 ```
+
+## D16 应用权限仓储
+
+迁移 `0005-permissions-grants` 在保留 0001–0004 SQL 与校验和的基础上新增全局策略/授权表、应用审批表、调用授权票据和仅追加的权限审计。D08 的运行审批继续使用原有 `approvals` 表。
+
+`repos/permissions.ts` 对多能力请求在同一 SQLite 事务中核对策略、机器人状态、会话、Host generation、期限和次数；全部满足才扣减。一次授权仅服务绑定的审批调用，会话授权默认 5 次/2 小时，永久授权不绑定 generation。扣减发生在工具派发前，处理失败不退款。
+
+Host 在派发前调用同步重验，检查持久化调用票据及其引用的全部授权；策略变为 deny、授权撤销/过期、机器人停用等均拒绝并追加审计，不重复扣减。启动时失效旧 generation 的待决审批与临时授权，保留永久授权和全局策略。过期审批在提交 expired 状态后才返回错误。
+
+审批 JSON 保存供人类预览的精确参数；授权票据与权限审计仅保留身份、能力、digest 和授权/审批 ID，不保存原始参数。审计以数据库自增 sequence 分页，SQLite 触发器拒绝更新和删除；人工及重启撤销均携带 botId。
