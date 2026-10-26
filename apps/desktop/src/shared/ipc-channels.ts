@@ -11,6 +11,9 @@ export const IPC_CHANNELS = {
   SETTINGS_SAVE_KEY: "settings:saveKey",
   /** Renderer → Host contract call (method allowlist enforced in main). */
   HOST_CALL: "host:call",
+  /** D24: app-update checks via electron-updater against GitHub Releases. */
+  UPDATES_CHECK: "updates:check",
+  UPDATES_DOWNLOAD_INSTALL: "updates:downloadInstall",
 } as const;
 
 /** Main → renderer event channel for scheduler skip-and-notify notices (FR-08). */
@@ -33,6 +36,20 @@ export type AppInfo = {
   name: string;
   version: string;
   platform: NodeJS.Platform;
+};
+
+/** D24: update check result surfaced to the renderer. */
+export type UpdateStatus = {
+  /** A newer version exists on the release source. */
+  available: boolean;
+  /** Latest version string when available; current version otherwise. */
+  version: string | null;
+  /** True while the installer download is in flight. */
+  downloading: boolean;
+  /** Update installed on disk; renderer may prompt restart-to-install. */
+  readyToInstall: boolean;
+  /** Failure reason (network, no releases yet, signature…), if any. */
+  error: string | null;
 };
 
 export type IpcErrorCode = "UNKNOWN_CHANNEL" | "UNAUTHORIZED_SENDER" | "INVALID_PAYLOAD";

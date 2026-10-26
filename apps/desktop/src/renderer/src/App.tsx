@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useLayoutEffect, useRef, useState, type JSX } from "react";
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type JSX } from "react";
 import { createPortal } from "react-dom";
 import { useBots, type UiBot } from "./features/bots/use-bots.js";
 import { BotForm } from "./features/bots/bot-form.js";
@@ -23,6 +23,22 @@ import {
 } from "./features/avatars/avatar-meta.js";
 import { WorkflowEditor } from "./features/workflow-editor/workflow-editor.js";
 import { RunMonitor } from "./features/run-monitor/run-monitor.js";
+import { ChatMarkdown } from "./features/chat/chat-markdown.js";
+import type { MentionTable } from "./features/chat/mentions.js";
+import {
+  attachmentAccept,
+  classifyAttachment,
+  formatAttachmentSize,
+  MAX_ATTACHMENT_BYTES,
+  type AttachmentDraft,
+} from "./features/chat/attachments.js";
+import { GlobalSearch } from "./features/search/global-search.js";
+import { buildSearchIndex, type SearchItem } from "./features/search/search-core.js";
+import {
+  ACCENT_PRESETS,
+  loadSettings,
+  saveSettings,
+} from "./features/settings/settings-store.js";
 
 
 type Group = { key: number; name: string };
@@ -43,7 +59,20 @@ type Msg = {
   speakerKey?: number;
   /** Centered bot-to-bot delivery metadata line. */
   notice?: { label: string; otherKey: number } | null;
+  /** Multi-bot delivery: stacked avatar chips, clickable per bot. */
+  deliverTo?: number[];
   peerKey?: number;
+  /** Files sent with the message (D26 renderer slice). */
+  attachments?:
+    | { name: string; size: number; kind: "text" | "image" | "binary"; dataUrl?: string }[]
+    | undefined;
+  /** Choice card the bot put to the user (D14 interaction slice). */
+  choices?: {
+    question: string;
+    options: { id: string; label: string }[];
+    other?: boolean;
+    answered?: string | undefined;
+  } | undefined;
   /** System notices (e.g. blocked cross-group requests) render as a centered muted line. */
   system?: boolean;
 };
@@ -252,13 +281,40 @@ export function App(): JSX.Element {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [workflowOpen, setWorkflowOpen] = useState(false);
   const [monitorOpen, setMonitorOpen] = useState(false);
-  const [theme, setTheme] = useState<"dark" | "light">("dark");
-  const [accountName, setAccountName] = useState("本地用户");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const initialSettings = useMemo(() => loadSettings(window.localStorage), []);
+  const [theme, setTheme] = useState<"dark" | "light">(initialSettings.theme);
+  const [accountName, setAccountName] = useState(initialSettings.accountName);
+  const [accent, setAccent] = useState(initialSettings.accent);
+  const [updateStatus, setUpdateStatus] = useState<
+    { available: boolean; version: string | null; downloading: boolean; readyToInstall: boolean; error: string | null } | null
+  >(null);
+
+  useEffect(() => {
+    saveSettings(window.localStorage, { theme, accountName, accent });
+  }, [theme, accountName, accent]);
+
+  useEffect(() => {
+    document.documentElement.style.setProperty("--accent", accent);
+  }, [accent]);
+
+  useEffect(() => {
+    // Silent startup check; preview shims have no updates bridge.
+    const bridge = window.deepseekBot;
+    if (!bridge || !("updates" in bridge)) {
+      return;
+    }
+    const timer = setTimeout(() => {
+      void bridge.updates.check().then(setUpdateStatus).catch(() => undefined);
+    }, 4000);
+    return () => clearTimeout(timer);
+  }, []);
   const [editingName, setEditingName] = useState(false);
   const [keyDraft, setKeyDraft] = useState("");
   const [testResult, setTestResult] = useState<
     { result: "success" | "failure" | "unverified"; ok: boolean; errorCode?: string } | null
   >(null);
+  const [testing, setTesting] = useState(false);
   const [nameDraft, setNameDraft] = useState("");
 
   useEffect(() => {
@@ -346,6 +402,10 @@ export function App(): JSX.Element {
         setSettingsOpen(false);
         setEditingName(false);
         setGroupMenu(null);
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setSearchOpen((v) => !v);
       }
     };
     window.addEventListener("keydown", onKey);
@@ -457,9 +517,13 @@ export function App(): JSX.Element {
     setMenu(null);
   };
 
-    const sendUserMessage = (botKey: number, text: string): void => {
+    const sendUserMessage = (
+    botKey: number,
+    text: string,
+    attachments?: Msg["attachments"],
+  ): void => {
     const t = text.trim();
-    if (!t) {
+    if (!t && !(attachments && attachments.length > 0)) {
       return;
     }
     setChats((prev) => {
@@ -477,12 +541,17 @@ export function App(): JSX.Element {
             mine: [],
             time: Date.now(),
             system: false,
+            attachments: attachments && attachments.length > 0 ? attachments : undefined,
           },
         ],
       };
     });
     setQuoteDraft(null);
-    const reply = `（占位回复）已收到：「${t.slice(0, 24)}」。真实模型会话将在后续里程碑接入。`;
+    const attachNote =
+      attachments && attachments.length > 0
+        ? `已读取附件 ${attachments.map((a) => `${a.name}（${formatAttachmentSize(a.size)}）`).join("、")}；`
+        : "";
+    const reply = `（占位回复）${attachNote}已收到：「${t.slice(0, 24)}」。附件读取经工具网关的真实链路在 D15 写层接线后启用。`;
     setTimeout(() => {
       setChats((prev) => {
         const list = prev[botKey] ?? [];
@@ -591,6 +660,7 @@ export function App(): JSX.Element {
           time: now,
           system: true,
           notice: { label: "已发消息给", otherKey: toKey },
+          deliverTo: [toKey],
           peerKey: toKey,
         },
       ],
@@ -605,7 +675,7 @@ export function App(): JSX.Element {
           mine: [],
           time: now,
           system: true,
-          notice: { label: "消息来自", otherKey: fromKey },
+          notice: { label: "已只回", otherKey: fromKey },
           peerKey: fromKey,
         },
       ],
@@ -638,17 +708,45 @@ export function App(): JSX.Element {
       }
       return {
         ...prev,
-        [bot.key]: [
+            [bot.key]: [
           {
             id: bot.key,
             from: "bot",
-            text: `hello，我是 ${bot.bot.name}，有什么可以为你服务的吗`,
+            text: `hello，我是 ${bot.bot.name}。聊天支持 **Markdown**：
+
+- 列表、\`行内代码\` 与 [链接](https://api.deepseek.com)
+- 代码块带高亮：
+\`\`\`typescript
+const answer = await bot.ask("你好");
+\`\`\`
+- 数学公式：质能方程 $E = mc^2$，以及求和
+$$\\sum_{i=1}^{n} i = \\frac{n(n+1)}{2}$$`,
             quote: null,
             reactions: {},
             mine: [],
             time: Date.now(),
             system: false,
             speakerKey: bot.key,
+          },
+          {
+            id: bot.key + 0.5,
+            from: "bot",
+            text: `想先试哪种能力？也可以在输入框里直接提需求，或 @${bot.bot.name} 让我接手。`,
+            quote: null,
+            reactions: {},
+            mine: [],
+            time: Date.now(),
+            system: false,
+            speakerKey: bot.key,
+            choices: {
+              question: "想先试哪种能力？",
+              options: [
+                { id: "A", label: "深度思考一个复杂问题" },
+                { id: "B", label: "帮我起草一个工作流" },
+                { id: "C", label: "查看运行监控" },
+              ],
+              other: true,
+            },
           },
         ],
       };
@@ -703,6 +801,83 @@ const logout = (): void => {
   };
 
   const menuBot = menu ? bots.find((b) => b.key === menu.botKey) : undefined;
+
+  const searchIndex = useMemo<SearchItem[]>(() => {
+    const messages: {
+      botKey: number;
+      botName: string;
+      text: string;
+      time: number;
+    }[] = [];
+    for (const [botKey, list] of Object.entries(chats)) {
+      const botName =
+        bots.find((b) => b.key === Number(botKey))?.bot.name ?? "Bot";
+      for (const msg of list) {
+        if (msg.system || msg.notice) {
+          continue;
+        }
+        messages.push({
+          botKey: Number(botKey),
+          botName,
+          text: msg.text,
+          time: msg.time,
+        });
+      }
+    }
+    return buildSearchIndex({
+      bots: bots.map((b) => ({
+        key: b.key,
+        name: b.bot.name,
+        group: groups.find((g) => g.key === b.group)?.name ?? "未分组",
+      })),
+      messages,
+      actions: [
+        {
+          id: "action-settings",
+          kind: "action",
+          title: "打开设置",
+          subtitle: "Key、主题、账户",
+          action: "settings",
+        },
+        {
+          id: "action-monitor",
+          kind: "action",
+          title: "打开运行监控与审批",
+          subtitle: "FR-06/07",
+          action: "monitor",
+        },
+        {
+          id: "action-workflow",
+          kind: "action",
+          title: "打开工作流编辑器",
+          subtitle: "FR-04",
+          action: "workflow",
+        },
+      ],
+    });
+  }, [bots, groups, chats]);
+
+  const onSearchSelect = (item: SearchItem): void => {
+    if (item.kind === "bot" || item.kind === "message") {
+      const botKey = item.botKey;
+      const target = bots.find((b) => b.key === botKey);
+      if (botKey !== undefined && target) {
+        setSelectedBot(botKey);
+        setQuoteDraft(null);
+        ensureChat(target);
+      }
+      return;
+    }
+    if (item.action === "settings") {
+      setSettingsOpen(true);
+    } else if (item.action === "monitor") {
+      setWorkflowOpen(false);
+      setMonitorOpen(true);
+    } else if (item.action === "workflow") {
+      setMonitorOpen(false);
+      setWorkflowOpen(true);
+    }
+  };
 
   return (
     <div className="shell">
@@ -861,12 +1036,18 @@ const logout = (): void => {
       <div className="shell-main">
       <aside className="sidebar">
         <div className="top-left">
-          <span className="circle-btn" aria-hidden="true">
+          <button
+            type="button"
+            className="circle-btn clickable"
+            aria-label="全局搜索（Ctrl+K）"
+            title="全局搜索（Ctrl+K）"
+            onClick={() => setSearchOpen(true)}
+          >
             <svg viewBox="0 0 24 24">
               <circle cx="10.5" cy="10.5" r="6" fill="none" stroke="currentColor" strokeWidth="2" />
               <line x1="15.5" y1="15.5" x2="20" y2="20" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
             </svg>
-          </span>
+          </button>
           <button
             type="button"
             className="circle-btn clickable"
@@ -1002,6 +1183,27 @@ const logout = (): void => {
             </div>
           );
         })}
+        {updateStatus?.available && (
+          <button
+            type="button"
+            className="update-badge"
+            title={`下载并安装 ${updateStatus.version ?? "新版本"}`}
+            onClick={() => {
+              const bridge = window.deepseekBot;
+              if (!bridge || !("updates" in bridge)) {
+                return;
+              }
+              setUpdateStatus({ ...updateStatus, downloading: true });
+              void bridge.updates
+                .downloadInstall()
+                .then(setUpdateStatus)
+                .catch(() => setUpdateStatus({ ...updateStatus, downloading: false, error: "下载失败" }));
+            }}
+          >
+            <span className="update-badge-dot" />
+            {updateStatus.downloading ? "更新下载中…" : "有新版本，点击更新"}
+          </button>
+        )}
         <div className="sidebar-foot">
           <button
             type="button"
@@ -1086,7 +1288,7 @@ const logout = (): void => {
               }}
               onPairQuote={(name, text) => setQuoteDraft({ name, text: text.slice(0, 60) })}
               onCancelQuote={() => setQuoteDraft(null)}
-              onSend={(t) => sendUserMessage(selectedBot, t)}
+              onSend={(text, attachments) => sendUserMessage(selectedBot, text, attachments)}
               onAssistant={(t) =>
                 setChats((prev) => ({
                   ...prev,
@@ -1109,7 +1311,15 @@ const logout = (): void => {
               onReact={(msgId, emoji) => toggleReaction(selectedBot, msgId, emoji)}
               onTalkTo={(otherKey) => talkTo(selectedBot, otherKey)}
               onCopy={(t) => void copyText(t)}
-              onAttach={() => setToast("添加附件（后续提供）")}
+              onNotify={(message) => setToast(message)}
+              onOpenBot={(botKey) => {
+                const target = bots.find((b) => b.key === botKey);
+                if (target) {
+                  setSelectedBot(botKey);
+                  setQuoteDraft(null);
+                  ensureChat(target);
+                }
+              }}
             />
           ) : (
             <div className="empty-state">
@@ -1517,27 +1727,28 @@ const logout = (): void => {
                   <div className="settings-row">
                     <span>测试连接</span>
                     <span className="key-input-wrap">
-                      {testResult ? (
-                        testResult.result === "unverified" ? (
+                      {testResult &&
+                        (testResult.result === "unverified" ? (
                           <span className="settings-soon">UNVERIFIED（无真实网络，占位）</span>
                         ) : (
                           <span className={testResult.ok ? "settings-ok" : "form-error"}>
                             {testResult.ok ? "连接成功" : testResult.errorCode}
                           </span>
-                        )
-                      ) : (
-                        <button
-                          type="button"
-                          className="pill-btn"
-                          onClick={() => {
-                            void desktop.settings
-                              .testConnection({ model: "deepseek-chat", endpoint: "https://api.deepseek.com" })
-                              .then(setTestResult);
-                          }}
-                        >
-                          测试连接
-                        </button>
-                      )}
+                        ))}
+                      <button
+                        type="button"
+                        className="pill-btn"
+                        disabled={testing}
+                        onClick={() => {
+                          setTesting(true);
+                          void desktop.settings
+                            .testConnection({ model: "deepseek-chat", endpoint: "https://api.deepseek.com" })
+                            .then(setTestResult)
+                            .finally(() => setTesting(false));
+                        }}
+                      >
+                        {testing ? "测试中…" : "测试连接"}
+                      </button>
                     </span>
                   </div>
                 </div>
@@ -1557,18 +1768,67 @@ const logout = (): void => {
                   </div>
                   <div className="settings-row">
                     <span>强调色</span>
-                    <span className="settings-soon">后续提供</span>
+                    <span className="accent-chips" role="radiogroup" aria-label="强调色">
+                      {ACCENT_PRESETS.map((preset) => (
+                        <button
+                          key={preset}
+                          type="button"
+                          className={"accent-chip" + (accent === preset ? " selected" : "")}
+                          style={{ background: preset }}
+                          aria-label={`强调色 ${preset}`}
+                          aria-pressed={accent === preset}
+                          onClick={() => setAccent(preset)}
+                        />
+                      ))}
+                    </span>
                   </div>
                   <div className="settings-row">
                     <span>语言</span>
                     <span className="settings-soon">跟随系统</span>
                   </div>
                 </div>
-                <div className="settings-section-title">关于</div>
+                <div className="settings-section-title">关于与更新</div>
                 <div className="settings-card">
                   <div className="settings-row">
                     <span>版本</span>
                     <span className="settings-soon">{version}</span>
+                  </div>
+                  <div className="settings-row">
+                    <span>检查更新</span>
+                    <span className="key-input-wrap">
+                      <span className="update-state">
+                        {updateStatus === null
+                          ? "（GitHub Releases）"
+                          : updateStatus.available
+                            ? `发现新版本 ${updateStatus.version ?? ""}`
+                            : updateStatus.error
+                              ? "暂无可用更新（尚未发布 Release）"
+                              : "已是最新"}
+                      </span>
+                      <button
+                        type="button"
+                        className="pill-btn"
+                        onClick={() => {
+                          const bridge = window.deepseekBot;
+                          if (!bridge || !("updates" in bridge)) {
+                            setToast("更新通道需要主进程（打包版可用）");
+                            return;
+                          }
+                          void bridge.updates.check().then(setUpdateStatus).catch(() => {
+                            setToast("检查更新失败（网络或无 Release）");
+                          });
+                        }}
+                      >
+                        检查
+                      </button>
+                    </span>
+                  </div>
+                  <div className="settings-row">
+                    <span>本地用量</span>
+                    <span className="settings-soon">
+                      {bots.length} 个 Bot · {Object.keys(chats).length} 个会话 ·{" "}
+                      {Object.values(chats).reduce((sum, list) => sum + list.length, 0)} 条消息
+                    </span>
                   </div>
                 </div>
                 <div className="settings-section-title">系统</div>
@@ -1593,6 +1853,13 @@ const logout = (): void => {
           {toast}
         </div>
       )}
+
+      <GlobalSearch
+        open={searchOpen}
+        items={searchIndex}
+        onSelect={onSearchSelect}
+        onClose={() => setSearchOpen(false)}
+      />
     </div>
   );
 }
@@ -1601,6 +1868,9 @@ function MessageBubble({
   msg,
   speaker,
   accent,
+  mentions,
+  onMentionClick,
+  onChoice,
   onReact,
   onQuote,
   onCopy,
@@ -1608,6 +1878,9 @@ function MessageBubble({
   msg: Msg;
   speaker: UiBot | null;
   accent: string;
+  mentions?: MentionTable;
+  onMentionClick?: (botKey: number) => void;
+  onChoice?: (msgId: number, optionLabel: string, other: boolean) => void;
   onReact: (msgId: number, emoji: Emoji) => void;
   onQuote: (msg: Msg) => void;
   onCopy: (text: string) => void;
@@ -1672,7 +1945,69 @@ function MessageBubble({
               引用 {msg.quote.name}：{msg.quote.text}
             </div>
           )}
-          {msg.text}
+          {msg.attachments && msg.attachments.length > 0 && (
+            <div className="msg-attachments">
+              {msg.attachments.map((file) =>
+                file.kind === "image" && file.dataUrl ? (
+                  <img
+                    key={file.name}
+                    className="msg-attachment-image"
+                    src={file.dataUrl}
+                    alt={file.name}
+                    draggable={false}
+                  />
+                ) : (
+                  <span className="msg-attachment-file" key={file.name}>
+                    <span className="msg-attachment-name">{file.name}</span>
+                    <span className="msg-attachment-size">
+                      {formatAttachmentSize(file.size)}
+                    </span>
+                  </span>
+                ),
+              )}
+            </div>
+          )}
+          {isUser ? (
+            msg.text
+          ) : (
+            <ChatMarkdown
+              text={msg.text}
+              mentions={mentions}
+              onMentionClick={onMentionClick}
+            />
+          )}
+          {msg.choices && (
+            <div className="choice-card" role="group" aria-label={msg.choices.question}>
+              <div className="choice-question">{msg.choices.question}</div>
+              {msg.choices.answered ? (
+                <div className="choice-answered">已选择：{msg.choices.answered}</div>
+              ) : (
+                <div className="choice-options">
+                  {msg.choices.options.map((option) => (
+                    <button
+                      key={option.id}
+                      type="button"
+                      className="choice-option"
+                      onClick={() => onChoice?.(msg.id, option.label, false)}
+                    >
+                      <span className="choice-key">{option.id}</span>
+                      <span>{option.label}</span>
+                    </button>
+                  ))}
+                  {msg.choices.other && (
+                    <button
+                      type="button"
+                      className="choice-option choice-other"
+                      onClick={() => onChoice?.(msg.id, "", true)}
+                    >
+                      <span className="choice-key">✎</span>
+                      <span>其他，我说明</span>
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
           {!isUser && EMOJIS.some((e) => (msg.reactions[e] ?? 0) > 0) && (
             <div className="reaction-chips">
               {EMOJIS.filter((e) => (msg.reactions[e] ?? 0) > 0).map((e) => (
@@ -1788,8 +2123,9 @@ function BotsPlaceholder({
   onReact,
   onTalkTo,
   onCopy,
-  onAttach,
   onAssistant,
+  onOpenBot,
+  onNotify,
 }: {
   bots: UiBot[];
   groups: Group[];
@@ -1803,12 +2139,13 @@ function BotsPlaceholder({
   onQuote: (msg: Msg) => void;
   onPairQuote: (name: string, text: string) => void;
   onCancelQuote: () => void;
-  onSend: (text: string) => void;
+  onSend: (text: string, attachments?: Msg["attachments"]) => void;
   onReact: (msgId: number, emoji: Emoji) => void;
   onTalkTo: (otherKey: number) => void;
   onCopy: (text: string) => void;
-  onAttach: () => void;
   onAssistant: (text: string) => void;
+  onOpenBot: (botKey: number) => void;
+  onNotify: (message: string) => void;
 }): JSX.Element {
   const service = useService();
   const [draft, setDraft] = useState("");
@@ -1816,9 +2153,31 @@ function BotsPlaceholder({
   const [detailOther, setDetailOther] = useState<number | null>(null);
   const [stream, setStream] = useState<(StreamState & { forKey: number }) | null>(null);
   const [failedText, setFailedText] = useState("");
+  const [answeredChoices, setAnsweredChoices] = useState<Record<number, string>>({});
+  const [pendingFiles, setPendingFiles] = useState<AttachmentDraft[]>([]);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const streamRef = useRef<StreamHandle | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
   const me = bots.find((b) => b.key === selectedBot);
+
+  /** @Name chips link to any known bot; color follows its avatar. */
+  const mentionTable = useMemo<MentionTable>(() => {
+    const table: MentionTable = new Map();
+    for (const bot of bots) {
+      table.set(bot.bot.name, { botKey: bot.key, color: avatarColor(bot.avatar) });
+    }
+    return table;
+  }, [bots]);
+
+  const handleChoice = (msgId: number, optionLabel: string, other: boolean): void => {
+    if (other) {
+      inputRef.current?.focus();
+      return;
+    }
+    setAnsweredChoices((prev) => ({ ...prev, [msgId]: optionLabel }));
+    onSend(`我选择：${optionLabel}`);
+  };
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
@@ -1924,12 +2283,49 @@ function BotsPlaceholder({
   );
   const firstNoticeId = msgs.find((message) => message.notice)?.id ?? null;
 
-  const send = (): void => {
-    const text = draft.trim();
-    if (!text) {
+  const readPickedFiles = async (files: FileList | null): Promise<void> => {
+    if (!files || files.length === 0) {
       return;
     }
-    onSend(text);
+    const drafts: AttachmentDraft[] = [];
+    for (const file of [...files]) {
+      if (file.size > MAX_ATTACHMENT_BYTES) {
+        onNotify(`${file.name} 超过 2 MB 上限`);
+        continue;
+      }
+      const kind = classifyAttachment(file.type, file.name);
+      if (kind === "text") {
+        drafts.push({ name: file.name, size: file.size, mime: file.type, text: await file.text() });
+      } else if (kind === "image") {
+        const dataUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result));
+          reader.onerror = () => reject(reader.error);
+          reader.readAsDataURL(file);
+        });
+        drafts.push({ name: file.name, size: file.size, mime: file.type, dataUrl });
+      } else {
+        onNotify(`${file.name} 暂不支持预览（仅文本与图片）`);
+      }
+    }
+    if (drafts.length > 0) {
+      setPendingFiles((prev) => [...prev, ...drafts]);
+    }
+  };
+
+  const send = (): void => {
+    const text = draft.trim();
+    if (!text && pendingFiles.length === 0) {
+      return;
+    }
+    const outgoing: NonNullable<Msg["attachments"]> = pendingFiles.map((f) => ({
+      name: f.name,
+      size: f.size,
+      kind: classifyAttachment(f.mime, f.name),
+      ...(f.dataUrl !== undefined ? { dataUrl: f.dataUrl } : {}),
+    }));
+    onSend(text, outgoing.length > 0 ? outgoing : undefined);
+    setPendingFiles([]);
     setFailedText(text);
     setDraft("");
     if (streamRef.current) {
@@ -2029,7 +2425,35 @@ function BotsPlaceholder({
             <Fragment key={m.id}>
               {showTime && <div className="chat-time">{formatChatTime(m.time)}</div>}
               {m.notice ? (
-                m.id === firstNoticeId ? (
+                m.deliverTo ? (
+                  <div className="deliver-notice" role="status">
+                    <span className="deliver-label">{m.notice.label}</span>
+                    <span className="avatar-stack">
+                      {m.deliverTo.map((key) => {
+                        const target = bots.find((bot) => bot.key === key);
+                        return (
+                          <button
+                            key={key}
+                            type="button"
+                            className="stack-avatar"
+                            title={`打开 ${target?.bot.name ?? "?"} 的会话`}
+                            aria-label={`打开 ${target?.bot.name ?? "?"} 的会话`}
+                            onClick={() => onOpenBot(key)}
+                          >
+                            <AvatarView
+                              avatar={target?.avatar ?? me.avatar}
+                              variant="inline"
+                              size={20}
+                            />
+                          </button>
+                        );
+                      })}
+                    </span>
+                    {m.deliverTo.length > 1 && (
+                      <span className="deliver-count">{m.deliverTo.length} 个 Bot</span>
+                    )}
+                  </div>
+                ) : m.id === firstNoticeId ? (
                   <div className="chat-summary">
                     <span className="chat-summary-label">{pairTotal} 条消息往来：</span>
                     {pairPeers.map((peerKey, peerIndex) => {
@@ -2055,9 +2479,17 @@ function BotsPlaceholder({
                 <div className="sys-line">{m.text}</div>
               ) : (
                 <MessageBubble
-                  msg={m}
+                  msg={{
+                    ...m,
+                    choices: m.choices
+                      ? { ...m.choices, answered: m.choices.answered ?? answeredChoices[m.id] }
+                      : undefined,
+                  }}
                   speaker={speaker}
                   accent={avatarColor(me.avatar)}
+                  mentions={mentionTable}
+                  onMentionClick={onOpenBot}
+                  onChoice={handleChoice}
                   onReact={onReact}
                   onQuote={onQuote}
                   onCopy={onCopy}
@@ -2117,6 +2549,26 @@ function BotsPlaceholder({
           </>
         )}
       </div>
+      {pendingFiles.length > 0 && (
+        <div className="attach-chips" aria-label="待发送附件">
+          {pendingFiles.map((file, index) => (
+            <span className="attach-chip" key={`${file.name}-${index}`}>
+              <span className="attach-chip-name">{file.name}</span>
+              <span className="attach-chip-size">{formatAttachmentSize(file.size)}</span>
+              <button
+                type="button"
+                className="attach-chip-remove"
+                aria-label={`移除附件 ${file.name}`}
+                onClick={() =>
+                  setPendingFiles((prev) => prev.filter((_, i) => i !== index))
+                }
+              >
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
       {quoteDraft && (
         <div className="quote-chip">
           <span>
@@ -2127,6 +2579,18 @@ function BotsPlaceholder({
           </button>
         </div>
       )}
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        accept={attachmentAccept()}
+        style={{ display: "none" }}
+        aria-label="选择附件"
+        onChange={(event) => {
+          void readPickedFiles(event.target.files);
+          event.target.value = "";
+        }}
+      />
       <div className="composer">
         <div className="composer-menu-wrap">
           <button
@@ -2148,7 +2612,7 @@ function BotsPlaceholder({
                   className="menu-item"
                   onClick={() => {
                     setPlusOpen(false);
-                    onAttach();
+                    fileInputRef.current?.click();
                   }}
                 >
                   <MenuIcon d="M21 12.5 12.5 21a5 5 0 0 1-7-7l8-8a3.5 3.5 0 0 1 5 5l-8 8a1.8 1.8 0 0 1-2.5-2.5L15 4.5" />
@@ -2195,6 +2659,7 @@ function BotsPlaceholder({
           )}
         </div>
         <input
+          ref={inputRef}
           className="composer-input"
           placeholder={`给 ${me.bot.name} 发消息`}
           value={draft}
@@ -2219,7 +2684,7 @@ function BotsPlaceholder({
             />
           </svg>
         </span>
-        <button type="button" className="send-btn" aria-label="发送" disabled={!draft.trim()} onClick={send}>
+        <button type="button" className="send-btn" aria-label="发送" disabled={!draft.trim() && pendingFiles.length === 0} onClick={send}>
           ↑
         </button>
       </div>

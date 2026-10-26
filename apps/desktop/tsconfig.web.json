@@ -17,6 +17,7 @@
   },
   "include": [
     "src/renderer/src/**/*",
+    "src/shared/**/*.ts",
     "../../packages/contracts/src/**/*.ts",
     "../../packages/contracts/fixtures/**/*.json",
     "tests/contracts-smoke.test.ts",

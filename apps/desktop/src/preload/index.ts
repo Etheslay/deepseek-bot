@@ -37,6 +37,11 @@ export type DesktopBridge = {
   settings: {
     saveKey: (key: string) => Promise<{ configured: boolean }>;
   };
+  /** D24: app updates against GitHub Releases (electron-updater). */
+  updates: {
+    check: () => Promise<import("../shared/ipc-channels.js").UpdateStatus>;
+    downloadInstall: () => Promise<import("../shared/ipc-channels.js").UpdateStatus>;
+  };
   host: {
     call: (method: string, payload: unknown) => Promise<unknown>;
     /** Scheduler skip-and-notify notices (FR-08); returns an unsubscribe. */
@@ -57,6 +62,10 @@ const api: DesktopBridge = {
   },
   settings: {
     saveKey: (key) => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_SAVE_KEY, key),
+  },
+  updates: {
+    check: () => ipcRenderer.invoke(IPC_CHANNELS.UPDATES_CHECK),
+    downloadInstall: () => ipcRenderer.invoke(IPC_CHANNELS.UPDATES_DOWNLOAD_INSTALL),
   },
   host: {
     call: (method, payload) => ipcRenderer.invoke(IPC_CHANNELS.HOST_CALL, method, payload),

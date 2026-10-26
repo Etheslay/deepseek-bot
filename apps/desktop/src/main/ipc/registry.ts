@@ -4,6 +4,7 @@ import {
   assertAllowedChannel,
   assertValidTitleBarOverlayColors,
   type AppInfo,
+  type UpdateStatus,
 } from "../../shared/ipc-channels.js";
 import {
   assertAuthorizedSender,
@@ -22,6 +23,10 @@ export type IpcHandlers = {
   hostCall: (method: unknown, payload: unknown) => Promise<unknown>;
   /** Encrypt the API key with safeStorage and register the credential ref. */
   saveKey: (key: unknown) => Promise<{ configured: boolean }>;
+  /** D24: check GitHub Releases for a newer version. */
+  checkUpdates: () => Promise<UpdateStatus>;
+  /** D24: download the update and restart into the installer. */
+  downloadAndInstallUpdate: () => Promise<UpdateStatus>;
 };
 
 /**
@@ -99,6 +104,16 @@ export function registerIpcHandlers(
       assertAuthorizedSender(event, isAuthorized);
       return handlers.hostCall(method, payload);
     },
+  );
+  ipcMain.handle(
+    IPC_CHANNELS.UPDATES_CHECK,
+    wrap(IPC_CHANNELS.UPDATES_CHECK, () => handlers.checkUpdates()),
+  );
+  ipcMain.handle(
+    IPC_CHANNELS.UPDATES_DOWNLOAD_INSTALL,
+    wrap(IPC_CHANNELS.UPDATES_DOWNLOAD_INSTALL, () =>
+      handlers.downloadAndInstallUpdate(),
+    ),
   );
 }
 

@@ -16,6 +16,13 @@ describe("IPC allowlist", () => {
     expect(() => assertAllowedChannel(IPC_CHANNELS.APP_GET_INFO)).not.toThrow();
   });
 
+  it("registers the D24 update channels", () => {
+    expect(ALLOWED_CHANNELS.has(IPC_CHANNELS.UPDATES_CHECK)).toBe(true);
+    expect(ALLOWED_CHANNELS.has(IPC_CHANNELS.UPDATES_DOWNLOAD_INSTALL)).toBe(true);
+    expect(() => assertAllowedChannel(IPC_CHANNELS.UPDATES_CHECK)).not.toThrow();
+    expect(() => assertAllowedChannel(IPC_CHANNELS.UPDATES_DOWNLOAD_INSTALL)).not.toThrow();
+  });
+
   it("rejects unknown channels with a stable error code", () => {
     try {
       assertAllowedChannel("shell:exec");
