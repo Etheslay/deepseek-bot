@@ -7,7 +7,7 @@
  * validation ownership. Validation still runs the real BotSchema from
  * contracts and maps issues onto fields.
  */
-import { useState, type JSX, type ReactNode } from "react";
+import { useEffect, useState, type JSX, type ReactNode } from "react";
 import { validateBot } from "../../services/contract-validation.js";
 import type { BotDraft } from "../../services/desktop-service.js";
 import { CustomSelect } from "../../components/custom-select.js";
@@ -98,6 +98,14 @@ export function BotForm(
   const [customDraft, setCustomDraft] = useState("");
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  // Template pre-fill (D17): when the parent hands a new initial object,
+  // adopt it wholesale (the parent owns when this happens).
+  useEffect(() => {
+    if (props.initial) {
+      setDraft(props.initial);
+    }
+  }, [props.initial]);
 
   const set = (field: keyof BotDraft, value: string): void => {
     setDraft((prev) => ({ ...prev, [field]: value }));
