@@ -6481,6 +6481,47 @@ select option {
   font-weight: 700;
 }
 
+/* Answered row: long answers ellipsize, the full text sits in the title. */
+.choice-answered-text {
+  max-width: 360px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Locked (answering / awaiting composer text) and closed (expired/cancelled)
+   cards keep their rows visible but inert; theme variables only. */
+.choice-option:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.choice-option:disabled:hover {
+  transform: none;
+  border-color: rgba(127, 127, 127, 0.2);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0));
+  box-shadow: none;
+}
+
+.choice-option:disabled::after,
+.choice-option:disabled:hover::after,
+.choice-option:disabled:focus-visible::after {
+  opacity: 0;
+  transform: translateX(-5px);
+}
+
+[data-theme="light"] .choice-option:disabled:hover {
+  border-color: rgba(15, 23, 42, 0.09);
+  background: #ffffff;
+  box-shadow: none;
+}
+
+.choice-note {
+  margin: 10px 2px 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
 /* --- delivery notice (avatar stack) --- */
 
 .deliver-notice {
