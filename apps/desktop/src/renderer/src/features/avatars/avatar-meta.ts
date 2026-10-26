@@ -51,3 +51,20 @@ export function avatarKey(avatar: Avatar): string {
       return `grok:${avatar.shape}:${avatar.color}:${avatar.state ?? "idle"}`;
   }
 }
+
+/** Readable text ink for a bubble painted with the exact bot colour. */
+export function bubbleInk(color: string): string {
+  if (color.includes("--avatar-mono-bg")) {
+    return "var(--avatar-mono-fg)";
+  }
+  const m = /^#?([0-9a-f]{6})$/i.exec(color.trim());
+  if (m === null) {
+    return "var(--text)";
+  }
+  const n = Number.parseInt(m[1]!, 16);
+  const r = ((n >> 16) & 255) / 255;
+  const g = ((n >> 8) & 255) / 255;
+  const b = (n & 255) / 255;
+  const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return luminance > 0.5 ? "#15151a" : "#ffffff";
+}

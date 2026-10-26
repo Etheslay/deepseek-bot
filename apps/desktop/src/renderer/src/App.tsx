@@ -22,6 +22,7 @@ import { AvatarPicker } from "./features/avatars/avatar-picker.js";
 import { GazeAvatar } from "./features/avatars/gaze-avatar.js";
 import {
   avatarColor,
+  bubbleInk,
   type Avatar as AvatarKind,
 } from "./features/avatars/avatar-meta.js";
 import { WorkflowEditor } from "./features/workflow-editor/workflow-editor.js";
