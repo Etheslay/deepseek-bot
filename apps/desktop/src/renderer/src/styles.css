@@ -6998,3 +6998,52 @@ select option {
   font-weight: 600;
 }
 
+/* ---------- dropdowns: the selection matches the A/B/C/D choice card ----------
+   Two complaints in one place. The open list marked its current entry with a
+   tinted highlight, and focusing a trigger left a bright #8ab4ff ring behind
+   after the menu closed. The selected entry now wears the same neutral wash the
+   choice card uses for a chosen option — rgba(127,127,127,.14), and
+   rgba(15,23,42,.06) on the light theme — and the focus cue is a border colour
+   change, so nothing glows. Covers the custom selects and the native ones in
+   the permissions panel. */
+.custom-select-item.current,
+select option:checked {
+  background: rgba(127, 127, 127, 0.14);
+  color: var(--text);
+}
+
+[data-theme="light"] .custom-select-item.current,
+[data-theme="light"] select option:checked {
+  background: rgba(15, 23, 42, 0.06);
+}
+
+/* Hover sits one step below the selection so the current entry still reads as
+   the current one while the pointer is elsewhere in the list. */
+.custom-select-item:hover {
+  background: rgba(127, 127, 127, 0.1);
+}
+
+[data-theme="light"] .custom-select-item:hover {
+  background: rgba(15, 23, 42, 0.04);
+}
+
+.custom-select-trigger:focus-visible,
+.custom-select-item:focus-visible,
+select:focus-visible {
+  outline: none;
+}
+
+.custom-select-trigger:focus-visible,
+select:focus-visible {
+  border-color: var(--muted);
+}
+
+/* Keyboard navigation inside the open list still needs a visible cursor, but a
+   neutral one: the same wash the pointer gets. */
+.custom-select-item:focus-visible {
+  background: rgba(127, 127, 127, 0.14);
+}
+
+[data-theme="light"] .custom-select-item:focus-visible {
+  background: rgba(15, 23, 42, 0.06);
+}
