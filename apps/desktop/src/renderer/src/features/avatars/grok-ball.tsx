@@ -1,15 +1,13 @@
 /**
- * Grok Ball avatar.
+ * Grok Ball avatar — solid-geometry renderer (D29 follow-up).
  *
- * A reusable, animated geometric avatar: the body breathes, the eyes follow
- * the cursor with damping, blinks on a spring, and expressions morph between
- * agent states instead of hard-cutting. In the `inline` variant (in-message
- * avatars and picker thumbnails) it renders as a static identity glyph so the
- * ball never "floats" as a live element inside the chat stream; the animated
- * form is reserved for fixed identity slots (sidebar plaque, message header,
- * create/edit preview).
+ * The body is a real 3D mesh (sphere / tetrahedron / octahedron / extruded
+ * prism built from the 2D contour; see grok-ball-3d.ts). Gaze drives yaw and
+ * pitch: turning the head changes the silhouette and which facets catch the
+ * fixed upper-left key light, so the avatar reads as a solid, not a disc.
+ * Eyes ride the front of the model and blink on a spring.
  */
-import { useEffect, useId, useMemo, useRef, type CSSProperties, type JSX } from "react";
+import { useEffect, useMemo, useRef, type CSSProperties, type JSX, type RefObject } from "react";
 import {
   GROK_BALL_SHAPES,
   GROK_BALL_SIZES,
@@ -17,14 +15,12 @@ import {
   contourPath,
   interpolateStateFrame,
   isStaticVariant,
-  projectEye,
-  sampleContour,
   type GrokBallShapeId,
   type GrokBallState,
   type GrokBallVariant,
-  type ShapeDefinition,
   type StateFrame,
 } from "./grok-ball-model.js";
+import { buildMesh, projectMesh, projectPoint, type Vec3 } from "./grok-ball-3d.js";
 
 export type { GrokBallVariant };
 export { GROK_BALL_SIZES };
@@ -35,6 +31,18 @@ const BREATH_AMPLITUDE = 0.014;
 const BLINK_MIN_MS = 2000;
 const BLINK_MAX_MS = 6000;
 const GAZE_TIME_CONSTANT_MS = 105;
+/**
+ * Time constant while the pointer drives the gaze: the target updates the
+ * instant the mouse moves, but the eyes glide over ~1 s (3 tau) so the turn
+ * reads as a natural look instead of a jump.
+ */
+const POINTER_TRACKING_MS = 320;
+/** Body radius in viewBox units and the gaze→rotation amplitudes (radians). */
+const BODY_R = 34;
+const YAW_GAIN = 0.62;
+const PITCH_GAIN = 0.34;
+/** Resting eye height multiplier (taller eyes read better at small sizes). */
+const EYE_OPEN_STRETCH = 1.16;
 /** Idle glance targets: up-left, hard left, hard right, straight ahead. */
 const GLANCES = [
   { x: -0.75, y: 0.55 },
@@ -54,6 +62,8 @@ type GrokBallProps = {
   state?: GrokBallState;
   /** Force animation on/off; defaults to true except for the inline variant. */
   motion?: boolean | undefined;
+  /** Live pointer gaze (-1..1); overrides the idle glances while non-null. */
+  gazeSource?: { readonly current: { x: number; y: number } | null } | undefined;
   className?: string | undefined;
   style?: CSSProperties | undefined;
 };
@@ -66,13 +76,97 @@ function eyePathFromFrame(frame: StateFrame["left"]): string {
   return contourPath(frame.points);
 }
 
-/** Neutral (centered, open) transform for one eye, used for static renders. */
-function neutralEyeTransform(side: -1 | 1, def: ShapeDefinition): string {
-  const p = projectEye({ x: 0, y: 0 }, side);
-  const x = 50 + (def.eyeX ?? 0) + p.x * (def.eyeSpacing / 0.68);
-  const y = def.eyeY + p.y * (def.eyeSpacing * 0.72);
-  const s = def.eyeScale ?? 1;
-  return `translate(${x.toFixed(2)} ${y.toFixed(2)}) scale(${s} ${s})`;
+/** hex → HSL so each facet can be re-lighted without a color library. */
+function hexToHsl(hex: string): { h: number; s: number; l: number } | null {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (m === null) {
+    return null;
+  }
+  const n = Number.parseInt(m[1]!, 16);
+  const r = ((n >> 16) & 255) / 255;
+  const g = ((n >> 8) & 255) / 255;
+  const b = (n & 255) / 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+  let h = 0;
+  let s = 0;
+  if (max !== min) {
+    const d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    if (max === r) {
+      h = (g - b) / d + (g < b ? 6 : 0);
+    } else if (max === g) {
+      h = (b - r) / d + 2;
+    } else {
+      h = (r - g) / d + 4;
+    }
+    h /= 6;
+  }
+  return { h: h * 360, s: s * 100, l: l * 100 };
+}
+
+interface Hsl {
+  readonly h: number;
+  readonly s: number;
+  readonly l: number;
+}
+
+function faceFill(base: Hsl | null, mono: boolean, shade: number): string {
+  if (mono || base === null) {
+    // Mono balls shade with a black/white overlay instead of HSL math.
+    return "var(--avatar-mono-bg)";
+  }
+  const l = Math.max(8, Math.min(94, base.l * (0.55 + 0.75 * shade)));
+  return `hsl(${base.h.toFixed(1)} ${base.s.toFixed(1)}% ${l.toFixed(1)}%)`;
+}
+
+function monoOverlay(shade: number): { color: string; opacity: number } {
+  if (shade < 0.72) {
+    return { color: "#000000", opacity: Math.min(0.6, (0.72 - shade) * 1.15) };
+  }
+  return { color: "#ffffff", opacity: Math.min(0.5, (shade - 0.72) * 1.4) };
+}
+
+/** z of the model surface at an eye anchor, per solid family. */
+function eyeSurfaceZ(shape: GrokBallShapeId, x: number, y: number): number {
+  switch (shape) {
+    case "circle":
+    case "blob":
+    case "egg":
+      return Math.sqrt(Math.max(0.2, 1 - x * x - y * y));
+    case "star4":
+      return Math.max(0.25, 1 - Math.abs(x) - Math.abs(y));
+    case "triangle":
+      return 0.5;
+    default:
+      return 0.23;
+  }
+}
+
+function meshMarkup(
+  shape: GrokBallShapeId,
+  yaw: number,
+  pitch: number,
+  scale: number,
+  base: Hsl | null,
+  mono: boolean,
+): string {
+  const faces = projectMesh(buildMesh(shape), { yaw, pitch, scale });
+  const parts: string[] = [];
+  for (const face of faces) {
+    const fill = faceFill(base, mono, face.shade);
+    parts.push(`<path d="${face.d}" fill="${fill}" stroke="${fill}" stroke-width="0.5"/>`);
+    if (mono || base === null) {
+      const overlay = monoOverlay(face.shade);
+      if (overlay.opacity > 0.02) {
+        parts.push(
+          `<path d="${face.d}" fill="${overlay.color}" opacity="${overlay.opacity.toFixed(3)}"/>`,
+        );
+      }
+    }
+  }
+  return parts.join("");
 }
 
 export function GrokBall({
@@ -82,20 +176,17 @@ export function GrokBall({
   color = "mono",
   state = "idle",
   motion,
+  gazeSource,
   className,
   style,
 }: GrokBallProps): JSX.Element {
   const pixelSize = size ?? GROK_BALL_SIZES[variant];
   const animate = motion ?? !isStaticVariant(variant);
   const mono = isMono(color);
-
-  const clipId = `gbClip${useId().replace(/[:]/g, "")}`;
   const definition = GROK_BALL_SHAPES[shape];
-  const bodyPath = useMemo(
-    () => contourPath(sampleContour(definition.points, 72)),
-    [definition.points],
-  );
-  const bodyGroupRef = useRef<SVGGElement | null>(null);
+  const baseHsl = useMemo(() => (mono ? null : hexToHsl(color)), [color, mono]);
+
+  const meshGroupRef = useRef<SVGGElement | null>(null);
   const leftEyeGroupRef = useRef<SVGGElement | null>(null);
   const rightEyeGroupRef = useRef<SVGGElement | null>(null);
   const leftEyePathRef = useRef<SVGPathElement | null>(null);
@@ -113,31 +204,87 @@ export function GrokBall({
   const burstRef = useRef<{ start: number } | null>(null);
   const stateRef = useRef<GrokBallState>(state);
 
-  // Static (inline) avatars: place eyes once per state, no animation loop.
+  const eyeY = (definition.eyeY - 50) / BODY_R;
+  const eyeX = Math.min(0.42, (definition.eyeSpacing ?? 22) / 2 / BODY_R);
+
+  const render = (now: number): void => {
+    const yaw = gazeRef.current.x * YAW_GAIN;
+    const pitch = gazeRef.current.y * PITCH_GAIN;
+    const breath = 1 + Math.sin((now / BREATH_PERIOD_MS) * Math.PI * 2) * BREATH_AMPLITUDE;
+    const scale = BODY_R * breath;
+
+    const group = meshGroupRef.current;
+    if (group !== null) {
+      group.innerHTML = meshMarkup(shape, yaw, pitch, scale, baseHsl, mono);
+    }
+
+    const frame = frameRef.current;
+    const blink = blinkRef.current;
+    const blinkScale =
+      (1 - Math.max(0, Math.min(1, blink.value)) * 0.86) * EYE_OPEN_STRETCH;
+    const eyeScale = definition.eyeScale ?? 1;
+    const eyes: ReadonlyArray<
+      readonly [-1 | 1, RefObject<SVGGElement | null>, RefObject<SVGPathElement | null>, StateFrame["left"]]
+    > = [
+      [-1, leftEyeGroupRef, leftEyePathRef, frame.left],
+      [1, rightEyeGroupRef, rightEyePathRef, frame.right],
+    ];
+    for (const [side, groupRef, pathRef, frameEye] of eyes) {
+      const anchor: Vec3 = [side * eyeX, eyeY, eyeSurfaceZ(shape, eyeX, eyeY)];
+      const p = projectPoint(anchor, { yaw, pitch, scale });
+      const node = groupRef.current;
+      if (node !== null) {
+        node.setAttribute(
+          "transform",
+          `translate(${p.x.toFixed(2)} ${p.y.toFixed(2)}) scale(${(eyeScale * p.s).toFixed(3)} ${(eyeScale * blinkScale * p.s).toFixed(3)})`,
+        );
+        node.setAttribute("opacity", p.z > -0.55 ? "1" : "0");
+      }
+      const path = pathRef.current;
+      if (path !== null) {
+        path.setAttribute("d", eyePathFromFrame(frameEye));
+        if (!mono) {
+          if (stateRef.current === "idle") {
+            path.style.removeProperty("fill");
+          } else {
+            path.style.fill = frameEye.color;
+          }
+        }
+      }
+    }
+
+    const aura = auraRef.current;
+    if (aura !== null) {
+      if (stateRef.current === "thinking") {
+        const dashOffset = (now / 1400) % 1;
+        aura.setAttribute("stroke", frame.aura ?? "#60a5fa");
+        aura.setAttribute("stroke-dasharray", "5 7");
+        aura.setAttribute("stroke-dashoffset", String(dashOffset * 12));
+        aura.setAttribute("opacity", "0.65");
+        aura.setAttribute("r", "56");
+      } else if (stateRef.current === "done" && burstRef.current !== null) {
+        const progress = Math.min(1, (now - burstRef.current.start) / 650);
+        aura.setAttribute("stroke", frame.aura ?? "#22c55e");
+        aura.setAttribute("stroke-dasharray", "none");
+        aura.setAttribute("opacity", ((1 - progress) * 0.8).toFixed(3));
+        aura.setAttribute("r", (48 + progress * 16).toFixed(2));
+      } else {
+        aura.setAttribute("opacity", "0");
+      }
+    }
+  };
+
+  // Static (inline) avatars: one fixed three-quarter pose, no animation loop.
   useEffect(() => {
     if (animate) {
       return;
     }
-    const frame = GROK_BALL_STATE_FRAMES[state];
-    frameRef.current = frame;
-    targetFrameRef.current = frame;
-    if (bodyGroupRef.current) {
-      bodyGroupRef.current.removeAttribute("transform");
-    }
-    leftEyeGroupRef.current?.setAttribute(
-      "transform",
-      neutralEyeTransform(-1, definition),
-    );
-    rightEyeGroupRef.current?.setAttribute(
-      "transform",
-      neutralEyeTransform(1, definition),
-    );
-    leftEyeGroupRef.current?.setAttribute("opacity", "1");
-    rightEyeGroupRef.current?.setAttribute("opacity", "1");
-    leftEyePathRef.current?.setAttribute("d", eyePathFromFrame(frame.left));
-    rightEyePathRef.current?.setAttribute("d", eyePathFromFrame(frame.right));
-    auraRef.current?.setAttribute("opacity", "0");
-  }, [animate, state, definition]);
+    frameRef.current = GROK_BALL_STATE_FRAMES[state];
+    targetFrameRef.current = GROK_BALL_STATE_FRAMES[state];
+    gazeRef.current = { x: 0.2, y: -0.08 };
+    blinkRef.current.value = 0;
+    render(performance.now());
+  }, [animate, state, shape, mono, baseHsl, definition]);
 
   useEffect(() => {
     if (!animate) {
@@ -147,15 +294,13 @@ export function GrokBall({
       return;
     }
     const from = frameRef.current;
-    const to = GROK_BALL_STATE_FRAMES[state];
+    targetFrameRef.current = GROK_BALL_STATE_FRAMES[state];
     morphRef.current = { start: performance.now(), from };
-    targetFrameRef.current = to;
     stateRef.current = state;
     if (state === "done") {
       burstRef.current = { start: performance.now() };
     }
   }, [state, animate]);
-
 
   useEffect(() => {
     if (!animate) {
@@ -164,17 +309,21 @@ export function GrokBall({
     let raf = 0;
     let lastTime = performance.now();
 
-    const loop = (now: number): void => {
+    const step = (now: number): void => {
       const dt = Math.min(100, now - lastTime);
       lastTime = now;
 
-      // Gaze damping with a ~105 ms time constant.
-      const smoothing = 1 - Math.exp(-dt / GAZE_TIME_CONSTANT_MS);
-      gazeRef.current.x += (gazeTargetRef.current.x - gazeRef.current.x) * smoothing;
-      gazeRef.current.y += (gazeTargetRef.current.y - gazeRef.current.y) * smoothing;
-
-      // Autonomous glances: no cursor tracking, just look around now and then.
-      if (now > nextSaccadeRef.current) {
+      // Pointer tracking wins while hovered; otherwise glance around. The
+      // target snaps the moment the mouse moves (no input lag) but the mesh
+      // glides toward it with a ~1 s time constant.
+      const pointer = gazeSource?.current ?? null;
+      if (pointer !== null) {
+        gazeTargetRef.current = {
+          x: Math.max(-0.9, Math.min(0.9, pointer.x)) * 0.95,
+          y: -Math.max(-0.72, Math.min(0.72, pointer.y)) * 0.9,
+        };
+        nextSaccadeRef.current = now + 1200;
+      } else if (now > nextSaccadeRef.current) {
         const glance = GLANCES[Math.floor(Math.random() * GLANCES.length)]!;
         gazeTargetRef.current = {
           x: glance.x + (Math.random() - 0.5) * 0.12,
@@ -183,10 +332,18 @@ export function GrokBall({
         nextSaccadeRef.current = now + 1800 + Math.random() * 2600;
       }
 
-      // Blink spring.
+      const smoothing =
+        1 - Math.exp(-dt / (pointer !== null ? POINTER_TRACKING_MS : GAZE_TIME_CONSTANT_MS));
+      gazeRef.current.x += (gazeTargetRef.current.x - gazeRef.current.x) * smoothing;
+      gazeRef.current.y += (gazeTargetRef.current.y - gazeRef.current.y) * smoothing;
+
+      // Blink spring; suppressed while the pointer drives the gaze so a
+      // blink never interrupts the "looking at you" moment.
       const blink = blinkRef.current;
-      if (blink.next === 0) {
-        // First frame: schedule the first blink instead of closing immediately.
+      if (pointer !== null) {
+        blink.target = 0;
+        blink.next = now + 800;
+      } else if (blink.next === 0) {
         blink.next = now + 1500 + Math.random() * 3500;
       } else if (now > blink.next) {
         blink.target = blink.target === 0 ? 1 : 0;
@@ -195,15 +352,13 @@ export function GrokBall({
             ? now + 110
             : now + BLINK_MIN_MS + Math.random() * (BLINK_MAX_MS - BLINK_MIN_MS);
       }
-      const stiffness = 180;
-      const damping = 22;
-      blink.velocity += (blink.target - blink.value) * stiffness * (dt / 1000);
-      blink.velocity -= blink.velocity * damping * (dt / 1000);
+      blink.velocity += (blink.target - blink.value) * 180 * (dt / 1000);
+      blink.velocity -= blink.velocity * 22 * (dt / 1000);
       blink.value += blink.velocity * (dt / 1000);
       blink.value = Math.max(-0.05, Math.min(1.08, blink.value));
 
       // State morph (pointwise eye-ring keyframe interpolation).
-      if (morphRef.current) {
+      if (morphRef.current !== null) {
         const progress = Math.min(1, (now - morphRef.current.start) / MORPH_MS);
         frameRef.current = interpolateStateFrame(
           morphRef.current.from,
@@ -217,104 +372,23 @@ export function GrokBall({
       } else {
         frameRef.current = targetFrameRef.current;
       }
-      const frame = frameRef.current;
 
-      // Body breathing and state transform.
-      const breath = 1 + Math.sin((now / BREATH_PERIOD_MS) * Math.PI * 2) * BREATH_AMPLITUDE;
-      const bodyScale = breath * frame.bodyScale;
-      const bodyGroup = bodyGroupRef.current;
-      if (bodyGroup) {
-        // Slight head turn: rotate and foreshorten the body with the glance.
-        const turn = gazeRef.current.x;
-        const squash = 1 - Math.abs(turn) * 0.09;
-        bodyGroup.setAttribute(
-          "transform",
-          `translate(${(50 + turn * 2.4).toFixed(2)} 50) scale(${(bodyScale * squash).toFixed(4)} ${(bodyScale * (1 + Math.abs(turn) * 0.03)).toFixed(4)}) rotate(${((frame.bodyTilt * 180) / Math.PI + turn * 9).toFixed(3)}) translate(-50 -50)`,
-        );
-      }
+      render(now);
+    };
 
-      // Eyes: projected onto the body surface, hidden on the back hemisphere.
-      const eyeScale = definition.eyeScale ?? 1;
-      const xScale = definition.eyeSpacing / 0.68;
-      const yScale = definition.eyeSpacing * 0.72;
-      const blinkScale = 1 - Math.max(0, Math.min(1, blink.value)) * 0.86;
-
-      const leftProjection = projectEye(gazeRef.current, -1);
-      const rightProjection = projectEye(gazeRef.current, 1);
-      const leftGroup = leftEyeGroupRef.current;
-      if (leftGroup) {
-        const x = 50 + (definition.eyeX ?? 0) + leftProjection.x * xScale;
-        const y = definition.eyeY + leftProjection.y * yScale;
-        leftGroup.setAttribute(
-          "transform",
-          `translate(${x.toFixed(2)} ${y.toFixed(2)}) scale(${eyeScale.toFixed(3)} ${(eyeScale * blinkScale).toFixed(3)})`,
-        );
-        leftGroup.setAttribute("opacity", leftProjection.visible ? "1" : "0");
+    const loop = (now: number): void => {
+      try {
+        step(now);
+      } catch {
+        // One bad frame must not freeze the avatar forever: keep scheduling.
+      } finally {
+        raf = requestAnimationFrame(loop);
       }
-      const rightGroup = rightEyeGroupRef.current;
-      if (rightGroup) {
-        const x = 50 + (definition.eyeX ?? 0) + rightProjection.x * xScale;
-        const y = definition.eyeY + rightProjection.y * yScale;
-        rightGroup.setAttribute(
-          "transform",
-          `translate(${x.toFixed(2)} ${y.toFixed(2)}) scale(${eyeScale.toFixed(3)} ${(eyeScale * blinkScale).toFixed(3)})`,
-        );
-        rightGroup.setAttribute("opacity", rightProjection.visible ? "1" : "0");
-      }
-
-      const leftPath = leftEyePathRef.current;
-      if (leftPath) {
-        leftPath.setAttribute("d", eyePathFromFrame(frame.left));
-        if (!mono) {
-          if (stateRef.current === "idle") {
-            leftPath.style.removeProperty("fill");
-          } else {
-            leftPath.style.fill = frame.left.color;
-          }
-        }
-      }
-      const rightPath = rightEyePathRef.current;
-      if (rightPath) {
-        rightPath.setAttribute("d", eyePathFromFrame(frame.right));
-        if (!mono) {
-          if (stateRef.current === "idle") {
-            rightPath.style.removeProperty("fill");
-          } else {
-            rightPath.style.fill = frame.right.color;
-          }
-        }
-      }
-
-      // Aura / thinking orbit / done burst (accent colors are theme-independent).
-      const aura = auraRef.current;
-      if (aura) {
-        if (stateRef.current === "thinking") {
-          const dashOffset = (now / 1400) % 1;
-          aura.setAttribute("stroke", frame.aura ?? "#60a5fa");
-          aura.setAttribute("stroke-dasharray", "5 7");
-          aura.setAttribute("stroke-dashoffset", String(dashOffset * 12));
-          aura.setAttribute("opacity", "0.65");
-          aura.setAttribute("r", "56");
-        } else if (stateRef.current === "done" && burstRef.current) {
-          const progress = Math.min(1, (now - burstRef.current.start) / 650);
-          const radius = 48 + progress * 16;
-          const opacity = (1 - progress) * 0.8;
-          aura.setAttribute("stroke", frame.aura ?? "#22c55e");
-          aura.setAttribute("stroke-dasharray", "none");
-          aura.setAttribute("stroke-dashoffset", "0");
-          aura.setAttribute("opacity", opacity.toFixed(3));
-          aura.setAttribute("r", radius.toFixed(2));
-        } else {
-          aura.setAttribute("opacity", "0");
-        }
-      }
-
-      raf = requestAnimationFrame(loop);
     };
 
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
-  }, [animate, mono, definition.eyeScale, definition.eyeSpacing, definition.eyeY]);
+  }, [animate, mono, shape, baseHsl, gazeSource, definition]);
 
   const rootClass =
     "grok-ball" +
@@ -331,70 +405,57 @@ export function GrokBall({
       viewBox="0 0 100 100"
       aria-hidden="true"
     >
-      <defs>
-        <clipPath id={clipId}>
-          <path d={bodyPath} />
-        </clipPath>
-      </defs>
-      <g ref={bodyGroupRef}>
-        {definition.stem && (
-          <path
-            className="gb-stem"
-            d="M49 15 C48 8 51 4 57 3 L59 6 C54 7 52 11 52 15 Z"
-            fill="#8b5e3c"
-          />
-        )}
+      <ellipse
+        className="gb-contact"
+        cx="50"
+        cy="88"
+        rx="22"
+        ry="3.6"
+        fill="#000000"
+        opacity="0.18"
+      />
+      <g ref={meshGroupRef} />
+      {definition.stem === true && (
         <path
-          className="gb-body"
-          d={bodyPath}
-          fill={mono ? "var(--avatar-mono-bg)" : color}
+          className="gb-stem"
+          d="M49 15 C48 8 51 4 57 3 L59 6 C54 7 52 11 52 15 Z"
+          fill="#8b5e3c"
         />
-        <g clipPath={`url(#${clipId})`}>          <g ref={leftEyeGroupRef} transform={neutralEyeTransform(-1, definition)}>
-            <path
-              ref={leftEyePathRef}
-              className="gb-eye"
-              d={eyePathFromFrame(GROK_BALL_STATE_FRAMES[state].left)}
-              style={
-                mono || state === "idle"
-                  ? undefined
-                  : { fill: GROK_BALL_STATE_FRAMES[state].left.color }
-              }
-            />
-          </g>
-          <g ref={rightEyeGroupRef} transform={neutralEyeTransform(1, definition)}>
-            <path
-              ref={rightEyePathRef}
-              className="gb-eye"
-              d={eyePathFromFrame(GROK_BALL_STATE_FRAMES[state].right)}
-              style={
-                mono || state === "idle"
-                  ? undefined
-                  : { fill: GROK_BALL_STATE_FRAMES[state].right.color }
-              }
-            />
-          </g>
-        </g>
-        <circle
-          ref={auraRef}
-          cx="50"
-          cy="50"
-          r="56"
-          fill="none"
-          stroke="transparent"
-          strokeWidth="3"
-          opacity="0"
+      )}
+      <g ref={leftEyeGroupRef} transform={`translate(${50 - eyeX * BODY_R} ${50 + eyeY * BODY_R})`}>
+        <path
+          ref={leftEyePathRef}
+          className="gb-eye"
+          d={eyePathFromFrame(GROK_BALL_STATE_FRAMES[state].left)}
+          style={
+            mono || state === "idle"
+              ? undefined
+              : { fill: GROK_BALL_STATE_FRAMES[state].left.color }
+          }
         />
       </g>
+      <g ref={rightEyeGroupRef} transform={`translate(${50 + eyeX * BODY_R} ${50 + eyeY * BODY_R})`}>
+        <path
+          ref={rightEyePathRef}
+          className="gb-eye"
+          d={eyePathFromFrame(GROK_BALL_STATE_FRAMES[state].right)}
+          style={
+            mono || state === "idle"
+              ? undefined
+              : { fill: GROK_BALL_STATE_FRAMES[state].right.color }
+          }
+        />
+      </g>
+      <circle
+        ref={auraRef}
+        cx="50"
+        cy="50"
+        r="56"
+        fill="none"
+        stroke="transparent"
+        strokeWidth="3"
+        opacity="0"
+      />
     </svg>
   );
 }
-
-
-
-
-
-
-
-
-
-

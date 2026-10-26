@@ -19,6 +19,7 @@ import {
 import type { StreamHandle } from "./services/desktop-service.js";
 import { Avatar as AvatarView } from "./features/avatars/avatar.js";
 import { AvatarPicker } from "./features/avatars/avatar-picker.js";
+import { GazeAvatar } from "./features/avatars/gaze-avatar.js";
 import {
   avatarColor,
   type Avatar as AvatarKind,
@@ -196,6 +197,7 @@ export function App(): JSX.Element {
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editingBot, setEditingBot] = useState<UiBot | null>(null);
+
   const [shape, setShape] = useState(0);
   const [color, setColor] = useState(2);
   const [avatar, setAvatar] = useState<AvatarKind>(() => ({
@@ -914,9 +916,9 @@ const logout = (): void => {
   return (
     <div className="shell">
       <header className="top">
-        <span className="page-chip">
+        <span className="page-chip" data-gaze-zone="">
           {selectedBotEntry ? (
-            <AvatarView avatar={selectedBotEntry.avatar} variant="message-header" />
+            <GazeAvatar avatar={selectedBotEntry.avatar} variant="message-header" />
           ) : (
             <BlobMark />
           )}
@@ -1093,9 +1095,9 @@ const logout = (): void => {
             </svg>
           </button>
         </div>
-        <div className="side-identity">
+        <div className="side-identity" data-gaze-zone="">
           <span className="big-avatar">
-            <AvatarView avatar={{ kind: "grok", shape: "circle", color: "#3b93f0" }} variant="preview" size={84} />
+            <GazeAvatar avatar={{ kind: "grok", shape: "circle", color: "#3b93f0" }} variant="preview" size={84} />
           </span>
           <span className="identity-name">DeepSeek Bot</span>
         </div>
@@ -1156,6 +1158,7 @@ const logout = (): void => {
                   {members.map((b) => (
                   <button
                     key={b.key}
+                    data-gaze-zone=""
                     type="button"
                     draggable
                     onDragStart={(e) => {
@@ -1187,6 +1190,7 @@ const logout = (): void => {
                       setDragOverGroup(null);
                     }}
                     className={selectedBot === b.key ? "tab active" : "tab"}
+
                     onClick={() => {
                       setSelectedBot(b.key);
                       setQuoteDraft(null);
@@ -1197,7 +1201,7 @@ const logout = (): void => {
                       setMenu({ x: e.clientX, y: e.clientY, botKey: b.key });
                     }}
                   >
-                    <AvatarView avatar={b.avatar} variant="sidebar" size={36} />
+                    <GazeAvatar avatar={b.avatar} variant="sidebar" size={36} />
                     <span className="tab-label">
                       <span className="tab-title">
                         {b.bot.name}
@@ -1281,7 +1285,7 @@ const logout = (): void => {
           ) : restoredSession !== null && selectedBot !== null ? (
             <div className="restored-view">
               <header className="pair-head">
-                <span className="page-chip">{restoredSession.title}</span>
+                <span className="page-chip" data-gaze-zone="">{restoredSession.title}</span>
               </header>
               <div className="pair-body">
                 <div className="msg-notice">
