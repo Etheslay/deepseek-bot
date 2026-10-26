@@ -1,6 +1,6 @@
 # 冲刺计划（双人单晚系列）
 
-状态：执行框架。冲刺一（M5 夜）待执行；后续冲刺按 §5 队列滚动排入。开发者：Etheslay、Destinyian。
+状态：执行中。阶段二按 §5 双线并行队列推进，各任务交付状态见 §4 执行记录；§2 的冲刺一正文保留为当时的排期切片记录。开发者：Etheslay、Destinyian。
 
 本文件把 [开发计划](DEVELOPMENT_PLAN.md) §6 的阶段二任务切成**两人并行、一晚可完成**的冲刺。每个冲刺遵守三条铁律：
 
@@ -74,9 +74,21 @@
 
 ## 4. 执行记录
 
-| 冲刺 | 状态 | 分支 / PR | 证据 |
+自 §5 改为双线并行队列后，本表按**任务 / 分支**记录交付，不再使用"冲刺N"编号（§2 的冲刺一正文保留为当时的排期切片记录）。
+
+| 任务 | 状态 | 分支 → merge | 证据 |
 | --- | --- | --- | --- |
-| 一（M5 夜：D14 渲染片 + D15 读层） | 待执行 | `feature/chat-experience` / `feature/agent-tools` | 待补 |
+| D15 工具网关读层 | 已交付 | `feature/agent-tools` → `80e2074` | [D15-report](reports/D15-report.md) |
+| D15 工具网关写层 | 已交付 | `feature/agent-tools` → `d4a3f35` | [D15-report](reports/D15-report.md) |
+| D15 `ask_user` 后端 | 已交付 | `feature/agent-tools` → `0350e40` | [D15-report](reports/D15-report.md) |
+| D15 `web_search` 后端 | 进行中（未合入） | `feature/agent-tools`（`573421e`） | 待补 |
+| D14 渲染片 + 交互片 | 已交付（mermaid 砍除，验收部分达成） | `feature/chat-experience` → `feature/settings-updates` → `0f20970` | [D14-report](reports/D14-report.md) |
+| D25 全局搜索 | 已交付（host 检索按计划后接） | 同上 → `0f20970` | [D25-report](reports/D25-report.md) |
+| D26 聊天附件 | **切片交付，任务未完成** | 同上 → `0f20970` | [D26-report](reports/D26-report.md) |
+| D24 设置与更新 | **切片交付，任务未完成** | 同上 → `0f20970` | [D24-report](reports/D24-report.md) |
+| D17 技能与模板 | **切片交付，任务未完成** | `feature/skills-templates` → `292c3b8` | [D17-report](reports/D17-report.md) |
+
+补记说明：B 线四项与 D17 在合入时**未写交付报告、PR 自审记录未填**（两份 PR 清单各仅勾选 2/5）；报告于 2026-10-25 事后补记，**不追认事前完成自审**，自审结论仍留空待负责人签署。B 线四项挤在一条串行分支经单个 PR 合入，偏离"一任务一分支"，lockfile 与 CI 配置改动亦未拆独立小 PR；后续任务（含 D17、D24、D26 的剩余部分）从最新 develop 单独切分支，不再堆叠。各任务的手测截图（`reports/assets/d14|d17|d24|d25|d26/`）仍缺，列为待补。
 
 ## 5. 双线并行队列（各自独立推进，互不等待）
 
