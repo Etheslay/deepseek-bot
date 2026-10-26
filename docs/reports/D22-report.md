@@ -133,6 +133,8 @@
 
 代码 head：`377a37b`；随后 `d9f4a38`/`84b0f1d` 为文档提交，`56d07fc` 合入 `origin/develop`（#52 工具网关，冲突见下）。自审需覆盖 `2ecb2f9..HEAD` 的全部提交（`git log --oneline 2ecb2f9..HEAD`）。
 
+第二次合并 `origin/develop` = `426310b`（#53 用户气泡随 bot 配色）：唯一冲突是 `App.tsx` 的 react import 行（本分支加了 `useCallback`，#53 加了 `CSSProperties`），两侧都保留；typecheck / lint / `pnpm test` / 未翻译扫描在合并后重跑通过。§5 证据采集于 `56d07fc` 构建，#53 只改气泡配色与 import 行，不触及 D22 界面。
+
 与 develop 的冲突处理：`App.tsx` 取 develop 侧（#52 把聊天内联授权卡移进审批网关路径）；`permission-chat.tsx` 保留 #52 的按 bot 生命周期守卫、`botId` 过滤与新增的「待执行参数」块，并重新套用 D22 文案层（能力表改由 `capability-labels.ts` 提供、选项与提示存 message key、新增 2 条 key）；`docs/SPRINTS.md` 保留 develop 的 D17 行并追加 D22 行。合并后 `pnpm test` / `pnpm run lint` / `pnpm --dir apps/desktop run typecheck` 与未翻译扫描全部通过，§5 证据在合并后的构建上重新采集。
 
 分支已推送 `origin/feature/system-integration`。本机无 `gh` CLI，PR 需由负责人在浏览器创建：<https://github.com/Etheslay/deepseek-bot/pull/new/feature/system-integration>（base = `develop`）。按 [Git 工作流 §4](GIT_WORKFLOW.md)（必需批准数 0、负责人自审后自行合并），填写 §8 后以 merge commit 合入；本次未执行任何合并动作。
