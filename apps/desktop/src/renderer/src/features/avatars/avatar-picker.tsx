@@ -4,6 +4,7 @@ import type { Avatar } from "./avatar-meta.js";
 import {
   GROK_BALL_COLORS,
   GROK_BALL_SHAPE_IDS,
+  toneKeyFor,
 } from "./grok-ball-model.js";
 import { Avatar as AvatarView } from "./avatar.js";
 
@@ -52,21 +53,27 @@ export function AvatarPicker(props: {
           title={props.theme === "light" ? "黑色（跟随主题）" : "白色（跟随主题）"}
           onClick={() => props.onChange({ kind: "mono" })}
         />
-        {GROK_BALL_COLORS.map((c) => (
-          <button
-            key={c}
-            type="button"
-            role="radio"
-            aria-checked={props.value.kind === "grok" && color === c}
-            className={
-              "color-btn" +
-              (props.value.kind === "grok" && color === c ? " selected" : "")
-            }
-            style={{ background: c }}
-            onClick={() => pickGrok(shape, c)}
-            aria-label={`颜色 ${c}`}
-          />
-        ))}
+        {GROK_BALL_COLORS.map((c) => {
+          const tone = toneKeyFor(c);
+          return (
+            <button
+              key={c}
+              type="button"
+              role="radio"
+              aria-checked={props.value.kind === "grok" && color === c}
+              className={
+                "color-btn" +
+                (props.value.kind === "grok" && color === c ? " selected" : "")
+              }
+              // A palette colour resolves through the theme-aware tone
+              // variable; anything else (a retired hex) paints itself.
+              data-tone={tone ?? undefined}
+              style={tone === null ? { background: c } : undefined}
+              onClick={() => pickGrok(shape, c)}
+              aria-label={`颜色 ${c}`}
+            />
+          );
+        })}
       </div>
     </div>
   );

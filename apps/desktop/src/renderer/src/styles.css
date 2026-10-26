@@ -5831,10 +5831,68 @@ select option {
   overflow: visible;
 }
 
+/* ---------- Grok Ball body tones: one colour per theme ----------
+   The persisted avatar colour is the light-theme value. `data-tone` maps it
+   back to its pair, so a dark panel gets the deeper tone instead of a colour
+   that glows out of it. A hex outside the palette carries no tone and renders
+   as itself in both themes. `:root` is the dark theme; light overrides. */
+:root {
+  --gb-body-brown: #855C36;
+  --gb-body-red: #E02135;
+  --gb-body-orange: #FF6700;
+  --gb-body-yellow: #FF9800;
+  --gb-body-green: #009957;
+  --gb-body-cyan: #00A592;
+  --gb-body-blue: #0E74E0;
+  --gb-body-violet: #804EE0;
+  --gb-body-magenta: #E02A88;
+  --gb-body-gray: #777777;
+}
+
+:root[data-theme="light"] {
+  --gb-body-brown: #A27952;
+  --gb-body-red: #FF3E51;
+  --gb-body-orange: #FF781C;
+  --gb-body-yellow: #FFAF38;
+  --gb-body-green: #00C972;
+  --gb-body-cyan: #1CC3B0;
+  --gb-body-blue: #2A92FE;
+  --gb-body-violet: #A97EFE;
+  --gb-body-magenta: #FF5EB1;
+  --gb-body-gray: #959595;
+}
+
+.grok-ball[data-tone="brown"],
+.color-btn[data-tone="brown"] { --gb-body: var(--gb-body-brown); }
+.grok-ball[data-tone="red"],
+.color-btn[data-tone="red"] { --gb-body: var(--gb-body-red); }
+.grok-ball[data-tone="orange"],
+.color-btn[data-tone="orange"] { --gb-body: var(--gb-body-orange); }
+.grok-ball[data-tone="yellow"],
+.color-btn[data-tone="yellow"] { --gb-body: var(--gb-body-yellow); }
+.grok-ball[data-tone="green"],
+.color-btn[data-tone="green"] { --gb-body: var(--gb-body-green); }
+.grok-ball[data-tone="cyan"],
+.color-btn[data-tone="cyan"] { --gb-body: var(--gb-body-cyan); }
+.grok-ball[data-tone="blue"],
+.color-btn[data-tone="blue"] { --gb-body: var(--gb-body-blue); }
+.grok-ball[data-tone="violet"],
+.color-btn[data-tone="violet"] { --gb-body: var(--gb-body-violet); }
+.grok-ball[data-tone="magenta"],
+.color-btn[data-tone="magenta"] { --gb-body: var(--gb-body-magenta); }
+.grok-ball[data-tone="gray"],
+.color-btn[data-tone="gray"] { --gb-body: var(--gb-body-gray); }
+
+/* The swatch wears the same tone the ball will, so picking a colour is not a
+   promise the avatar then breaks when the theme flips. */
+.color-btn[data-tone] {
+  background: var(--gb-body);
+}
+
 /* ---------- Grok Ball: theme inversion + fixed-slot plaque ---------- */
 /* Light = dark body + light eyes; Dark = light body + dark eyes.
-   The body is a shaded gradient now, so the mono palette is fed through the
-   --gb-mono-* stops instead of a flat fill; eyes still swap via CSS. */
+   The body is one flat colour, so the mono palette is fed straight through
+   --avatar-mono-bg; the eyes still swap via CSS. */
 .grok-ball .gb-body {
   transition: opacity 200ms ease;
 }
