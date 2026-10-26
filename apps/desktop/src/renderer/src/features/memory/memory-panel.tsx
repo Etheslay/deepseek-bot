@@ -12,6 +12,14 @@ type MemoryNote = {
   at: string;
 };
 
+function importNotice(code: "format" | "size" | "empty" | "encoding" | "read"): string {
+  if (code === "format") return "只接受 .txt 和 .md 文件";
+  if (code === "size") return "文件超过 16 KiB，或正文超过 4000 字";
+  if (code === "empty") return "文件没有可导入的正文";
+  if (code === "encoding") return "文件不是 UTF-8 文本";
+  return "无法读取该文件";
+}
+
 export function MemoryPanel({ botId }: { botId: string }): JSX.Element {
   return <BotMemory key={botId} botId={botId} />;
 }
@@ -55,6 +63,27 @@ function BotMemory({ botId }: { botId: string }): JSX.Element {
     };
   }, [load]);
 
+  async function importFile(): Promise<void> {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const picked = await window.deepseekBot.knowledge.importFile();
+      if (!active.current) return;
+      if (!picked.ok) {
+        if (picked.code !== "cancelled") setNotice(importNotice(picked.code));
+        return;
+      }
+      await window.deepseekBot.host.call("memory.write", { botId, text: picked.text });
+      if (!active.current) return;
+      setNotice("已导入知识");
+      await load();
+    } catch {
+      if (active.current) setNotice("记忆保存失败");
+    } finally {
+      if (active.current) setBusy(false);
+    }
+  }
+
   async function save(): Promise<void> {
     const text = draft.trim();
     if (text.length === 0 || busy) return;
@@ -97,6 +126,9 @@ function BotMemory({ botId }: { botId: string }): JSX.Element {
         />
         <button type="button" onClick={() => void save()}>
           保存记忆
+        </button>
+        <button type="button" onClick={() => void importFile()}>
+          导入知识
         </button>
       </div>
       <input

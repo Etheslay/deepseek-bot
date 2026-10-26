@@ -11,6 +11,8 @@ export const IPC_CHANNELS = {
   SETTINGS_SAVE_KEY: "settings:saveKey",
   /** Renderer → Host contract call (method allowlist enforced in main). */
   HOST_CALL: "host:call",
+  /** Desktop file dialog for one .txt/.md knowledge note. No path argument. */
+  KNOWLEDGE_IMPORT: "knowledge:import",
   /** D24: app-update checks via electron-updater against GitHub Releases. */
   UPDATES_CHECK: "updates:check",
   UPDATES_DOWNLOAD_INSTALL: "updates:downloadInstall",
