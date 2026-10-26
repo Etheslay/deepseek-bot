@@ -64,6 +64,12 @@ const IDLE_TX_W = 0.23;
 const IDLE_TY = 1;
 const IDLE_TY_W = 0.7;
 const IDLE_SQUASH = 0.009;
+/**
+ * How wide the per-ball phase spread is, in seconds. It has to exceed the
+ * slowest idle cycle (the 0.13 rad/s roll, ~48 s) so no two balls can share a
+ * beat.
+ */
+const IDLE_PHASE_SPAN_S = 60;
 /** Resting eye height multiplier (taller eyes read better at small sizes). */
 const EYE_OPEN_STRETCH = 1.16;
 /**
@@ -281,7 +287,19 @@ export function GrokBall({
   const nextTrickRef = useRef(0);
   const trickOutRef = useRef<{ spin: number; hop: number }>({ spin: 0, hop: 0 });
   const reducedMotionRef = useRef(false);
+  /** First frame error, kept so the console sees exactly one report per ball. */
+  const frameErrorRef = useRef<unknown>(null);
   const mountedAtRef = useRef(performance.now());
+  /**
+   * This ball's offset into the idle cycle, in seconds.
+   *
+   * Every sidebar ball mounts in the same frame, so a clock that starts at
+   * `performance.now()` puts them all at the same point of the sway and breath
+   * sines — and a row of bots that all rock and turn on the same beat looks
+   * eerie, not lively. Each instance draws its own offset once, which is what
+   * makes them feel like separate creatures sharing a room.
+   */
+  const phaseRef = useRef(Math.random() * IDLE_PHASE_SPAN_S);
 
   // Eye band, in model units: centred unless the shape offsets it.
   const eyeOffsetX = (definition.eyeX ?? 0) / BODY_R;
@@ -289,7 +307,9 @@ export function GrokBall({
   const eyeHalf = Math.min(0.42, (definition.eyeSpacing ?? 22) / 2 / BODY_R);
 
   const render = (now: number): void => {
-    const t = (now - mountedAtRef.current) / 1000;
+    // Offset by this ball's own phase: the sway, drift and breath of two balls
+    // must never line up, or the sidebar reads as one puppet on a string.
+    const t = (now - mountedAtRef.current) / 1000 + phaseRef.current;
     const turn = gazeXRef.current.x * TURN_GAIN;
     const tilt = gazeYRef.current.x * TILT_GAIN;
     // Idle life: two slow sines for the roll, a sub-pixel drift, a shallow breath.
@@ -496,7 +516,8 @@ export function GrokBall({
     reducedMotionRef.current =
       typeof matchMedia === "function" &&
       matchMedia("(prefers-reduced-motion: reduce)").matches;
-    nextTrickRef.current = lastTime + rand(TRICK_FIRST_MS);
+    nextTrickRef.current =
+      lastTime + rand(TRICK_FIRST_MS) + phaseRef.current * 250;
 
     const step = (now: number): void => {
       const dt = Math.min(100, now - lastTime);
@@ -589,8 +610,14 @@ export function GrokBall({
     const loop = (now: number): void => {
       try {
         step(now);
-      } catch {
+      } catch (error) {
         // One bad frame must not freeze the avatar forever: keep scheduling.
+        // Report the first failure once — swallowing it silently is how a
+        // broken ball ends up shipping as an invisible one.
+        if (frameErrorRef.current === null) {
+          frameErrorRef.current = error;
+          console.error("[grok-ball] frame failed", error);
+        }
       } finally {
         raf = requestAnimationFrame(loop);
       }
