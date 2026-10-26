@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type JSX } from "react";
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type JSX } from "react";
 import { createPortal } from "react-dom";
 import { useBots, type UiBot } from "./features/bots/use-bots.js";
 import { PermissionChatCards } from "./features/permissions/permission-chat.js";
@@ -2534,7 +2534,14 @@ function BotsPlaceholder({
       <p className="sys-line" aria-live="polite">
         静态占位 · 无网络请求 · 不同分组的 Bot 无法主动交流
       </p>
-      <div className="chat" ref={listRef}>
+      <div
+        className="chat"
+        ref={listRef}
+        /* SPRINTS §6 #8: the user bubble follows the current bot's colour.
+           The variable is scoped to this conversation, so switching bots
+           re-tints only this pane. */
+        style={{ "--bot-color": avatarColor(me.avatar) } as CSSProperties}
+      >
         {msgs.map((m, index) => {
           const prev = msgs[index - 1];
           const showTime =
