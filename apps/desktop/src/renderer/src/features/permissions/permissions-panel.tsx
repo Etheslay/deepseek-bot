@@ -11,7 +11,7 @@ import {
   type PermissionGrant,
   type PermissionMode,
 } from "@deepseek-bot/contracts";
-import { t, type MessageKey } from "../../i18n.js";
+import { t, useLanguage, type MessageKey } from "../../i18n.js";
 import { capabilityLabel } from "./capability-labels.js";
 
 /** Permission modes are contract data; only their labels are localized (D22). */
@@ -68,11 +68,18 @@ function grantUsage(grant: IssuedGrant): string {
 }
 
 export function PermissionsPanel() {
+  // Subscribes to the language store: the stored notice is a factory, so it only
+  // re-translates when this component re-renders (D22).
+  useLanguage();
   const [policies, setPolicies] = useState<
     { capability: CapabilityId; mode: PermissionMode }[] | null
   >(null);
   const [grants, setGrants] = useState<IssuedGrant[]>([]);
-  const [notice, setNotice] = useState<string | null>(null);
+  /**
+   * The notice is stored as a factory, not a rendered string: a translated string
+   * kept in state would still show the previous language after a switch (D22).
+   */
+  const [notice, setNotice] = useState<(() => string) | null>(null);
   const [noticeError, setNoticeError] = useState(false);
 
   const reload = useCallback(async (): Promise<void> => {
@@ -86,14 +93,16 @@ export function PermissionsPanel() {
   useEffect(() => {
     void reload().catch(() => {
       setNoticeError(true);
-      setNotice(t("permissions.loadFailed"));
+      setNotice(() => () => t("permissions.loadFailed"));
     });
   }, [reload]);
 
   if (policies === null) {
     return (
       <div className="settings-card">
-        <p className={noticeError ? "form-error" : "settings-soon"}>{notice ?? t("permissions.loading")}</p>
+        <p className={noticeError ? "form-error" : "settings-soon"}>
+          {notice !== null ? notice() : t("permissions.loading")}
+        </p>
       </div>
     );
   }
@@ -106,13 +115,13 @@ export function PermissionsPanel() {
         PERMISSION_METHODS["permission.policy.set"].response.parse(response);
         setNoticeError(false);
         setNotice(
-          t("permissions.policySaved", [capabilityLabel(capability), t(MODE_LABEL_KEYS[mode])]),
+          () => () => t("permissions.policySaved", [capabilityLabel(capability), t(MODE_LABEL_KEYS[mode])]),
         );
         return reload();
       })
       .catch(() => {
         setNoticeError(true);
-        setNotice(t("permissions.policySaveFailed"));
+        setNotice(() => () => t("permissions.policySaveFailed"));
       });
   };
 
@@ -168,12 +177,12 @@ export function PermissionsPanel() {
                   .then((response) => {
                     PERMISSION_METHODS["permission.grant.revoke"].response.parse(response);
                     setNoticeError(false);
-                    setNotice(t("permissions.grantRevoked"));
+                    setNotice(() => () => t("permissions.grantRevoked"));
                     return reload();
                   })
                   .catch(() => {
                     setNoticeError(true);
-                    setNotice(t("permissions.revokeFailed"));
+                    setNotice(() => () => t("permissions.revokeFailed"));
                   });
               }}
             >
@@ -183,7 +192,7 @@ export function PermissionsPanel() {
         </div>
       ))}
       {notice !== null ? (
-        <p className={noticeError ? "form-error" : "settings-ok"}>{notice}</p>
+        <p className={noticeError ? "form-error" : "settings-ok"}>{notice()}</p>
       ) : null}
     </div>
   );

@@ -6885,3 +6885,15 @@ select option {
   color: #f87171;
   border-color: color-mix(in srgb, #f87171 45%, var(--line));
 }
+
+/*
+ * D02 的 .ghost-btn 基类是绝对定位胶囊（标题栏右侧那颗）。设置弹窗内的按钮
+ * ——D17 的技能工具栏、D22 的 Chrome 导入面板——需要按文档流排布，否则全部
+ * 叠到弹窗右外侧。与 .wf-editor .ghost-btn 同一处理方式。
+ */
+.settings .ghost-btn {
+  position: static;
+  right: auto;
+  top: auto;
+  transform: none;
+}

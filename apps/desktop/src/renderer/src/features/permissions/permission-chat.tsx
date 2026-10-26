@@ -12,7 +12,7 @@ import {
   type CapabilityId,
   type PermissionDecisionRequest,
 } from "@deepseek-bot/contracts";
-import { t, type MessageKey } from "../../i18n.js";
+import { t, useLanguage, type MessageKey } from "../../i18n.js";
 import { capabilityLabel } from "./capability-labels.js";
 
 const SESSION_USES = 5;
@@ -87,6 +87,8 @@ export function PermissionChatCards(props: {
   onPendingCount?: (count: number) => void;
 }): JSX.Element | null {
   const { botId, onPendingCount } = props;
+  // Re-renders on a language switch: the stored notice is a message key (D22).
+  useLanguage();
   const [approvals, setApprovals] = useState<AppApproval[] | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);

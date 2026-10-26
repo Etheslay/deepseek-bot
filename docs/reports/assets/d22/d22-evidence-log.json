@@ -1,0 +1,290 @@
+[
+  {
+    "step": "01-zh-boot",
+    "accountLabel": "本地用户",
+    "trayFallbackName": "打开设置",
+    "bodyHasChinese": true,
+    "englishLeak": false,
+    "languageSyncToMain": [
+      "system",
+      "system"
+    ]
+  },
+  {
+    "step": "02-tray-sync",
+    "payload": {
+      "pushes": 4,
+      "activeBotId": "11111111-1111-4111-8111-111111111111",
+      "bots": [
+        {
+          "name": "note-summarizer",
+          "status": "idle",
+          "unread": false,
+          "iconKind": "data:image/png;base64,",
+          "iconBytes": 935
+        },
+        {
+          "name": "research-bot",
+          "status": "idle",
+          "unread": false,
+          "iconKind": "data:image/png;base64,",
+          "iconBytes": 797
+        }
+      ]
+    }
+  },
+  {
+    "step": "03-reply-gated-while-focused",
+    "result": "sent",
+    "notifyRequestsSoFar": 0
+  },
+  {
+    "step": "03b-still-gated",
+    "notifyRequests": [],
+    "trayStatuses": [
+      "idle",
+      "idle"
+    ],
+    "lastAssistantBubble": null
+  },
+  {
+    "step": "04-settings-zh",
+    "open": true,
+    "languageRow": "语言",
+    "notifySection": "通知",
+    "chromeSection": "Chrome 数据导入",
+    "switches": 4,
+    "chromePrivacy": true
+  },
+  {
+    "step": "05-language-switch",
+    "optionClicked": true,
+    "languageSyncToMain": [
+      "system",
+      "system",
+      "en"
+    ],
+    "stored": {
+      "theme": "dark",
+      "accountName": "",
+      "accent": "#6ea8ff",
+      "language": "en",
+      "notifications": {
+        "enabled": true,
+        "onlyWhenUnfocused": true,
+        "mutedBotIds": []
+      }
+    },
+    "englishNow": true,
+    "chineseLeft": false
+  },
+  {
+    "step": "06-notify-panel",
+    "sectionFound": true,
+    "switchLabels": [
+      "System notificationsNotify in the system notification centre whe",
+      "Only when the window is not focused",
+      "note-summarizerUnmute",
+      "research-botUnmute"
+    ],
+    "checked": [
+      "true",
+      "true",
+      "true",
+      "true"
+    ],
+    "testButton": true
+  },
+  {
+    "step": "07-notify-test",
+    "before": 0,
+    "requests": [
+      {
+        "botId": null,
+        "title": "DeepSeek Bot",
+        "body": "This is a test notification",
+        "icon": null,
+        "silent": false
+      }
+    ],
+    "sentLabelShown": true
+  },
+  {
+    "step": "08-notify-mute",
+    "stored": {
+      "enabled": true,
+      "onlyWhenUnfocused": true,
+      "mutedBotIds": [
+        "11111111-1111-4111-8111-111111111111"
+      ]
+    },
+    "rows": [
+      "note-summarizerMute",
+      "research-botUnmute"
+    ]
+  },
+  {
+    "step": "08c-send-after-unchecking-foreground-quiet",
+    "turnedOff": true,
+    "unmuted": "unmuted",
+    "result": "sent"
+  },
+  {
+    "step": "08c2-tray-during-reply",
+    "statuses": [
+      "note-summarizer:idle",
+      "research-bot:idle"
+    ]
+  },
+  {
+    "step": "08d-reply-notification-arrived",
+    "before": 1,
+    "requests": [
+      {
+        "botId": null,
+        "title": "DeepSeek Bot",
+        "body": "This is a test notification",
+        "icon": null,
+        "silent": false
+      },
+      {
+        "botId": "11111111-1111-4111-8111-111111111111",
+        "title": "note-summarizer replied",
+        "body": "",
+        "icon": null,
+        "silent": false
+      }
+    ],
+    "trayStatuses": [
+      {
+        "name": "note-summarizer",
+        "status": "idle",
+        "unread": false
+      },
+      {
+        "name": "research-bot",
+        "status": "idle",
+        "unread": false
+      }
+    ],
+    "storedNotifications": {
+      "enabled": true,
+      "onlyWhenUnfocused": false,
+      "mutedBotIds": []
+    }
+  },
+  {
+    "step": "09-chrome-scan",
+    "calls": [
+      "state",
+      "state",
+      "scan"
+    ],
+    "profiles": [
+      "Work desktop128 bookmarksPreviewImport",
+      "Personal7 bookmarksPreviewImport"
+    ],
+    "sourceRow": "SourceC:\\Users\\demo\\AppData\\Local\\Google\\Chrome\\User Data",
+    "privacyShown": true
+  },
+  {
+    "step": "10-chrome-preview",
+    "calls": [
+      "state",
+      "state",
+      "scan",
+      "preview:Default"
+    ],
+    "samples": [
+      "DeepSeek Harnesshttps://github.com/deepseek-ai/deepseek-harness",
+      "DeepSeekhttps://www.deepseek.com/",
+      "MDNhttps://developer.mozilla.org/"
+    ]
+  },
+  {
+    "step": "11-chrome-import",
+    "calls": [
+      "state",
+      "state",
+      "scan",
+      "preview:Default",
+      "import:Default",
+      "state"
+    ],
+    "toast": "Imported 128 bookmarks",
+    "importedRow": "ImportedImported Work desktop · Oct 26, 2026, 03:16:22",
+    "actions": [
+      "Scan Chrome profiles",
+      "Preview",
+      "Import",
+      "Preview",
+      "Import",
+      "Export as Markdown",
+      "Delete imported data"
+    ]
+  },
+  {
+    "step": "12-chrome-export",
+    "calls": [
+      "state",
+      "state",
+      "scan",
+      "preview:Default",
+      "import:Default",
+      "state",
+      "export"
+    ],
+    "toast": "Exported to %APPDATA%/DeepSeekBot/imports/chrome/bookmarks.md"
+  },
+  {
+    "step": "13-chrome-clear",
+    "calls": [
+      "state",
+      "state",
+      "scan",
+      "preview:Default",
+      "import:Default",
+      "state",
+      "export",
+      "clear",
+      "state"
+    ],
+    "importedRow": "ImportedNo Chrome data imported yet",
+    "stillOffersExport": false
+  },
+  {
+    "step": "14-reload-persistence",
+    "storedLanguage": "en",
+    "englishUi": true,
+    "chineseUi": false,
+    "languageSyncToMain": [
+      "en",
+      "en"
+    ],
+    "trayPushes": 3
+  },
+  {
+    "step": "15-switch-back-zh",
+    "clicked": true,
+    "chineseUi": true,
+    "englishLeft": false,
+    "storedLanguage": "zh",
+    "languageSyncToMain": [
+      "en",
+      "en",
+      "zh"
+    ]
+  },
+  {
+    "step": "16-tray-after-language",
+    "activeBotId": null,
+    "names": [
+      "note-summarizer",
+      "research-bot"
+    ],
+    "icons": [
+      "png",
+      "png"
+    ]
+  }
+]
