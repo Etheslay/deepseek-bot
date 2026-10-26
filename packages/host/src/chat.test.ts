@@ -89,7 +89,7 @@ describe("chat runtime", () => {
       botId,
       text: "你好",
     })) as { sessionId: string; text: string; messageId: string; at: string };
-    expect(sent.sessionId).toBe(`chat:${botId}`);
+    expect(sent.sessionId.startsWith(`chat:${botId}`)).toBe(true);
     expect(sent.text).toBe("fake final response");
     const history = (await host.handleMethod("chat.history", { botId })) as {
       messages: Array<{ role: string; text: string }>;
@@ -98,15 +98,24 @@ describe("chat runtime", () => {
     expect(history.messages[1]?.text).toBe("fake final response");
   });
 
-  it("keeps one session per bot across turns", async () => {
+  it("replays history as context because each turn opens a fresh session", async () => {
     const { host, botId } = await hostWithBot();
-    await host.handleMethod("chat.send", { botId, text: "one" });
-    await host.handleMethod("chat.send", { botId, text: "two" });
-    const history = (await host.handleMethod("chat.history", { botId, limit: 10 })) as {
-      messages: Array<{ sessionId: string }>;
+    const first = (await host.handleMethod("chat.send", { botId, text: "one" })) as {
+      sessionId: string;
     };
-    expect(history.messages).toHaveLength(4);
-    expect(new Set(history.messages.map((m) => m.sessionId)).size).toBe(1);
+    const second = (await host.handleMethod("chat.send", { botId, text: "two" })) as {
+      sessionId: string;
+    };
+    expect(second.sessionId).not.toBe(first.sessionId);
+    const history = (await host.handleMethod("chat.history", { botId, limit: 10 })) as {
+      messages: Array<{ role: string; text: string }>;
+    };
+    expect(history.messages.map((m) => m.role)).toEqual([
+      "user",
+      "assistant",
+      "user",
+      "assistant",
+    ]);
   });
 
   it("rejects unknown bots and reports cancel state", async () => {

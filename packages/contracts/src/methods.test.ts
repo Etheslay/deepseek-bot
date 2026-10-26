@@ -26,7 +26,7 @@ describe("method whitelist", () => {
   it("defines a contract for every whitelisted method and nothing else", () => {
     const contractMethods = Object.keys(METHOD_CONTRACTS).sort();
     expect(contractMethods).toEqual([...METHODS].sort());
-    expect(METHODS).toHaveLength(31);
+    expect(METHODS).toHaveLength(37);
   });
 
   it("covers every method group from CONTRACTS §3", () => {
@@ -38,10 +38,13 @@ describe("method whitelist", () => {
       "creation",
       "data",
       "events",
+      "grant",
       "group",
+      "policy",
       "run",
       "schedule",
       "settings",
+      "tool",
       "workflow",
     ]);
   });

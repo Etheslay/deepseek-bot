@@ -29,6 +29,7 @@ import {
   type RunningApprovalBridge,
 } from "@deepseek-bot/harness-adapter";
 import { ChatManager } from "./chat.js";
+import { PolicyGate } from "./permissions.js";
 import { EngineError, WorkflowEngine, LocalScheduler, type ScheduleMissNotice } from "@deepseek-bot/runtime";
 import {
   ensureDataLayout,
@@ -226,7 +227,22 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
   const recoveredRuns = engine.recoverInterruptedRuns();
 
   let closed = false;
-  const context: HostContext = { db, engine, scheduler, layout, now, resolveApiKey: options.resolveApiKey, chat };
+  const agentToolsHolder: { current?: ToolGateway } = {};
+  const context: HostContext = {
+    db,
+    engine,
+    scheduler,
+    layout,
+    now,
+    resolveApiKey: options.resolveApiKey,
+    chat,
+    get agentTools(): ToolGateway {
+      if (agentToolsHolder.current === undefined) {
+        throw new Error("agent tools gateway is not ready yet");
+      }
+      return agentToolsHolder.current;
+    },
+  };
   const handlers = buildHandlers(context);
 
   // D15: the agent tool gateway is the only sanctioned side-effect path for
@@ -302,7 +318,9 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
   const agentTools = new ToolGateway({
     registry: agentRegistry,
     audit: new JsonlAuditSink(join(layout.logs, "agent-tools-audit.jsonl")),
+    grants: new PolicyGate(db, now, { isClosed: () => closed }),
   });
+  agentToolsHolder.current = agentTools;
 
   return {
     layout,

@@ -1,13 +1,19 @@
 /**
- * Chat runtime (D30): one Harness conversation per bot, one attempt per turn.
+ * Chat runtime (D30): one Harness attempt per turn, conversation state kept by
+ * the Host.
  *
- * Each `chat.send` spawns a fresh pinned-Harness attempt and resumes the bot's
- * stable session id (`chat:<botId>`), so conversation context lives in the
- * Harness home (the same `session/resume` path D01 verified) instead of a
- * long-lived child process. Approval-requiring tools fail closed for chat
- * sessions on purpose in this slice: chat sessions are not registered in the
- * bridge's session registry.
+ * The pinned Harness rejects re-using a session id for a new prompt
+ * (`session "...": already exists`) and `session/resume` only attaches to a
+ * session owned by the same runtime, so the runtime cannot be a long-lived
+ * conversation here. Each turn therefore starts a fresh session, and the Host
+ * replays the recent chat history (persisted in `chat_messages`) as prompt
+ * context. That keeps multi-turn chat coherent without depending on harness
+ * session persistence.
+ *
+ * Approval-requiring tools fail closed for chat sessions on purpose in this
+ * slice: chat sessions are not registered in the bridge's session registry.
  */
+import { randomUUID } from "node:crypto";
 import type { Bot } from "@deepseek-bot/contracts";
 import { EngineError } from "@deepseek-bot/runtime";
 import {
@@ -25,9 +31,13 @@ export function chatSessionIdFor(botId: string): string {
 
 type BotInputs = Awaited<ReturnType<DshSdkExecutorOptions["resolveBotInputs"]>>;
 
+export interface ChatHistoryEntry {
+  readonly role: "user" | "assistant";
+  readonly text: string;
+}
+
 interface ChatSession {
-  readonly sessionId: string;
-  turns: number;
+  lastSessionId: string;
   busy: boolean;
   active: HarnessAttempt | null;
 }
@@ -42,12 +52,15 @@ export class ChatManager {
     return this.sessions.size;
   }
 
-  async send(bot: Bot, text: string): Promise<TurnOutcome & { sessionId: string }> {
-    const sessionId = chatSessionIdFor(bot.id);
-    let session = this.sessions.get(sessionId);
+  async send(
+    bot: Bot,
+    text: string,
+    history: ReadonlyArray<ChatHistoryEntry> = [],
+  ): Promise<TurnOutcome & { sessionId: string }> {
+    let session = this.sessions.get(bot.id);
     if (session === undefined) {
-      session = { sessionId, turns: 0, busy: false, active: null };
-      this.sessions.set(sessionId, session);
+      session = { lastSessionId: chatSessionIdFor(bot.id), busy: false, active: null };
+      this.sessions.set(bot.id, session);
     }
     if (session.busy) {
       throw new EngineError({
@@ -57,10 +70,17 @@ export class ChatManager {
       });
     }
     session.busy = true;
-    const inputs = await this.options.resolveBotInputs(bot);
-    const attempt = new HarnessAttempt(this.buildOptions(inputs));
-    session.active = attempt;
+    let attempt: HarnessAttempt | null = null;
     try {
+      const inputs = await this.options.resolveBotInputs(bot).catch((error: unknown) => {
+        throw new EngineError({
+          code: "INVALID_INPUT",
+          message: `无法解析模型凭据：${error instanceof Error ? error.message : String(error)}。请到设置里重新保存 API Key。`,
+          retryable: false,
+        });
+      });
+      attempt = new HarnessAttempt(this.buildOptions(inputs));
+      session.active = attempt;
       await attempt.start({
         cwd: inputs.workspacePath,
         provider: this.options.provider ?? "deepseek-official",
@@ -69,23 +89,25 @@ export class ChatManager {
           ? { maxTokens: inputs.profile.limits.maxTokens }
           : {}),
       });
-      if (session.turns > 0) {
-        // Continuation turn: pull the stored conversation back into this child.
-        await attempt.resume(sessionId).catch(() => undefined);
-      }
-      const prompt = `${bot.instructions}\n\n[用户消息]\n${text}`;
+      const sessionId = `chat:${bot.id}:${randomUUID()}`;
+      const prompt = this.composePrompt(bot, text, history);
       const outcome = await attempt.runTurn(sessionId, prompt);
-      session.turns += 1;
+      session.lastSessionId = sessionId;
       return { ...outcome, sessionId };
     } finally {
       session.active = null;
       session.busy = false;
-      await attempt.dispose().catch(() => undefined);
+      if (attempt !== null) {
+        await attempt.dispose().catch(() => undefined);
+      }
     }
   }
 
   cancel(sessionId: string): boolean {
-    const session = this.sessions.get(sessionId);
+    const botId = sessionId.startsWith("chat:") ? sessionId.slice("chat:".length) : sessionId;
+    const session =
+      this.sessions.get(botId) ??
+      [...this.sessions.values()].find((candidate) => candidate.lastSessionId === sessionId);
     if (session === undefined || session.active === null) {
       return false;
     }
@@ -101,6 +123,25 @@ export class ChatManager {
       }
     }
     this.sessions.clear();
+  }
+
+  private composePrompt(
+    bot: Bot,
+    text: string,
+    history: ReadonlyArray<ChatHistoryEntry>,
+  ): string {
+    const parts: string[] = [];
+    if (bot.instructions.trim().length > 0) {
+      parts.push(bot.instructions.trim());
+    }
+    if (history.length > 0) {
+      const lines = history.map(
+        (entry) => `${entry.role === "user" ? "用户" : "助手"}：${entry.text}`,
+      );
+      parts.push(`【最近对话】\n${lines.join("\n")}`);
+    }
+    parts.push(`[用户消息]\n${text}`);
+    return parts.join("\n\n");
   }
 
   private buildOptions(inputs: BotInputs): HarnessAttemptOptions {
@@ -138,4 +179,3 @@ export class ChatManager {
     };
   }
 }
-

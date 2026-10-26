@@ -77,6 +77,12 @@ export const METHODS = [
   "chat.send",
   "chat.history",
   "chat.cancel",
+  "grant.create",
+  "grant.list",
+  "grant.revoke",
+  "policy.get",
+  "policy.set",
+  "tool.invoke",
   "schedule.save",
   "schedule.enable",
   "schedule.disable",
@@ -88,6 +94,18 @@ export const METHODS = [
 ] as const;
 
 export type Method = (typeof METHODS)[number];
+
+export const GrantSchema = z.object({
+  id: UuidSchema,
+  capability: z.string().min(1).max(64),
+  botId: UuidSchema.nullable(),
+  scope: z.enum(["once", "session", "persistent"]),
+  maxUses: z.int().min(0),
+  used: z.int().min(0),
+  expiresAt: IsoDateTimeUtcSchema.nullable(),
+  revokedAt: IsoDateTimeUtcSchema.nullable(),
+  createdAt: IsoDateTimeUtcSchema,
+});
 
 export const MethodSchema = z.enum(METHODS);
 
@@ -397,6 +415,45 @@ export const METHOD_CONTRACTS = {
   "chat.cancel": {
     request: z.object({ sessionId: z.string().min(1).max(128) }),
     response: z.object({ cancelled: z.boolean() }),
+  },
+  "grant.create": {
+    request: z.object({
+      capability: z.string().min(1).max(64),
+      botId: UuidSchema.nullable().optional(),
+      scope: z.enum(["once", "session", "persistent"]),
+      maxUses: z.int().min(0).max(1000).optional(),
+      expiresInSeconds: z.int().min(60).max(604800).nullable().optional(),
+    }),
+    response: GrantSchema,
+  },
+  "grant.list": {
+    request: z.object({ capability: z.string().min(1).max(64).optional() }),
+    response: z.object({ grants: z.array(GrantSchema) }),
+  },
+  "grant.revoke": {
+    request: z.object({ id: UuidSchema }),
+    response: z.object({ revoked: z.boolean() }),
+  },
+  "policy.get": {
+    request: z.object({}),
+    response: z.object({
+      policies: z.record(z.string(), z.enum(["always", "ask", "never"])),
+    }),
+  },
+  "policy.set": {
+    request: z.object({
+      capability: z.string().min(1).max(64),
+      policy: z.enum(["always", "ask", "never"]),
+    }),
+    response: z.object({ ok: z.literal(true) }),
+  },
+  "tool.invoke": {
+    request: z.object({
+      tool: z.string().min(1).max(64),
+      params: z.record(z.string(), z.unknown()).optional(),
+      callerBotId: UuidSchema.optional(),
+    }),
+    response: z.object({ result: z.unknown() }),
   },
   "settings.testConnection": {
     request: z.object({
