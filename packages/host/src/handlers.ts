@@ -62,6 +62,13 @@ import {
   readRetentionPolicy,
   writeRetentionPolicy,
   sweepRetention,
+  deleteTriggerRule,
+  decideTriggerFiring,
+  getTriggerFiring,
+  listTriggerFirings,
+  listTriggerRules,
+  saveTriggerRule,
+  setTriggerEnabled,
   listConnectors,
   registerConnector,
   setConnectorEnabled,
@@ -161,6 +168,38 @@ function invalid(message: string, details?: Record<string, unknown>): EngineErro
     ...(details !== undefined ? { details } : {}),
     retryable: false,
   });
+}
+
+/** Storage rows carry createdAt; the wire shape calls it `at`. */
+function toRuleResponse(row: {
+  id: string;
+  name: string;
+  workflowId: string;
+  eventType: "run.failed" | "run.completed";
+  filterWorkflowId: string | null;
+  enabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+}): {
+  id: string;
+  name: string;
+  workflowId: string;
+  eventType: "run.failed" | "run.completed";
+  filterWorkflowId: string | null;
+  enabled: boolean;
+  at: string;
+  updatedAt: string;
+} {
+  return {
+    id: row.id,
+    name: row.name,
+    workflowId: row.workflowId,
+    eventType: row.eventType,
+    filterWorkflowId: row.filterWorkflowId,
+    enabled: row.enabled,
+    at: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
 }
 
 /** bot.create/bot.update accept a groupId; it must reference a live group. */
@@ -332,6 +371,14 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
       markBatchRevoked(db, payload.batchId);
       return { revokedBotIds, revokedGroupId };
     },
+
+    "workflow.list": () => ({
+      workflows: listWorkflows(db).map((workflow) => ({
+        id: workflow.id,
+        name: workflow.name,
+        revision: workflow.revision,
+      })),
+    }),
 
     "workflow.validate": (payload) => {
       const issues = validateWorkflowDraft(payload.workflow);
@@ -659,6 +706,92 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
       const bot = requireLiveBot(db, payload.botId);
       deleteMemory(db, { botId: bot.id, memoryId: payload.memoryId });
       return { deleted: true as const };
+    },
+
+    // D20 event automation: rules and the review queue. Nothing auto-starts;
+    // trigger.firing.decide "start" reuses the run.start path (same policy
+    // pinning, revision guard and idempotency semantics).
+    "trigger.list": () => ({
+      rules: listTriggerRules(db).map(toRuleResponse),
+    }),
+
+    "trigger.save": (payload) => {
+      const rule = payload.rule;
+      return toRuleResponse(
+        saveTriggerRule(db, {
+          ...(rule.id !== undefined ? { id: rule.id } : {}),
+          name: rule.name,
+          workflowId: rule.workflowId,
+          eventType: rule.eventType,
+          ...(rule.filterWorkflowId !== undefined
+            ? { filterWorkflowId: rule.filterWorkflowId }
+            : {}),
+        }),
+      );
+    },
+
+    "trigger.enable": (payload) => ({
+      ...toRuleResponse(setTriggerEnabled(db, { id: payload.id, enabled: true })),
+      enabled: true as const,
+    }),
+
+    "trigger.disable": (payload) => ({
+      ...toRuleResponse(setTriggerEnabled(db, { id: payload.id, enabled: false })),
+      enabled: false as const,
+    }),
+
+    "trigger.delete": (payload) => {
+      deleteTriggerRule(db, payload.id);
+      return { deleted: true as const };
+    },
+
+    "trigger.firing.list": (payload) => ({
+      firings: listTriggerFirings(db, {
+        ...(payload.status !== undefined ? { status: payload.status } : {}),
+        limit: payload.limit,
+      }).map((firing) => ({
+        id: firing.id,
+        ruleId: firing.ruleId,
+        ruleName: firing.ruleName,
+        workflowId: firing.workflowId,
+        eventType: firing.eventType,
+        sourceRunId: firing.sourceRunId,
+        reason: firing.reason,
+        status: firing.status,
+        at: firing.createdAt,
+        decidedAt: firing.decidedAt,
+      })),
+    }),
+
+    "trigger.firing.decide": (payload) => {
+      const firing = getTriggerFiring(db, payload.firingId);
+      if (firing === undefined) {
+        throw invalid("trigger firing was not found", { firingId: payload.firingId });
+      }
+      if (payload.decision === "dismiss") {
+        const decided = decideTriggerFiring(db, { firingId: firing.id, decision: "dismiss" });
+        return {
+          firing: { id: decided.id, status: decided.status, decidedAt: decided.decidedAt },
+          runId: null,
+        };
+      }
+      const workflow = getWorkflow(db, firing.workflowId);
+      if (workflow === undefined) {
+        throw invalid("target workflow no longer exists", { workflowId: firing.workflowId });
+      }
+      const { run } = engine.startRun({
+        workflowId: firing.workflowId,
+        trigger: { kind: "manual", idempotencyKey: randomUUID() },
+      });
+      const decided = decideTriggerFiring(db, {
+        firingId: firing.id,
+        decision: "start",
+        startedRunId: run.id,
+      });
+      return {
+        firing: { id: decided.id, status: decided.status, decidedAt: decided.decidedAt },
+        runId: run.id,
+      };
     },
 
     "memory.retention.get": () => ({ policy: readRetentionPolicy(db) }),

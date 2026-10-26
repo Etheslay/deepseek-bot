@@ -517,5 +517,43 @@ CREATE TABLE knowledge_docs (
 CREATE INDEX knowledge_docs_bot_created ON knowledge_docs(bot_id, created_at);
 `,
   },
+  {
+    // D20 (FR-17): event trigger rules and their review-queue firings. A
+    // firing is unique per (rule, source event) — one event fires a rule
+    // once; started_run_id carries the loop guard (runs the queue started
+    // never enqueue new firings). NOTE: feature/connector-invoke carries a
+    // 0011-connectors-endpoint migration; whichever branch merges first
+    // owns id 11 and the other renumbers before merging.
+    id: 11,
+    name: "0011-automation-triggers",
+    sql: /* sql */ `
+CREATE TABLE trigger_rules (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  workflow_id TEXT NOT NULL REFERENCES workflows(id),
+  event_type TEXT NOT NULL CHECK (event_type IN ('run.failed', 'run.completed')),
+  filter_workflow_id TEXT,
+  enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)),
+  cursor_event_rowid INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE trigger_firings (
+  id TEXT PRIMARY KEY,
+  rule_id TEXT NOT NULL REFERENCES trigger_rules(id) ON DELETE CASCADE,
+  source_event_id TEXT NOT NULL,
+  source_run_id TEXT,
+  source_workflow_id TEXT,
+  reason TEXT NOT NULL CHECK (reason IN ('event', 'missed')),
+  status TEXT NOT NULL CHECK (status IN ('pending', 'approved', 'dismissed')),
+  started_run_id TEXT,
+  created_at TEXT NOT NULL,
+  decided_at TEXT,
+  UNIQUE (rule_id, source_event_id)
+);
+CREATE INDEX trigger_firings_status ON trigger_firings(status, created_at);
+`,
+  },
 ];
 

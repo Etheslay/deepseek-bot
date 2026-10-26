@@ -191,3 +191,12 @@
 - 全仓 lint/typecheck/test 全绿：shared 6、bridge 16、contracts 88、agent-tools 75、storage 159、desktop 226、runtime 128、adapter 58、host 88（+1 跳过冒烟）。
 - 未验证（docs/reports/D18-knowledge-search-report.md §4）：真实 Electron 手测、真实模型调用 knowledge_search、真实语料相关性人工评估、远程 CI；神经语义检索未评估。
 - 自审记录留空待负责人 Etheslay 填写；PR 合并由本人确认。
+
+## 2026-10-27：D20 事件自动化第一片——触发规则与评审队列（feature/automation-triggers）
+
+- FR-17 后端：迁移 0011-automation-triggers（trigger_rules + trigger_firings）；受信方法 trigger.list/save/enable/disable/delete + trigger.firing.list/decide；补 workflow.list 摘要方法供选择器。
+- 三层防护：(rule, source event) 唯一去重；队列自启运行经 started_run_id 跳过（循环防护）；宕机积累事件以 reason=missed 补入评审队列——可见、绝不静默补跑。游标整轮扫描成功后才推进；Host 启动补扫 + 5 秒轮询（可配、shutdown 清理）。
+- decide("start") 复用 run.start 路径（策略钉扎/revision/幂等）；无任何自动启动路径。桌面设置页新增自动化面板（规则管理 + 评审队列）。
+- 全仓 lint/typecheck/test 全绿（连续两轮）：shared 6、bridge 16、contracts 90、agent-tools 78、storage 163、desktop 229、runtime 128、adapter 58、host 92（+1 跳过）。
+- 过程修复：跨分支迁移编号协调（connector-invoke 持 0011-connectors-endpoint，本分支 0011-automation-triggers，合并时后到者重编号）；host 测试清理遇 Windows 文件锁改尽力而为重试。
+- 未验证（docs/reports/D20-triggers-report.md §3）：真实 Electron 手测、真实 Harness 人工闭环、聊天内通知条（B 线 D14 组件）、远程 CI。自审留空待负责人签署；PR 由本人确认合并。

@@ -63,6 +63,7 @@ export const METHODS = [
   "group.create",
   "group.list",
   "creation.revoke",
+  "workflow.list",
   "workflow.validate",
   "workflow.save",
   "workflow.export",
@@ -96,6 +97,13 @@ export const METHODS = [
   "connector.register",
   "connector.enable",
   "connector.disable",
+  "trigger.list",
+  "trigger.save",
+  "trigger.enable",
+  "trigger.disable",
+  "trigger.delete",
+  "trigger.firing.list",
+  "trigger.firing.decide",
   "grant.create",
   "grant.list",
   "grant.revoke",
@@ -298,6 +306,23 @@ export const METHOD_CONTRACTS = {
     response: z.object({
       revokedBotIds: z.array(UuidSchema),
       revokedGroupId: UuidSchema.nullable(),
+    }),
+  },
+  /**
+   * Workflow summaries for pickers (D20 automation panel). Metadata only —
+   * full documents stay behind workflow.get-style editor flows; summaries
+   * keep any library size under the 1 MiB message cap.
+   */
+  "workflow.list": {
+    request: z.object({}).strict(),
+    response: z.object({
+      workflows: z.array(
+        z.object({
+          id: UuidSchema,
+          name: NonEmptyStringSchema(TEXT_LIMITS.name),
+          revision: UuidSchema,
+        }),
+      ),
     }),
   },
   "workflow.validate": {
@@ -718,6 +743,121 @@ export const METHOD_CONTRACTS = {
       credentialRef: z.string().nullable(),
       at: IsoDateTimeUtcSchema,
       updatedAt: IsoDateTimeUtcSchema,
+    }),
+  },
+  /**
+   * D20 event automation (FR-17). A rule watches the persisted event stream
+   * for one event type (optionally scoped to a source workflow) and enqueues
+   * a FIRING for human review — nothing auto-starts. Protections: firings
+   * are unique per (rule, source event) so one event fires once; runs the
+   * review queue itself started never enqueue new firings (loop guard);
+   * events that accumulated before the host could evaluate them are
+   * enqueued with reason "missed" — visible, never silently replayed.
+   */
+  "trigger.list": {
+    request: z.object({}).strict(),
+    response: z.object({
+      rules: z.array(
+        z.object({
+          id: UuidSchema,
+          name: NonEmptyStringSchema(TEXT_LIMITS.name),
+          workflowId: UuidSchema,
+          eventType: z.enum(["run.failed", "run.completed"]),
+          filterWorkflowId: UuidSchema.nullable(),
+          enabled: z.boolean(),
+          at: IsoDateTimeUtcSchema,
+          updatedAt: IsoDateTimeUtcSchema,
+        }),
+      ),
+    }),
+  },
+  "trigger.save": {
+    request: z.object({
+      rule: z.object({
+        id: UuidSchema.optional(),
+        name: z.string().trim().min(1).max(TEXT_LIMITS.name),
+        workflowId: UuidSchema,
+        eventType: z.enum(["run.failed", "run.completed"]),
+        filterWorkflowId: UuidSchema.nullable().optional(),
+      }),
+    }),
+    response: z.object({
+      id: UuidSchema,
+      name: NonEmptyStringSchema(TEXT_LIMITS.name),
+      workflowId: UuidSchema,
+      eventType: z.enum(["run.failed", "run.completed"]),
+      filterWorkflowId: UuidSchema.nullable(),
+      enabled: z.boolean(),
+      at: IsoDateTimeUtcSchema,
+      updatedAt: IsoDateTimeUtcSchema,
+    }),
+  },
+  "trigger.enable": {
+    request: z.object({ id: UuidSchema }).strict(),
+    response: z.object({
+      id: UuidSchema,
+      name: NonEmptyStringSchema(TEXT_LIMITS.name),
+      workflowId: UuidSchema,
+      eventType: z.enum(["run.failed", "run.completed"]),
+      filterWorkflowId: UuidSchema.nullable(),
+      enabled: z.literal(true),
+      at: IsoDateTimeUtcSchema,
+      updatedAt: IsoDateTimeUtcSchema,
+    }),
+  },
+  "trigger.disable": {
+    request: z.object({ id: UuidSchema }).strict(),
+    response: z.object({
+      id: UuidSchema,
+      name: NonEmptyStringSchema(TEXT_LIMITS.name),
+      workflowId: UuidSchema,
+      eventType: z.enum(["run.failed", "run.completed"]),
+      filterWorkflowId: UuidSchema.nullable(),
+      enabled: z.literal(false),
+      at: IsoDateTimeUtcSchema,
+      updatedAt: IsoDateTimeUtcSchema,
+    }),
+  },
+  "trigger.delete": {
+    request: z.object({ id: UuidSchema }).strict(),
+    response: z.object({ deleted: z.literal(true) }),
+  },
+  "trigger.firing.list": {
+    request: z
+      .object({
+        status: z.enum(["pending", "approved", "dismissed"]).optional(),
+        limit: z.int().min(1).max(100).default(50),
+      })
+      .strict(),
+    response: z.object({
+      firings: z.array(
+        z.object({
+          id: UuidSchema,
+          ruleId: UuidSchema,
+          ruleName: NonEmptyStringSchema(TEXT_LIMITS.name),
+          workflowId: UuidSchema,
+          eventType: z.enum(["run.failed", "run.completed"]),
+          sourceRunId: UuidSchema.nullable(),
+          reason: z.enum(["event", "missed"]),
+          status: z.enum(["pending", "approved", "dismissed"]),
+          at: IsoDateTimeUtcSchema,
+          decidedAt: IsoDateTimeUtcSchema.nullable(),
+        }),
+      ),
+    }),
+  },
+  "trigger.firing.decide": {
+    request: z.object({
+      firingId: UuidSchema,
+      decision: z.enum(["start", "dismiss"]),
+    }).strict(),
+    response: z.object({
+      firing: z.object({
+        id: UuidSchema,
+        status: z.enum(["pending", "approved", "dismissed"]),
+        decidedAt: IsoDateTimeUtcSchema.nullable(),
+      }),
+      runId: UuidSchema.nullable(),
     }),
   },
   "grant.create": {
