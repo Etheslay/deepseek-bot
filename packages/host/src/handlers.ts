@@ -468,13 +468,17 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
         throw invalid("archived bots cannot chat");
       }
       const sessionId = chatSessionIdFor(bot.id);
+      const history = listChatMessages(db, bot.id, 20).map((row) => ({
+        role: row.role,
+        text: row.text,
+      }));
       appendChatMessage(db, {
         botId: bot.id,
         sessionId,
         role: "user",
         text: payload.text,
       });
-      const outcome = await chat.send(bot, payload.text);
+      const outcome = await chat.send(bot, payload.text, history);
       const assistant = appendChatMessage(db, {
         botId: bot.id,
         sessionId,
@@ -482,7 +486,7 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
         text: outcome.finalResponse,
       });
       return {
-        sessionId,
+        sessionId: outcome.sessionId,
         messageId: assistant.id,
         text: outcome.finalResponse,
         at: assistant.createdAt,

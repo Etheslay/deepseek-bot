@@ -2601,6 +2601,9 @@ function BotsPlaceholder({
               <div className="chat-failure" role="alert">
                 <span className="failure-code">{stream.failure.code}</span>
                 {failureMessage(stream.failure.code)}
+                {stream.failure.message ? (
+                  <span className="failure-detail">{stream.failure.message}</span>
+                ) : null}
                 {stream.failure.code === "UNAUTHORIZED_PATH" &&
                 /grant required: ([a-z.]+)/.test(stream.failure.message ?? "") ? (
                   <span className="grant-card">

@@ -31,4 +31,16 @@
 
 （AI 执行记录，需负责人 Etheslay 确认：提交 SHA、检查证据、结论。）
 
+## 5. 后续修复（复测：Key 测试成功但聊天无响应）
 
+实机复测定位到三个缺陷，均已修复：
+
+1. **忙碌标记泄漏**：`resolveBotInputs` 与 Harness 解析在 `try` 之外抛错时 `busy` 永远为 `true`，之后每条消息都返回「already answering」。现全部移入 `try/finally`。
+2. **会话 id 复用冲突**：钉扎 Harness 拒绝复用已存在的 session（`session "...": already exists`），`session/resume` 也只在同一 runtime 内有效。改为**每轮新建 session**，由 Host 从 `chat_messages` 回放最近 20 条历史作为上下文，多轮语义仍然成立。
+3. **失败原因不可见**：聊天失败只显示通用文案。失败气泡现在附带 Host 返回的真实 `message`（分类后的 provider 原文）。
+
+实机验证（用户临时 Key，仅以 safeStorage 密文存于本机 `.tmp` 数据根，未提交、未入库）：`chat.send` 返回真实回复「我是由 DeepSeek Harness 驱动的 AI 编程助手，当前使用的模型是 deepseek-chat」；追问「刚才我们聊了什么」能正确复述上文。截图：`assets/chat-diag/chat-real-reply.png`。
+
+新增诊断开关：`DSB_HOST_DEBUG=1` 时桌面主进程把 Host 的 stderr 转发到控制台。
+
+**仍存在的集成缺口**：`installBridgeIntoProfile` 从未在 Host 启动时调用，真实运行的 profile 里没有 `@deepseek-bot/harness-bridge`，钉扎 Harness 会打印 `warning: 1 entry did not activate`，审批桥在真实聊天/运行中不生效（基础聊天不受影响）。列为 D16 后续小片。
