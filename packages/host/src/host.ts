@@ -38,7 +38,7 @@ import {
   type OpenedDatabase,
 } from "@deepseek-bot/storage";
 import { buildHandlers, type HostContext } from "./handlers.js";
-import { JsonlAuditSink, ToolGateway, ToolRegistry, bindReadTools, bindWriteTools } from "@deepseek-bot/agent-tools";
+import { AskUserCoordinator, JsonlAuditSink, ToolGateway, ToolRegistry, bindAskUserTool, bindReadTools, bindWriteTools, type UserQuestionControls } from "@deepseek-bot/agent-tools";
 
 export interface HostOptions {
   /** Data root (storage layout: database, harness home, artifacts, backups). */
@@ -81,6 +81,8 @@ export interface DeepSeekBotHost {
   handleMethod(method: Method, payload: unknown, requestId?: string): Promise<unknown>;
   /** D15 agent tool gateway (read + write layers; every call audited). */
   readonly agentTools: ToolGateway;
+  /** Trusted in-process human controls. Never registered as model capabilities. */
+  readonly userQuestions: UserQuestionControls;
   /** Start the scheduler tick loop (FR-08). */
   start(): void;
   /** Stop the scheduler, close the approval bridge and the database. */
@@ -268,12 +270,14 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
   };
 
   const agentRegistry = new ToolRegistry();
+  const questions = new AskUserCoordinator();
   // D15: read layer (default-allow) plus the write layer (draft / group /
   // batch create / revoke). D16 replaces AllowAllGrants with the three-layer
   // grant/审批 checkpoint — until then write calls ride the same stub.
   for (const capability of [
     ...bindReadTools((method, payload) => dispatch(method as Method, payload)),
     ...bindWriteTools((method, payload) => dispatch(method as Method, payload)),
+    bindAskUserTool(questions),
   ]) {
     agentRegistry.register(capability);
   }
@@ -291,12 +295,18 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
     bootGeneration,
     recoveredRuns,
     agentTools,
+    userQuestions: {
+      listPending: (callerId) => questions.listPending(callerId),
+      answer: (requestId, callerId, answer) => questions.answer(requestId, callerId, answer),
+      cancel: (requestId, callerId) => questions.cancel(requestId, callerId),
+    },
     handleMethod: dispatch,
     start(): void {
       scheduler.start();
     },
     async shutdown(): Promise<void> {
       closed = true;
+      questions.close();
       scheduler.stop();
       await bridge.close();
       db.close();
