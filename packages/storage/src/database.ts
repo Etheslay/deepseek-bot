@@ -501,7 +501,6 @@ CREATE INDEX connectors_created ON connectors(created_at);
 `,
   },
   {
-  {
     // D18 (独立知识表): long-form per-bot knowledge documents, separate from
     // the 4k memory notes. Whole documents, no chunk table — retrieval
     // windows and their vectors are computed at query time.

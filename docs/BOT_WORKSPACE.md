@@ -41,7 +41,7 @@ src/renderer/src/services/
 
 - **产物即工作区文件**：`artifacts.list/read/save/versions/versionContent/revert` 操作的是 bot 工作区（`workspaces.canonical_path`）里的真实文件，按 `(botId, relativePath)` 寻址；隐藏项（`.` 前缀）与符号链接不列出、不跟随。
 - **共编闭环**：用户在画布侧车（`features/canvas/canvas-sidecar.tsx`）保存 → Host 原子写回工作区文件 → bot 下一轮经自身文件工具读到用户版本再续写；bot 直接写盘的内容由下次 list/read/versions 补记为 `author=bot` 版本。侧车 5 秒轮询：干净时静默刷新，有未保存修改时显示"已被修改"横幅而不覆盖用户草稿。
-- **版本链**：迁移 `0010-artifact-versions` 只追加；快照内容存数据根 `artifacts/coedit-versions/<botId>/<versionId>.bin`（含产物备份即含版本快照），元数据含 author/size/sha256；每文件保留最近 50 版，超出剪除最旧（行+文件）。回退 = 以历史内容生成新版本，不改写历史。
+- **版本链**：迁移 `0011-artifact-versions` 只追加；快照内容存数据根 `artifacts/coedit-versions/<botId>/<versionId>.bin`（含产物备份即含版本快照），元数据含 author/size/sha256；每文件保留最近 50 版，超出剪除最旧（行+文件）。回退 = 以历史内容生成新版本，不改写历史。
 - **安全边界**：路径经 `RelativeArtifactPathSchema` + realpath 夹紧，写不越工作区；内联读/写上限 768 KiB（超限显式拒绝，文件仍可列与回看版本）；text/html 与二进制不进编辑器、不内联渲染（QA-14）；Markdown 预览走 D14 本地安全渲染链。
 - **并发**：save 携带编辑基准 `expectedChecksum`，文件已被 bot 改动时返回 `REVISION_CONFLICT`，UI 提示重新加载而非静默覆盖。
 
