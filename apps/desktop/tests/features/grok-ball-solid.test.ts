@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { createElement, type ReactElement } from "react";
+import { createElement, Fragment, type ReactElement } from "react";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it } from "vitest";
@@ -120,6 +120,38 @@ describe("GrokBall solid renderer", () => {
     const points = pathPoints(painted.d);
     expect(points.length, "silhouette samples").toBeGreaterThan(40);
     expect(spanAt(points, 45, 55)).toBeGreaterThan(60);
+  });
+
+  it("gives every ball its own idle rhythm, so a row never moves in lockstep", async () => {
+    const multi = document.createElement("div");
+    document.body.append(multi);
+    const multiRoot = createRoot(multi);
+    act(() => {
+      multiRoot.render(
+        createElement(
+          Fragment,
+          null,
+          [0, 1, 2, 3, 4].map((i) =>
+            createElement(GrokBall, { key: i, variant: "sidebar", shape: "blob", color: "#2A92FE" }),
+          ),
+        ),
+      );
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    });
+    // Every ball mounts in the same frame. Without a per-instance phase they
+    // would all sample the sway sines at the same point and rock together.
+    const rotations = Array.from(multi.querySelectorAll(".grok-ball > g")).map((g) => {
+      const m = /rotate\(([-\d.]+)\)/.exec(g.getAttribute("transform") ?? "");
+      return m ? Number(m[1]) : null;
+    });
+    expect(rotations.every((r) => r !== null), "all balls animated").toBe(true);
+    expect(new Set(rotations).size, `identical rotations: ${rotations.join(",")}`).toBeGreaterThan(1);
+    act(() => {
+      multiRoot.unmount();
+    });
+    multi.remove();
   });
 
   it("hooks a palette colour to the theme, and a stray hex to itself", () => {
