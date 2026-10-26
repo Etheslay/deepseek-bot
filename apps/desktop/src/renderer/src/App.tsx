@@ -39,6 +39,12 @@ import {
   loadSettings,
   saveSettings,
 } from "./features/settings/settings-store.js";
+import {
+  deleteTemplate,
+  listTemplates,
+  saveTemplate,
+  type BotTemplate,
+} from "./features/templates/bot-templates.js";
 
 
 type Group = { key: number; name: string };
@@ -175,6 +181,8 @@ export function App(): JSX.Element {
     color: "#3b93f0",
   }));
   const [modalGroup, setModalGroup] = useState<number>(UNGROUPED);
+  const [tplSeed, setTplSeed] = useState("new");
+  const [tplDraft, setTplDraft] = useState<BotDraft | null>(null);
 
   const [groups, setGroups] = useState<Group[]>([{ key: UNGROUPED, name: "未分组" }]);
   const {
@@ -286,6 +294,29 @@ export function App(): JSX.Element {
   const [theme, setTheme] = useState<"dark" | "light">(initialSettings.theme);
   const [accountName, setAccountName] = useState(initialSettings.accountName);
   const [accent, setAccent] = useState(initialSettings.accent);
+  const [botTemplates, setBotTemplates] = useState<BotTemplate[]>(() =>
+    listTemplates(window.localStorage),
+  );
+
+  const saveBotTemplate = (target: UiBot): void => {
+    const result = saveTemplate(window.localStorage, {
+      name: `${target.bot.name} 模板`,
+      bot: {
+        name: target.bot.name,
+        instructions: target.bot.instructions,
+        avatarUi: { avatar: target.avatar, shape: target.shape, color: target.color },
+      },
+    });
+    if (result.ok) {
+      setBotTemplates(listTemplates(window.localStorage));
+      setToast(`已保存模板「${result.template.name}」`);
+    } else {
+      setToast(
+        result.reason === "limit" ? `模板已达上限` : `同名模板已存在`,
+      );
+    }
+  };
+
   const [updateStatus, setUpdateStatus] = useState<
     { available: boolean; version: string | null; downloading: boolean; readyToInstall: boolean; error: string | null } | null
   >(null);
@@ -426,6 +457,8 @@ export function App(): JSX.Element {
   const selectedBotName = selectedBotEntry?.bot.name ?? "DeepSeek Bot";
 
   const openCreateBotModal = () => {
+    setTplDraft(null);
+    setTplSeed("new");
     setShape(0);
     setColor(2);
     setAvatar({ kind: "grok", shape: "blob", color: "#3b93f0" });
@@ -1417,6 +1450,18 @@ const logout = (): void => {
               <MenuIcon d="M9 9h10v12H9zM5 15H3V3h12v2" />
               复制 Bot
             </button>
+            <button
+              type="button"
+              role="menuitem"
+              className="menu-item"
+              onClick={() => {
+                saveBotTemplate(menuBot);
+                setMenu(null);
+              }}
+            >
+              <MenuIcon d="M4 5h16v4H4zM6 9v10h12V9M10 13h4" />
+              存为模板
+            </button>
             <button type="button" role="menuitem" className="menu-item" onClick={() => void copyBotId(menuBot.key)}>
               <MenuIcon d="M9 9h10v12H9zM5 15H3V3h12v2" />
               复制对话 ID
@@ -1534,8 +1579,49 @@ const logout = (): void => {
               </button>
             </header>
             <div className="modal-body">
+              {!editingBot && botTemplates.length > 0 && (
+                <div className="tpl-row" role="group" aria-label="从模板开始">
+                  <span className="tpl-label">模板</span>
+                  {botTemplates.map((tpl) => (
+                    <span className="tpl-chip-wrap" key={tpl.id}>
+                      <button
+                        type="button"
+                        className="tpl-chip"
+                        title={`用模板「${tpl.name}」填充`}
+                        onClick={() => {
+                          setAvatar(tpl.bot.avatarUi.avatar as AvatarKind);
+                          setShape(tpl.bot.avatarUi.shape);
+                          setColor(tpl.bot.avatarUi.color);
+                          const seed = bots[0]?.bot;
+                          setTplDraft({
+                            name: tpl.bot.name,
+                            instructions: tpl.bot.instructions,
+                            modelProfileId: seed?.modelProfileId ?? "44444444-4444-4444-8444-444444444444",
+                            workspaceId: seed?.workspaceId ?? "55555555-5555-4555-8555-555555555555",
+                            toolPolicyId: seed?.toolPolicyId ?? "66666666-6666-4666-8666-666666666666",
+                          });
+                          setTplSeed(tpl.id);
+                        }}
+                      >
+                        {tpl.name}
+                      </button>
+                      <button
+                        type="button"
+                        className="tpl-chip-remove"
+                        aria-label={`删除模板 ${tpl.name}`}
+                        onClick={() => {
+                          setBotTemplates(deleteTemplate(window.localStorage, tpl.id));
+                        }}
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
               <BotForm
-                key={editingBot?.bot.id ?? "new"}
+                key={editingBot?.bot.id ?? tplSeed}
+                {...(!editingBot && tplDraft ? { initial: tplDraft } : {})}
                 {...(editingBot
                   ? {
                       initial: {

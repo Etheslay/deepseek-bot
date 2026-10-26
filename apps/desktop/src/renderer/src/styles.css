@@ -6613,3 +6613,60 @@ select option {
 .mention-chip {
   color: var(--mention-color, var(--accent, #6ea8ff));
 }
+
+/* ============================================================
+   Bot templates (D17) — chips row inside the create dialog.
+   ============================================================ */
+
+.tpl-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.tpl-label {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.tpl-chip-wrap {
+  display: inline-flex;
+  align-items: center;
+}
+
+.tpl-chip {
+  border: 1px solid var(--border);
+  background: var(--raised);
+  color: inherit;
+  font: inherit;
+  font-size: 0.76rem;
+  padding: 3px 10px;
+  border-radius: 999px 0 0 999px;
+  cursor: pointer;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tpl-chip:hover {
+  border-color: var(--accent, #6ea8ff);
+}
+
+.tpl-chip-remove {
+  border: 1px solid var(--border);
+  border-left: none;
+  background: var(--raised);
+  color: var(--muted);
+  font-size: 0.8rem;
+  padding: 3px 8px;
+  border-radius: 0 999px 999px 0;
+  cursor: pointer;
+}
+
+.tpl-chip-remove:hover {
+  color: var(--text);
+  background: var(--item-hover);
+}
