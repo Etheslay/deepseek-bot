@@ -40,6 +40,7 @@ describe("connector settings", () => {
       name: string;
       enabled: boolean;
       credentialRef: string | null;
+      endpoint: string | null;
       at: string;
       updatedAt: string;
     }> = [
@@ -48,6 +49,7 @@ describe("connector settings", () => {
         name: NAME,
         enabled: false,
         credentialRef: null,
+        endpoint: null,
         at: "2026-10-26T12:00:00.000Z",
         updatedAt: "2026-10-26T12:00:00.000Z",
       },
@@ -58,13 +60,14 @@ describe("connector settings", () => {
           calls.push({ method, payload });
           if (method === "connector.list") return { connectors };
           if (method === "connector.register") {
-            const body = payload as { name: string; credentialRef?: string };
+            const body = payload as { name: string; credentialRef?: string; endpoint?: string };
             connectors = [
               {
                 id: ID,
                 name: body.name,
                 enabled: false,
                 credentialRef: body.credentialRef ?? null,
+                endpoint: body.endpoint ?? null,
                 at: "2026-10-26T12:01:00.000Z",
                 updatedAt: "2026-10-26T12:01:00.000Z",
               },

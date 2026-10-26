@@ -517,5 +517,15 @@ CREATE TABLE knowledge_docs (
 CREATE INDEX knowledge_docs_bot_created ON knowledge_docs(bot_id, created_at);
 `,
   },
+  {
+    // D19 (connector invoke): loopback http(s) endpoint of the local
+    // service behind a registered connector. Nullable — a connector without
+    // an endpoint stays catalog-only.
+    id: 11,
+    name: "0011-connectors-endpoint",
+    sql: /* sql */ `
+ALTER TABLE connectors ADD COLUMN endpoint TEXT;
+`,
+  },
 ];
 

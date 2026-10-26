@@ -96,6 +96,7 @@ export const METHODS = [
   "connector.register",
   "connector.enable",
   "connector.disable",
+  "connector.setEndpoint",
   "grant.create",
   "grant.list",
   "grant.revoke",
@@ -676,6 +677,7 @@ export const METHOD_CONTRACTS = {
           name: NonEmptyStringSchema(TEXT_LIMITS.name),
           enabled: z.boolean(),
           credentialRef: z.string().nullable(),
+          endpoint: z.string().nullable(),
           at: IsoDateTimeUtcSchema,
           updatedAt: IsoDateTimeUtcSchema,
         }),
@@ -687,6 +689,9 @@ export const METHOD_CONTRACTS = {
       .object({
         name: z.string().trim().min(1).max(TEXT_LIMITS.name),
         credentialRef: z.string().trim().min(1).max(TEXT_LIMITS.label).nullable().optional(),
+        // Loopback http(s) URL of the local service (D19); validated by the
+        // Host before storage, never contacted at registration time.
+        endpoint: z.string().trim().max(2048).nullable().optional(),
       })
       .strict(),
     response: z.object({
@@ -694,6 +699,7 @@ export const METHOD_CONTRACTS = {
       name: NonEmptyStringSchema(TEXT_LIMITS.name),
       enabled: z.literal(false),
       credentialRef: z.string().nullable(),
+      endpoint: z.string().nullable(),
       at: IsoDateTimeUtcSchema,
       updatedAt: IsoDateTimeUtcSchema,
     }),
@@ -705,6 +711,7 @@ export const METHOD_CONTRACTS = {
       name: NonEmptyStringSchema(TEXT_LIMITS.name),
       enabled: z.literal(true),
       credentialRef: z.string().nullable(),
+      endpoint: z.string().nullable(),
       at: IsoDateTimeUtcSchema,
       updatedAt: IsoDateTimeUtcSchema,
     }),
@@ -716,6 +723,27 @@ export const METHOD_CONTRACTS = {
       name: NonEmptyStringSchema(TEXT_LIMITS.name),
       enabled: z.literal(false),
       credentialRef: z.string().nullable(),
+      endpoint: z.string().nullable(),
+      at: IsoDateTimeUtcSchema,
+      updatedAt: IsoDateTimeUtcSchema,
+    }),
+  },
+  /**
+   * D19: set or clear the loopback http(s) endpoint of a local connector.
+   * The Host validates the URL shape (http/https, loopback host only)
+   * before storage and never contacts the endpoint here.
+   */
+  "connector.setEndpoint": {
+    request: z.object({
+      id: UuidSchema,
+      endpoint: z.string().trim().max(2048).nullable(),
+    }).strict(),
+    response: z.object({
+      id: UuidSchema,
+      name: NonEmptyStringSchema(TEXT_LIMITS.name),
+      enabled: z.boolean(),
+      credentialRef: z.string().nullable(),
+      endpoint: z.string().nullable(),
       at: IsoDateTimeUtcSchema,
       updatedAt: IsoDateTimeUtcSchema,
     }),

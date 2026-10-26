@@ -75,6 +75,18 @@ async function fixture(
           ],
         }),
       );
+    } else if (request.url === "/connectors") {
+      response.end(
+        JSON.stringify({
+          tools: [
+            {
+              name: "connector_invoke",
+              description: "connector_invoke",
+              parameters: { type: "object", additionalProperties: false, properties: {} },
+            },
+          ],
+        }),
+      );
     } else if (request.url === "/ask-user") {
       response.end(
         JSON.stringify({
@@ -143,6 +155,7 @@ describe("application tool plugin", () => {
       "memory_write",
       "memory_search",
       "knowledge_search",
+      "connector_invoke",
       "web_search",
     ]);
     expect(calls).toEqual([{ tools: names }]);
@@ -193,6 +206,7 @@ describe("application tool plugin", () => {
       "/app-tools",
       "/ask-user",
       "/memory",
+      "/connectors",
       "/web-search",
       "/app-tools/ready",
       "/app-tools/call",
@@ -259,6 +273,7 @@ describe("application tool plugin", () => {
       "memory_write",
       "memory_search",
       "knowledge_search",
+      "connector_invoke",
     ]);
     expect(calls[0]).toEqual({ tools: names });
     const agentTools: Definition[] = [];
