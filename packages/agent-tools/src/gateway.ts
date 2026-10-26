@@ -105,6 +105,7 @@ export class ToolGateway {
     const context: ToolContext = {
       caller,
       ...(options.signal !== undefined ? { signal: options.signal } : {}),
+      ...(options.networkPermissions !== undefined ? { networkPermissions: options.networkPermissions } : {}),
     };
     try {
       const result = await capability.handler(parsed.data, context);

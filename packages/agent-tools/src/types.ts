@@ -13,7 +13,7 @@ import type { ErrorCode } from "@deepseek-bot/contracts";
 export type GatewayRejectionCode = Extract<
   ErrorCode,
   "INVALID_INPUT" | "UNAUTHORIZED_PATH" | "APPROVAL_REQUIRED" | "APPROVAL_EXPIRED"
-  | "CANCELLED" | "TOOL_TIMEOUT" | "RUNTIME_UNAVAILABLE"
+  | "CANCELLED" | "TOOL_TIMEOUT" | "RUNTIME_UNAVAILABLE" | "RATE_LIMITED"
 >;
 
 /** Who invoked the tool (audit "谁"). v0.1 callers: chat agents and the UI. */
@@ -26,10 +26,24 @@ export interface ToolCaller {
 export interface ToolContext {
   readonly caller: ToolCaller;
   readonly signal?: AbortSignal;
+  readonly networkPermissions?: ToolNetworkPermissions;
 }
 
 export interface ToolCallOptions {
   readonly signal?: AbortSignal;
+  /** Trusted in-process D08 handle; never accepted in model parameters. */
+  readonly networkPermissions?: ToolNetworkPermissions;
+}
+
+/** Structurally compatible with D08 NodePermissionHandle, without a runtime dependency. */
+export interface ToolNetworkPermissions {
+  authorize(action: {
+    readonly kind: "network.request";
+    readonly callId: string;
+    readonly toolName: string;
+    readonly url: string;
+    readonly arguments: Readonly<Record<string, unknown>>;
+  }): Promise<unknown>;
 }
 
 export class ToolRejectionError extends Error {

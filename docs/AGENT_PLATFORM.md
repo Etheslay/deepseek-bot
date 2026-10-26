@@ -54,6 +54,7 @@ flowchart LR
 | 写（应用） | `create_group` / `create_bot` / `assign_bot_group` / `create_workflow` / `add_node` / `add_edge` / `update_bot` | 全部受 grant 与审批约束；批量创建 bot 时组内自动分配**不重复**的形状×颜色头像（组合用尽才允许重复），用户显式指定时以用户为准 |
 | 写（执行） | `start_run` / `cancel_run` | 高风险，默认每次审批 |
 | 交互 | `ask_user`（选项卡片 / 确认框） | 暂停当前回合等待人类选择；卡片答案作为用户输入回到会话；组件与 D16 授权弹层共用（见 [开发计划](DEVELOPMENT_PLAN.md) D14） |
+| 搜索 | `web_search` | D15 后端通过受信配置的 SearXNG JSON API 返回标题/URL/摘要；出站前走 D08 网络权限，网关摘要审计；真实聊天接线与 D16 grant 后续完成（见 [接口说明](../packages/agent-tools/README.md)） |
 | 扩展 | 技能调用、连接器调用、记忆读写 | 由技能/连接器声明所需能力 |
 
 批量创建必须带 `batchId`，支持一键撤销整批。

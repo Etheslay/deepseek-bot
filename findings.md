@@ -1,5 +1,13 @@
 # 调研记录
 
+## 2026-10-26：D15 `web_search`
+
+- 用户选择 SearXNG JSON；官方 API 支持 POST 表单，JSON 输出需实例启用，公共实例可能返回 403：https://docs.searxng.org/dev/search_api.html 。未选择或测试任意公共实例。
+- `ToolCaller.id` 是不透明标识，现无真实聊天调用方；由受信调用选项传递结构兼容 D08 NodePermissionHandle 的网络权限句柄，不从 caller 字符串解析身份、不接受模型参数传权限。
+- Host main 通过环境变量 DEEPSEEK_BOT_SEARXNG_URL 配置，桌面 Host 子进程继承父环境；缺少端点/权限均拒绝联网。
+- D08 tool.requested 按既有规范记录精确 query，JSONL 网关审计则只保存摘要；文档区分两者。
+- 真实权限联调发现 D12 默认种子 network='allow'/shell='approval' 不符合契约；仅修复默认 policy 的旧值，不改合法用户配置或自定义 policy。
+
 ## 2026-10-26：D15 `ask_user` 实现事实
 
 - 远程 develop 已含读层 PR #37 与写层 PR #38（`d4a3f35`）；本分支由 `12d163f` 快进到该基线。
