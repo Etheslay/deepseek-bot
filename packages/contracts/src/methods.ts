@@ -86,6 +86,10 @@ export const METHODS = [
   "memory.list",
   "memory.write",
   "memory.delete",
+  "connector.list",
+  "connector.register",
+  "connector.enable",
+  "connector.disable",
   "grant.create",
   "grant.list",
   "grant.revoke",
@@ -551,6 +555,64 @@ export const METHOD_CONTRACTS = {
       })
       .strict(),
     response: z.object({ deleted: z.literal(true) }),
+  },
+  /**
+   * Trusted desktop catalog. Registration always starts disabled.
+   * credentialRef is an opaque cred:<uuid> reference; these methods never
+   * resolve it or contact the connector. ToolPolicy.mcp is a separate gate.
+   */
+  "connector.list": {
+    request: z.object({}).strict(),
+    response: z.object({
+      connectors: z.array(
+        z.object({
+          id: UuidSchema,
+          name: NonEmptyStringSchema(TEXT_LIMITS.name),
+          enabled: z.boolean(),
+          credentialRef: z.string().nullable(),
+          at: IsoDateTimeUtcSchema,
+          updatedAt: IsoDateTimeUtcSchema,
+        }),
+      ),
+    }),
+  },
+  "connector.register": {
+    request: z
+      .object({
+        name: z.string().trim().min(1).max(TEXT_LIMITS.name),
+        credentialRef: z.string().trim().min(1).max(TEXT_LIMITS.label).nullable().optional(),
+      })
+      .strict(),
+    response: z.object({
+      id: UuidSchema,
+      name: NonEmptyStringSchema(TEXT_LIMITS.name),
+      enabled: z.literal(false),
+      credentialRef: z.string().nullable(),
+      at: IsoDateTimeUtcSchema,
+      updatedAt: IsoDateTimeUtcSchema,
+    }),
+  },
+  "connector.enable": {
+    request: z.object({ id: UuidSchema }).strict(),
+    response: z.object({
+      id: UuidSchema,
+      name: NonEmptyStringSchema(TEXT_LIMITS.name),
+      enabled: z.literal(true),
+      credentialRef: z.string().nullable(),
+      at: IsoDateTimeUtcSchema,
+      updatedAt: IsoDateTimeUtcSchema,
+    }),
+  },
+  "connector.disable": {
+    request: z.object({ id: UuidSchema }).strict(),
+    response: z.object({
+      id: UuidSchema,
+      name: NonEmptyStringSchema(TEXT_LIMITS.name),
+      enabled: z.literal(false),
+      credentialRef: z.string().nullable(),
+      at: IsoDateTimeUtcSchema,
+      updatedAt: IsoDateTimeUtcSchema,
+    }),
   },
   "grant.create": {
     request: z.object({

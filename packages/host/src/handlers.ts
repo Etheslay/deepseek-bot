@@ -55,6 +55,9 @@ import {
   deleteMemory,
   listMemories,
   writeMemory,
+  listConnectors,
+  registerConnector,
+  setConnectorEnabled,
   updateBot,
   type BotPatch,
   type DataLayout,
@@ -646,6 +649,56 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
       const bot = requireLiveBot(db, payload.botId);
       deleteMemory(db, { botId: bot.id, memoryId: payload.memoryId });
       return { deleted: true as const };
+    },
+
+    "connector.list": () => ({
+      connectors: listConnectors(db).map((row) => ({
+        id: row.id,
+        name: row.name,
+        enabled: row.enabled,
+        credentialRef: row.credentialRef,
+        at: row.createdAt,
+        updatedAt: row.updatedAt,
+      })),
+    }),
+
+    "connector.register": (payload) => {
+      const row = registerConnector(db, {
+        name: payload.name,
+        ...(payload.credentialRef !== undefined ? { credentialRef: payload.credentialRef } : {}),
+      });
+      return {
+        id: row.id,
+        name: row.name,
+        enabled: false as const,
+        credentialRef: row.credentialRef,
+        at: row.createdAt,
+        updatedAt: row.updatedAt,
+      };
+    },
+
+    "connector.enable": (payload) => {
+      const row = setConnectorEnabled(db, { id: payload.id, enabled: true });
+      return {
+        id: row.id,
+        name: row.name,
+        enabled: true as const,
+        credentialRef: row.credentialRef,
+        at: row.createdAt,
+        updatedAt: row.updatedAt,
+      };
+    },
+
+    "connector.disable": (payload) => {
+      const row = setConnectorEnabled(db, { id: payload.id, enabled: false });
+      return {
+        id: row.id,
+        name: row.name,
+        enabled: false as const,
+        credentialRef: row.credentialRef,
+        at: row.createdAt,
+        updatedAt: row.updatedAt,
+      };
     },
 
     "settings.testConnection": async (payload) => {

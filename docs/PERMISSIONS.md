@@ -39,6 +39,8 @@
 
 `memory_search` 绑定 `memory.read`，`memory_write` 绑定 `memory.write`。两者都只使用受信 `ToolCaller.botId`，模型参数不能指定 bot。默认不跨 bot 共享，也没有共享开关。用户经受信方法 `memory.list` / `memory.write` / `memory.delete` 查看、写入和删除当前 bot 的记忆；删除是物理删除，模型目录没有删除工具。网关 JSONL 仍只存摘要。知识导入是桌面文件对话框，不接收渲染进程传入的路径，也不是模型工具。通过后仍调用 `memory.write`，隔离规则不变。只接受 `.txt` / `.md`，文件不超过 16 KiB，正文仍须放进一条 1–4000 字的记忆。
 
+`connector.list` / `connector.register` / `connector.enable` / `connector.disable` 是受信桌面方法，不是模型工具，也不进入八个应用工具目录。新登记的连接器默认关闭。`credentialRef` 只能是 `cred:<uuid>` 引用；本片不解析该引用，也不调用连接器。`connector.invoke` 仍是每次询问。`ToolPolicy.mcp` 的判定不变。
+
 ## 3. 三档策略
 
 每个能力可设为：

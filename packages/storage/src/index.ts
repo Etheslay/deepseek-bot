@@ -32,4 +32,5 @@ export * from "./repos/settings.js";
 export * from "./repos/permissions.js";
 export * from "./repos/chat.js";
 export * from "./repos/memories.js";
+export * from "./repos/connectors.js";
 export * from "./repos/grants.js";
