@@ -6,7 +6,7 @@
  * UI-only types (ChatSessionView) live here because CONTRACTS v0.1 has no
  * Session entity — they must never be promoted into packages/contracts.
  */
-import type { Artifact, Bot, ErrorCode, EventEnvelope } from "@deepseek-bot/contracts";
+import type { ArtifactVersion, Bot, BotArtifact, ErrorCode, EventEnvelope } from "@deepseek-bot/contracts";
 import type { WorkflowServiceApi } from "../features/workflow-editor/workflow-service.js";
 import type { RunServiceApi } from "../features/run-monitor/run-service.js";
 
@@ -108,10 +108,41 @@ export interface DesktopService {
       options?: StreamOptions,
     ): StreamHandle;
   };
+  /**
+   * D28 co-edit sidecar over one bot's workspace files. Read/save address a
+   * file by (botId, relativePath); every save/revert appends a version. The
+   * read union mirrors the contract: HTML and binary media never hand the
+   * renderer executable or opaque content (QA-14).
+   */
   artifacts: {
-    listBySession(sessionId: string): Promise<Artifact[]>;
-    /** Text/Markdown preview; HTML and unknown media are blocked, never executed. */
-    preview(artifact: Artifact): Promise<{ kind: "text"; content: string } | { kind: "blocked"; reason: string }>;
+    list(botId: string): Promise<BotArtifact[]>;
+    read(
+      botId: string,
+      relativePath: string,
+    ): Promise<
+      | { kind: "text"; mediaType: string; checksum: BotArtifact["checksum"]; content: string }
+      | { kind: "blocked"; mediaType: string; reason: string }
+    >;
+    save(
+      botId: string,
+      relativePath: string,
+      content: string,
+      expectedChecksum?: string,
+    ): Promise<{ artifact: BotArtifact; version: ArtifactVersion }>;
+    versions(botId: string, relativePath: string): Promise<ArtifactVersion[]>;
+    versionContent(
+      botId: string,
+      relativePath: string,
+      versionId: string,
+    ): Promise<
+      | { kind: "text"; mediaType: string; content: string }
+      | { kind: "blocked"; mediaType: string; reason: string }
+    >;
+    revert(
+      botId: string,
+      relativePath: string,
+      versionId: string,
+    ): Promise<{ artifact: BotArtifact; version: ArtifactVersion }>;
   };
   /** Workflow editor API (D07); fixture-backed, no execution/persistence. */
   workflows: WorkflowServiceApi;

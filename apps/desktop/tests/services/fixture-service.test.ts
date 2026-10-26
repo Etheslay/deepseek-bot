@@ -169,20 +169,79 @@ describe("FixtureService chat", () => {
   });
 });
 
-describe("FixtureService artifacts", () => {
-  it("lists schema-valid artifacts for a session", async () => {
-    const artifacts = await service.artifacts.listBySession("sess-success-run");
+describe("FixtureService artifacts (D28 co-edit)", () => {
+  it("lists schema-valid workspace artifacts for a bot", async () => {
+    const artifacts = await service.artifacts.list(SESSION_BOT_A);
     expect(artifacts).toHaveLength(2);
-    expect(artifacts[0]?.relativePath).toBe("summaries/note-summary.md");
+    expect(artifacts[0]?.relativePath).toBe("reports/index.html");
+    expect(artifacts[1]?.relativePath).toBe("summaries/note-summary.md");
   });
 
-  it("previews text safely and blocks HTML", async () => {
-    const artifacts = await service.artifacts.listBySession("sess-success-run");
-    const md = artifacts[0]!;
-    const html = artifacts[1]!;
-    const mdPreview = await service.artifacts.preview(md);
-    expect(mdPreview.kind).toBe("text");
-    const htmlPreview = await service.artifacts.preview(html);
-    expect(htmlPreview).toEqual({ kind: "blocked", reason: expect.stringContaining("QA-14") });
+  it("reads markdown as text and blocks HTML (QA-14)", async () => {
+    const md = await service.artifacts.read(SESSION_BOT_A, "summaries/note-summary.md");
+    expect(md.kind).toBe("text");
+    if (md.kind === "text") {
+      expect(md.mediaType).toBe("text/markdown");
+      expect(md.content).toContain("会议纪要");
+    }
+    const html = await service.artifacts.read(SESSION_BOT_A, "reports/index.html");
+    expect(html.kind).toBe("blocked");
+    if (html.kind === "blocked") {
+      expect(html.mediaType).toBe("text/html");
+    }
+  });
+
+  it("save appends a user version and revert appends another", async () => {
+    const before = await service.artifacts.versions(SESSION_BOT_A, "summaries/note-summary.md");
+    const saved = await service.artifacts.save(
+      SESSION_BOT_A,
+      "summaries/note-summary.md",
+      "# 更新后的纪要\n",
+    );
+    expect(saved.version.author).toBe("user");
+    expect(saved.version.revision).toBe(before[0]!.revision + 1);
+
+    const afterSave = await service.artifacts.versions(SESSION_BOT_A, "summaries/note-summary.md");
+    expect(afterSave[0]!.id).toBe(saved.version.id);
+
+    const reverted = await service.artifacts.revert(
+      SESSION_BOT_A,
+      "summaries/note-summary.md",
+      before[0]!.id,
+    );
+    expect(reverted.version.revision).toBe(saved.version.revision + 1);
+    const reread = await service.artifacts.read(SESSION_BOT_A, "summaries/note-summary.md");
+    if (reread.kind === "text") {
+      expect(reread.content).toContain("会议纪要");
+    }
+  });
+
+  it("save with a stale expectedChecksum fails with REVISION_CONFLICT", async () => {
+    const read = await service.artifacts.read(SESSION_BOT_A, "summaries/note-summary.md");
+    if (read.kind !== "text") {
+      throw new Error("expected text read");
+    }
+    await expect(
+      service.artifacts.save(
+        SESSION_BOT_A,
+        "summaries/note-summary.md",
+        "# 并发写入\n",
+        "0".repeat(64),
+      ),
+    ).rejects.toMatchObject({ code: "REVISION_CONFLICT" });
+  });
+
+  it("versionContent returns the recorded snapshot", async () => {
+    const saved = await service.artifacts.save(
+      SESSION_BOT_A,
+      "summaries/note-summary.md",
+      "# 版本快照内容\n",
+    );
+    const content = await service.artifacts.versionContent(
+      SESSION_BOT_A,
+      "summaries/note-summary.md",
+      saved.version.id,
+    );
+    expect(content).toMatchObject({ kind: "text", content: "# 版本快照内容\n" });
   });
 });

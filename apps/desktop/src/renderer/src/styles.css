@@ -6961,3 +6961,179 @@ select option {
   background: var(--bot-color, var(--accent, #ffffff));
   color: var(--bot-ink, #ffffff);
 }
+
+/* ---------- D28 产物画布共编侧车 ---------- */
+.canvas-sidecar {
+  width: min(420px, 38vw);
+  min-width: 300px;
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border-left: 1px solid var(--border);
+  background: var(--panel);
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.canvas-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.canvas-title-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.canvas-bot-chip {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.canvas-path {
+  font-family: Consolas, monospace;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.canvas-head-actions {
+  display: flex;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.canvas-meta {
+  color: var(--muted);
+}
+
+.canvas-editor {
+  flex: 1 1 auto;
+  min-height: 220px;
+  resize: none;
+  font-family: Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text);
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.canvas-editor:focus-visible {
+  outline: 2px solid var(--accent, #3b82f6);
+  outline-offset: 1px;
+}
+
+.canvas-preview {
+  flex: 1 1 auto;
+  min-height: 220px;
+  overflow-y: auto;
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 14px;
+}
+
+.canvas-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.canvas-toast {
+  font-size: 12px;
+  color: var(--text);
+  background: var(--item-active);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 10px;
+}
+
+.canvas-error {
+  margin: 0;
+}
+
+.canvas-stale {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text);
+  background: var(--item-hover);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 10px;
+}
+
+.canvas-blocked {
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  padding: 12px;
+}
+
+.canvas-versions {
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+}
+
+.canvas-versions-toggle {
+  /* .ghost-btn 基类是标题栏场景的绝对定位；侧车内的切换按钮必须回到普通流。 */
+  position: static;
+  transform: none;
+  width: 100%;
+  text-align: left;
+}
+
+.canvas-version-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.canvas-version-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: var(--raised);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 10px;
+}
+
+.canvas-version-actions {
+  display: flex;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+
+.canvas-version-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.canvas-version-preview .replay-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+/* 窄窗口：侧车收窄，编辑器仍可用 */
+@media (max-width: 1100px) {
+  .canvas-sidecar {
+    width: min(340px, 42vw);
+  }
+}
