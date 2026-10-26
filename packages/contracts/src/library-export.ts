@@ -36,10 +36,27 @@ export const SkillExportSchema = z.object({
 export type SkillExport = z.infer<typeof SkillExportSchema>;
 
 /**
- * Mirror of the renderer-side bot template entry. `avatarUi` holds the
- * renderer-local avatar derivation (kind label + shape index + css color),
- * deliberately NOT the contract `Avatar` pool id: templates predate the
- * pool wiring and keep their visual snapshot self-contained.
+ * Renderer avatar snapshot carried by templates: `Avatar` in
+ * apps/desktop/src/renderer/src/features/avatars/avatar-meta.ts is a union of
+ * `{ kind: "mono" }` and `{ kind: "grok"; shape; color; state? }`. Contracts
+ * stay renderer-agnostic, so the ids inside are plain strings rather than
+ * imported renderer enums; the snapshot shape is still enforced.
+ */
+export const TemplateAvatarSchema = z.union([
+  z.object({ kind: z.literal("mono") }),
+  z.object({
+    kind: z.literal("grok"),
+    shape: NonEmptyStringSchema(TEXT_LIMITS.label),
+    color: z.string().min(1),
+    state: z.string().min(1).optional(),
+  }),
+]);
+
+/**
+ * Mirror of the renderer-side bot template entry. `avatarUi` holds the avatar
+ * picker state captured with the bot: the chosen avatar object plus the
+ * picker's shape/color indexes — numbers, deliberately not the contract
+ * `Avatar` pool id, because templates keep their visual snapshot self-contained.
  */
 export const TemplateExportSchema = z.object({
   name: NonEmptyStringSchema(TEXT_LIMITS.name),
@@ -47,9 +64,9 @@ export const TemplateExportSchema = z.object({
     name: NonEmptyStringSchema(TEXT_LIMITS.name),
     instructions: z.string().max(TEXT_LIMITS.instructions),
     avatarUi: z.object({
-      avatar: NonEmptyStringSchema(TEXT_LIMITS.label),
+      avatar: TemplateAvatarSchema,
       shape: z.number().int().min(0),
-      color: NonEmptyStringSchema(TEXT_LIMITS.label),
+      color: z.number().int().min(0),
     }),
   }),
 });
