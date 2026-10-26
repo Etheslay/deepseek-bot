@@ -55,7 +55,7 @@
 | permission.approval.list / decide | v0.3 人类读取精确动作/批准或拒绝 | 列表默认 pending；决定必须匹配 approvalId、expectedActionDigest、代次、期限；scope 默认 once，session 可指定 maxUses/ttlMinutes；一次消费 |
 | permission.audit.list | v0.3 人类按 botId、afterSequence 查询追加式审计 | 默认最多 50，最高 100；模型不能写入/删除或调用控制方法 |
 
-`permission.*` 是受信 Host 控制面，绝不注册为模型工具。设置页调用 `permission.policy.list` / `permission.policy.set` 与 `permission.grant.list` / `permission.grant.revoke`。聊天授权卡调用 `permission.approval.list` / `permission.approval.decide`。真实 Harness 调用方仍未接线。受信进程内 `ToolCaller.botId/sessionId` 独立绑定身份，不能从不透明 caller.id 解析，也不能接受模型参数中的身份。D16 网关在 schema 校验后授权，未安装检查器时默认拒绝，执行前再次同步验证。详细作用域与迁移边界见 [PERMISSIONS.md](PERMISSIONS.md)。
+`permission.*` 是受信 Host 控制面，绝不注册为模型工具。设置页调用 `permission.policy.list` / `permission.policy.set` 与 `permission.grant.list` / `permission.grant.revoke`。聊天授权卡调用 `permission.approval.list` / `permission.approval.decide`。本轮应用工具通过每轮令牌认证的 Host 内部 loopback 通道调用；物理 Harness 会话从登记表绑定稳定的 `ToolCaller.botId/sessionId`，不从不透明 caller.id 解析，也不接受模型参数中的身份。通道不是桌面公开契约，不增加方法或迁移，协议仍为 0.3。公开 `tool.invoke.callerBotId` 不构成可信授权身份。D16 网关在 schema 校验后授权，未安装检查器时默认拒绝，执行前再次同步验证。详细作用域与迁移边界见 [PERMISSIONS.md](PERMISSIONS.md)。
 
 ## 4. 事件
 

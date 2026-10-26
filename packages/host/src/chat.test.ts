@@ -3,7 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
+import type { AppApproval } from "@deepseek-bot/contracts";
 import { createBot } from "@deepseek-bot/storage";
 import { createHost, type DeepSeekBotHost } from "./host.js";
 
@@ -22,13 +23,17 @@ afterAll(async () => {
   }
 });
 
-async function hostWithBot(): Promise<{ host: DeepSeekBotHost; botId: string }> {
+async function hostWithBot(
+  scenario = "ok",
+  resolveApiKey: () => Promise<string> = async () => "sk-test-only",
+): Promise<{ host: DeepSeekBotHost; botId: string }> {
   const root = mkdtempSync(join(tmpdir(), "dsb-chat-runtime-"));
   roots.push(root);
   const host = await createHost({
     dataRoot: root,
-    resolveApiKey: async () => "sk-test-only",
+    resolveApiKey,
     dshBin: fakeHarness,
+    childEnv: (parent) => ({ ...parent, FAKE_SCENARIO: scenario }),
   });
   hosts.push(host);
   const now = host.db.now().toISOString();
@@ -83,6 +88,72 @@ async function hostWithBot(): Promise<{ host: DeepSeekBotHost; botId: string }> 
 }
 
 describe("chat runtime", () => {
+  it("keeps an application tool call waiting for approval and returns its actual result to Harness", async () => {
+    const { host, botId } = await hostWithBot("app-tool");
+    const sent = host.handleMethod("chat.send", { botId, text: "create group" });
+    let approvals: AppApproval[] = [];
+    await vi.waitFor(async () => {
+      ({ approvals } = (await host.handleMethod("permission.approval.list", { botId })) as {
+        approvals: AppApproval[];
+      });
+      expect(approvals).toHaveLength(1);
+    });
+    expect(await host.handleMethod("group.list", {})).toEqual({ groups: [] });
+    const approval = approvals[0]!;
+    expect(approval.sessionId).toBe(`chat:${botId}`);
+    await host.handleMethod("permission.approval.decide", {
+      approvalId: approval.id,
+      expectedActionDigest: approval.actionDigest,
+      decision: "approved",
+      scope: "once",
+    });
+    expect(await sent).toMatchObject({ text: expect.stringContaining('"name":"from Harness"') });
+    expect(
+      ((await host.handleMethod("group.list", {})) as { groups: unknown[] }).groups,
+    ).toHaveLength(1);
+  });
+  it("cancels a pending application tool without leaving an approval or write", async () => {
+    const { host, botId } = await hostWithBot("app-tool");
+    const sent = host.handleMethod("chat.send", { botId, text: "cancel this write" });
+    const cancelled = expect(sent).rejects.toMatchObject({ code: "CANCELLED" });
+    await vi.waitFor(async () =>
+      expect(
+        (
+          (await host.handleMethod("permission.approval.list", { botId })) as {
+            approvals: unknown[];
+          }
+        ).approvals,
+      ).toHaveLength(1),
+    );
+    expect(await host.handleMethod("chat.cancel", { sessionId: `chat:${botId}` })).toEqual({
+      cancelled: true,
+    });
+    await cancelled;
+    expect(await host.handleMethod("permission.approval.list", { botId })).toEqual({
+      approvals: [],
+    });
+    expect(await host.handleMethod("group.list", {})).toEqual({ groups: [] });
+  });
+  it("can cancel while credential resolution is still pending", async () => {
+    let release!: (value: string) => void;
+    const credential = new Promise<string>((resolve) => {
+      release = resolve;
+    });
+    const { host, botId } = await hostWithBot("ok", () => credential);
+    let failure: unknown;
+    const sent = host
+      .handleMethod("chat.send", { botId, text: "cancel before start" })
+      .catch((error) => {
+        failure = error;
+      });
+    await host.handleMethod("chat.cancel", { sessionId: `chat:${botId}` });
+    try {
+      await vi.waitFor(() => expect(failure).toMatchObject({ code: "CANCELLED" }));
+    } finally {
+      release("unused");
+      await sent;
+    }
+  });
   it("sends a turn through the harness and persists both sides", async () => {
     const { host, botId } = await hostWithBot();
     const sent = (await host.handleMethod("chat.send", {
@@ -110,12 +181,7 @@ describe("chat runtime", () => {
     const history = (await host.handleMethod("chat.history", { botId, limit: 10 })) as {
       messages: Array<{ role: string; text: string }>;
     };
-    expect(history.messages.map((m) => m.role)).toEqual([
-      "user",
-      "assistant",
-      "user",
-      "assistant",
-    ]);
+    expect(history.messages.map((m) => m.role)).toEqual(["user", "assistant", "user", "assistant"]);
   });
 
   it("rejects unknown bots and reports cancel state", async () => {
@@ -129,4 +195,3 @@ describe("chat runtime", () => {
     expect(cancelled.cancelled).toBe(false);
   });
 });
-

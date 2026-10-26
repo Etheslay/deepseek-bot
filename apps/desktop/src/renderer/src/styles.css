@@ -6246,6 +6246,17 @@ select option {
   margin-bottom: 8px;
 }
 
+.permission-params {
+  max-height: 240px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 12px;
+}
+
 .choice-options {
   display: flex;
   flex-direction: column;

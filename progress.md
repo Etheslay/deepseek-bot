@@ -171,3 +171,11 @@
 - 实测（Windows 11 x64 + Node v24.16.0 + pnpm 11.28.5）：desktop **21 文件 / 197 用例通过**（新增 18 例）、desktop typecheck exit 0、contracts **6 文件 / 81 用例通过**、根 `pnpm run lint` exit 0。
 - 未验证：真实 Host 端到端（技能是否被模型遵从需真实 API 手测）、设置页与表单的键盘/读屏手测、CI run 细节（本机无 gh CLI）、截图证据。
 - 未做：工作流模板导入导出、技能历史回退、`capabilities` 强制（归 D16）、Host 持久化与模型侧注入（等 SPRINTS §8 待拍板 #1 与 A 线）。
+
+## 2026-10-26：D16 真实聊天应用工具授权闭环
+
+- 已核实 PR #47 后端、#49 设置页、#51 聊天卡、#50 TTL 测试修复、#48 技能库均已合入。新分支 `feature/harness-tool-gateway` 基线 `2ecb2f9`。
+- 八个应用读写工具经离线插件接入钉扎 Harness，使用每轮令牌认证的内部 loopback 通道；Host 登记可信 bot/稳定逻辑会话，原调用等待精确审批后继续。同 call ID 去重、并发 bot 隔离、取消/断连/关闭清理已覆盖。
+- 审批卡展示精确参数，旧 `grant.create` 按钮移除；插件构建与准备纳入链路，拒绝目录链接写出 profile。无新公开契约、迁移、依赖或 lockfile 改动。
+- 最终 lint/typecheck/test、Host/桥接包/desktop build、diff check 通过；全仓 794 通过、1 跳过。真实 Electron + 生产 Host + 钉扎 Harness + 本地受控模型完成仅本次授权闭环，截图和实际命令见 `docs/reports/D16-harness-tools-report.md`。
+- 本片通过 `feature/harness-tool-gateway` 交付，待真人自审与 PR 合入。付费模型、远程 CI、安装包、`ask_user` / `web_search` 真实聊天接线及原生聊天 D08 审批未验收；后续按提问 → 搜索 → D18 的顺序推进。Etheslay 最新提交的真人自审留空。
