@@ -29,6 +29,9 @@ const host = await createHost({
   dataRoot: resolveDataRoot(),
   resolveApiKey: (credentialRef) => credentialChannel.resolve(credentialRef),
   onMissed: (notices) => missedChannel.notify(notices),
+  ...(process.env.DEEPSEEK_BOT_SEARXNG_URL !== undefined
+    ? { webSearch: { endpoint: process.env.DEEPSEEK_BOT_SEARXNG_URL } }
+    : {}),
 });
 const controller = startStdioHost({
   host,

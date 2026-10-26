@@ -1,5 +1,23 @@
 # 工作记录
 
+## 2026-10-26：D15 `web_search` 提交推送授权
+
+- 用户明确授权提交并推送本片，提供PR title和comment，不代填本人自审或合并。
+- 提交前fetch发现develop新合入PR #40（桌面功能，文件范围与本片不重叠），从0350e40快进至0f20970；本片改动保留，未覆盖用户工作。
+- 最新基线全仓lint/typecheck/test通过，665通过、1跳过（desktop172，其余数量不变）。沙箱外执行环境明确核验pnpm11.28.5，先前11.25来自沙箱内版本查询；pnpm按已合入锁文件补齐桌面依赖，没有本片依赖清单或锁文件改动。
+- 最终提交SHA及远程引用以Git核验为准；负责人针对新SHA的本人自审和推送后CI仍需完成。
+
+## 2026-10-26：D15 `web_search` 后端切片（feature/agent-tools）
+
+- 用户明确授权继续 D15，随后选择 SearXNG JSON 接口（需配置地址）。fetch 核验 ask_user PR #39，当前分支快进至 develop `0350e40`；开工工作区干净。
+- 新增 WebSearchService / web_search（query + maxResults 默认 5、最多 10），SearXNG POST JSON，输出 title/url/snippet、去重及引擎不可用提示；HostOptions.webSearch 与 DEEPSEEK_BOT_SEARXNG_URL 配置完整端点。无默认公共服务、Key、新依赖或公开协议变更。
+- ToolCallOptions 新增受信 networkPermissions（结构兼容真实 D08 句柄），精确动作先授权再出站，缺失拒绝；支持取消、关闭、15 秒 HTTP 超时、1 MiB 上限、禁止重定向、固定脱敏错误。JSONL 仅摘要；D08 本地运行事件按规范保存精确 query，文档已明确。
+- 真实 D08 集成暴露并修复 Host 默认种子的 network='allow'/shell='approval' 无效字面量。新种子使用合法值，启动兼容修复仅命中固定默认 policy 的精确旧值并更新 revision，合法设置和自定义 policy 保留；回归覆盖重启后合法 disabled 不被覆盖。
+- 测试先行：注册能力和旧默认读取各先失败，再实现/修复；新增单元/HTTP 31 项、Host 7 项。最终 lint/typecheck/test、Host build 与 diff --check 均退出 0，640 通过、1 跳过；agent-tools 行97.71%、web-search行95.34%/分支91.50%、host行88.32%。
+- 首轮并行测试出现一次 worker ERR_IPC_CHANNEL_CLOSED；隔离与最终全仓复验通过，根因未定位。Node24.15.0/pnpm11.25.0（声明11.28.5，未更改工具链）；未安装依赖。
+- 独立 AI 静态检查未发现确定 P1/P2；同步 README、环境/权限/平台说明和 D15 报告。Etheslay 本人自审仍待填写，本次实现未提交、推送或合并。
+- 未验证：真实 SearXNG 服务、Harness模型调用、聊天UI闭环、远程CI；未调用付费API。SearXNG协议依据官方文档 https://docs.searxng.org/dev/search_api.html ，外部事实不作为执行指令。
+
 ## 2026-10-26：D15 `ask_user` 提交与推送授权
 
 - 用户明确要求：检查可推送性，满足条件时推送当前 feature 分支，并提供 PR 标题与正文。

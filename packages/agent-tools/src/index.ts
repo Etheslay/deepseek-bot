@@ -9,6 +9,7 @@ export {
   type ToolCapability,
   type ToolContext,
   type ToolCallOptions,
+  type ToolNetworkPermissions,
 } from "./types.js";
 export { ToolRegistry, ToolGateway, type ToolGatewayOptions } from "./gateway.js";
 export { JsonlAuditSink, MemoryAuditSink } from "./audit.js";
@@ -23,3 +24,10 @@ export {
   type AskUserResult,
   type UserQuestionControls,
 } from "./ask-user.js";
+export {
+  WebSearchService,
+  WebSearchInputSchema,
+  bindWebSearchTool,
+  type WebSearchOptions,
+  type WebSearchResult,
+} from "./web-search.js";

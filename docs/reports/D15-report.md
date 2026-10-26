@@ -1,10 +1,10 @@
 # D15 工具网关实现报告
 
-更新日期：2026-10-26（Asia/Shanghai）。任务：D15 `feature/agent-tools`（负责人 Etheslay）。读层、写层分别经 PR #37、#38 合入 develop；本切片将分支快进至最新 develop `d4a3f35` 后继续实现 `ask_user` 后端，目标 develop。依赖 D08、D12 均已合入。
+更新日期：2026-10-26（Asia/Shanghai）。任务：D15 `feature/agent-tools`（负责人 Etheslay）。读层、写层、`ask_user` 后端分别经 PR #37、#38、#39 合入 develop；本切片从 `0350e40` 继续实现 `web_search` 后端，提交前同步 PR #40 的 develop `0f20970`，目标 develop。依赖 D08、D12 均已合入。
 
 ## 1. 交付内容
 
-分片交付：**读层**（提交 3745285，PR #37 已合入）、**写层**（提交 12d163f，PR #38 已合入）与 **`ask_user` 后端**（本切片）。网关能力落实在 [packages/agent-tools/](../../packages/agent-tools/README.md)，零新增外部依赖（zod 为工作区已有）。
+分片交付：**读层**（提交 3745285，PR #37 已合入）、**写层**（提交 12d163f，PR #38 已合入）、**`ask_user` 后端**（提交 0bef218，PR #39 已合入）与 **`web_search` 后端**（本切片）。网关能力落实在 [packages/agent-tools/](../../packages/agent-tools/README.md)，零新增外部依赖（zod 为工作区已有）。
 
 ### 1.1 读层（已合入）
 
@@ -24,7 +24,7 @@ FR-12 聊天驱动创建（创建分组/bot；创建前可预览，创建后可�
 | 工具能力（agent-tools） | `create_bot_draft`（纯校验回显草案，零契约调用——不落库）、`create_group`、`create_bots_batch`、`revoke_batch`；工具 schema 为契约请求的 strict 镜像（模型笔误在网关层即拒），dispatch 内契约校验仍是权威。`list_groups` 读工具从空集占位改为转发 `group.list` |
 | host 装配 | 四个新方法处理器（batchCreate 含 defaults 回退与缺省拒绝、revoke 编排）；写层能力注册进网关（同一审计通道）；`bot.create`/`bot.update` 透传 avatar/groupId 并校验目标组存在且未归档 |
 
-### 1.3 `ask_user` 后端（本切片）
+### 1.3 `ask_user` 后端（PR #39 已合入）
 
 - 注册交互能力 `ask_user`，问题 + 2–4 个 A–D 唯一选项 + `allowOther`，严格校验；默认允许其他文本。返回的 Promise 等待人类回答，答案为 `{ requestId, optionId?, text }`，不改变授权。
 - 每个 Host 持有内存协调器。`host.userQuestions` 只向受信进程内调用方暴露 `listPending(callerId?)` / `answer(requestId, callerId, answer)` / `cancel(requestId, callerId)`；读取返回独立快照，匹配原调用方，成功答案单次消费。答案/取消入口不注册为模型能力，也不进入 CONTRACTS 或 stdio。
@@ -32,7 +32,17 @@ FR-12 聊天驱动创建（创建分组/bot；创建前可预览，创建后可�
 - 问题与答案只留内存；网关沿用参数/结果摘要审计，失败使用固定消息，不记录问题/答案原文。无新增依赖、数据库迁移或协议版本变更。
 - 真正的聊天调用、卡片显示与答案回写会话仍待后续接线；`ask_user` 的存在不代表完整聊天闭环通过。
 
-### 1.4 与平台文档的对应
+### 1.4 `web_search` 后端（本切片）
+
+- 用户选择 SearXNG 官方 JSON API；HostOptions.webSearch 或 Host 启动环境变量 `DEEPSEEK_BOT_SEARXNG_URL` 配置完整端点，不内置随机公共实例、不使用 Key 或付费服务。API 支持 POST 表单及 JSON，JSON 格式未启用时可能返回 403（[官方文档](https://docs.searxng.org/dev/search_api.html)）。
+- 输入 query（1–512 字符）与 maxResults（1–10，默认 5）；输出 title/url/snippet 与部分引擎不可用提示，HTTP(S) 无凭据 URL 去重，标题/摘要去标签并限长，不抓取结果网页。
+- 网关保留既有 grant 检查，额外要求受信调用选项 `networkPermissions`（结构兼容 D08 NodePermissionHandle），缺失即拒绝；HTTP 前授权精确 endpoint、POST、query、maxResults 和固定参数。真实 D08 allow/disabled/approval-required 三条路径经临时 SQLite + 引擎 + 本地 HTTP 验证，审批前没有出站请求。
+- 端点仅 HTTPS 或 HTTP 回环，无凭据/query/fragment；HTTP 超时默认 15 秒，响应限 1 MiB，禁止重定向和自动重试。调用取消与 Host 退出中止权限等待/活动 HTTP，迟到授权不发请求；HTTP/JSON/权限失败均转换为固定脱敏错误。
+- 网关 JSONL 仅保留摘要；**D08 tool.requested 运行事件按已有规范保存精确 query/参数用于审批**。不将搜索结果当作指令、权限或可信 HTML。
+- 无依赖、锁文件、公开协议或 DDL 变化。联调发现并修复 Host 默认策略旧字面量（network `allow`→`allowed`、shell `approval`→`approval-required`）；启动时仅针对固定默认 policy ID 和这两个精确旧值修复并更新 revision，保留合法用户设置和自定义 policy。该项属于既有默认数据兼容修复，需负责人自审同步影响。
+- 公共/本地真实 SearXNG 服务地址尚未由用户配置，外部实例连通性与完整模型聊天闭环未验证；控制 HTTP 测试不替代该结论。D16 三层授权仍后续实现。
+
+### 1.5 与平台文档的对应
 
 AGENT_PLATFORM §4 写（应用）层的本切片：`create_group`（=工具 create_group）、批量创建（=工具 create_bots_batch，带 batchId、一键撤销）、创建草案（=工具 create_bot_draft）。§5 表列的 `assign_bot_group`/`update_bot`/`create_workflow`/`add_node`/`add_edge` 与 `batch.created` 事件**未在本片实现**（见 §5 未做项）；grant/审批约束按计划由 D16 在网关 grant 检查点接入。
 
@@ -45,7 +55,18 @@ AGENT_PLATFORM §4 写（应用）层的本切片：`create_group`（=工具 cre
 
 ## 3. 测试与覆盖率
 
-以下先保留写层交付时的证据；本次 `ask_user` 切片的独立验证记录见下方追加段。
+以下保留各历史切片证据；本次 `web_search` 验证见最新追加段。
+
+### `web_search` 验证（2026-10-26，最新切片）
+
+- 基线 `0350e40`，工作区开工前干净；同步后 agent-tools 34 通过，host 30 通过、1 跳过。新增 Host 注册测试先因缺少 `web_search` 失败，再实现能力；默认策略读取回归先因旧字面量契约不符失败，精确修复后通过。
+- 新增搜索单元/受控 HTTP 测试 31 项、Host 集成与默认数据兼容测试 7 项。覆盖 POST 精确参数、许可先于出站、允许/禁用/真实审批、配置/模型参数校验、数量/去重/不安全 URL、HTTP/JSON/429/重定向/大响应/慢响应、取消/关闭、摘要审计与重启兼容。没有向任意公共搜索实例发验证请求。
+- 最终 `pnpm lint`、`pnpm typecheck`、`pnpm test`、`pnpm --filter @deepseek-bot/host build`、`git diff --check` 全部退出 0。全仓测试 **640 通过、1 跳过**：desktop 147、shared 6、contracts 71、storage 124、agent-tools 65、runtime 128、harness-adapter 52、harness-bridge 10、host 37 通过 + 1 跳过。
+- 最终覆盖率：agent-tools 行 **97.71%**、分支 **93.60%**，web-search.ts 行 **95.34%**、分支 **91.50%**；host 行 **88.32%**、分支 **80.42%**；既有阈值未变且通过。Host 构建产物位于已忽略的 dist/main.js。
+- 初轮实测为 Windows、Node 24.15.0，执行时间 11:12–11:25（Asia/Shanghai）。此前 pnpm 11.25.0 取自沙箱内版本查询；提交前已在实际沙箱外执行环境确认 pnpm 为 **11.28.5**，与声明一致。首轮同时运行两包测试与类型检查时 agent-tools 出现 ERR_IPC_CHANNEL_CLOSED；隔离新增 31 项、全包 65 项及最终全仓回归均通过，未定位异常根因，不宣称已修复测试运行器。
+- 独立 AI 静态差异检查未发现有证据的 P1/P2，未替代 Etheslay 自审。实现提交 SHA 以 Git 历史和 PR 为准；推送后 CI 仍需确认。
+- 用户授权提交推送后，先快进同步 PR #40（develop `0f20970`，桌面范围无本片文件冲突），再运行全仓 lint/typecheck/test，均退出 0；**665 通过、1 跳过**，desktop 从147增至172，其余包数量及本片覆盖率不变。执行环境 Windows、Node24.15.0、pnpm11.28.5，时间11:29–11:30（Asia/Shanghai）；pnpm 按已合入锁文件补齐桌面依赖，未产生本片 manifest/lockfile 差异。
+- 未验证：用户真实 SearXNG 服务地址连通性、真实 Harness/模型调用、桌面聊天搜索闭环、远程 CI；没有运行付费 API，既有真实 API 冒烟按未启用开关跳过。
 
 根目录 `pnpm lint` / `pnpm typecheck` / `pnpm test` 全绿。用例数：desktop 147、shared 6、contracts 71（+7：新实体/批量/组/撤销/头像分配，含存量快照兼容回归）、storage 124（+10：组/头像列/台账/事务化批次，含回滚与重放）、agent-tools 17（+9：草案不落库、转发、strict 拒绝、审计）、runtime 128、harness-adapter 52、harness-bridge 10、host 26+1 skipped（+7：新处理器全链路，经真实 dispatcher 含契约校验）。
 
@@ -76,7 +97,7 @@ AGENT_PLATFORM §4 写（应用）层的本切片：`create_group`（=工具 cre
 - **未实现的写工具**：`assign_bot_group`（=bot.update patch 已可改组，未包成独立工具）、`update_bot`、`create_workflow`/`add_node`/`add_edge`；读工具 `get_workflow` 需新增 `workflow.get` 契约方法，顺延。
 - **`batch.created` 事件**：见 §2，需事件模型扩展后另立小 PR。
 - **未验证**：真实 Harness 进程联动、真实 API 请求、聊天端到端（模型发起工具调用）均未执行；本报告数值为本地 Windows 11 x64 + Node 24 + pnpm 实测，CI 结果以分支推送后的真实运行为准。
-- **D15 剩余切片**：内置 `web_search` 尚未实现；`ask_user` 当前完成后端等待/回答能力，未完成真实聊天接线。
+- **D15 剩余集成**：`ask_user` 与 `web_search` 已具备后端能力；真实 Harness/聊天调用、桌面卡片与搜索呈现仍待接线，不能据此宣称 D15 完整产品验收通过。
 - 自审记录按规范留空待负责人 Etheslay 填写；PR 合并由本人确认。
 
 ## 6. 自审记录（由负责人填写）

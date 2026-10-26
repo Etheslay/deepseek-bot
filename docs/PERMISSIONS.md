@@ -27,8 +27,11 @@
 | `exec.shell` | 执行本地命令 | 高 | 每次询问 |
 | `screen.capture` | 窗口截图 / OCR | 高 | 从不允许（需显式开启） |
 | `connector.invoke` | 调用连接器 / MCP 工具 | 中 | 每次询问 |
+| `web_search` / D08 `network.request` | 向受信配置的 SearXNG 端点提交搜索 | 中 | 按 D08 网络策略；缺少受信权限句柄拒绝 |
 
 能力清单与工具签名一一对应，新增能力必须同时更新本文、契约与审计字段。
+
+D15 的 `web_search` 后端复用现有 ToolPolicy.network 及 D08 精确动作授权，不新增公开契约方法。工具模型参数不能指定服务地址或传入权限对象；受信调用方经 ToolCallOptions.networkPermissions 绑定当前节点的 D08 句柄。禁止网络时不发请求，要求审批时先等真实审批。网关 JSONL 存摘要；D08 本地 tool.requested 事件按已有规范保存精确搜索参数用于审批。D16 全局 capability/grant 尚未落地，不将当前网关默认放行桩当成网络授权。
 
 ## 3. 三档策略
 

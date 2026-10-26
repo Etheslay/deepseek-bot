@@ -19,7 +19,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { methodContract, type Method } from "@deepseek-bot/contracts";
+import { methodContract, type Method, type ToolPolicy } from "@deepseek-bot/contracts";
 import {
   DshSdkExecutor,
   SessionRegistry,
@@ -39,6 +39,7 @@ import {
 } from "@deepseek-bot/storage";
 import { buildHandlers, type HostContext } from "./handlers.js";
 import { AskUserCoordinator, JsonlAuditSink, ToolGateway, ToolRegistry, bindAskUserTool, bindReadTools, bindWriteTools, type UserQuestionControls } from "@deepseek-bot/agent-tools";
+import { WebSearchService, bindWebSearchTool, type WebSearchOptions } from "@deepseek-bot/agent-tools";
 
 export interface HostOptions {
   /** Data root (storage layout: database, harness home, artifacts, backups). */
@@ -61,6 +62,8 @@ export interface HostOptions {
   };
   /** Skip-and-notify hook (FR-08): surfaced to the UI by the caller. */
   readonly onMissed?: (notices: ReadonlyArray<ScheduleMissNotice>) => void;
+  /** Trusted SearXNG configuration. No key, default public endpoint or automatic requests. */
+  readonly webSearch?: WebSearchOptions;
 }
 
 export interface DeepSeekBotHost {
@@ -127,15 +130,28 @@ function seedDefaults(db: OpenedDatabase, layout: DataLayout): void {
       randomUUID(),
       JSON.stringify({
         filesystem: { enabled: true, operations: ["read", "write"] },
-        shell: { mode: "approval" },
-        network: { mode: "allow" },
+        shell: { mode: "approval-required" },
+        network: { mode: "allowed" },
         mcp: { enabled: false, requireApproval: true, servers: [] },
-      }),
+      } satisfies Pick<ToolPolicy, "filesystem" | "shell" | "network" | "mcp">),
       now,
       now,
     );
+  // D12 seeded two invalid legacy literals. Repair only this known default
+  // record and those exact values; valid user settings and custom policies stay intact.
+  for (const [path, legacy, current] of [
+    ["$.network.mode", "allow", "allowed"],
+    ["$.shell.mode", "approval", "approval-required"],
+  ] as const) {
+    db.raw.prepare(
+      "UPDATE tool_policies SET policy_json = json_set(policy_json, ?, ?), revision = ?, updated_at = ? " +
+      "WHERE id = ? AND CASE WHEN json_valid(policy_json) THEN json_extract(policy_json, ?) END = ?;",
+    ).run(path, current, randomUUID(), now, DEFAULT_TOOL_POLICY_ID, path, legacy);
+  }
 }
 export async function createHost(options: HostOptions): Promise<DeepSeekBotHost> {
+  // Validate configuration before allocating the database or approval server.
+  const webSearch = new WebSearchService(options.webSearch);
   const layout = ensureDataLayout(options.dataRoot);
   const db = openDatabase(layout.dbFile);
   seedDefaults(db, layout);
@@ -278,6 +294,7 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
     ...bindReadTools((method, payload) => dispatch(method as Method, payload)),
     ...bindWriteTools((method, payload) => dispatch(method as Method, payload)),
     bindAskUserTool(questions),
+    bindWebSearchTool(webSearch),
   ]) {
     agentRegistry.register(capability);
   }
@@ -307,6 +324,7 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
     async shutdown(): Promise<void> {
       closed = true;
       questions.close();
+      webSearch.close();
       scheduler.stop();
       await bridge.close();
       db.close();

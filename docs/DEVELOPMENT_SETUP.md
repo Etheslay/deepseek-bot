@@ -92,6 +92,19 @@ apps/desktop/             # Electron 桌面壳（D02 起存在）
 
 ## Windows 注意事项
 
+### D15 SearXNG 搜索服务配置
+
+独立 Host 在启动时读取 `DEEPSEEK_BOT_SEARXNG_URL`；桌面 main 启动 Host 时会继承环境变量。例如使用自行配置、已启用 JSON 的本地 SearXNG：
+
+```powershell
+$env:DEEPSEEK_BOT_SEARXNG_URL = 'http://127.0.0.1:8080/search'
+pnpm --filter @deepseek-bot/desktop dev
+```
+
+地址必须为完整搜索端点、HTTPS 或 HTTP 回环地址，不能含凭据、查询串或 fragment。远程 SearXNG 可使用 HTTPS；未设置时 `web_search` 明确报未配置，不选取隐式公共实例。配置地址本身不授权搜索：每次调用仍需受信宿主提供真实 D08 网络权限句柄与取消信号。当前完成后端切片，桌面真实聊天尚未调用此能力，设置环境变量不代表 UI 已有可用搜索入口。搜索查询会发给该服务及其上游引擎，服务须启用 `json` 格式，见 [SearXNG 官方 API](https://docs.searxng.org/dev/search_api.html) 与 [agent-tools 接口说明](../packages/agent-tools/README.md)。
+
+### 通用事项
+
 - 使用 PowerShell 或 Windows Terminal；路径使用仓库根，避免混入未跟踪的 `handoff/`。
 - Corepack 需要对本机 Node 安装目录有写权限；若 `corepack enable` 失败，以管理员权限重试或记录阻塞，不要静默换 pnpm 版本。
 - 不要提交 `node_modules/`、`dist/`、`coverage/`、`.env`；已由根 `.gitignore` 覆盖。
