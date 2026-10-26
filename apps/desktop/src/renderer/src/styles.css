@@ -6115,7 +6115,15 @@ select option {
   color: var(--muted);
 }
 
-.chat-md a { color: var(--md-link, #6ea8ff); text-decoration: underline; }
+.chat-md a { color: var(--md-link, #6ea8ff); text-decoration: none; }
+/* Chat body text never carries underline decorations (user preference, 2026-10-25). */
+.chat-md p,
+.chat-md li,
+.chat-md strong,
+.chat-md em,
+.chat-md span:not(.mention-chip) {
+  text-decoration: none !important;
+}
 .chat-md a:hover { opacity: 0.85; }
 
 .chat-md code:not(.hljs) {
