@@ -16,6 +16,7 @@ import {
   type ToolCaller,
   type ToolCapability,
   type ToolContext,
+  type ToolCallOptions,
 } from "./types.js";
 
 function digest(value: unknown): string {
@@ -76,6 +77,7 @@ export class ToolGateway {
     caller: ToolCaller,
     tool: string,
     params: unknown,
+    options: ToolCallOptions = {},
   ): Promise<unknown> {
     const now = this.options.now ?? (() => new Date());
     const capability = this.lookup(tool);
@@ -100,7 +102,10 @@ export class ToolGateway {
       await this.audit(caller.id, tool, params, undefined, "rejected", "INVALID_INPUT", "parameters failed schema validation", now, { issues });
       throw new ToolRejectionError("INVALID_INPUT", `parameters for '${tool}' failed validation`, { issues });
     }
-    const context: ToolContext = { caller };
+    const context: ToolContext = {
+      caller,
+      ...(options.signal !== undefined ? { signal: options.signal } : {}),
+    };
     try {
       const result = await capability.handler(parsed.data, context);
       await this.audit(caller.id, tool, parsed.data, result, "ok", undefined, undefined, now);

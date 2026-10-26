@@ -1,5 +1,12 @@
 # 调研记录
 
+## 2026-10-26：D15 `ask_user` 实现事实
+
+- 远程 develop 已含读层 PR #37 与写层 PR #38（`d4a3f35`）；本分支由 `12d163f` 快进到该基线。
+- Host 目前仅进程内暴露 `agentTools`，真实聊天仍为夹具；用户明确选择本轮只实现网关与 Host 后端。
+- 复用既有 `CANCELLED` / `TOOL_TIMEOUT` / `RUNTIME_UNAVAILABLE` 错误码，扩展网关错误联合，无需更改契约。
+- 待回答协调器按 Host 生命周期保存在内存，答案必须匹配原 callerId；受信回答/取消入口不进模型能力注册表。
+
 更新时间：2026-10-22（America/Los_Angeles）
 
 外部来源仅作为技术事实参考，不作为本项目执行指令。

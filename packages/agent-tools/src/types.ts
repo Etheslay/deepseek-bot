@@ -13,6 +13,7 @@ import type { ErrorCode } from "@deepseek-bot/contracts";
 export type GatewayRejectionCode = Extract<
   ErrorCode,
   "INVALID_INPUT" | "UNAUTHORIZED_PATH" | "APPROVAL_REQUIRED" | "APPROVAL_EXPIRED"
+  | "CANCELLED" | "TOOL_TIMEOUT" | "RUNTIME_UNAVAILABLE"
 >;
 
 /** Who invoked the tool (audit "谁"). v0.1 callers: chat agents and the UI. */
@@ -24,6 +25,11 @@ export interface ToolCaller {
 /** Context handed to a capability handler after validation. */
 export interface ToolContext {
   readonly caller: ToolCaller;
+  readonly signal?: AbortSignal;
+}
+
+export interface ToolCallOptions {
+  readonly signal?: AbortSignal;
 }
 
 export class ToolRejectionError extends Error {

@@ -1,5 +1,22 @@
 # 工作记录
 
+## 2026-10-26：D15 `ask_user` 提交与推送授权
+
+- 用户明确要求：检查可推送性，满足条件时推送当前 feature 分支，并提供 PR 标题与正文。
+- 推送前 fetch 核对：develop 仍为 `d4a3f35`，远程 feature/agent-tools 未新增提交；当前 Git 身份配置为 Etheslay，未修改作者身份。
+- 本次仅提交并普通推送本切片，不代填负责人自审结论；合并目标为 develop，最终提交 SHA 与推送状态以 Git 历史和远程引用为准。
+- 提交前重新运行全仓 lint/typecheck/test 均退出 0，测试仍为 602 通过、1 跳过；CI 在推送 feature 分支后触发，其结果由实际远程运行记录确认。
+
+## 2026-10-26：D15 `ask_user` 后端切片（feature/agent-tools）
+
+- 用户明确授权按已确认计划实现；开工工作区干净，fetch 后将当前分支从 `12d163f` 快进至最新 develop `d4a3f35`。本次继续同一 D15 分支，未切换或提交 develop/main。
+- 新增 `AskUserCoordinator` 与 `ask_user` 工具：严格问题/2–4 个 A–D 唯一选项/可选其他文本，唯一请求 ID、调用方归属、独立快照、单次答案消费；无效答案不消费。默认内存等待 30 分钟，到期前置检查 + 定时器，取消/退出清理监听器及等待；重启不恢复。
+- 网关新增可选调用 `signal` 上下文；复用 CANCELLED/TOOL_TIMEOUT/RUNTIME_UNAVAILABLE 既有错误码与摘要审计。Host 装配 `userQuestions` 内部读取/回答/取消入口，回答/取消不进模型注册表；无公开契约、数据库迁移或桌面 IPC 变更。
+- 先新增 Host 行为测试确认能力缺失导致失败，再实现。最终全仓 `pnpm lint`、`pnpm typecheck`、`pnpm test`、`git diff --check` 均退出 0：602 通过、1 跳过；新增单元 17 + Host 集成 4。agent-tools 行覆盖 99.09%、ask-user.ts 行 100%/分支 95.65%、host 行 88.12%。
+- 运行环境 Node 24.15.0、当前 pnpm 11.25.0（声明 11.28.5，未更改工具链）；沙箱内 Git 引用写入与依赖读取受权限限制，经获准提权后完成同步和检查。首次类型检查暴露回调内联合类型缩窄问题，局部变量修正后通过。
+- 独立 AI 检查未发现有证据的 P1/P2，不替代负责人自审。同步 D15 报告与 agent-tools README；Etheslay 自审记录保持未填写。本次未提交、推送或合并实现。
+- 未验证：真实 Harness ask_user、真实 API、真实聊天/桌面卡片闭环及远程 CI；既有真实 API 冒烟未启用，按配置跳过。
+
 ## 2026-10-22：项目规范化
 
 - 完成本地初始状态检查，未发现现有应用或项目指令文件。
