@@ -251,3 +251,72 @@ describe("host-backed artifacts (D28 co-edit)", () => {
   });
 });
 
+describe("host-backed vault (D24 leftover)", () => {
+  it("routes backup/restore/describe to the host data.* methods", async () => {
+    const { bridge, calls } = makeBridge({
+      "data.backup": () => ({ backupId: "b1", createdAt: "2026-10-26T00:00:00.000Z", sizeBytes: 10 }),
+      "data.restore": () => ({ restored: true }),
+      "data.describe": () => ({ schemaVersion: "11", counts: { bots: 1 } }),
+    });
+    const service = createHostService(bridge);
+    await service.vault.createBackup();
+    await service.vault.restore("b1");
+    const described = await service.vault.describe();
+    expect(calls.map((call) => call.method)).toEqual([
+      "data.backup",
+      "data.restore",
+      "data.describe",
+    ]);
+    expect(calls[1]!.payload).toEqual({ backupId: "b1" });
+    expect(described).toEqual({ schemaVersion: "11", counts: { bots: 1 } });
+  });
+
+  it("restore surfaces the hostRestarted flag and maps stable errors", async () => {
+    // The mock stands in for the MAIN-process wrapper: after a successful
+    // data.restore it restarts the Host and adds hostRestarted (index.ts).
+    const { bridge } = makeBridge({
+      "data.restore": () => ({ restored: true, hostRestarted: true }),
+    });
+    await expect(createHostService(bridge).vault.restore("b1")).resolves.toEqual({
+      restored: true,
+      hostRestarted: true,
+    });
+
+    const { bridge: failing } = makeBridge({
+      "data.restore": () => {
+        throw Object.assign(new Error("存在进行中的运行"), { code: "INVALID_INPUT" });
+      },
+    });
+    await expect(createHostService(failing).vault.restore("b1")).rejects.toMatchObject({
+      code: "INVALID_INPUT",
+    });
+  });
+
+  it("lists backups through the desktop bridge and tolerates its absence", async () => {
+    const { bridge } = makeBridge({});
+    const service = createHostService(bridge);
+    await expect(service.vault.listBackups()).resolves.toEqual([]);
+
+    const { bridge: withBackups } = makeBridge({});
+    (withBackups as unknown as { backups: { list: () => Promise<unknown[]> } }).backups = {
+      list: async () => [{ backupId: "b1", createdAt: "2026-10-26T00:00:00.000Z", schemaVersion: 11, sizeBytes: 5 }],
+    };
+    const listed = await createHostService(withBackups).vault.listBackups();
+    expect(listed).toHaveLength(1);
+    expect(listed[0]!.backupId).toBe("b1");
+  });
+
+  it("falls back to an in-memory hardware-acceleration answer without the bridge", async () => {
+    const { bridge } = makeBridge({});
+    const service = createHostService(bridge);
+    await expect(service.hardwareAcceleration()).resolves.toEqual({
+      enabled: true,
+      restartRequired: false,
+    });
+    await expect(service.hardwareAcceleration(false)).resolves.toEqual({
+      enabled: false,
+      restartRequired: true,
+    });
+  });
+});
+

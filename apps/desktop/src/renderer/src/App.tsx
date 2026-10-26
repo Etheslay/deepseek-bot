@@ -125,6 +125,17 @@ function pairKeyOf(a: number, b: number): string {
   return a < b ? `${a}|${b}` : `${b}|${a}`;
 }
 
+/** 人类可读的备份体积（D24 保险库分区）。 */
+function formatBackupSize(bytes: number): string {
+  if (bytes < 1024) {
+    return `${bytes} B`;
+  }
+  if (bytes < 1024 * 1024) {
+    return `${(bytes / 1024).toFixed(1)} KB`;
+  }
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 function formatChatTime(t: number): string {
   const d = new Date(t);
   const hh = String(d.getHours()).padStart(2, "0");
@@ -339,6 +350,22 @@ export function App(): JSX.Element {
   }, [groupMenu]);
 
   const [settingsOpen, setSettingsOpen] = useState(false);
+  /** D24 leftover: which settings nav section is active. */
+  const [settingsSection, setSettingsSection] = useState<
+    "general" | "computer" | "vault" | "usage" | "updates"
+  >("general");
+  const [backups, setBackups] = useState<
+    import("../../shared/ipc-channels.js").BackupSummary[] | null
+  >(null);
+  const [backupBusy, setBackupBusy] = useState(false);
+  const [describe, setDescribe] = useState<{
+    schemaVersion: string;
+    counts: Record<string, number>;
+  } | null>(null);
+  const [hwAccel, setHwAccel] = useState<{
+    enabled: boolean;
+    restartRequired: boolean;
+  } | null>(null);
   const [workflowOpen, setWorkflowOpen] = useState(false);
   const [monitorOpen, setMonitorOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -405,12 +432,16 @@ export function App(): JSX.Element {
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
-    // 窗口控制条由主进程 titleBarOverlay 绘制，随主题经白名单 IPC 同步颜色
+    // 窗口控制条由主进程 titleBarOverlay 绘制，随主题经白名单 IPC 同步颜色；
+    // 无 preload 桥的环境（组件级取证页）直接跳过。
     const overlay =
       theme === "light"
         ? { color: "#ffffff", symbolColor: "#1a1a1e" }
         : { color: "#0f0f10", symbolColor: "#ececf1" };
-    void window.deepseekBot.window.setTitleBarOverlay(overlay).catch(() => undefined);
+    const bridge = window.deepseekBot;
+    if (bridge !== undefined && bridge.window !== undefined) {
+      void bridge.window.setTitleBarOverlay(overlay).catch(() => undefined);
+    }
   }, [theme]);
 
   useEffect(() => {
@@ -462,6 +493,58 @@ export function App(): JSX.Element {
       cancelled = true;
     };
   }, [artifactsOpen, selectedBot, bots, desktop, canvas]);
+
+  // D24 leftover: vault/usage/computer sections load their data lazily on open.
+  useEffect(() => {
+    if (!settingsOpen || settingsSection !== "vault") {
+      return;
+    }
+    let cancelled = false;
+    void desktop.vault
+      .listBackups()
+      .then((list) => {
+        if (!cancelled) {
+          setBackups(list);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setBackups([]);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [settingsOpen, settingsSection, desktop]);
+
+  useEffect(() => {
+    if (!settingsOpen || settingsSection !== "usage") {
+      return;
+    }
+    let cancelled = false;
+    void desktop.vault
+      .describe()
+      .then((result) => {
+        if (!cancelled) {
+          setDescribe(result);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setDescribe(null);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [settingsOpen, settingsSection, desktop]);
+
+  useEffect(() => {
+    if (!settingsOpen || settingsSection !== "computer" || hwAccel !== null) {
+      return;
+    }
+    void desktop.hardwareAcceleration().then(setHwAccel).catch(() => undefined);
+  }, [settingsOpen, settingsSection, desktop, hwAccel]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1904,17 +1987,21 @@ const logout = (): void => {
             onClick={(e) => e.stopPropagation()}
           >
             <aside className="settings-nav" aria-label="设置分类">
-              <button type="button" className="settings-nav-item active">
-                <MenuIcon d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1-1.55 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.55-1 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.09a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.09a1.7 1.7 0 0 0 1.55 1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.55 1Z" />
-                通用
-              </button>
-              {["电脑", "保险库", "用量与账单", "更新"].map((label) => (
+              {(
+                [
+                  ["general", "通用"],
+                  ["computer", "电脑"],
+                  ["vault", "保险库"],
+                  ["usage", "用量"],
+                  ["updates", "更新"],
+                ] as const
+              ).map(([key, label]) => (
                 <button
-                  key={label}
+                  key={key}
                   type="button"
-                  className="settings-nav-item disabled"
-                  disabled
-                  title="后续提供"
+                  className={"settings-nav-item" + (settingsSection === key ? " active" : "")}
+                  aria-current={settingsSection === key ? "true" : undefined}
+                  onClick={() => setSettingsSection(key)}
                 >
                   {label}
                 </button>
@@ -1922,7 +2009,17 @@ const logout = (): void => {
             </aside>
             <div className="settings-main">
               <header className="settings-head">
-                <h3>通用</h3>
+                <h3>
+                  {
+                    {
+                      general: "通用",
+                      computer: "电脑",
+                      vault: "保险库",
+                      usage: "用量",
+                      updates: "更新",
+                    }[settingsSection]
+                  }
+                </h3>
                 <button
                   type="button"
                   className="modal-close"
@@ -1933,6 +2030,8 @@ const logout = (): void => {
                 </button>
               </header>
               <div className="settings-body">
+                {settingsSection === "general" && (
+                  <>
                 <div className="settings-section-title">账户</div>
                 <div className="account-card">
                   <span className="account-avatar" aria-hidden="true">
@@ -2092,61 +2191,222 @@ const logout = (): void => {
                     <span className="settings-soon">跟随系统</span>
                   </div>
                 </div>
-                <div className="settings-section-title">关于与更新</div>
-                <div className="settings-card">
-                  <div className="settings-row">
-                    <span>版本</span>
-                    <span className="settings-soon">{version}</span>
-                  </div>
-                  <div className="settings-row">
-                    <span>检查更新</span>
-                    <span className="key-input-wrap">
-                      <span className="update-state">
-                        {updateStatus === null
-                          ? "（GitHub Releases）"
-                          : updateStatus.available
-                            ? `发现新版本 ${updateStatus.version ?? ""}`
-                            : updateStatus.error
-                              ? "暂无可用更新（尚未发布 Release）"
-                              : "已是最新"}
+                  </>
+                )}
+                {settingsSection === "updates" && (
+                  <div className="settings-card">
+                    <div className="settings-row">
+                      <span>版本</span>
+                      <span className="settings-soon">{version}</span>
+                    </div>
+                    <div className="settings-row">
+                      <span>检查更新</span>
+                      <span className="key-input-wrap">
+                        <span className="update-state">
+                          {updateStatus === null
+                            ? "（GitHub Releases）"
+                            : updateStatus.available
+                              ? `发现新版本 ${updateStatus.version ?? ""}`
+                              : updateStatus.error
+                                ? "暂无可用更新（尚未发布 Release）"
+                                : "已是最新"}
+                        </span>
+                        <button
+                          type="button"
+                          className="pill-btn"
+                          onClick={() => {
+                            const bridge = window.deepseekBot;
+                            if (!bridge || !("updates" in bridge)) {
+                              setToast("更新通道需要主进程（打包版可用）");
+                              return;
+                            }
+                            void bridge.updates.check().then(setUpdateStatus).catch(() => {
+                              setToast("检查更新失败（网络或无 Release）");
+                            });
+                          }}
+                        >
+                          检查
+                        </button>
                       </span>
-                      <button
-                        type="button"
-                        className="pill-btn"
-                        onClick={() => {
-                          const bridge = window.deepseekBot;
-                          if (!bridge || !("updates" in bridge)) {
-                            setToast("更新通道需要主进程（打包版可用）");
-                            return;
-                          }
-                          void bridge.updates.check().then(setUpdateStatus).catch(() => {
-                            setToast("检查更新失败（网络或无 Release）");
-                          });
-                        }}
-                      >
-                        检查
-                      </button>
-                    </span>
+                    </div>
                   </div>
-                  <div className="settings-row">
-                    <span>本地用量</span>
-                    <span className="settings-soon">
-                      {bots.length} 个 Bot · {Object.keys(chats).length} 个会话 ·{" "}
-                      {Object.values(chats).reduce((sum, list) => sum + list.length, 0)} 条消息
-                    </span>
+                )}
+                {settingsSection === "usage" && (
+                  <div className="settings-card">
+                    <div className="settings-row">
+                      <span>数据库版本</span>
+                      <span className="settings-soon">{describe?.schemaVersion ?? "…"}</span>
+                    </div>
+                    {(
+                      [
+                        ["bots", "Bot"],
+                        ["workflows", "工作流"],
+                        ["runs", "运行记录"],
+                        ["schedules", "定时任务"],
+                      ] as const
+                    ).map(([key, label]) => (
+                      <div className="settings-row" key={key}>
+                        <span>{label}</span>
+                        <span className="settings-soon">{describe?.counts[key] ?? "…"}</span>
+                      </div>
+                    ))}
+                    <div className="settings-row">
+                      <span>本次启动会话</span>
+                      <span className="settings-soon">
+                        {Object.keys(chats).length} 个会话 ·{" "}
+                        {Object.values(chats).reduce((sum, list) => sum + list.length, 0)} 条消息
+                      </span>
+                    </div>
                   </div>
-                </div>
-                <div className="settings-section-title">系统</div>
-                <div className="settings-card">
-                  <div className="settings-row">
-                    <span>麦克风</span>
-                    <span className="settings-soon">已全部拒绝（安全策略）</span>
+                )}
+                {settingsSection === "vault" && (
+                  <>
+                    <div className="settings-section-title">API Key 状态</div>
+                    <div className="settings-card">
+                      <div className="settings-row">
+                        <span>接入状态</span>
+                        <span className="settings-soon">
+                          {desktop.settings.keyConfigured() ? "已配置（只写不读）" : "未配置"}
+                        </span>
+                      </div>
+                      <div className="settings-row">
+                        <span>保存与测试</span>
+                        <span className="session-meta">在「通用 → 接入」分区完成</span>
+                      </div>
+                    </div>
+                    <div className="settings-section-title">备份与恢复</div>
+                    <div className="settings-card">
+                      <p className="session-meta vault-note" role="note">
+                        备份包含聊天与运行历史，请妥善保管。备份只含数据库，不含产物文件、版本快照与
+                        API Key；恢复后需要重新输入 Key 才能继续对话。
+                      </p>
+                      <div className="settings-row">
+                        <span>创建备份</span>
+                        <span className="key-input-wrap">
+                          <button
+                            type="button"
+                            className="pill-btn"
+                            disabled={backupBusy}
+                            onClick={() => {
+                              setBackupBusy(true);
+                              void desktop.vault
+                                .createBackup()
+                                .then((created) => {
+                                  setToast(`已备份 ${created.backupId.slice(0, 8)}…`);
+                                  return desktop.vault.listBackups();
+                                })
+                                .then(setBackups)
+                                .catch((error: unknown) => {
+                                  setToast(
+                                    `备份失败：${error instanceof Error ? error.message : String(error)}`,
+                                  );
+                                })
+                                .finally(() => setBackupBusy(false));
+                            }}
+                          >
+                            {backupBusy ? "处理中…" : "立即备份"}
+                          </button>
+                        </span>
+                      </div>
+                      <div className="vault-backup-list" aria-label="备份列表">
+                        {backups === null && <div className="sys-line">正在读取…</div>}
+                        {backups !== null && backups.length === 0 && (
+                          <div className="sys-line">还没有备份。</div>
+                        )}
+                        {(backups ?? []).map((backup) => (
+                          <div className="settings-row vault-backup-item" key={backup.backupId}>
+                            <span className="vault-backup-meta">
+                              <span className="tab-title">
+                                {new Date(backup.createdAt).toLocaleString()}
+                              </span>
+                              <span className="session-meta">
+                                schema {backup.schemaVersion} · {formatBackupSize(backup.sizeBytes)}
+                              </span>
+                            </span>
+                            <button
+                              type="button"
+                              className="pill-btn"
+                              disabled={backupBusy}
+                              onClick={() => {
+                                if (
+                                  !window.confirm(
+                                    "恢复会用这份备份覆盖当前数据（当前数据先自动暂存，恢复后应用重载数据并可能要求重新输入 Key）。继续？",
+                                  )
+                                ) {
+                                  return;
+                                }
+                                setBackupBusy(true);
+                                void desktop.vault
+                                  .restore(backup.backupId)
+                                  .then(() => {
+                                    setToast("恢复完成，正在重载数据…");
+                                    window.setTimeout(() => window.location.reload(), 600);
+                                  })
+                                  .catch((error: unknown) => {
+                                    setToast(
+                                      `恢复失败：${error instanceof Error ? error.message : String(error)}`,
+                                    );
+                                    setBackupBusy(false);
+                                  });
+                              }}
+                            >
+                              恢复
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                )}
+                {settingsSection === "computer" && (
+                  <div className="settings-card">
+                    <div className="settings-row">
+                      <span>麦克风</span>
+                      <span className="settings-soon">已全部拒绝（安全策略）</span>
+                    </div>
+                    <div className="settings-row">
+                      <span>硬件加速</span>
+                      <span className="key-input-wrap">
+                        <span className="session-meta">
+                          {hwAccel === null
+                            ? "…"
+                            : hwAccel.enabled
+                              ? "开启（默认）"
+                              : "已关闭，重启应用后生效"}
+                        </span>
+                        <button
+                          type="button"
+                          className="pill-btn"
+                          disabled={hwAccel === null}
+                          onClick={() => {
+                            const target = !(hwAccel?.enabled ?? true);
+                            void desktop
+                              .hardwareAcceleration(target)
+                              .then((status) => {
+                                setHwAccel(status);
+                                setToast(
+                                  status.restartRequired
+                                    ? "已保存，重启应用后生效"
+                                    : "设置未变化",
+                                );
+                              })
+                              .catch((error: unknown) => {
+                                setToast(
+                                  `设置失败：${error instanceof Error ? error.message : String(error)}`,
+                                );
+                              });
+                          }}
+                        >
+                          切换
+                        </button>
+                      </span>
+                    </div>
+                    <div className="settings-row">
+                      <span>通知</span>
+                      <span className="settings-soon">随 D22 系统集成交付</span>
+                    </div>
                   </div>
-                  <div className="settings-row">
-                    <span>硬件加速</span>
-                    <span className="settings-soon">后续提供</span>
-                  </div>
-                </div>
+                )}
               </div>
             </div>
           </div>

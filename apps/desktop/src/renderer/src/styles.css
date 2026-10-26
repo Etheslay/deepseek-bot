@@ -7223,3 +7223,26 @@ select:focus-visible {
     width: min(340px, 42vw);
   }
 }
+
+/* ---------- D24 保险库分区（备份/恢复） ---------- */
+.vault-note {
+  margin: 0 0 8px;
+}
+
+.vault-backup-list {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.vault-backup-item {
+  align-items: center;
+}
+
+.vault-backup-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
