@@ -6,6 +6,7 @@ import { QuestionChatCards } from "./features/questions/question-chat.js";
 import { SearchResultCards } from "./features/search/search-results.js";
 import { MemoryPanel } from "./features/memory/memory-panel.js";
 import { SearchSettings } from "./features/search/search-settings.js";
+import { ConnectorSettings } from "./features/connectors/connector-settings.js";
 import { PermissionsPanel } from "./features/permissions/permissions-panel.js";
 import { BotForm } from "./features/bots/bot-form.js";
 import { CustomSelect } from "./components/custom-select.js";
@@ -1863,6 +1864,7 @@ const logout = (): void => {
                   </div>
                 </div>
                 <SearchSettings />
+                <ConnectorSettings />
                 <div className="settings-section-title">技能（复用与导入导出）</div>
                 <div className="settings-card">
                   <SkillsPanel

@@ -55,7 +55,7 @@ pnpm --filter @deepseek-bot/storage typecheck
 
 ## D16 应用权限仓储
 
-迁移 `0005-permissions-grants` 在保留 0001–0004 SQL 与校验和的基础上新增全局策略/授权表、应用审批表、调用授权票据和仅追加的权限审计。D08 的运行审批继续使用原有 `approvals` 表。
+迁移 `0005-permissions-grants` 在保留 0001–0004 SQL 与校验和的基础上新增全局策略/授权表、应用审批表、调用授权票据和仅追加的权限审计。D08 的运行审批继续使用原有 `approvals` 表。迁移 `0009-connectors` 增加本机连接器目录：名称、默认关闭的启停位，以及可空的 `cred:<uuid>` 引用。该表不保存密文，仓储也不读取凭据 blob。
 
 `repos/permissions.ts` 对多能力请求在同一 SQLite 事务中核对策略、机器人状态、会话、Host generation、期限和次数；全部满足才扣减。一次授权仅服务绑定的审批调用，会话授权默认 5 次/2 小时，永久授权不绑定 generation。扣减发生在工具派发前，处理失败不退款。
 
