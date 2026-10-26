@@ -4,7 +4,7 @@
  * permission.approval.decide. Once / session / permanent follow the contract:
  * per-action capabilities and missing sessions cannot take a longer grant.
  */
-import { useCallback, useEffect, useState, type JSX } from "react";
+import { useCallback, useEffect, useRef, useState, type JSX } from "react";
 import {
   PERMISSION_METHODS,
   requiresPerActionApproval,
@@ -61,6 +61,7 @@ export function approvalDecision(
   };
 }
 
+/** Grant scopes are contract values; only their labels are localized (D22). */
 const CHOICE_LABEL_KEYS: Record<CardChoice, MessageKey> = {
   once: "shell.scopeOnce",
   session: "shell.scopeSession",
@@ -76,8 +77,6 @@ function capabilityLine(capabilities: readonly CapabilityId[]): string {
   return capabilities.map(capabilityLabel).join(t("d22.listSeparator"));
 }
 
-type Notice = { key: MessageKey; params?: readonly (string | number)[] };
-
 export function PermissionChatCards(props: {
   botId: string;
   /**
@@ -86,27 +85,44 @@ export function PermissionChatCards(props: {
    */
   onPendingCount?: (count: number) => void;
 }): JSX.Element | null {
+  // Each bot owns its component lifetime: a completed request from a closed
+  // chat must never replace the next bot's approval cards or notices.
+  return <BotPermissionChatCards key={props.botId} {...props} />;
+}
+
+/** Notices are stored as a message key, never as rendered text (D22). */
+type Notice = { key: MessageKey; params?: readonly (string | number)[] };
+
+function BotPermissionChatCards(props: {
+  botId: string;
+  onPendingCount?: (count: number) => void;
+}): JSX.Element | null {
   const { botId, onPendingCount } = props;
-  // Re-renders on a language switch: the stored notice is a message key (D22).
+  // Re-renders on a language switch: the stored notice is a message key.
   useLanguage();
   const [approvals, setApprovals] = useState<AppApproval[] | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
-
-  useEffect(() => {
-    onPendingCount?.(approvals?.length ?? 0);
-  }, [approvals, onPendingCount]);
+  const active = useRef(true);
+  const loadSequence = useRef(0);
 
   const load = useCallback(async (): Promise<void> => {
+    const sequence = ++loadSequence.current;
     const response = await window.deepseekBot.host.call("permission.approval.list", { botId });
     const parsed = PERMISSION_METHODS["permission.approval.list"].response.parse(response);
-    setApprovals(parsed.approvals.filter((approval) => approval.status === "pending"));
+    if (!active.current || sequence !== loadSequence.current) return;
+    setApprovals(
+      parsed.approvals.filter(
+        (approval) => approval.status === "pending" && approval.botId === botId,
+      ),
+    );
     setNotice((current) =>
       current?.key === "permissions.approvalListLoadFailed" ? null : current,
     );
   }, [botId]);
 
   useEffect(() => {
+    active.current = true;
     let cancelled = false;
     const run = (): void => {
       void load().catch(() => {
@@ -116,10 +132,15 @@ export function PermissionChatCards(props: {
     run();
     const timer = setInterval(run, 4_000);
     return () => {
+      active.current = false;
       cancelled = true;
       clearInterval(timer);
     };
   }, [load]);
+
+  useEffect(() => {
+    onPendingCount?.(approvals?.length ?? 0);
+  }, [approvals, onPendingCount]);
 
   const choose = (approval: AppApproval, choice: CardChoice): void => {
     setBusyId(approval.id);
@@ -127,6 +148,7 @@ export function PermissionChatCards(props: {
       .call("permission.approval.decide", approvalDecision(approval, choice))
       .then((response) => {
         PERMISSION_METHODS["permission.approval.decide"].response.parse(response);
+        if (!active.current) return;
         setNotice(
           choice === "deny"
             ? { key: "permissions.denied" }
@@ -135,10 +157,10 @@ export function PermissionChatCards(props: {
         return load();
       })
       .catch(() => {
-        setNotice({ key: "permissions.decisionFailed" });
+        if (active.current) setNotice({ key: "permissions.decisionFailed" });
       })
       .finally(() => {
-        setBusyId(null);
+        if (active.current) setBusyId(null);
       });
   };
 
@@ -157,14 +179,22 @@ export function PermissionChatCards(props: {
           >
             <div className="choice-question">{t("permissions.allowQuestion")}</div>
             <p className="choice-answered">{t("permissions.requestLine", [approval.tool])}</p>
-            <p className="choice-answered">{t("permissions.capabilitiesLine", [capabilityLine(approval.capabilities)])}</p>
+            <p className="choice-answered">
+              {t("permissions.capabilitiesLine", [capabilityLine(approval.capabilities)])}
+            </p>
+            <p className="choice-answered">{t("permissions.pendingParamsLabel")}</p>
+            <pre className="permission-params" aria-label={t("permissions.pendingParamsAria")}>
+              {JSON.stringify(approval.params, null, 2)}
+            </pre>
             <p className="choice-answered">{t("permissions.onceGrant", [approval.expiresAt])}</p>
             {choices.includes("session") ? (
               <p className="choice-answered">
                 {t("permissions.sessionGrant", [SESSION_USES, SESSION_MINUTES / 60])}
               </p>
             ) : null}
-            {choices.includes("permanent") ? <p className="choice-answered">{t("permissions.permanentGrant")}</p> : null}
+            {choices.includes("permanent") ? (
+              <p className="choice-answered">{t("permissions.permanentGrant")}</p>
+            ) : null}
             <div className="choice-options">
               {choices.map((choice) => (
                 <button

@@ -81,13 +81,15 @@
 | D15 工具网关读层 | 已交付 | `feature/agent-tools` → `80e2074` | [D15-report](reports/D15-report.md) |
 | D15 工具网关写层 | 已交付 | `feature/agent-tools` → `d4a3f35` | [D15-report](reports/D15-report.md) |
 | D15 `ask_user` 后端 | 已交付 | `feature/agent-tools` → `0350e40` | [D15-report](reports/D15-report.md) |
-| D15 `web_search` 后端 | 进行中（未合入） | `feature/agent-tools`（`573421e`） | 待补 |
+| D15 `web_search` 后端 | 已合入；真实聊天接线待做 | `feature/agent-tools`（`573421e`）→ PR #42 `b693c5b` | [D15-report](reports/D15-report.md) |
+| D16 授权后端与设置/聊天卡 | 已合入 | PR #47 `a0af1f5`、#49 `8a8e01c`、#51 `9ebab3a` | [D16-report](reports/D16-report.md) |
+| D16 真实聊天应用工具 | 本功能分支已实现；受控模型与真实桌面验证通过，待真人自审/PR 合入 | `feature/harness-tool-gateway`，基线 `2ecb2f9` | [D16-harness-tools-report](reports/D16-harness-tools-report.md) |
 | D14 渲染片 + 交互片 | 已交付（mermaid 砍除，验收部分达成） | `feature/chat-experience` → `feature/settings-updates` → `0f20970` | [D14-report](reports/D14-report.md) |
 | D25 全局搜索 | 已交付（host 检索按计划后接） | 同上 → `0f20970` | [D25-report](reports/D25-report.md) |
 | D26 聊天附件 | **切片交付，任务未完成** | 同上 → `0f20970` | [D26-report](reports/D26-report.md) |
 | D24 设置与更新 | **切片交付，任务未完成** | 同上 → `0f20970` | [D24-report](reports/D24-report.md) |
-| D17 技能与模板 | **已交付（渲染层闭环）**：模板库（`292c3b8`）+ 技能定义/复用/版本化 + 统一文件导入导出（契约校验）。工作流模板、Host 注入与能力强制留后续 | `feature/skills-templates`（两次：`292c3b8`、本分支） | [D17-report](reports/D17-report.md) |
-| D22 系统集成与双语 | **已交付（实机项待验收）**：全量中英双语（660 条 key + 防回归守卫）、单托盘随活跃 bot + 逐 bot 图标菜单、系统通知与设置（总开关/仅非前台/按 bot 静音/测试）、Chrome **书签**只读导入（预览→导入→导出→删除）。托盘/通知/真实 Chrome 读取属实机项，本执行环境无法启动 Electron | `feature/system-integration`（base `2ecb2f9`，head `377a37b`，未合并） | [D22-report](reports/D22-report.md) |
+| D17 技能与模板 | **已交付（渲染层闭环）**：模板库 + 技能定义/复用/版本化 + 统一文件导入导出（契约校验）。工作流模板、Host 注入与能力强制留后续 | `feature/skills-templates` → `292c3b8`、PR #48 `2ecb2f9` | [D17-report](reports/D17-report.md) |
+| D22 系统集成与双语 | **已交付（实机项待验收）**：全量中英双语（660+ 条 key + 防回归守卫）、单托盘随活跃 bot + 逐 bot 图标菜单、系统通知与设置（总开关/仅非前台/按 bot 静音/测试）、Chrome **书签**只读导入（预览→导入→导出→删除）。托盘/通知/真实 Chrome 读取属实机项，本执行环境无法启动 Electron | `feature/system-integration`（base `2ecb2f9`，未合并） | [D22-report](reports/D22-report.md) |
 
 补记说明：B 线四项与 D17 模板库切片在合入时**未写交付报告、PR 自审记录未填**（两份 PR 清单各仅勾选 2/5）；相应报告于 2026-10-25 事后补记，**不追认事前完成自审**，自审结论仍留空待负责人签署。B 线四项挤在一条串行分支经单个 PR 合入，偏离"一任务一分支"，lockfile 与 CI 配置改动亦未拆独立小 PR；D17 技能库部分已改从最新 develop 单独切分支。后续任务（含 D24、D26 的剩余部分）同样单独切分支，不再堆叠。各任务的手测截图（`reports/assets/d14|d17|d24|d25|d26/`）仍缺，列为待补。
 

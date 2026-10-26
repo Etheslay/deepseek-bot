@@ -24,6 +24,10 @@
  * | 'cancelled' | 'unavailable'.
  */
 
+import { applyApplicationTools, type ApplicationToolContext } from "./app-tools.js";
+
+export const inject = ["tools"];
+
 /** Structural view of the pieces of the upstream agent this plugin touches. */
 export interface BridgeSessionLike {
   readonly id?: unknown;
@@ -168,14 +172,12 @@ export function createApprovalAnswerer(config: ApprovalBridgeConfig): ApprovalAn
  * answerer when a bridge URL is available; no-op otherwise so a mount without
  * the Host environment stays fail-closed instead of erroring the profile.
  */
-export function apply(ctx: { on(event: string, handler: unknown): void }, config: ApprovalBridgeConfig = {}): void {
+export async function apply(ctx: ApplicationToolContext & { on(event: string, handler: unknown): void }, config: ApprovalBridgeConfig = {}): Promise<void> {
   const bridgeUrl = config.bridgeUrl ?? globalThis.process?.env?.[BRIDGE_URL_ENV];
   const answerer = createApprovalAnswerer({
     ...config,
     ...(bridgeUrl !== undefined ? { bridgeUrl } : {}),
   });
-  if (answerer === undefined) {
-    return;
-  }
-  ctx.on("approval/request", answerer);
+  if (answerer !== undefined) ctx.on("approval/request", answerer);
+  await applyApplicationTools(ctx);
 }

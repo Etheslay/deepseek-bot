@@ -72,6 +72,13 @@ function emitTurnCompletion(messageId, text) {
 
 const lines = createInterface({ input: process.stdin, terminal: false });
 lines.on("line", (line) => {
+  void handleLine(line).catch((error) => {
+    process.stderr.write(`fake harness request failed: ${error instanceof Error ? error.message : String(error)}\n`);
+    process.exitCode = 1;
+    lines.close();
+  });
+});
+async function handleLine(line) {
   const trimmed = line.trim();
   if (trimmed.length === 0) return;
   let frame;
@@ -89,6 +96,11 @@ lines.on("line", (line) => {
         return;
       }
       initializeParams = params;
+      if (process.env.DSB_APP_TOOLS_URL !== undefined) {
+        const headers = { authorization: `Bearer ${process.env.DSB_APP_TOOLS_TOKEN}`, "content-type": "application/json" };
+        const { tools } = await (await globalThis.fetch(`${process.env.DSB_APP_TOOLS_URL}/app-tools`, { headers })).json();
+        await globalThis.fetch(`${process.env.DSB_APP_TOOLS_URL}/app-tools/ready`, { method: "POST", headers, body: JSON.stringify({ tools: tools.map(tool => tool.name) }) });
+      }
       record({
         env: {
           DSH_HOME: process.env.DSH_HOME,
@@ -110,6 +122,14 @@ lines.on("line", (line) => {
       }
       const messageId = `msg-${serial + 1}`;
       respond(id, { messageId });
+      if (scenario === "app-tool") {
+        status("running");
+        const response = await globalThis.fetch(`${process.env.DSB_APP_TOOLS_URL}/app-tools/call`, {
+          method: "POST", headers: { authorization: `Bearer ${process.env.DSB_APP_TOOLS_TOKEN}`, "content-type": "application/json" },
+          body: JSON.stringify({ sessionId, callId: "app-call-1", tool: "create_group", params: { name: "from Harness" } }),
+        });
+        emitTurnCompletion(messageId, JSON.stringify(await response.json())); return;
+      }
       if (scenario === "crash") {
         serial += 1;
         notify("session.event", {
@@ -188,7 +208,7 @@ lines.on("line", (line) => {
       if (id !== undefined) respondError(id, -32601, `method not found: ${method}`);
     }
   }
-});
+}
 
 if (scenario === "stderr-noise") {
   process.stderr.write("fake harness diagnostic line\n");

@@ -2866,38 +2866,6 @@ function BotsPlaceholder({
                 {stream.failure.message ? (
                   <span className="failure-detail">{stream.failure.message}</span>
                 ) : null}
-                {stream.failure.code === "UNAUTHORIZED_PATH" &&
-                /grant required: ([a-z.]+)/.test(stream.failure.message ?? "") ? (
-                  <span className="grant-card">
-                    {(["once", "session", "persistent"] as const).map((scope) => (
-                      <button
-                        key={scope}
-                        type="button"
-                        className="pill-btn"
-                        onClick={() => {
-                          const capability = /grant required: ([a-z.]+)/.exec(
-                            stream.failure?.message ?? "",
-                          )?.[1];
-                          if (!capability) {
-                            return;
-                          }
-                          void window.deepseekBot.host
-                            .call("grant.create", {
-                              capability,
-                              scope,
-                              botId: me.bot.id,
-                              ...(scope === "persistent" ? { maxUses: 0 } : {}),
-                            })
-                            .then(() => {
-                              retryStream();
-                            });
-                        }}
-                      >
-                        {scope === "once" ? t("shell.scopeOnce") : scope === "session" ? t("shell.scopeSession") : t("shell.scopeAlwaysAllow")}
-                      </button>
-                    ))}
-                  </span>
-                ) : null}
                 {stream.failure.retryable && (
                   <button type="button" className="pill-btn" onClick={retryStream}>
                     {t("shell.retry")}

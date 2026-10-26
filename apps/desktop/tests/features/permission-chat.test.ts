@@ -88,6 +88,55 @@ function labels(container: ParentNode): string[] {
 }
 
 describe("chat permission cards", () => {
+  it("shows the exact validated parameters as escaped text before a decision", async () => {
+    installHost([
+      {
+        ...APPROVAL,
+        params: { name: "<img src=x onerror=alert(1)>", bots: [{ name: "research" }] },
+      },
+    ]);
+    const container = await renderCards();
+    const preview = container.querySelector("pre");
+    expect(preview?.textContent).toBe(
+      JSON.stringify(
+        { name: "<img src=x onerror=alert(1)>", bots: [{ name: "research" }] },
+        null,
+        2,
+      ),
+    );
+    expect(container.querySelector("img")).toBeNull();
+  });
+
+  it("ignores a previous bot's late approval response after switching chats", async () => {
+    let resolvePrevious!: (value: unknown) => void;
+    const previous = new Promise<unknown>((resolve) => {
+      resolvePrevious = resolve;
+    });
+    const otherBot = "33333333-3333-4333-8333-333333333333";
+    const otherApproval = {
+      ...APPROVAL,
+      botId: otherBot,
+      tool: "create_group",
+      params: { name: "other" },
+    };
+    window.deepseekBot = {
+      host: {
+        call: async (_method: string, payload: { botId: string }) =>
+          payload.botId === BOT ? previous : { approvals: [otherApproval] },
+      },
+    } as unknown as Window["deepseekBot"];
+    const container = await renderCards();
+    await act(async () => {
+      roots.at(-1)!.render(createElement(PermissionChatCards, { botId: otherBot }));
+    });
+    expect(container.textContent).toContain("create_group");
+    await act(async () => {
+      resolvePrevious({ approvals: [APPROVAL] });
+    });
+    expect(container.textContent).not.toContain("create_bots_batch");
+    expect(container.textContent).toContain("create_group");
+  });
+
   it("lists pending approvals for the open bot and offers once, session, and permanent", async () => {
     const calls = installHost([APPROVAL]);
     const container = await renderCards();
