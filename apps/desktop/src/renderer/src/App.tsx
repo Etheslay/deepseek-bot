@@ -4,6 +4,7 @@ import { useBots, type UiBot } from "./features/bots/use-bots.js";
 import { PermissionChatCards } from "./features/permissions/permission-chat.js";
 import { PermissionsPanel } from "./features/permissions/permissions-panel.js";
 import { BotForm } from "./features/bots/bot-form.js";
+import { nextBotName } from "./features/bots/bot-names.js";
 import { CustomSelect } from "./components/custom-select.js";
 import type { BotDraft } from "./services/desktop-service.js";
 import { useService } from "./services/service-context.jsx";
@@ -208,6 +209,8 @@ export function App(): JSX.Element {
   }));
   const [modalGroup, setModalGroup] = useState<number>(UNGROUPED);
   const [tplSeed, setTplSeed] = useState("new");
+  /** Name suggested for the next bot, computed when the create dialog opens. */
+  const [createName, setCreateName] = useState("");
   const [tplDraft, setTplDraft] = useState<BotDraft | null>(null);
 
   const [groups, setGroups] = useState<Group[]>([{ key: UNGROUPED, name: "未分组" }]);
@@ -501,9 +504,22 @@ export function App(): JSX.Element {
   const selectedBotEntry = bots.find((b) => b.key === selectedBot);
   const selectedBotName = selectedBotEntry?.bot.name ?? "DeepSeek Bot";
 
-  const openCreateBotModal = () => {
+  /**
+   * Open the create dialog.
+   *
+   * A plain click leaves the name empty: naming is the user's business, and a
+   * field that already holds a placeholder makes them clear it first. The
+   * right-click entry (see the + button) pre-fills the next free BotNN instead,
+   * for the times you just want a bot in a hurry.
+   */
+  const openCreateBotModal = (withSuggestedName = false) => {
     setTplDraft(null);
-    setTplSeed("new");
+    // Unique per open, so the form remounts and picks up the freshly computed
+    // suggestion even when the previous dialog was cancelled with a typed name.
+    setTplSeed(`new-${Date.now()}`);
+    setCreateName(
+      withSuggestedName ? nextBotName(bots.map((b) => b.bot.name)) : "",
+    );
     setShape(0);
     setColor(2);
     setAvatar({ kind: "grok", shape: "blob", color: "#3b93f0" });
@@ -810,15 +826,9 @@ export function App(): JSX.Element {
           {
             id: bot.key,
             from: "bot",
-            text: `hello，我是 ${bot.bot.name}。聊天支持 **Markdown**：
+            text: `你好，我是 ${bot.bot.name}。我跑在你这台电脑上，数据和记录都不离开本机。
 
-- 列表、\`行内代码\` 与 [链接](https://api.deepseek.com)
-- 代码块带高亮：
-\`\`\`typescript
-const answer = await bot.ask("你好");
-\`\`\`
-- 数学公式：质能方程 $E = mc^2$，以及求和
-$$\\sum_{i=1}^{n} i = \\frac{n(n+1)}{2}$$`,
+你可以直接让我干活：读文件、写代码、查资料、整理记录；也可以把反复要做的事交给我，我把它做成工作流。`,
             quote: null,
             reactions: {},
             mine: [],
@@ -1150,8 +1160,13 @@ const logout = (): void => {
             type="button"
             className="circle-btn clickable"
             aria-label="创建新 Bot"
-            title="创建新 Bot"
-            onClick={openCreateBotModal}
+            title="创建新 Bot（右键：自动取 Bot01 这样的名字）"
+            onClick={() => openCreateBotModal()}
+            onContextMenu={(e) => {
+              // The shortcut: right-click creates one that is already named.
+              e.preventDefault();
+              openCreateBotModal(true);
+            }}
           >
             <svg viewBox="0 0 24 24">
               <line x1="12" y1="5" x2="12" y2="19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
@@ -1504,7 +1519,7 @@ const logout = (): void => {
                 <CloudDecor />
               </div>
               <p>创建一个 Bot 开始使用</p>
-              <button type="button" className="primary-btn" onClick={openCreateBotModal}>
+              <button type="button" className="primary-btn" onClick={() => openCreateBotModal()}>
                 创建 Bot
               </button>
             </div>
@@ -1779,6 +1794,7 @@ const logout = (): void => {
               <BotForm
                 key={editingBot?.bot.id ?? tplSeed}
                 {...(!editingBot && tplDraft ? { initial: tplDraft } : {})}
+                {...(!editingBot && !tplDraft ? { defaultName: createName } : {})}
                 {...(editingBot
                   ? {
                       initial: {

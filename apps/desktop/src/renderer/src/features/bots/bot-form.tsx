@@ -84,11 +84,17 @@ export function BotForm(
     skillsSlot?: ReactNode;
     /** Create mode: keep the dialog focused on name + avatar. */
     minimal?: boolean;
+    /**
+     * Create mode: the name to pre-fill. The caller supplies a number that is
+     * actually free (Bot01, Bot02 …) so Enter is a complete action; an edit or a
+     * template always wins because those arrive through `initial`.
+     */
+    defaultName?: string;
   },
 ): JSX.Element {
   const [draft, setDraft] = useState<BotDraft>(
     props.initial ?? {
-      name: "",
+      name: props.defaultName ?? "",
       instructions: "",
       modelProfileId: MODEL_OPTIONS[0]!.id,
       workspaceId: WORKSPACE_OPTIONS[0]!.id,
