@@ -59,6 +59,14 @@ import {
 } from "@deepseek-bot/storage";
 import { DEFAULT_MODEL_PROFILE_ID, backupDirFor, newBackupId } from "./host.js";
 import { chatSessionIdFor, type ChatManager } from "./chat.js";
+import { KNOWN_CAPABILITIES, policyKey, readPolicy, type PolicyLevel } from "./permissions.js";
+import {
+  createGrant,
+  listGrants,
+  revokeGrant,
+  type GrantRow,
+} from "@deepseek-bot/storage";
+import type { ToolGateway } from "@deepseek-bot/agent-tools";
 
 export interface HostContext {
   readonly db: OpenedDatabase;
@@ -68,8 +76,34 @@ export interface HostContext {
   readonly now: () => Date;
   /** Desktop main decrypts credential blobs with safeStorage; Host never sees them. */
   readonly resolveApiKey: (credentialRef: string) => Promise<string>;
-  /** Chat runtime (D29): one Harness session per bot. */
+  /** Chat runtime (D30): one Harness session per bot. */
   readonly chat: ChatManager;
+  /** D15 agent tool gateway; `tool.invoke` routes model calls through it. */
+  readonly agentTools: ToolGateway;
+}
+
+function grantResponse(row: GrantRow): {
+  id: string;
+  capability: string;
+  botId: string | null;
+  scope: "once" | "session" | "persistent";
+  maxUses: number;
+  used: number;
+  expiresAt: string | null;
+  revokedAt: string | null;
+  createdAt: string;
+} {
+  return {
+    id: row.id,
+    capability: row.capability,
+    botId: row.botId,
+    scope: row.scope,
+    maxUses: row.maxUses,
+    used: row.used,
+    expiresAt: row.expiresAt,
+    revokedAt: row.revokedAt,
+    createdAt: row.createdAt,
+  };
 }
 
 export interface HandlerCallContext {
@@ -386,6 +420,44 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
     "schedule.enable": (payload) => scheduler.setEnabled({ id: payload.id, enabled: true }),
 
     "schedule.disable": (payload) => scheduler.setEnabled({ id: payload.id, enabled: false }),
+
+    "grant.create": (payload) =>
+      grantResponse(
+        createGrant(db, {
+          capability: payload.capability,
+          ...(payload.botId !== undefined ? { botId: payload.botId } : {}),
+          scope: payload.scope,
+          ...(payload.maxUses !== undefined ? { maxUses: payload.maxUses } : {}),
+          ...(payload.expiresInSeconds !== undefined && payload.expiresInSeconds !== null
+            ? { expiresInSeconds: payload.expiresInSeconds }
+            : {}),
+        }),
+      ),
+
+    "grant.list": (payload) => ({
+      grants: listGrants(db, payload.capability).map(grantResponse),
+    }),
+
+    "grant.revoke": (payload) => ({ revoked: revokeGrant(db, payload.id) }),
+
+    "policy.get": () => ({
+      policies: Object.fromEntries(
+        KNOWN_CAPABILITIES.map((capability) => [capability, readPolicy(db, capability)]),
+      ) as Record<string, PolicyLevel>,
+    }),
+
+    "policy.set": (payload) => {
+      setSetting(db, policyKey(payload.capability), payload.policy);
+      return { ok: true as const };
+    },
+
+    "tool.invoke": async (payload) => ({
+      result: await context.agentTools.call(
+        { id: `agent:${payload.callerBotId ?? "unknown"}` },
+        payload.tool,
+        payload.params ?? {},
+      ),
+    }),
 
     "chat.send": async (payload) => {
       const bot = getBot(db, payload.botId);

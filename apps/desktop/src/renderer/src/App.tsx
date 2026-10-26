@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type JSX } from "react";
 import { createPortal } from "react-dom";
 import { useBots, type UiBot } from "./features/bots/use-bots.js";
+import { PermissionsPanel } from "./features/permissions/permissions-panel.js";
 import { BotForm } from "./features/bots/bot-form.js";
 import { CustomSelect } from "./components/custom-select.js";
 import type { BotDraft } from "./services/desktop-service.js";
@@ -1748,6 +1749,8 @@ const logout = (): void => {
                     </button>
                   </div>
                 </div>
+                <div className="settings-section-title">电脑与权限（策略 / 授权 / 撤销）</div>
+                <PermissionsPanel />
                 <div className="settings-section-title">接入（Key 加密保存在系统凭据库，只写不读）</div>
                 <div className="settings-card">
                   <div className="settings-row">
@@ -2598,6 +2601,38 @@ function BotsPlaceholder({
               <div className="chat-failure" role="alert">
                 <span className="failure-code">{stream.failure.code}</span>
                 {failureMessage(stream.failure.code)}
+                {stream.failure.code === "UNAUTHORIZED_PATH" &&
+                /grant required: ([a-z.]+)/.test(stream.failure.message ?? "") ? (
+                  <span className="grant-card">
+                    {(["once", "session", "persistent"] as const).map((scope) => (
+                      <button
+                        key={scope}
+                        type="button"
+                        className="pill-btn"
+                        onClick={() => {
+                          const capability = /grant required: ([a-z.]+)/.exec(
+                            stream.failure?.message ?? "",
+                          )?.[1];
+                          if (!capability) {
+                            return;
+                          }
+                          void window.deepseekBot.host
+                            .call("grant.create", {
+                              capability,
+                              scope,
+                              botId: me.bot.id,
+                              ...(scope === "persistent" ? { maxUses: 0 } : {}),
+                            })
+                            .then(() => {
+                              retryStream();
+                            });
+                        }}
+                      >
+                        {scope === "once" ? "仅本次" : scope === "session" ? "本会话" : "永久允许"}
+                      </button>
+                    ))}
+                  </span>
+                ) : null}
                 {stream.failure.retryable && (
                   <button type="button" className="pill-btn" onClick={retryStream}>
                     重试

@@ -420,5 +420,23 @@ CREATE TABLE chat_messages (
 CREATE INDEX chat_messages_bot_created ON chat_messages(bot_id, created_at);
 `,
   },
+  {
+    id: 6,
+    name: "0006-grants",
+    sql: /* sql */ `
+CREATE TABLE grants (
+  id TEXT PRIMARY KEY,
+  capability TEXT NOT NULL,
+  bot_id TEXT,
+  scope TEXT NOT NULL CHECK (scope IN ('once', 'session', 'persistent')),
+  max_uses INTEGER NOT NULL DEFAULT 1,
+  used INTEGER NOT NULL DEFAULT 0,
+  expires_at TEXT,
+  revoked_at TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX grants_lookup ON grants(capability, bot_id, revoked_at, expires_at);
+`,
+  },
 ];
 
