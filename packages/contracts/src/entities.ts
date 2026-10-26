@@ -17,7 +17,7 @@ import {
   TEXT_LIMITS,
   UuidSchema,
 } from "./primitives.js";
-import { NODE_RUN_STATUSES, RUN_STATUSES } from "./status.js";
+import { NODE_RUN_STATUSES, RUN_STATUSES, TASK_STATUSES } from "./status.js";
 import { WORKFLOW_SCHEMA_VERSION } from "./version.js";
 
 // ---------------------------------------------------------------------------
@@ -158,7 +158,17 @@ export function assignBatchAvatars(input: {
  * `avatar`/`groupId` are nullish (not merely nullable) because Bot embeds
  * into run botSnapshots recorded before D15: absent keys must keep parsing.
  * Null means "not assigned" — UIs fall back to their own derivation.
+ *
+ * `role` (v0.5, manager orchestration) is additive with the "standard"
+ * default so stored bots and pre-0.5 snapshots keep parsing. The only write
+ * path is the human bot editor (`bot.create`/`bot.update`); no model tool
+ * ever accepts a role field, and the Host enforces at most one coordinator
+ * per group before persisting.
  */
+export const BOT_ROLES = ["standard", "coordinator"] as const;
+export type BotRole = (typeof BOT_ROLES)[number];
+export const BotRoleSchema = z.enum(BOT_ROLES);
+
 export const BotSchema = z.object({
   id: UuidSchema,
   revision: UuidSchema,
@@ -169,6 +179,7 @@ export const BotSchema = z.object({
   toolPolicyId: UuidSchema,
   avatar: AvatarSchema.nullish(),
   groupId: UuidSchema.nullish(),
+  role: BotRoleSchema.default("standard"),
   archivedAt: IsoDateTimeUtcSchema.nullable(),
 });
 
@@ -418,6 +429,72 @@ export const NodeRunSchema = z.object({
 export type Run = z.infer<typeof RunSchema>;
 export type NodeRun = z.infer<typeof NodeRunSchema>;
 export type RunTrigger = z.infer<typeof RunTriggerSchema>;
+
+// ---------------------------------------------------------------------------
+// Dispatched task (v0.5 manager orchestration, TASK_MANAGER_ORCHESTRATION.md)
+// ---------------------------------------------------------------------------
+
+/**
+ * One instruction a coordinator bot hands to a same-group executor bot.
+ * `instruction` is the full text the executor receives as its user-side
+ * message; `resultSummary` is the truncated final response of the single
+ * chat turn the dispatch triggered. `workerMessageIds` pins the executor
+ * session rows (dispatch marker + assistant reply) so the UI can jump to
+ * the full transcript.
+ *
+ * Relay chains (T7): a pre-declared handoff chain shares one root task.
+ * The first hop is its own root (`rootTaskId === id`, `chainIndex === 0`);
+ * every later hop references the same root with an increasing chainIndex.
+ * `chainTotal` counts all hops of the chain and never changes after the
+ * first dispatch, so the UI can render "跳 x/y" consistently.
+ */
+export const TASK_INSTRUCTION_MAX = 8_000;
+/** T7 hard cap on relay hops per chain, including the initial dispatch. */
+export const TASK_CHAIN_MAX = 4;
+
+export const TaskSchema = z.object({
+  id: UuidSchema,
+  fromBotId: UuidSchema,
+  toBotId: UuidSchema,
+  instruction: z.string().min(1).max(TASK_INSTRUCTION_MAX),
+  status: z.enum(TASK_STATUSES),
+  resultSummary: z.string().max(2_000).nullable(),
+  rootTaskId: UuidSchema,
+  chainIndex: z.int().nonnegative().max(TASK_CHAIN_MAX - 1),
+  chainTotal: z.int().min(1).max(TASK_CHAIN_MAX),
+  createdAt: IsoDateTimeUtcSchema,
+  startedAt: IsoDateTimeUtcSchema.nullable(),
+  finishedAt: IsoDateTimeUtcSchema.nullable(),
+  workerMessageIds: z.array(UuidSchema).max(100),
+});
+
+export type Task = z.infer<typeof TaskSchema>;
+
+/**
+ * Additive marker on a persisted chat message row (v0.5). `dispatch` marks
+ * the user-side message a coordinator's dispatch injected into the executor
+ * session; `task_notice` is the delivery receipt the Host writes into the
+ * coordinator session when a dispatched task leaves the running state.
+ */
+export const ChatMessageMetaSchema = z.discriminatedUnion("kind", [
+  z
+    .object({
+      kind: z.literal("dispatch"),
+      taskId: UuidSchema,
+      fromBotId: UuidSchema,
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("task_notice"),
+      taskId: UuidSchema,
+      status: z.enum(TASK_STATUSES),
+      resultSummary: z.string().max(2_000).optional(),
+    })
+    .strict(),
+]);
+
+export type ChatMessageMeta = z.infer<typeof ChatMessageMetaSchema>;
 
 // ---------------------------------------------------------------------------
 // Approval

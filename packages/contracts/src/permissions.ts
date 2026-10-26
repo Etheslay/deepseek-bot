@@ -10,6 +10,7 @@ export const CAPABILITY_IDS = [
   "app.create_workflow",
   "app.start_run",
   "app.cancel_run",
+  "app.dispatch_task",
   "app.revoke_creation",
   "interaction.ask_user",
   "network.search",
@@ -38,6 +39,13 @@ export function defaultPermissionMode(capability: CapabilityId): PermissionMode 
   return capability === "screen.capture" ? "deny" : "ask";
 }
 
+/**
+ * Per-action approval locks. `app.start_run` stays locked to "ask" (v1
+ * decision, TASK_MANAGER_ORCHESTRATION.md Q1); `app.dispatch_task` is
+ * deliberately NOT on this list: one dispatch costs one chat turn — far
+ * below one workflow run — the executor's own high-risk tools still carry
+ * their own policy, so once/session/permanent grants stay meaningful.
+ */
 export function requiresPerActionApproval(capability: CapabilityId): boolean {
   return (
     capability === "app.start_run" || capability === "exec.shell" || capability === "screen.capture"

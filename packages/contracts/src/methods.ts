@@ -13,11 +13,15 @@ import {
   AvatarSchema,
   BotArtifactSchema,
   BotGroupSchema,
+  BotRoleSchema,
   BotSchema,
+  ChatMessageMetaSchema,
   ImportableWorkflowDraftSchema,
   NodeRunSchema,
   RunSchema,
   ScheduleSchema,
+  TASK_CHAIN_MAX,
+  TaskSchema,
   WorkflowDraftSchema,
   WorkflowSchema,
 } from "./entities.js";
@@ -33,13 +37,14 @@ import {
   TEXT_LIMITS,
   UuidSchema,
 } from "./primitives.js";
-import { RUN_STATUSES } from "./status.js";
+import { RUN_STATUSES, TASK_STATUSES } from "./status.js";
 import {
   isProtocolVersionSupported,
   PROTOCOL_VERSION,
 } from "./version.js";
 import {
   EventEnvelopeSchema,
+  TaskEventEnvelopeSchema,
 } from "./events.js";
 import { WorkflowIssueSchema } from "./workflow.js";
 import { PERMISSION_METHODS } from "./permissions.js";
@@ -93,6 +98,9 @@ export const METHODS = [
   "chat.send",
   "chat.history",
   "chat.cancel",
+  "task.dispatch",
+  "task.list",
+  "task.cancel",
   "question.list",
   "question.answer",
   "search.config.get",
@@ -180,6 +188,9 @@ const BotPatchSchema = z
     modelProfileId: UuidSchema.optional(),
     workspaceId: UuidSchema.optional(),
     toolPolicyId: UuidSchema.optional(),
+    // v0.5 coordinator role: written only through the human editor surface
+    // (bot.create/bot.update); no model tool binds a role field (FR-9).
+    role: BotRoleSchema.optional(),
     // null clears the assignment (nullish, like BotSchema's fields).
     avatar: AvatarSchema.nullish(),
     groupId: UuidSchema.nullish(),
@@ -191,6 +202,7 @@ const BotPatchSchema = z
       patch.modelProfileId !== undefined ||
       patch.workspaceId !== undefined ||
       patch.toolPolicyId !== undefined ||
+      patch.role !== undefined ||
       patch.avatar !== undefined ||
       patch.groupId !== undefined,
     { message: "patch must change at least one field" },
@@ -205,16 +217,20 @@ const RevisionRefSchema = z.object({
  * One member of a chat-driven batch creation (FR-12). Per-bot fields fall
  * back to the batch `defaults` when omitted; explicit avatars win over
  * auto-assignment. Every effective modelProfileId/workspaceId must exist
- * (same validation as bot.create).
+ * (same validation as bot.create). Strict on purpose: a model must never be
+ * able to smuggle privileged fields (e.g. the v0.5 coordinator `role`) into
+ * a batch entry — unknown keys reject instead of being stripped (U2).
  */
-const BotBatchEntrySchema = z.object({
-  name: NonEmptyStringSchema(TEXT_LIMITS.name),
-  instructions: z.string().max(TEXT_LIMITS.instructions),
-  modelProfileId: UuidSchema.optional(),
-  workspaceId: UuidSchema.optional(),
-  toolPolicyId: UuidSchema.optional(),
-  avatar: AvatarSchema.optional(),
-});
+const BotBatchEntrySchema = z
+  .object({
+    name: NonEmptyStringSchema(TEXT_LIMITS.name),
+    instructions: z.string().max(TEXT_LIMITS.instructions),
+    modelProfileId: UuidSchema.optional(),
+    workspaceId: UuidSchema.optional(),
+    toolPolicyId: UuidSchema.optional(),
+    avatar: AvatarSchema.optional(),
+  })
+  .strict();
 
 const RunIdRefSchema = z.object({ runId: UuidSchema });
 
@@ -246,6 +262,9 @@ export const METHOD_CONTRACTS = {
       // win; batch creation is the path that auto-assigns.
       avatar: AvatarSchema.optional(),
       groupId: UuidSchema.optional(),
+      // v0.5: human editor may mint a coordinator directly; the model-facing
+      // batch path (bot.batchCreate) never carries a role field.
+      role: BotRoleSchema.optional(),
     }),
     response: BotSchema,
   },
@@ -399,13 +418,27 @@ export const METHOD_CONTRACTS = {
     }),
     response: RunSchema,
   },
+  /**
+   * v0.5 extends the pull subscription to dispatched tasks: exactly one of
+   * runId/taskId must be supplied. Run events replay the persistent events
+   * log; task events replay the task_events log with the same at-least-once
+   * dedup semantics (eventId + per-subject sequence).
+   */
   "events.subscribe": {
-    request: z.object({
-      runId: UuidSchema,
-      afterSequence: z.int().nonnegative(),
-    }),
+    request: z
+      .object({
+        runId: UuidSchema.optional(),
+        taskId: UuidSchema.optional(),
+        afterSequence: z.int().nonnegative(),
+      })
+      .refine(
+        (request) =>
+          (request.runId !== undefined) !== (request.taskId !== undefined),
+        { message: "exactly one of runId or taskId is required" },
+      ),
     response: z.object({
       events: z.array(EventEnvelopeSchema),
+      taskEvents: z.array(TaskEventEnvelopeSchema).optional(),
       snapshotRequired: z.boolean(),
     }),
   },
@@ -454,6 +487,9 @@ export const METHOD_CONTRACTS = {
           sessionId: z.string().min(1).max(128),
           role: z.enum(["user", "assistant"]),
           text: z.string(),
+          // v0.5: dispatch markers and task delivery notices (optional so
+          // pre-0.5 rows and callers keep parsing unchanged).
+          meta: ChatMessageMetaSchema.optional(),
           at: IsoDateTimeUtcSchema,
         }),
       ),
@@ -462,6 +498,70 @@ export const METHOD_CONTRACTS = {
   "chat.cancel": {
     request: z.object({ sessionId: z.string().min(1).max(128) }),
     response: z.object({ cancelled: z.boolean() }),
+  },
+  /**
+   * v0.5 manager orchestration (TASK_MANAGER_ORCHESTRATION.md §3.3).
+   * task.dispatch is gateway-internal: only the model tool `dispatch_task`
+   * reaches it, and the Host re-checks the coordinator rules (role, same
+   * group, not self) before enqueueing — the gateway layer check explains
+   * the rejection to the model, this one is authoritative. task.list is the
+   * human + read-only-tool query surface; task.cancel is human-only (queued
+   * tasks cancel directly, running tasks ride the chat cancel path; queued
+   * hops of the same relay chain are cascaded, T7 R-13.5).
+   *
+   * T7 relay chain: `chain` pre-declares the downstream hops. The chain is
+   * validated as a simple path (no repeated botId, no self-reference) of
+   * same-group live bots; total hops including this dispatch are capped at
+   * TASK_CHAIN_MAX. One approval on this call covers the whole chain
+   * (R-13.1), and every hop is revalidated before execution (R-13.6).
+   */
+  "task.dispatch": {
+    request: z
+      .object({
+        fromBotId: UuidSchema,
+        toBotId: UuidSchema,
+        task: z.string().trim().min(1).max(8_000),
+        context: z.string().min(1).max(4_000).optional(),
+        chain: z
+          .array(
+            z.object({
+              botId: UuidSchema,
+              instruction: z.string().trim().min(1).max(8_000),
+            }),
+          )
+          .max(TASK_CHAIN_MAX - 1)
+          .optional(),
+      })
+      .strict()
+      .refine((request) => request.fromBotId !== request.toBotId, {
+        message: "a coordinator cannot dispatch a task to itself",
+      })
+      .refine(
+        (request) => {
+          const ids = [request.fromBotId, request.toBotId].concat(
+            (request.chain ?? []).map((hop) => hop.botId),
+          );
+          return new Set(ids).size === ids.length;
+        },
+        { message: "relay chain botIds must form a simple path (no repeats)" },
+      ),
+    response: TaskSchema,
+  },
+  "task.list": {
+    request: z
+      .object({
+        fromBotId: UuidSchema.optional(),
+        toBotId: UuidSchema.optional(),
+        rootTaskId: UuidSchema.optional(),
+        status: z.enum(TASK_STATUSES).optional(),
+        limit: z.int().min(1).max(100).default(50),
+      })
+      .strict(),
+    response: z.object({ tasks: z.array(TaskSchema) }),
+  },
+  "task.cancel": {
+    request: z.object({ taskId: UuidSchema }).strict(),
+    response: TaskSchema,
   },
   "question.list": {
     request: z.object({ botId: UuidSchema }).strict(),
