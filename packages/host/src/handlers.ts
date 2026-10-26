@@ -55,6 +55,13 @@ import {
   deleteMemory,
   listMemories,
   writeMemory,
+  deleteKnowledgeDoc,
+  listKnowledgeDocs,
+  searchKnowledge,
+  writeKnowledgeDoc,
+  readRetentionPolicy,
+  writeRetentionPolicy,
+  sweepRetention,
   listConnectors,
   registerConnector,
   setConnectorEnabled,
@@ -645,6 +652,9 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
     "memory.write": (payload) => {
       const bot = requireLiveBot(db, payload.botId);
       const row = writeMemory(db, { botId: bot.id, text: payload.text });
+      // Retention limits apply right after a write, so the configured cap
+      // holds without waiting for the next host restart.
+      sweepRetention(db, readRetentionPolicy(db), now());
       return { id: row.id, botId: row.botId, text: row.text, at: row.createdAt };
     },
 
@@ -652,6 +662,61 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
       const bot = requireLiveBot(db, payload.botId);
       deleteMemory(db, { botId: bot.id, memoryId: payload.memoryId });
       return { deleted: true as const };
+    },
+
+    "memory.retention.get": () => ({ policy: readRetentionPolicy(db) }),
+
+    "memory.retention.set": (payload) => ({
+      policy: writeRetentionPolicy(db, payload.policy),
+    }),
+
+    // D18 独立知识表: long-form per-bot documents, separate from the 4k
+    // memory notes. list stays summary-only; search ranks local windows.
+    "knowledge.list": (payload) => {
+      const bot = requireLiveBot(db, payload.botId);
+      return {
+        docs: listKnowledgeDocs(db, { botId: bot.id }).map((doc) => ({
+          id: doc.id,
+          botId: doc.botId,
+          title: doc.title,
+          size: doc.size,
+          at: doc.createdAt,
+        })),
+      };
+    },
+
+    "knowledge.write": (payload) => {
+      const bot = requireLiveBot(db, payload.botId);
+      const doc = writeKnowledgeDoc(db, {
+        botId: bot.id,
+        title: payload.title,
+        text: payload.text,
+      });
+      sweepRetention(db, readRetentionPolicy(db), now());
+      return {
+        id: doc.id,
+        botId: doc.botId,
+        title: doc.title,
+        size: doc.size,
+        at: doc.createdAt,
+      };
+    },
+
+    "knowledge.delete": (payload) => {
+      const bot = requireLiveBot(db, payload.botId);
+      deleteKnowledgeDoc(db, { botId: bot.id, docId: payload.docId });
+      return { deleted: true as const };
+    },
+
+    "knowledge.search": (payload) => {
+      const bot = requireLiveBot(db, payload.botId);
+      return {
+        hits: searchKnowledge(db, {
+          botId: bot.id,
+          query: payload.query,
+          limit: payload.limit,
+        }),
+      };
     },
 
     "connector.list": () => ({

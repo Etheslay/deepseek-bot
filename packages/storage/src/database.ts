@@ -501,14 +501,34 @@ CREATE INDEX connectors_created ON connectors(created_at);
 `,
   },
   {
+  {
+    // D18 (独立知识表): long-form per-bot knowledge documents, separate from
+    // the 4k memory notes. Whole documents, no chunk table — retrieval
+    // windows and their vectors are computed at query time.
+    id: 10,
+    name: "0010-knowledge-docs",
+    sql: /* sql */ `
+CREATE TABLE knowledge_docs (
+  id TEXT PRIMARY KEY,
+  bot_id TEXT NOT NULL REFERENCES bots(id),
+  title TEXT NOT NULL,
+  text TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX knowledge_docs_bot_created ON knowledge_docs(bot_id, created_at);
+`,
+  },
+  {
     // D28 co-edit sidecar: immutable version trail for bot workspace files.
     // Rows are metadata only — version content lives as files under
     // `<root>/artifacts/coedit-versions/` (content_path), so backups that
     // include the artifacts tree carry the snapshots with it. Every save,
     // revert and reconciled bot write appends a row; nothing is ever
     // updated or deleted except the oldest rows beyond the per-file cap.
-    id: 10,
-    name: "0010-artifact-versions",
+    // Renumbered 0010→0011 at the D28 sync merge: develop's 0010-knowledge-docs
+    // landed first, and migration ids must stay globally unique.
+    id: 11,
+    name: "0011-artifact-versions",
     sql: /* sql */ `
 CREATE TABLE artifact_versions (
   id TEXT PRIMARY KEY,

@@ -40,7 +40,7 @@ function setup(): { db: OpenedDatabase; botId: string } {
   roots.push(root);
   const db = openTestDatabase(makeLayout(root));
   opened.push(db);
-  expect(db.appliedMigrations.some((m) => m.name === "0010-artifact-versions")).toBe(true);
+  expect(db.appliedMigrations.some((m) => m.name === "0011-artifact-versions")).toBe(true);
   const { profile, workspaceId } = seedProfileAndWorkspace(db, {
     workspaceId: join(root, "workspace"),
   });

@@ -86,7 +86,11 @@ describe("chat memory", () => {
     expect(await host.handleMethod("memory.list", { botId: bot.id })).toEqual({ memories: [] });
 
     const advertised = (await (await request("/memory")).json()) as { tools: Array<{ name: string }> };
-    expect(advertised.tools.map((tool) => tool.name)).toEqual(["memory_write", "memory_search"]);
+    expect(advertised.tools.map((tool) => tool.name)).toEqual([
+      "memory_write",
+      "memory_search",
+      "knowledge_search",
+    ]);
     expect(
       await (
         await request("/memory/call", {

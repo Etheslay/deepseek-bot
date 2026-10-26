@@ -1,22 +1,33 @@
 /**
- * Desktop knowledge import. One .txt or .md file becomes one existing memory
- * note. There is no separate knowledge table and no size setting.
+ * Desktop knowledge import. One .txt or .md file becomes one knowledge
+ * document (D18 独立知识表) owned by the open bot. There is no size setting.
  *
  * The plan states a format limit and that an import has a size limit, but it
- * does not name a byte cap. 16 KiB is the file cap for this slice. The note
- * still has to fit the existing 4000-character memory row. Over either limit,
- * nothing is written.
+ * does not name a byte cap. 256 KiB is the file cap; the text must still fit
+ * the contract's knowledge document limit. Over either limit, nothing is
+ * written.
  */
-export const KNOWLEDGE_IMPORT_MAX_BYTES = 16 * 1024;
-export const KNOWLEDGE_IMPORT_MAX_CHARS = 4_000;
+import { TEXT_LIMITS } from "@deepseek-bot/contracts";
+
+export const KNOWLEDGE_IMPORT_MAX_BYTES = 256 * 1024;
+export const KNOWLEDGE_IMPORT_MAX_CHARS = TEXT_LIMITS.knowledgeText;
+const TITLE_MAX = 200;
 
 export type KnowledgeImportCode = "format" | "size" | "empty" | "encoding" | "cancelled" | "read";
 
 export type KnowledgeImportResult =
-  | { ok: true; text: string }
+  | { ok: true; title: string; text: string }
   | { ok: false; code: KnowledgeImportCode };
 
 const EXTENSIONS = new Set([".txt", ".md"]);
+
+function titleFrom(fileName: string): string {
+  const base = fileName.split(/[/\\]/).pop() ?? "";
+  const dot = base.lastIndexOf(".");
+  const stem = (dot > 0 ? base.slice(0, dot) : "").trim();
+  const title = stem.length === 0 ? "未命名知识" : stem;
+  return title.length > TITLE_MAX ? title.slice(0, TITLE_MAX) : title;
+}
 
 export function importKnowledgeText(fileName: string, bytes: Uint8Array): KnowledgeImportResult {
   const base = fileName.split(/[/\\]/).pop() ?? "";
@@ -34,5 +45,5 @@ export function importKnowledgeText(fileName: string, bytes: Uint8Array): Knowle
   const text = decoded.trim();
   if (text.length === 0) return { ok: false, code: "empty" };
   if (text.length > KNOWLEDGE_IMPORT_MAX_CHARS) return { ok: false, code: "size" };
-  return { ok: true, text };
+  return { ok: true, title: titleFrom(fileName), text };
 }

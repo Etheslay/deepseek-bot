@@ -86,4 +86,6 @@ export const TEXT_LIMITS = {
   reason: 2_000,
   path: 1024,
   digestHex: 64,
+  /** One knowledge document (D18): independent of the 4k memory note cap. */
+  knowledgeText: 100_000,
 } as const;

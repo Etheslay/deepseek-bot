@@ -110,7 +110,7 @@ function askUserTool(value: unknown): ToolSchema {
   };
 }
 
-const MEMORY_TOOL_NAMES = ["memory_write", "memory_search"] as const;
+const MEMORY_TOOL_NAMES = ["memory_write", "memory_search", "knowledge_search"] as const;
 
 function memoryTools(value: unknown): ToolSchema[] {
   if (!object(value) || !Array.isArray(value.tools) || value.tools.length !== MEMORY_TOOL_NAMES.length) {

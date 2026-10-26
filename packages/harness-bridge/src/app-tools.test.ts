@@ -67,6 +67,11 @@ async function fixture(
               description: "memory_search",
               parameters: { type: "object", additionalProperties: false, properties: {} },
             },
+            {
+              name: "knowledge_search",
+              description: "knowledge_search",
+              parameters: { type: "object", additionalProperties: false, properties: {} },
+            },
           ],
         }),
       );
@@ -137,6 +142,7 @@ describe("application tool plugin", () => {
       "ask_user",
       "memory_write",
       "memory_search",
+      "knowledge_search",
       "web_search",
     ]);
     expect(calls).toEqual([{ tools: names }]);
@@ -252,6 +258,7 @@ describe("application tool plugin", () => {
       "ask_user",
       "memory_write",
       "memory_search",
+      "knowledge_search",
     ]);
     expect(calls[0]).toEqual({ tools: names });
     const agentTools: Definition[] = [];
