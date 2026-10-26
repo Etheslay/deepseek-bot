@@ -28,7 +28,7 @@ describe("openDatabase migrations", () => {
     raw.exec("INSERT INTO settings VALUES ('preserved', '{\"value\":42}', '2026-10-24T00:00:00.000Z')");
     raw.close();
     const upgraded = openDatabase(layout.dbFile);
-    expect(upgraded.schemaVersion).toBe(9);
+    expect(upgraded.schemaVersion).toBe(10);
     expect(
       upgraded.raw.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'memories'").get(),
     ).toMatchObject({ name: "memories" });

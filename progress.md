@@ -179,3 +179,15 @@
 - 审批卡展示精确参数，旧 `grant.create` 按钮移除；插件构建与准备纳入链路，拒绝目录链接写出 profile。无新公开契约、迁移、依赖或 lockfile 改动。
 - 最终 lint/typecheck/test、Host/桥接包/desktop build、diff check 通过；全仓 794 通过、1 跳过。真实 Electron + 生产 Host + 钉扎 Harness + 本地受控模型完成仅本次授权闭环，截图和实际命令见 `docs/reports/D16-harness-tools-report.md`。
 - 本片通过 `feature/harness-tool-gateway` 交付，待真人自审与 PR 合入。付费模型、远程 CI、安装包、`ask_user` / `web_search` 真实聊天接线及原生聊天 D08 审批未验收；后续按提问 → 搜索 → D18 的顺序推进。Etheslay 最新提交的真人自审留空。
+
+## 2026-10-26：D18 收尾——独立知识表、本地向量检索与保留策略
+
+- 用户确认继续 D18；分支 `feature/knowledge-base` 自 develop cc4a379（PR #61 后）创建。
+- 契约（协议仍 0.3，附加式）：受信方法 `knowledge.list/write/delete/search` + `memory.retention.get/set`；`TEXT_LIMITS.knowledgeText = 100000`。
+- 迁移 `0010-knowledge-docs`：独立知识文档表（bot 外键、bot 域隔离同记忆）；导入上限 16 KiB→256 KiB，从写记忆改为写知识文档，标题取文件名主干。
+- 本地向量检索：480 字窗（100 重叠）+ CJK 双字/拉丁词 TF-IDF 余弦 + 精确短语加分；纯本地零依赖，不预存向量、不引嵌入模型；模型工具 `knowledge_search`（能力映射 memory.read，/memory 路由第三工具，桥接目录名单同步扩为三）。
+- 保留策略：单设置键 `memory.retention`（retentionDays / memoryMaxPerBot / knowledgeMaxPerBot，0=不限制默认，损坏值按 0 读）；Host 启动 + 每次写入后清扫；知识不按时钟过期只受数量上限。
+- 桌面记忆面板三区：记忆（不变）/知识库（导入/搜索/删除/列表）/保留策略；文本一律按文本渲染。
+- 全仓 lint/typecheck/test 全绿：shared 6、bridge 16、contracts 88、agent-tools 75、storage 159、desktop 226、runtime 128、adapter 58、host 88（+1 跳过冒烟）。
+- 未验证（docs/reports/D18-knowledge-search-report.md §4）：真实 Electron 手测、真实模型调用 knowledge_search、真实语料相关性人工评估、远程 CI；神经语义检索未评估。
+- 自审记录留空待负责人 Etheslay 填写；PR 合并由本人确认。

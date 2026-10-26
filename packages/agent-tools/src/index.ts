@@ -38,3 +38,9 @@ export {
   type MemoryRecord,
   type MemoryStore,
 } from "./memory.js";
+export {
+  bindKnowledgeTools,
+  KnowledgeSearchInputSchema,
+  type KnowledgeSearchHit,
+  type KnowledgeStore,
+} from "./knowledge.js";

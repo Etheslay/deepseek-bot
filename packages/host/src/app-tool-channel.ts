@@ -94,7 +94,11 @@ export async function startApplicationToolServer(
   const schemas = gateway.capabilities.schemas(APPLICATION_TOOLS);
   const askUserSchema = gateway.capabilities.schemas(["ask_user"])[0];
   const webSearchSchema = gateway.capabilities.schemas(["web_search"])[0];
-  const memorySchemas = gateway.capabilities.schemas(["memory_write", "memory_search"]);
+  const memorySchemas = gateway.capabilities.schemas([
+    "memory_write",
+    "memory_search",
+    "knowledge_search",
+  ]);
   let closed = false;
   const server = createServer((request, response) => {
     void handle(request, response).catch(() =>
@@ -183,7 +187,9 @@ export async function startApplicationToolServer(
         : request.url === "/web-search/call"
           ? parsed.tool === "web_search"
           : request.url === "/memory/call"
-            ? parsed.tool === "memory_write" || parsed.tool === "memory_search"
+            ? parsed.tool === "memory_write" ||
+              parsed.tool === "memory_search" ||
+              parsed.tool === "knowledge_search"
             : (APPLICATION_TOOLS as readonly string[]).includes(parsed.tool);
     if (!toolAllowed) {
       send(response, 400, failure("INVALID_INPUT", "tool is not available in chat"));

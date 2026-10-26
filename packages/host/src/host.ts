@@ -42,6 +42,9 @@ import {
   getWorkspace,
   listMemories,
   writeMemory,
+  searchKnowledge,
+  readRetentionPolicy,
+  sweepRetention,
   incrementBootGeneration,
   openDatabase,
   type DataLayout,
@@ -53,6 +56,7 @@ import { AskUserCoordinator, JsonlAuditSink, ToolGateway, ToolRegistry, bindAskU
 import {
   ToolRejectionError,
   WebSearchService,
+  bindKnowledgeTools,
   bindMemoryTools,
   bindWebSearchTool,
   type ToolCaller,
@@ -268,6 +272,9 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
     ...(options.onMissed !== undefined ? { onMissed: options.onMissed } : {}),
   });
   const recoveredRuns = engine.recoverInterruptedRuns();
+  // D18 保留策略: apply configured limits once at startup so expiry and
+  // caps hold even when nothing writes for a while.
+  sweepRetention(db, readRetentionPolicy(db), now());
 
   let closed = false;
   const agentToolsHolder: { current?: ToolGateway } = {};
@@ -388,6 +395,15 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
           text: row.text,
           at: row.createdAt,
         }));
+      },
+    }),
+    ...bindKnowledgeTools({
+      search(botId, query, limit) {
+        const bot = getBot(db, botId);
+        if (bot === undefined || bot.archivedAt !== null) {
+          throw new ToolRejectionError("UNAUTHORIZED_PATH", "knowledge bot is not available");
+        }
+        return searchKnowledge(db, { botId, query, limit });
       },
     }),
   ]) {
