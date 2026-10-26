@@ -70,7 +70,14 @@ export function validateBotDraft(draft: BotDraft): FieldErrors {
 
 export function BotForm(
   props: {
-    initial?: { name: string; instructions: string; modelProfileId: string; workspaceId: string; toolPolicyId: string };
+    initial?: {
+      name: string;
+      instructions: string;
+      modelProfileId: string;
+      workspaceId: string;
+      toolPolicyId: string;
+      role?: "standard" | "coordinator";
+    };
     submitLabel: string;
     onSubmit: (draft: BotDraft) => Promise<{ ok: boolean; errorCode?: string }>;
     onCancel: () => void;
@@ -118,6 +125,14 @@ export function BotForm(
   const set = (field: keyof BotDraft, value: string): void => {
     setDraft((prev) => ({ ...prev, [field]: value }));
     setFieldErrors((prev) => ({ ...prev, [field]: undefined }));
+  };
+
+  // FR-1: the coordinator role is a human-only switch. It renders as a chip
+  // pair like the tone picker; the model-facing batch path never carries it.
+  const role: "standard" | "coordinator" =
+    draft.role === "coordinator" ? "coordinator" : "standard";
+  const setRole = (next: "standard" | "coordinator"): void => {
+    setDraft((prev) => ({ ...prev, role: next }));
   };
 
 
@@ -198,6 +213,29 @@ export function BotForm(
       />
       {fieldErrors.instructions && <em className="field-error">{fieldErrors.instructions}</em>}
       <span className="form-hint">可选：说明它能做什么、不能做什么；最大 4000 字。</span>
+
+      <span className="tone-label">角色</span>
+      <div className="role-picker" role="group" aria-label="bot 角色">
+        <button
+          type="button"
+          className={"role-chip" + (role === "standard" ? " selected" : "")}
+          aria-pressed={role === "standard"}
+          onClick={() => setRole("standard")}
+        >
+          标准
+        </button>
+        <button
+          type="button"
+          className={"role-chip coordinator" + (role === "coordinator" ? " selected" : "")}
+          aria-pressed={role === "coordinator"}
+          onClick={() => setRole("coordinator")}
+        >
+          协调者（可派发任务）
+        </button>
+      </div>
+      <span className="form-hint">
+        协调者可以在聊天里把任务派发给同组其他 bot（每次派发仍需你审批）；每组至多一个协调者。
+      </span>
 
       <span className="tone-label">性格</span>
       <div className="tone-picker" role="group" aria-label="语气选择（可多选）">

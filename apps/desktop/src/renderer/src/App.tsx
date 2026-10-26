@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { useBots, type UiBot } from "./features/bots/use-bots.js";
 import { PermissionChatCards } from "./features/permissions/permission-chat.js";
 import { QuestionChatCards } from "./features/questions/question-chat.js";
+import { TaskFeedCards } from "./features/chat/task-feed.js";
 import { SearchResultCards } from "./features/search/search-results.js";
 import { MemoryPanel } from "./features/memory/memory-panel.js";
 import { SearchSettings } from "./features/search/search-settings.js";
@@ -1007,6 +1008,11 @@ const logout = (): void => {
             <BlobMark />
           )}
           {selectedBotName}
+          {selectedBotEntry?.bot.role === "coordinator" && (
+            <span className="coord-badge" title="协调者：可在聊天中派发任务">
+              协调
+            </span>
+          )}
         </span>
         <button
           type="button"
@@ -1363,6 +1369,11 @@ const logout = (): void => {
                     <span className="tab-label">
                       <span className="tab-title">
                         {b.bot.name}
+                        {b.bot.role === "coordinator" && (
+                          <span className="coord-badge" title="协调者：可在聊天中派发任务">
+                            协调
+                          </span>
+                        )}
                         {b.unread && <span className="unread-dot" aria-label="未读" />}
                       </span>
 
@@ -1818,6 +1829,7 @@ const logout = (): void => {
                         modelProfileId: editingBot.bot.modelProfileId,
                         workspaceId: editingBot.bot.workspaceId,
                         toolPolicyId: editingBot.bot.toolPolicyId,
+                        role: editingBot.bot.role,
                       },
                     }
                   : {})}
@@ -2876,6 +2888,7 @@ function BotsPlaceholder({
         <SearchResultCards botId={me.bot.id} />
         <MemoryPanel botId={me.bot.id} />
         <PermissionChatCards botId={me.bot.id} />
+        <TaskFeedCards botId={me.bot.id} bots={bots} onOpenBot={onOpenBot} />
       </div>
       {pendingFiles.length > 0 && (
         <div className="attach-chips" aria-label="待发送附件">

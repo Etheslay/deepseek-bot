@@ -28,6 +28,7 @@ import {
 } from "./desktop-service.js";
 import { createFixtureWorkflowService } from "../features/workflow-editor/workflow-service.js";
 import { createFixtureRunService } from "../features/run-monitor/run-service.js";
+import { createFixtureTaskService, fixtureChatHistory } from "../features/run-monitor/tasks/task-service.js";
 
 // Fixture imports resolve through the workspace package exports
 // ("./fixtures/*"); validated against EventEnvelopeSchema in openSession.
@@ -50,6 +51,7 @@ const SEED_BOTS: Bot[] = [
     modelProfileId: "44444444-4444-4444-8444-444444444444",
     workspaceId: "55555555-5555-4555-8555-555555555555",
     toolPolicyId: "66666666-6666-4666-8666-666666666666",
+    role: "standard",
     archivedAt: null,
   },
   {
@@ -60,6 +62,7 @@ const SEED_BOTS: Bot[] = [
     modelProfileId: "44444444-4444-4444-8444-444444444444",
     workspaceId: "55555555-5555-4555-8555-555555555556",
     toolPolicyId: "66666666-6666-4666-8666-666666666667",
+    role: "standard",
     archivedAt: null,
   },
 ];
@@ -210,6 +213,7 @@ export function createFixtureService(): DesktopService {
           modelProfileId: draft.modelProfileId,
           workspaceId: draft.workspaceId,
           toolPolicyId: draft.toolPolicyId,
+          role: draft.role ?? "standard",
           archivedAt: null,
         };
         const checked = validateBot(bot);
@@ -335,6 +339,11 @@ export function createFixtureService(): DesktopService {
         });
         return { events };
       },
+
+      // The fixture chat thread lives in the UI's own state; there are no
+      // persisted host rows to replay (dispatch markers/notices show up
+      // only against a real host).
+      history: async (botId, limit) => fixtureChatHistory(botId, limit),
 
       stream(botId, userText, handlers, options): StreamHandle {
         const bot = requireBot(botId);
@@ -617,6 +626,7 @@ export function createFixtureService(): DesktopService {
 
     workflows: createFixtureWorkflowService(),
     runs: createFixtureRunService(),
+    tasks: createFixtureTaskService(),
   };
 
   return service;

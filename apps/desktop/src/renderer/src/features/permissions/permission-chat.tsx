@@ -21,6 +21,7 @@ const CAPABILITY_LABELS: Record<CapabilityId, string> = {
   "app.create_workflow": "修改工作流",
   "app.start_run": "启动运行",
   "app.cancel_run": "取消运行",
+  "app.dispatch_task": "派发任务给其他 bot",
   "app.revoke_creation": "撤销创建批次",
   "interaction.ask_user": "向用户提问",
   "network.search": "联网搜索",
@@ -32,6 +33,7 @@ const CAPABILITY_LABELS: Record<CapabilityId, string> = {
   "screen.capture": "屏幕与窗口感知",
   "connector.invoke": "调用连接器",
 };
+export { CAPABILITY_LABELS };
 
 const SESSION_USES = 5;
 const SESSION_MINUTES = 120;
