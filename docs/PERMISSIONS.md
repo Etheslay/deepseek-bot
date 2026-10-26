@@ -1,6 +1,6 @@
 # 权限与授权
 
-状态：规划稿（v0.2），与 [智能体平台](AGENT_PLATFORM.md) 同步实施。D08 已落地的工具权限门是本文模型的一部分，本文只新增“应用操作”类别与授权/撤销流程。
+状态：D16 契约、存储、网关与 Host 授权后端已实现于当前 feature 分支，设置页、聊天卡片及真实 Harness 调用方仍待接线，不代表 D16 整体验收。与 [智能体平台](AGENT_PLATFORM.md) 同步实施。D08 已落地的工具权限门继续生效；本轮交付见 [D16 报告](reports/D16-report.md)。
 
 ## 1. 三层模型
 
@@ -23,15 +23,17 @@
 | `app.create_workflow` | 创建工作流与节点/连线 | 中 | 每次询问 |
 | `app.start_run` | 启动运行（消耗 API 预算） | 高 | 每次询问（不可改为始终允许） |
 | `app.cancel_run` | 取消运行 | 中 | 每次询问 |
+| `app.revoke_creation` | 撤销创建批次 | 中 | 每次询问 |
+| `interaction.ask_user` | 等待人类回答 | 低 | 始终允许；回答不授予权限 |
 | `fs.read` / `fs.write` | 工作目录文件读写 | 中 | D08 路径策略 + 审批 |
 | `exec.shell` | 执行本地命令 | 高 | 每次询问 |
 | `screen.capture` | 窗口截图 / OCR | 高 | 从不允许（需显式开启） |
 | `connector.invoke` | 调用连接器 / MCP 工具 | 中 | 每次询问 |
-| `web_search` / D08 `network.request` | 向受信配置的 SearXNG 端点提交搜索 | 中 | 按 D08 网络策略；缺少受信权限句柄拒绝 |
+| `network.search` / D08 `network.request` | web_search 向受信配置的 SearXNG 端点提交搜索 | 中 | D16 每次询问，另需 D08 网络策略放行；缺少受信权限句柄拒绝 |
 
-能力清单与工具签名一一对应，新增能力必须同时更新本文、契约与审计字段。
+能力注册表包含未来能力，不会自动产生对应工具；新增工具必须显式绑定能力并同步本文、契约与审计字段。`create_bots_batch` 有 newGroup 时同时需要 create_bot/create_group。草案生成仅回显、不落库，属于 app.read。
 
-D15 的 `web_search` 后端复用现有 ToolPolicy.network 及 D08 精确动作授权，不新增公开契约方法。工具模型参数不能指定服务地址或传入权限对象；受信调用方经 ToolCallOptions.networkPermissions 绑定当前节点的 D08 句柄。禁止网络时不发请求，要求审批时先等真实审批。网关 JSONL 存摘要；D08 本地 tool.requested 事件按已有规范保存精确搜索参数用于审批。D16 全局 capability/grant 尚未落地，不将当前网关默认放行桩当成网络授权。
+`web_search` 先通过 D16 network.search，再通过现有 ToolPolicy.network 及 D08 精确动作授权。工具模型参数不能指定服务地址或传入权限对象；受信调用方经 ToolCallOptions.networkPermissions 绑定当前节点的 D08 句柄。禁止网络时不发请求，要求审批时先等真实审批。网关 JSONL 存摘要；D08 本地 tool.requested 事件按已有规范保存精确搜索参数用于审批。
 
 ## 3. 三档策略
 
@@ -43,7 +45,13 @@ D15 的 `web_search` 后端复用现有 ToolPolicy.network 及 D08 精确动作�
 | 每次询问 | 网关弹出审批卡，用户允许后执行 |
 | 从不允许 | 网关拒绝，向模型返回可解释原因 |
 
-默认值：`app.read` 始终允许，`app.start_run` 与 `screen.capture` 固定为每次询问/从不允许，其余默认每次询问。策略在设置页修改，持久化到数据库。
+默认值：app.read / interaction.ask_user 允许，screen.capture 拒绝，其余询问。app.start_run 固定 ask；exec.shell / screen.capture 只能 ask 或 deny，且三者不接受会话/永久授权。策略由受信 permission.policy.set 修改并持久化；设置页为后续工作。
+
+策略 deny 优先于已有授权。写操作和 network.search 即使策略 allow 也须绑定有效 bot；匿名只可使用策略 allow 的读/提问。网关没有检查器、未知能力或无效身份均拒绝。
+
+本次批准只匹配精确 invocation/参数摘要，最多一次；会话授权绑定 botId、sessionId、Host generation，默认 5 次/2 小时，可设 1–100 次/1–1440 分钟；永久授权绑定 bot，无期限或次数上限。多能力授权在一个事务中预扣次数，任何能力缺失都不扣；handler 失败不退还。执行前同步重验政策、撤销、有效期和参数摘要，不重复扣次数。Host 重启会撤销旧 once/session 授权并使未决审批过期；永久授权和策略保留。
+
+应用审批默认等待 10 分钟，取消信号或 Host 关闭结束等待，迟到/重复/摘要不符的决定拒绝。问题回答入口不会修改授权。精确参数存于 app_approvals 供人类预览；permission_audit 与 JSONL 不保存原文，备份包含审批预览数据。
 
 ## 4. 聊天内授权
 

@@ -56,7 +56,10 @@ import {
   type BotPatch,
   type DataLayout,
   type OpenedDatabase,
+  listPermissionPolicies, setPermissionPolicy, listPermissionGrants,
+  revokePermissionGrant, listPermissionApprovals, listPermissionAudit,
 } from "@deepseek-bot/storage";
+import type { AgentPermissionService } from "./agent-permissions.js";
 import { DEFAULT_MODEL_PROFILE_ID, backupDirFor, newBackupId } from "./host.js";
 import { chatSessionIdFor, type ChatManager } from "./chat.js";
 import { KNOWN_CAPABILITIES, policyKey, readPolicy, type PolicyLevel } from "./permissions.js";
@@ -69,6 +72,7 @@ import {
 import type { ToolGateway } from "@deepseek-bot/agent-tools";
 
 export interface HostContext {
+  readonly permissions: AgentPermissionService;
   readonly db: OpenedDatabase;
   readonly engine: WorkflowEngine;
   readonly scheduler: LocalScheduler;
@@ -143,6 +147,17 @@ function requireGroup(db: OpenedDatabase, groupId: string): void {
 export function buildHandlers(context: HostContext): { [M in Method]: Handler<M> } {
   const { db, engine, scheduler, layout, now, resolveApiKey, chat } = context;
   return {
+    "permission.policy.list": () => ({ policies: listPermissionPolicies(db) }),
+    "permission.policy.set": (payload) => {
+      const policy = setPermissionPolicy(db, payload);
+      if (policy.mode === "deny") context.permissions.denyCapability(policy.capability);
+      return policy;
+    },
+    "permission.grant.list": (payload) => ({ grants: listPermissionGrants(db, { ...(payload.botId !== undefined ? { botId: payload.botId } : {}), includeInactive: payload.includeInactive, limit: payload.limit, generation: context.permissions.generation }) }),
+    "permission.grant.revoke": (payload) => ({ grant: revokePermissionGrant(db, payload.grantId) }),
+    "permission.approval.list": (payload) => ({ approvals: listPermissionApprovals(db, { ...(payload.botId !== undefined ? { botId: payload.botId } : {}), status: payload.status, limit: payload.limit }) }),
+    "permission.approval.decide": (payload) => context.permissions.decide(payload),
+    "permission.audit.list": (payload) => ({ records: listPermissionAudit(db, { ...(payload.botId !== undefined ? { botId: payload.botId } : {}), afterSequence: payload.afterSequence, limit: payload.limit }) }),
     "bot.list": () => ({ bots: listBots(db) }),
 
     "bot.create": (payload, call) => {

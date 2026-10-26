@@ -6,4 +6,5 @@ export * from "./entities.js";
 export * from "./events.js";
 export * from "./workflow.js";
 export * from "./methods.js";
+export * from "./permissions.js";
 export * from "./library-export.js";

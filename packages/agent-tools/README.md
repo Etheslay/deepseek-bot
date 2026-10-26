@@ -1,6 +1,12 @@
-# Agent tools（D15）
+# Agent tools（D15 / D16）
 
 模型工具网关：能力注册、严格参数校验、grant 检查点及摘要审计。Host 负责装配，网关不直接访问数据库。
+
+## D16 授权检查点
+
+网关先严格校验参数，再调用 GrantCheckpoint，执行前同步 revalidate；缺少检查器时拒绝全部调用。Host 已装配持久化权限服务，写操作需要受信 caller.botId，session 授权还需 caller.sessionId；caller.id 仍是不透明审计标识，禁止由模型提供或从字符串推断身份。默认读/ask_user 允许，其余询问（screen 默认拒绝）。完整能力清单与作用域见 [PERMISSIONS.md](../../docs/PERMISSIONS.md)。
+
+受信 Host 控制面 permission.* 读取审批并批准/拒绝、设置策略、撤销授权；模型 registry 不包含这些方法。本次审批 10 分钟过期，调用取消或 Host 关闭会结束等待。会话授权重启失效，永久授权保留。授权预扣发生在 handler 前，失败不返还次数；JSONL 增加 bot/session、能力、grant/approval ID 与决策，异常与校验审计使用固定摘要，不复制参数原文。
 
 ## `ask_user` 后端切片
 
@@ -40,6 +46,7 @@ const host = await createHost({
 });
 
 // 在受信 NodeExecutor 中使用真实 D08 节点上下文：
+// caller 由宿主绑定 botId/sessionId，且先经 D16 network.search 审批/授权。
 const result = await host.agentTools.call(caller, "web_search", {
   query: "DeepSeek Harness documentation",
   maxResults: 5,
@@ -55,7 +62,7 @@ const result = await host.agentTools.call(caller, "web_search", {
 
 无配置、提供方 HTTP/JSON 异常返回 `RUNTIME_UNAVAILABLE`，429 返回 `RATE_LIMITED`，超时为 `TOOL_TIMEOUT`，调用取消为 `CANCELLED`；Host 关闭终止活动请求并返回 `RUNTIME_UNAVAILABLE`。异常消息采用固定文本，避免原始查询、端点或响应内容混入网关错误审计。合法空结果返回空数组；上游报告引擎失败时返回“不完整结果”提示。未配置真实服务地址时，不将受控 HTTP 测试宣称为公共实例验证。
 
-独立 Host 进程可在启动前配置 `DEEPSEEK_BOT_SEARXNG_URL`，见[开发环境说明](../../docs/DEVELOPMENT_SETUP.md)。此切片不增加公开契约或桌面 IPC，真实模型调用/聊天渲染后续接线；D16 的全局 capability/grant 仍待实现。
+独立 Host 进程可在启动前配置 `DEEPSEEK_BOT_SEARXNG_URL`，见[开发环境说明](../../docs/DEVELOPMENT_SETUP.md)。D15 搜索切片不增加公开契约或桌面 IPC；D16 另增人类权限控制面。真实模型调用/聊天渲染仍待接线。
 
 ## 检查
 

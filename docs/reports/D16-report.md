@@ -1,29 +1,71 @@
-# D16 权限与授权实现报告
 
-日期：2026-10-25。任务：D16 `feature/permissions-grants`（负责人 Etheslay）。依赖 D08、D15 均已合入。
+# D16 权限与授权：后端切片
 
-## 1. 交付内容
+日期：2026-10-26（Asia/Shanghai）。负责人：Etheslay。分支：`feature/permissions-grants`，从最新 `origin/develop` 的 `b693c5b` 创建；该基线已含 PR #42（D15 web_search）、#41（Destinyian bot 模板）和 #40（桌面设置/搜索/附件等）。本报告不代表负责人的真人自审或合并决定。
 
-| 层 | 实现 |
+## 1. 本轮范围与决定
+
+用户确认先交付契约、存储、网关和 Host 授权后端，关闭 D15 写操作默认放行缺口。用户另确认：会话授权在 Host 重启后失效，永久授权保留，未决审批始终失效。
+
+- 默认 app.read / interaction.ask_user 允许，screen.capture 拒绝，其余询问；app.start_run 固定 ask，exec.shell / screen.capture 不能 allow，三者仅支持逐次审批。
+- 全局策略与 bot 授权共用 permission_grants。策略 deny 优先；模型无法设置策略、签发或撤销授权。一次授权绑定精确审批；会话授权绑定 bot/session/generation，默认 5 次/2 小时；永久授权无期限及次数限制。
+- 模型应用写操作和 network.search 必须绑定有效 bot；身份由受信进程内 ToolCaller 提供，不解析 caller.id，不读取模型参数中的身份。匿名只可调用策略 allow 的读/提问。
+- 审批预览保存验证后的精确参数；摘要绑定 invocation、caller/bot/session、工具、能力、参数和启动代次。10 分钟过期；重复、迟到、摘要不符或无效代次不可消费。
+- 多能力使用次数在同一 SQLite 事务预扣，执行失败不退还；执行前同步重验参数、策略和授权，不重复扣次。create_bots_batch 携带 newGroup 时需要 create_bot 与 create_group 两项能力。
+- 调用取消、超时、Host 关闭清理等待；重启使旧 session/once 授权与 pending 审批失效；永久授权与全局策略保留。
+
+## 2. 交付与兼容性
+
+- contracts：新增能力/策略/grant/AppApproval/PermissionAudit schema 及 7 个 permission.* 人类方法。协议升至 0.3，仍接受 0.1/0.2；工作流文档版本保持 0.1；未知 0.4 拒绝。
+- storage：附加 migration 0005，新增 permission_grants、app_approvals、permission_authorizations 执行票据与 permission_audit；既有迁移不改校验和。审计表通过触发器禁止 UPDATE/DELETE。备份自动包含这些表与审批预览原文，仍属本地敏感数据。
+- agent-tools：移除 AllowAllGrants，缺少检查器默认拒绝；严格校验参数后授权，执行前重验；JSONL 增加身份/能力/grant/approval/decision 元数据。校验审计仅保存 issue code，异常审计使用固定文本，避免错误消息复制原文。
+- Host：装配审批等待协调器与人类控制方法；permission.* 不进入模型 registry。真实 D08 网络授权仍独立检查，D16 的 network.search 放行不免除 D08。
+- 无新依赖或 lockfile 变更。默认人类应用管理方法保留当前语义，不能交给模型任意调用。未来模型接线必须仅导出网关工具，并由宿主绑定可信身份、取消信号和 D08 权限句柄。
+
+## 3. 验证证据
+
+执行环境：Windows、本地 Node 24.15.0、pnpm 11.28.5。最终回归时间为 2026-10-26 13:25–13:26（Asia/Shanghai），对应当前未提交实现树，基线 HEAD 为 b693c5b02194d4bd0fa2169e1ebe31b2573b48a4。
+
+| 实际命令 | 结果 |
 | --- | --- |
-| 契约 | 新增 `grant.create/list/revoke`、`policy.get/set`、`tool.invoke`（METHODS 37→含 grant/policy/tool 三组）；`tool.invoke` 是模型调用工具网关的唯一入口，参数只接受注册 schema |
-| 存储 | 迁移 `0006-grants`：`grants(id, capability, bot_id, scope, max_uses, used, expires_at, revoked_at, created_at)`；`createGrant/findValidGrant/consumeGrant/revokeGrant/listGrants` |
-| Host | `PolicyGate`（三层：策略 → 授权 → 拒绝）接入 D15 `ToolGateway` 的 grant checkpoint；`app.start_run` 固定每次询问、`screen.capture` 固定从不允许；内置 `web_search` 默认始终允许，自定义连接器默认询问；Host 关闭时 gate 放行让下游报正确的 RUNTIME_UNAVAILABLE |
-| 渲染层 | 设置页新增「电脑与权限」面板：每能力三档下拉（固定项禁用）、已发放授权列表与撤销；聊天失败气泡在 `UNAUTHORIZED_PATH + grant required:` 时显示授权卡片（仅本次 / 本会话 / 永久允许），点击发 grant 并自动重试 |
+| `pnpm --filter @deepseek-bot/contracts test` | 契约包 76 项通过；最终全仓再次覆盖 |
+| `pnpm --filter @deepseek-bot/storage test` | 存储包 142 项通过；最终全仓再次覆盖 |
+| `pnpm --filter @deepseek-bot/agent-tools test` | 中间实现 68 项通过；审计回归加入后，最终全仓 69 项通过 |
+| `pnpm --filter @deepseek-bot/host test` | 中间实现 48 通过、1 跳过；故障注入测试加入后，最终全仓 53 通过、1 跳过 |
+| `pnpm lint` | 退出 0 |
+| `pnpm typecheck` | 全仓退出 0 |
+| `pnpm test` | 全仓退出 0，712 通过、1 跳过；既有覆盖率门槛通过 |
+| `pnpm --filter @deepseek-bot/host build` | 退出 0；dist/main.js 为忽略的构建产物 |
+| `git diff --check` | 退出 0 |
 
-## 2. 验证
+最终包计数：desktop 176、shared 6、contracts 76、storage 142、agent-tools 69、runtime 128、harness-adapter 52、harness-bridge 10、host 53 通过 + 1 跳过。新增本片测试 43 项（5 契约、18 存储含迁移、4 网关、16 Host）。真实 API smoke 未启用，故跳过 1 项，不算验证通过。
 
-- `pnpm lint` 0；`pnpm typecheck` 0；全仓测试通过：contracts 71、storage 129（+3 grants）、runtime 128、harness-adapter 52、host 45（+5 permissions）、desktop 179；
-- 新增测试：storage `grants.test.ts`（3 例：消费/作用域/过期）、host `permissions.test.ts`（5 例：默认询问、once 消费、always/never、撤销、读层默认放行）；
-- 审计：网关原有 jsonl 审计覆盖所有拒绝与成功调用（`logs/agent-tools-audit.jsonl`），grant 拒绝以 `UNAUTHORIZED_PATH + grant required: <capability>` 记录。
+最终行/分支覆盖率：contracts 99.28% / 92.52%，storage 92.99% / 86.88%（权限仓储 99.81% / 91.70%），agent-tools 97.73% / 91.98%，host 90.61% / 82.51%（Host 权限服务 96.70% / 88.60%）。覆盖率配置未放宽。
 
-## 3. 未验证 / 已知边界
+测试覆盖严格契约、高风险限制、默认拒绝、精确审批、次数/期限、并发多能力消费、会话隔离、重启、deny 优先、撤销、取消、关闭、模型控制面隔离与无原文审计。新增测试先观察失败，再实现对应后端路径。
 
-- **模型侧路由未接**：harness-bridge 尚未把上游 tool 请求转发到 `tool.invoke`，因此模型发起的写操作目前仍走契约直连；gate 对「经网关的调用」已生效（含 UI 未来的 tool.invoke 使用）。桥接路由列为 D16 后续小片；
-- 设置面板与授权卡片的 UI 截图未留证（本切片以自动化测试为准）；
-- `session` 作用域目前按 bot 维度匹配，未绑定 Harness 会话生命周期（重启后同 bot 仍有效，直到用完/过期/撤销）；
-- 审批（D09 approval）与 grant 是两条线：grant 管「能不能调」，approval 管「这次调用的参数」。
+独立 AI 差异审查发现并纳入修复：已消费授权撤销后即使策略改 allow 也不能复用旧票据；撤销审计按 bot 可查；Zod 多余键/handler 异常可能泄漏输入原文，改为安全摘要；取消/超时/关闭时 SQLite 写失败仍释放等待与资源，并拒绝无活跃等待的迟到决定。只读数据库故障注入先实际复现关机失败，再修复并通过。若无法持久化取消，旧审批行可能暂留 pending；当前 Host 不接受其决定，重启由 generation 过期处理。最终只读复查无未解决发现，此审查不是 Etheslay 的真人自审。
 
-## 4. 自审记录
+首次全仓回归命中存储层新增的“撤销后改 allow”失败测试，修复后完成上述最终全仓回归。迁移测试使用真实 v4 SQLite 升级 v5，校验旧 settings 数据及已提交 0001–0004 的 SHA-256 不变。共享最后一次会话额度验证使用两个 SQLite 连接依次竞争，未另行执行多进程同时写入压力测试。早期个别 pnpm 命令启动后延迟输出，直接已安装 Vitest/tsc 复核及最终 pnpm 常规命令均执行成功；未据无输出声称检查通过。
 
-（AI 执行记录，需负责人 Etheslay 确认：提交 SHA、检查证据、结论。）
+## 4. 未验证与后续工作
+
+- 设置页三档策略、授权记录 UI、聊天审批卡、真实 Harness/模型工具调用与会话恢复接线未完成。D14 示例卡片不能作为真实聊天验收，D16 整体仍未交付。
+- 能力目录不等于工具实现：app.start_run/update_bot/create_workflow 等未来工具未新增；D08 fs/shell/MCP 的真实资源门语义保持原样。
+- 未发起真实付费 API 请求，真实 API smoke 未显式启用；未验证真实 SearXNG 服务、桌面端到端或远程 CI。
+- 当前未提交/推送 D16，尚无此切片 PR 或 CI。GitHub 服务端保护规则本轮未核验，不能将本地规范当作已启用保护。
+
+## 5. 自审记录（Etheslay 本人填写）
+
+自审人：＿＿＿＿　最新提交 SHA：＿＿＿＿　日期：＿＿＿＿
+
+- [ ] 差异、共享契约、安全策略与迁移兼容性：＿＿＿＿
+- [ ] 测试与错误路径证据：＿＿＿＿
+- [ ] 远程 CI 与已知限制：＿＿＿＿
+- [ ] 自审结论：＿＿＿＿
+
+## 6. Develop 合并补记（2026-10-26）
+
+本分支同步 `origin/develop`（PR #46，merge base 后提交 `68229fa`）时，与该分支内另一套 D16 后端发生语义冲突。保留 develop 的聊天/设置 UI、聊天存储与 grants 迁移 5/6，并将本报告所述精确授权后端以迁移 7 追加；没有重写既有迁移校验和。`tool.invoke` 未从请求体伪造可信 bot 身份，因此 PR #45 的旧式 `policy.*` / `grant.*` 控制不能授权此安全网关；没有接入受信 Harness 调用方仍会 fail closed。旧设置/聊天授权 UI 与本权限控制面的完整适配未验证，不能视作已验收。
+
+合并后检查：`pnpm lint`、`pnpm typecheck`、`pnpm test`、`git diff --check` 均退出 0。全仓测试包结果：contracts 83、storage 147、agent-tools 69、desktop 179、host 61 通过 + 1 跳过；其他包按命令输出通过。真实 API smoke 保持跳过，真实聊天 Harness 工具链、权限 UI 到新授权后端的端到端流程和远程 CI 未验证。迁移测试确认 0001–0004 校验和和数据保留，并验证新 schema 版本为 7。

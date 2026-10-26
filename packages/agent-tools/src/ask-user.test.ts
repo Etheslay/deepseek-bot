@@ -18,7 +18,7 @@ function setup() {
   const audit = new MemoryAuditSink();
   const registry = new ToolRegistry();
   registry.register(bindAskUserTool(questions));
-  return { questions, audit, gateway: new ToolGateway({ registry, audit }) };
+  return { questions, audit, gateway: new ToolGateway({ registry, audit, grants: { check: async () => ({ allowed: true }) } }) };
 }
 
 async function pending(questions: AskUserCoordinator) {

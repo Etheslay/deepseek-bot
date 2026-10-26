@@ -42,21 +42,20 @@ describe("permission gate", () => {
     await expect(invoke(host)).rejects.toMatchObject({ code: "UNAUTHORIZED_PATH" });
   });
 
-  it("consumes a once grant and denies the second call", async () => {
+  it("does not let legacy grants authorize an untrusted tool.invoke identity", async () => {
     const host = await makeHost();
     await host.handleMethod("grant.create", {
       capability: "app.write",
       botId: callerBot,
       scope: "once",
     });
-    await expect(invoke(host)).resolves.toMatchObject({ result: expect.anything() });
     await expect(invoke(host)).rejects.toMatchObject({ code: "UNAUTHORIZED_PATH" });
   });
 
-  it("honours always and never policies", async () => {
+  it("does not let legacy policy settings authorize an untrusted tool.invoke identity", async () => {
     const host = await makeHost();
     await host.handleMethod("policy.set", { capability: "app.write", policy: "always" });
-    await expect(invoke(host)).resolves.toBeTruthy();
+    await expect(invoke(host)).rejects.toMatchObject({ code: "UNAUTHORIZED_PATH" });
     await host.handleMethod("policy.set", { capability: "app.write", policy: "never" });
     await host.handleMethod("grant.create", { capability: "app.write", scope: "persistent", maxUses: 0 });
     await expect(invoke(host)).rejects.toMatchObject({ code: "UNAUTHORIZED_PATH" });
@@ -69,7 +68,7 @@ describe("permission gate", () => {
       scope: "persistent",
       maxUses: 0,
     })) as { id: string };
-    await expect(invoke(host)).resolves.toBeTruthy();
+    await expect(invoke(host)).rejects.toMatchObject({ code: "UNAUTHORIZED_PATH" });
     await host.handleMethod("grant.revoke", { id: grant.id });
     await expect(invoke(host)).rejects.toMatchObject({ code: "UNAUTHORIZED_PATH" });
     const listed = (await host.handleMethod("grant.list", {})) as {
