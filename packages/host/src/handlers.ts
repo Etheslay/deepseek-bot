@@ -50,12 +50,15 @@ import {
   saveWorkflow,
   setSetting,
   getSettingRaw,
+  appendChatMessage,
+  listChatMessages,
   updateBot,
   type BotPatch,
   type DataLayout,
   type OpenedDatabase,
 } from "@deepseek-bot/storage";
 import { DEFAULT_MODEL_PROFILE_ID, backupDirFor, newBackupId } from "./host.js";
+import { chatSessionIdFor, type ChatManager } from "./chat.js";
 
 export interface HostContext {
   readonly db: OpenedDatabase;
@@ -65,6 +68,8 @@ export interface HostContext {
   readonly now: () => Date;
   /** Desktop main decrypts credential blobs with safeStorage; Host never sees them. */
   readonly resolveApiKey: (credentialRef: string) => Promise<string>;
+  /** Chat runtime (D29): one Harness session per bot. */
+  readonly chat: ChatManager;
 }
 
 export interface HandlerCallContext {
@@ -102,7 +107,7 @@ function requireGroup(db: OpenedDatabase, groupId: string): void {
  * method whitelist at build time.
  */
 export function buildHandlers(context: HostContext): { [M in Method]: Handler<M> } {
-  const { db, engine, scheduler, layout, now, resolveApiKey } = context;
+  const { db, engine, scheduler, layout, now, resolveApiKey, chat } = context;
   return {
     "bot.list": () => ({ bots: listBots(db) }),
 
@@ -382,6 +387,49 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
 
     "schedule.disable": (payload) => scheduler.setEnabled({ id: payload.id, enabled: false }),
 
+    "chat.send": async (payload) => {
+      const bot = getBot(db, payload.botId);
+      if (bot === undefined) {
+        throw invalid(`bot '${payload.botId}' was not found`);
+      }
+      if (bot.archivedAt !== null) {
+        throw invalid("archived bots cannot chat");
+      }
+      const sessionId = chatSessionIdFor(bot.id);
+      appendChatMessage(db, {
+        botId: bot.id,
+        sessionId,
+        role: "user",
+        text: payload.text,
+      });
+      const outcome = await chat.send(bot, payload.text);
+      const assistant = appendChatMessage(db, {
+        botId: bot.id,
+        sessionId,
+        role: "assistant",
+        text: outcome.finalResponse,
+      });
+      return {
+        sessionId,
+        messageId: assistant.id,
+        text: outcome.finalResponse,
+        at: assistant.createdAt,
+      };
+    },
+
+    "chat.history": (payload) => ({
+      messages: listChatMessages(db, payload.botId, payload.limit).map((row) => ({
+        id: row.id,
+        botId: row.botId,
+        sessionId: row.sessionId,
+        role: row.role,
+        text: row.text,
+        at: row.createdAt,
+      })),
+    }),
+
+    "chat.cancel": (payload) => ({ cancelled: chat.cancel(payload.sessionId) }),
+
     "settings.testConnection": async (payload) => {
       const credentialRef = getSettingRaw(db, "apiKeyRef");
       if (typeof credentialRef !== "string" || !credentialRef.startsWith("cred:")) {
@@ -473,6 +521,8 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
     }),
   };
 }
+
+
 
 
 

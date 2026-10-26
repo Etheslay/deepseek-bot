@@ -12,6 +12,7 @@ import {
   ServiceError,
   type BotDraft,
   type DesktopService,
+  type StreamResult,
   type TestConnectionResult,
 } from "./desktop-service.js";
 import { createFixtureService } from "./fixture-service.js";
@@ -59,6 +60,43 @@ export function createHostService(bridge: HostBridge): DesktopService {
         })) as Bot;
       },
     },
+    chat: {
+      // Sessions/history replay stays empty for now: the Host persists chat
+      // rows (chat.history) but the UI rebuilds its thread from live sends.
+      listSessions: async () => [],
+      openSession: async () => ({ events: [] }),
+      stream: (botId, text, handlers) => {
+        let cancelled = false;
+        const sessionId = `chat:${botId}`;
+        const done = bridge.host
+          .call("chat.send", { botId, text })
+          .then((response) => {
+            const reply = (response as { text: string }).text;
+            if (!cancelled) {
+              const chunks = reply.match(/[\s\S]{1,32}/g) ?? [reply];
+              for (const chunk of chunks) {
+                handlers.onDelta(chunk);
+              }
+            }
+            return { cancelled, failure: null } satisfies StreamResult;
+          })
+          .catch((error: unknown) => ({
+            cancelled,
+            failure: {
+              code: (error as { code?: ErrorCode }).code ?? "RUNTIME_UNAVAILABLE",
+              message: error instanceof Error ? error.message : String(error),
+              retryable: false,
+            },
+          }));
+        return {
+          cancel: () => {
+            cancelled = true;
+            void bridge.host.call("chat.cancel", { sessionId }).catch(() => undefined);
+          },
+          finish: () => done,
+        };
+      },
+    },
     settings: {
       ...base.settings,
       saveKey: async (key) => {
@@ -100,3 +138,4 @@ export function createHostService(bridge: HostBridge): DesktopService {
     },
   };
 }
+

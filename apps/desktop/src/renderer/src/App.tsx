@@ -580,33 +580,6 @@ export function App(): JSX.Element {
       };
     });
     setQuoteDraft(null);
-    const attachNote =
-      attachments && attachments.length > 0
-        ? `已读取附件 ${attachments.map((a) => `${a.name}（${formatAttachmentSize(a.size)}）`).join("、")}；`
-        : "";
-    const reply = `（占位回复）${attachNote}已收到：「${t.slice(0, 24)}」。附件读取经工具网关的真实链路在 D15 写层接线后启用。`;
-    setTimeout(() => {
-      setChats((prev) => {
-        const list = prev[botKey] ?? [];
-        return {
-          ...prev,
-          [botKey]: [
-            ...list,
-            {
-              id: Date.now() + 1,
-              from: "bot",
-              text: reply,
-              quote: null,
-              reactions: {},
-              mine: [],
-              time: Date.now(),
-              system: false,
-              speakerKey: botKey,
-            },
-          ],
-        };
-      });
-    }, 450);
   };
 
   const toggleReaction = (botKey: number, msgId: number, emoji: Emoji): void => {

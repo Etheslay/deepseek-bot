@@ -405,4 +405,20 @@ CREATE UNIQUE INDEX creation_batches_request_id
   ON creation_batches(request_id) WHERE request_id IS NOT NULL;
 `,
   },
+  {
+    id: 5,
+    name: "0005-chat-messages",
+    sql: /* sql */ `
+CREATE TABLE chat_messages (
+  id TEXT PRIMARY KEY,
+  bot_id TEXT NOT NULL REFERENCES bots(id),
+  session_id TEXT NOT NULL,
+  role TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
+  text TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX chat_messages_bot_created ON chat_messages(bot_id, created_at);
+`,
+  },
 ];
+
