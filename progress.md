@@ -123,3 +123,14 @@
 - 根目录 lint / typecheck / test 全绿：desktop 147、shared 6、contracts 71、storage 124、agent-tools 17、runtime 128、harness-adapter 52、harness-bridge 10、host 26+1 skipped。
 - 未做（记录于 docs/reports/D15-report.md §5）：grant/审批（D16 接入网关桩）、聊天侧调用方、assign_bot_group/update_bot/create_workflow 等写工具、get_workflow 读方法、batch.created 事件（run 域事件模型需先扩展）、真实 Harness/端到端验证。
 - 自审记录留空待负责人 Etheslay 填写；PR 合并由本人确认。
+
+## 2026-10-25：B 线集成合入与阶段二交付报告补记
+
+- 合入：`feature/settings-updates`（D14 渲染片 + 交互片、D25 全局搜索、D26 附件、D24 设置与更新，head `2452c05`）以 merge commit `0f20970` 进 develop；`feature/skills-templates`（D17 模板库切片，`2572758`）以 merge commit `292c3b8` 进 develop。两条分支由 GitHub 合入时自动删除。
+- 冗余分支清理：`feature/chat-experience`、`feature/chat-attachments` 经 `git merge-base --is-ancestor` 核验已为 develop 祖先后，删除远端与本地分支；本地 `feature/skills-templates` 一并删除。
+- 补记：新增 `docs/reports/D14-report.md`、`D17-report.md`、`D24-report.md`、`D25-report.md`、`D26-report.md`，重写 `docs/SPRINTS.md` §4 执行记录（按任务/分支记录，不再用"冲刺N"编号），并修正 §1 状态头。
+- 如实记录：上述两份 PR 合入时未写交付报告、自审记录未填（清单各仅勾选 2/5）；报告为事后补记，不追认事前完成自审，自审结论仍留空待负责人签署。
+- 补记所用检查数值（合入前本机实测，Windows 11 x64 + Node v24.16.0 + pnpm 11.28.5）：`2452c05` 上 desktop 18 文件 / 172 用例通过（计数排除当时未提交的 D17 测试）；`2572758` 上 19 文件 / 176 用例通过；`apps/desktop` typecheck 与根 `eslint .` 均 exit 0；`git merge-tree` 对 develop 试算零冲突。
+- 未验证：GitHub Actions run 细节（本机无 gh CLI，仅负责人截图确认页面 checks 通过）、运行期网络面板/CSP 零远程请求、安装包"下载后重启安装"、真实 Host 端到端、各任务手测截图。
+- 未做（已写入各报告 §5）：D14 mermaid 与 ask_user 前端接线、D25 host 检索、D26 工具网关与 grant 链路、D24 数据备份恢复与打包版更新实测、D17 技能定义与导入导出契约校验；模块文档（BOT_WORKSPACE / DESKTOP_SHELL / RELEASE / THIRD_PARTY_NOTICES）同步仍缺。
+- 新出现：Etheslay 重开 `feature/agent-tools` 并推送 `573421e`（web_search 后端，未合入），已登记进 SPRINTS §4。
