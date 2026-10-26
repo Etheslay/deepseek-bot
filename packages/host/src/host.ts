@@ -31,6 +31,7 @@ import {
   type RunningApprovalBridge,
 } from "@deepseek-bot/harness-adapter";
 import { ChatManager } from "./chat.js";
+import { createWorkspaceArtifacts } from "./artifacts.js";
 import { EngineError, NodeExecutionError, WorkflowEngine, LocalScheduler, evaluateToolAction, type ScheduleMissNotice } from "@deepseek-bot/runtime";
 import {
   appendChatMessage,
@@ -248,6 +249,12 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
   });
   bridgeRef.current = bridge;
 
+  const workspaceArtifacts = createWorkspaceArtifacts({
+    db,
+    artifactsRoot: layout.artifacts,
+    now,
+  });
+
   const engine = new WorkflowEngine({
     db,
     executor,
@@ -301,6 +308,7 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
       }
       return agentToolsHolder.current;
     },
+    artifacts: workspaceArtifacts,
   };
   const handlers = buildHandlers(context);
 
