@@ -87,4 +87,18 @@ export const d22Messages = {
   },
   "d22.chromeImportedAt": { zh: "导入于 {0}", en: "Imported {0}" },
   "d22.chromeFailed": { zh: "导入失败：{0}", en: "Import failed: {0}" },
+  "d22.notifyTestHint": {
+    zh: "用来确认系统通知通道是否可用",
+    en: "Checks whether this system can raise notifications",
+  },
+  "d22.notifyTestSent": { zh: "已发送", en: "Sent" },
+  "d22.notifyTestSkipped": { zh: "被去重或策略拦截", en: "Deduplicated or blocked" },
+  "d22.chromeNeedsShell": {
+    zh: "需要桌面壳（打包版可用）",
+    en: "Requires the desktop shell (available in the packaged app)",
+  },
+  "d22.chromeSource": { zh: "数据来源", en: "Source" },
+  "d22.chromeNotScanned": { zh: "尚未扫描", en: "Not scanned yet" },
+  "d22.chromeProfiles": { zh: "Chrome 配置", en: "Chrome profiles" },
+  "d22.chromeImportedSection": { zh: "已导入", en: "Imported" },
 } satisfies Record<string, Message>;

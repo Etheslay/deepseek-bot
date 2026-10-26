@@ -1,4 +1,13 @@
-import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type JSX } from "react";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type JSX,
+} from "react";
 import { createPortal } from "react-dom";
 import { useBots, type UiBot } from "./features/bots/use-bots.js";
 import { PermissionChatCards } from "./features/permissions/permission-chat.js";
@@ -44,13 +53,22 @@ import {
   type NotificationPrefs,
 } from "./features/settings/settings-store.js";
 import {
-  formatDate,
   formatFullDateTime,
+  formatDate,
   formatTime,
   setLanguagePreference,
   t,
   useLanguage,
 } from "./i18n.js";
+import { syncTrayState } from "./features/system/tray-sync.js";
+import {
+  createFocusTracker,
+  notificationRequest,
+  notifyUser,
+} from "./features/system/notify.js";
+import { NotificationSettingsPanel } from "./features/system/notifications-panel.js";
+import { ChromeImportPanel } from "./features/system/chrome-panel.js";
+import type { TrayBotStatus } from "../../shared/system-integration.js";
 import type { LanguagePreference } from "../../shared/i18n/types.js";
 import {
   deleteTemplate,
@@ -341,7 +359,7 @@ export function App(): JSX.Element {
   const [accountName, setAccountName] = useState(initialSettings.accountName);
   const [accent, setAccent] = useState(initialSettings.accent);
   const [language, setLanguage] = useState<LanguagePreference>(initialSettings.language);
-  const [notifications] = useState<NotificationPrefs>(initialSettings.notifications);
+  const [notifications, setNotifications] = useState<NotificationPrefs>(initialSettings.notifications);
   /** "" means the user never set a name — the UI shows the localized default (D22). */
   const displayName =
     accountName.trim().length > 0 ? accountName : t("d22.defaultAccountName");
@@ -387,6 +405,114 @@ export function App(): JSX.Element {
   useEffect(() => {
     document.documentElement.style.setProperty("--accent", accent);
   }, [accent]);
+
+  /* ---------------- D22: OS integration (tray, notifications) ---------------- */
+
+  const focusTracker = useRef(createFocusTracker());
+  const notifyClock = useRef<Map<string, number>>(new Map());
+  const [botStatuses, setBotStatuses] = useState<Record<string, TrayBotStatus>>({});
+  const activeBotId = bots.find((b) => b.key === selectedBot)?.bot.id ?? null;
+
+  const raiseNotice = useCallback(
+    (input: {
+      kind: "reply" | "approval" | "missed";
+      botId: string | null;
+      botName: string;
+      count?: number;
+    }): void => {
+      void notifyUser(notifications, input, {
+        focused: focusTracker.current.isFocused(),
+        now: () => Date.now(),
+        lastRaised: notifyClock.current,
+      });
+    },
+    [notifications],
+  );
+
+  const reportBotStatus = useCallback((botId: string, status: TrayBotStatus): void => {
+    setBotStatuses((previous) =>
+      previous[botId] === status ? previous : { ...previous, [botId]: status },
+    );
+  }, []);
+
+  const testNotification = useCallback(async (): Promise<{ shown: boolean; reason: string | null }> => {
+    const bridge = window.deepseekBot;
+    if (!bridge || !("system" in bridge)) {
+      return { shown: false, reason: "unsupported" };
+    }
+    try {
+      return await bridge.system.notifications.show(notificationRequest({ kind: "test", botId: null, botName: "" }));
+    } catch {
+      return { shown: false, reason: "unsupported" };
+    }
+  }, []);
+
+  useEffect(() => {
+    const bridge = window.deepseekBot;
+    if (!bridge || !("system" in bridge)) {
+      // Browser preview: there is no tray and no notification channel to track.
+      return;
+    }
+    return focusTracker.current.attach(bridge);
+  }, []);
+
+  useEffect(() => {
+    // The tray mirrors this window: bot list, which bot is open, unread flags,
+    // live status and the rasterised avatar of each bot (re-rasterised on theme).
+    void syncTrayState(
+      bots.map((bot) => ({
+        id: bot.bot.id,
+        name: bot.bot.name,
+        avatar: bot.avatar,
+        unread: bot.unread,
+        status: botStatuses[bot.bot.id] ?? "idle",
+      })),
+      activeBotId,
+      { theme },
+    );
+  }, [bots, activeBotId, botStatuses, theme, language]);
+
+  useEffect(() => {
+    const bridge = window.deepseekBot;
+    if (!bridge || !("system" in bridge)) {
+      return;
+    }
+    const openBot = (botId: string): void => {
+      const target = bots.find((bot) => bot.bot.id === botId);
+      if (target === undefined) {
+        return;
+      }
+      setSelectedBot(target.key);
+      setUi(target.key, { unread: false });
+    };
+    const offTray = bridge.system.onTrayAction((event) => {
+      if (event.kind === "settings") {
+        setSettingsOpen(true);
+        return;
+      }
+      openBot(event.botId);
+    });
+    const offClick = bridge.system.onNotificationClick((event) => {
+      if (event.botId !== null) {
+        openBot(event.botId);
+      }
+    });
+    return () => {
+      offTray();
+      offClick();
+    };
+  }, [bots, setUi]);
+
+  useEffect(() => {
+    const bridge = window.deepseekBot;
+    if (!bridge?.host?.onMissed) {
+      return;
+    }
+    // FR-08: a missed schedule must be heard as well as written into the chat.
+    return bridge.host.onMissed((notices) => {
+      raiseNotice({ kind: "missed", botId: null, botName: "", count: notices.length });
+    });
+  }, [raiseNotice]);
 
   useEffect(() => {
     // Silent startup check; preview shims have no updates bridge.
@@ -1348,6 +1474,16 @@ const logout = (): void => {
               onPairQuote={(name, text) => setQuoteDraft({ name, text: text.slice(0, 60) })}
               onCancelQuote={() => setQuoteDraft(null)}
               onSend={(text, attachments) => sendUserMessage(selectedBot, text, attachments)}
+              onBotStatus={reportBotStatus}
+              onReplyCompleted={(botId, botName) => {
+                raiseNotice({ kind: "reply", botId, botName });
+              }}
+              onApprovalPending={(botId, botName, count) => {
+                reportBotStatus(botId, count > 0 ? "waiting-approval" : "idle");
+                if (count > 0) {
+                  raiseNotice({ kind: "approval", botId, botName });
+                }
+              }}
               onAssistant={(assistantText) =>
                 setChats((prev) => ({
                   ...prev,
@@ -1995,6 +2131,19 @@ const logout = (): void => {
                     <span className="settings-soon">{t("shell.comingSoon")}</span>
                   </div>
                 </div>
+                <div className="settings-section-title">{t("d22.notifySection")}</div>
+                <div className="settings-card">
+                  <NotificationSettingsPanel
+                    prefs={notifications}
+                    bots={bots.map((bot) => ({ id: bot.bot.id, name: bot.bot.name }))}
+                    onChange={setNotifications}
+                    onTest={testNotification}
+                  />
+                </div>
+                <div className="settings-section-title">{t("d22.chromeSection")}</div>
+                <div className="settings-card">
+                  <ChromeImportPanel onToast={setToast} />
+                </div>
               </div>
             </div>
           </div>
@@ -2279,6 +2428,9 @@ function BotsPlaceholder({
   onAssistant,
   onOpenBot,
   onNotify,
+  onBotStatus,
+  onReplyCompleted,
+  onApprovalPending,
   skillContext,
 }: {
   bots: UiBot[];
@@ -2300,6 +2452,12 @@ function BotsPlaceholder({
   onAssistant: (text: string) => void;
   onOpenBot: (botKey: number) => void;
   onNotify: (message: string) => void;
+  /** D22: live bot state for the tray (running / waiting-approval / idle). */
+  onBotStatus: (botId: string, status: TrayBotStatus) => void;
+  /** D22: a reply landed — raise a system notification when the window is away. */
+  onReplyCompleted: (botId: string, botName: string) => void;
+  /** D22: pending approvals change the tray status and may notify. */
+  onApprovalPending: (botId: string, botName: string, count: number) => void;
   /** Bound-skill context for a bot, composed at send time (D17). */
   skillContext: (botId: string) => string;
 }): JSX.Element {
@@ -2504,7 +2662,12 @@ function BotsPlaceholder({
       },
     });
     streamRef.current = handle;
+    onBotStatus(me.bot.id, "running");
     void handle.finish().then((result) => {
+      onBotStatus(me.bot.id, "idle");
+      if (!result.cancelled && !result.failure) {
+        onReplyCompleted(me.bot.id, me.bot.name);
+      }
       streamRef.current = null;
       setStream((prev) => {
         if (!prev || prev.forKey !== forKey) {
@@ -2544,7 +2707,12 @@ function BotsPlaceholder({
         },
       });
       streamRef.current = handle;
+      onBotStatus(me.bot.id, "running");
       void handle.finish().then((result) => {
+        onBotStatus(me.bot.id, "idle");
+        if (!result.cancelled && !result.failure) {
+          onReplyCompleted(me.bot.id, me.bot.name);
+        }
         streamRef.current = null;
         setStream((prev) => {
           if (!prev || prev.forKey !== forKey) {
@@ -2739,7 +2907,10 @@ function BotsPlaceholder({
             )}
           </>
         )}
-        <PermissionChatCards botId={me.bot.id} />
+        <PermissionChatCards
+          botId={me.bot.id}
+          onPendingCount={(count) => onApprovalPending(me.bot.id, me.bot.name, count)}
+        />
       </div>
       {pendingFiles.length > 0 && (
         <div className="attach-chips" aria-label={t("shell.pendingAttachments")}>

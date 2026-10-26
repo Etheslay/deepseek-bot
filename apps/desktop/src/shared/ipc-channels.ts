@@ -18,17 +18,32 @@ export const IPC_CHANNELS = {
   UPDATES_DOWNLOAD_INSTALL: "updates:downloadInstall",
   /** D22: mirror the persisted UI language into the main process. */
   I18N_SET_LANGUAGE: "i18n:setLanguage",
+  /** D22: renderer pushes the per-bot tray state (bots, active bot, avatars). */
+  TRAY_SYNC: "tray:sync",
+  /** D22: renderer asks main to raise a system notification. */
+  NOTIFICATION_SHOW: "notification:show",
+  /** D22: scan Chrome profiles / preview / import / clear its bookmarks. */
+  CHROME_SCAN: "chrome:scan",
+  CHROME_PREVIEW: "chrome:preview",
+  CHROME_IMPORT: "chrome:import",
+  CHROME_STATE: "chrome:state",
+  CHROME_CLEAR: "chrome:clear",
+  CHROME_EXPORT: "chrome:export",
 } as const;
 
 /** Main → renderer event channel for scheduler skip-and-notify notices (FR-08). */
 export const HOST_EVENT_MISSED = "host:event:missed";
 
-/** D22 main → renderer: a tray menu bot entry was clicked. */
-export const SYSTEM_EVENT_TRAY_BOT = "system:event:tray-bot";
+/** D22 main → renderer: a tray menu entry was clicked. */
+export const SYSTEM_EVENT_TRAY_ACTION = "system:event:tray-action";
 /** D22 main → renderer: a system notification was clicked. */
-export const SYSTEM_EVENT_NOTIFICATION = "system:event:notification";
+export const SYSTEM_EVENT_NOTIFICATION_CLICK = "system:event:notification-click";
 /** D22 main → renderer: native window focus changed (notification gating). */
 export const SYSTEM_EVENT_WINDOW_FOCUS = "system:event:window-focus";
+
+export type TrayActionEvent = { kind: "bot"; botId: string } | { kind: "settings" };
+export type NotificationClickEvent = { botId: string | null };
+export type WindowFocusEvent = { focused: boolean };
 
 /**
  * Data root directory name, mirroring storage's layout constant. Duplicated

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, Tray, nativeImage, safeStorage, session } from "electron";
+import { app, BrowserWindow, nativeImage, safeStorage, session } from "electron";
 import { delimiter, join } from "node:path";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
@@ -11,12 +11,39 @@ import {
 } from "./host-client.js";
 import { checkUpdates, downloadAndInstallUpdate, setAppVersion } from "./updates.js";
 import { initMainLocale, setMainLanguagePreference, tr } from "./i18n.js";
-import { DATA_ROOT_DIR_NAME, HOST_EVENT_MISSED } from "../shared/ipc-channels.js";
+import { createTrayController, sendTrayAction, type TrayController } from "./tray.js";
+import {
+  createNotificationController,
+  sendNotificationClick,
+} from "./notifications.js";
+import {
+  clearChromeImport,
+  exportChromeImportToMarkdown,
+  importChromeProfile,
+  previewChromeProfile,
+  readChromeImport,
+  scanChromeProfiles,
+} from "./chrome-bookmarks.js";
+import {
+  DATA_ROOT_DIR_NAME,
+  HOST_EVENT_MISSED,
+  SYSTEM_EVENT_WINDOW_FOCUS,
+} from "../shared/ipc-channels.js";
 
 let mainWindow: BrowserWindow | null = null;
-let tray: Tray | null = null;
+let trayController: TrayController | null = null;
 let isQuitting = false;
 let hostClient: HostProcessClient | null = null;
+
+const notifications = createNotificationController({
+  getWindow: () => mainWindow,
+  send: (event) => sendNotificationClick(mainWindow, event),
+});
+
+function quitApplication(): void {
+  isQuitting = true;
+  app.quit();
+}
 
 /**
  * Data root mirrors storage's layout (env override first). The storage
@@ -156,40 +183,6 @@ function createMainWindow(): BrowserWindow {
   return win;
 }
 
-function createTray(win: BrowserWindow): Tray {
-  const next = new Tray(resolveTrayIcon());
-  next.setToolTip("DeepSeek Bot");
-  const contextMenu = Menu.buildFromTemplate([
-    {
-      label: "Show",
-      click: () => {
-        win.show();
-        win.focus();
-      },
-    },
-    {
-      label: "Hide",
-      click: () => {
-        win.hide();
-      },
-    },
-    { type: "separator" },
-    {
-      label: "Quit",
-      click: () => {
-        isQuitting = true;
-        app.quit();
-      },
-    },
-  ]);
-  next.setContextMenu(contextMenu);
-  next.on("double-click", () => {
-    win.show();
-    win.focus();
-  });
-  return next;
-}
-
 /**
  * Persist the API key: safeStorage ciphertext goes to the credential blob
  * store; the Host only receives the opaque `cred:` reference. Plaintext
@@ -264,9 +257,33 @@ function registerShellIpc(win: BrowserWindow): void {
         // Renderer re-colors the native window-control strip on theme switch.
         win.setTitleBarOverlay({ color: colors.color, symbolColor: colors.symbolColor });
       },
+      traySync: (payload) => {
+        trayController?.sync(payload);
+      },
+      showNotification: (request) => notifications.show(request),
+      chromeScan: () => scanChromeProfiles(),
+      chromePreview: (token) => previewChromeProfile(token),
+      chromeImport: (token) => importChromeProfile(resolveDataRoot(), token),
+      chromeState: () => readChromeImport(resolveDataRoot()),
+      chromeClear: () => clearChromeImport(resolveDataRoot()),
+      chromeExport: () => exportChromeImportToMarkdown(resolveDataRoot()),
     },
     createPrimaryWindowSenderGuard(() => mainWindow),
   );
+}
+
+function attachFocusEvents(win: BrowserWindow): void {
+  // D22: the renderer gates notifications on real focus, because
+  // document.hasFocus() is false while the window is hidden to the tray.
+  const send = (focused: boolean): void => {
+    if (!win.isDestroyed()) {
+      win.webContents.send(SYSTEM_EVENT_WINDOW_FOCUS, { focused });
+    }
+  };
+  win.on("focus", () => send(true));
+  win.on("blur", () => send(false));
+  win.on("show", () => send(true));
+  win.on("hide", () => send(false));
 }
 
 function denyAllPermissions(): void {
@@ -334,12 +351,22 @@ if (gotLock) {
     });
 
     mainWindow = createMainWindow();
-    tray = createTray(mainWindow);
+    // D22: one tray whose icon mirrors the active bot's avatar; the renderer
+    // pushes the bot list (with rasterised avatars) through tray:sync.
+    trayController = createTrayController({
+      getWindow: () => mainWindow,
+      quit: quitApplication,
+      appName: app.getName(),
+      defaultIcon: resolveTrayIcon,
+      send: (event) => sendTrayAction(mainWindow, event),
+    });
+    attachFocusEvents(mainWindow);
     registerShellIpc(mainWindow);
 
     app.on("activate", () => {
       if (BrowserWindow.getAllWindows().length === 0) {
         mainWindow = createMainWindow();
+        attachFocusEvents(mainWindow);
         registerShellIpc(mainWindow);
       } else if (mainWindow) {
         mainWindow.show();
@@ -350,8 +377,8 @@ if (gotLock) {
   app.on("before-quit", () => {
     isQuitting = true;
     unregisterIpcHandlers();
-    tray?.destroy();
-    tray = null;
+    trayController?.destroy();
+    trayController = null;
     // Graceful host teardown: host/shutdown request, exit wait, kill fallback.
     void hostClient?.shutdown();
     hostClient = null;

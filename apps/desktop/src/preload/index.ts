@@ -1,6 +1,26 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
-import { HOST_EVENT_MISSED, IPC_CHANNELS } from "../shared/ipc-channels.js";
+import {
+  HOST_EVENT_MISSED,
+  IPC_CHANNELS,
+  SYSTEM_EVENT_NOTIFICATION_CLICK,
+  SYSTEM_EVENT_TRAY_ACTION,
+  SYSTEM_EVENT_WINDOW_FOCUS,
+  type NotificationClickEvent,
+  type TrayActionEvent,
+  type WindowFocusEvent,
+} from "../shared/ipc-channels.js";
 import type { LanguagePreference } from "../shared/i18n/types.js";
+import type {
+  ChromeClearResult,
+  ChromeExportResult,
+  ChromeImportResult,
+  ChromePreviewResult,
+  ChromeScanResult,
+  ChromeStateResult,
+  NotificationOutcome,
+  NotificationRequest,
+  TraySyncPayload,
+} from "../shared/system-integration.js";
 
 export type HostMissedNotice = {
   scheduleId: string;
@@ -14,6 +34,13 @@ export type HostCallErrorShape = {
   message: string;
   retryable: boolean;
 };
+
+/** Main → renderer subscription with a stable unsubscribe handle. */
+function subscribe<T>(channel: string, listener: (payload: T) => void): () => void {
+  const handler = (_event: IpcRendererEvent, payload: T): void => listener(payload);
+  ipcRenderer.on(channel, handler);
+  return () => ipcRenderer.removeListener(channel, handler);
+}
 
 export type DesktopBridge = {
   getAppInfo: () => Promise<{
@@ -52,6 +79,31 @@ export type DesktopBridge = {
   i18n: {
     setLanguage: (preference: LanguagePreference) => Promise<void>;
   };
+  /**
+   * D22 OS integration. Everything here is desktop-process only: the tray state
+   * is pushed by the renderer (it owns bot data and avatars), notifications are
+   * raised by main, and Chrome bookmark import never leaves this machine.
+   */
+  system: {
+    tray: {
+      sync: (payload: TraySyncPayload) => Promise<void>;
+    };
+    notifications: {
+      show: (request: NotificationRequest) => Promise<NotificationOutcome>;
+    };
+    chrome: {
+      scan: () => Promise<ChromeScanResult>;
+      preview: (token: string) => Promise<ChromePreviewResult>;
+      import: (token: string) => Promise<ChromeImportResult>;
+      state: () => Promise<ChromeStateResult>;
+      clear: () => Promise<ChromeClearResult>;
+      export: () => Promise<ChromeExportResult>;
+    };
+    /** Main → renderer events; each returns an unsubscribe function. */
+    onTrayAction: (listener: (event: TrayActionEvent) => void) => () => void;
+    onNotificationClick: (listener: (event: NotificationClickEvent) => void) => () => void;
+    onWindowFocus: (listener: (event: WindowFocusEvent) => void) => () => void;
+  };
 };
 
 const api: DesktopBridge = {
@@ -84,6 +136,26 @@ const api: DesktopBridge = {
   i18n: {
     setLanguage: (preference) =>
       ipcRenderer.invoke(IPC_CHANNELS.I18N_SET_LANGUAGE, preference),
+  },
+  system: {
+    tray: {
+      sync: (payload) => ipcRenderer.invoke(IPC_CHANNELS.TRAY_SYNC, payload),
+    },
+    notifications: {
+      show: (request) => ipcRenderer.invoke(IPC_CHANNELS.NOTIFICATION_SHOW, request),
+    },
+    chrome: {
+      scan: () => ipcRenderer.invoke(IPC_CHANNELS.CHROME_SCAN),
+      preview: (token) => ipcRenderer.invoke(IPC_CHANNELS.CHROME_PREVIEW, token),
+      import: (token) => ipcRenderer.invoke(IPC_CHANNELS.CHROME_IMPORT, token),
+      state: () => ipcRenderer.invoke(IPC_CHANNELS.CHROME_STATE),
+      clear: () => ipcRenderer.invoke(IPC_CHANNELS.CHROME_CLEAR),
+      export: () => ipcRenderer.invoke(IPC_CHANNELS.CHROME_EXPORT),
+    },
+    onTrayAction: (listener) => subscribe<TrayActionEvent>(SYSTEM_EVENT_TRAY_ACTION, listener),
+    onNotificationClick: (listener) =>
+      subscribe<NotificationClickEvent>(SYSTEM_EVENT_NOTIFICATION_CLICK, listener),
+    onWindowFocus: (listener) => subscribe<WindowFocusEvent>(SYSTEM_EVENT_WINDOW_FOCUS, listener),
   },
 };
 

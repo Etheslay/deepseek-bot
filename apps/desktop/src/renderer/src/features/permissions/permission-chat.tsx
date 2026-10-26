@@ -78,10 +78,22 @@ function capabilityLine(capabilities: readonly CapabilityId[]): string {
 
 type Notice = { key: MessageKey; params?: readonly (string | number)[] };
 
-export function PermissionChatCards({ botId }: { botId: string }): JSX.Element | null {
+export function PermissionChatCards(props: {
+  botId: string;
+  /**
+   * D22: pending approvals drive the tray status dot and raise a system
+   * notification, so the owner of the bot view needs this count.
+   */
+  onPendingCount?: (count: number) => void;
+}): JSX.Element | null {
+  const { botId, onPendingCount } = props;
   const [approvals, setApprovals] = useState<AppApproval[] | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+
+  useEffect(() => {
+    onPendingCount?.(approvals?.length ?? 0);
+  }, [approvals, onPendingCount]);
 
   const load = useCallback(async (): Promise<void> => {
     const response = await window.deepseekBot.host.call("permission.approval.list", { botId });
