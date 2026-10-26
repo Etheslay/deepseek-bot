@@ -79,3 +79,11 @@
 检查环境：Windows、Node v24.22.1、pnpm 11.28.5。基线 `origin/develop` `a0af1f5`。`pnpm lint`、`pnpm typecheck`、`pnpm test`、`git diff --check` 均退出 0。其中桌面套件在格式化前为 20 文件 / 183 通过；全仓 `pnpm test` 在格式化之后退出 0，host 仍为 61 通过 + 1 跳过（真实 API smoke 未启用）。没有手点 Electron 设置页，没有远程 CI，没有付费 API 请求。
 
 本切片自审（Etheslay 本人填写）：自审人：＿＿＿＿　提交 SHA：＿＿＿＿　日期：＿＿＿＿　结论：＿＿＿＿
+
+## 8. 聊天授权卡切片（2026-10-26）
+
+§7 之后的这一块只在当前聊天里列出该 bot 的 pending 审批，并用已有选项卡样式提供仅本次、本会话、永久允许和拒绝。决定走 `permission.approval.decide`，本会话固定带上契约默认的 5 次和 120 分钟。`app.start_run`、`exec.shell`、`screen.capture` 以及没有 sessionId 的审批不提供更长授权。设置页文件没有改。真实 Harness 工具调用没有接。失败横幅里旧的 `grant.create` 按钮还在，它不能给新网关授权。
+
+检查环境：Windows、Node v24.22.1、pnpm 11.28.5。基线 `origin/develop` `8a8e01c`（PR #49）。`pnpm lint`、`pnpm typecheck`、`pnpm test`、`git diff --check` 均退出 0。host 仍为 61 通过 + 1 跳过（真实 API smoke 未启用）。没有手点 Electron，没有远程 CI，没有付费 API 请求。
+
+本切片自审（Etheslay 本人填写）：自审人：＿＿＿＿　提交 SHA：＿＿＿＿　日期：＿＿＿＿　结论：＿＿＿＿

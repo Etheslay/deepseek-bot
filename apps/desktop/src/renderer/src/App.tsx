@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type JSX } from "react";
 import { createPortal } from "react-dom";
 import { useBots, type UiBot } from "./features/bots/use-bots.js";
+import { PermissionChatCards } from "./features/permissions/permission-chat.js";
 import { PermissionsPanel } from "./features/permissions/permissions-panel.js";
 import { BotForm } from "./features/bots/bot-form.js";
 import { CustomSelect } from "./components/custom-select.js";
@@ -2645,6 +2646,7 @@ function BotsPlaceholder({
             )}
           </>
         )}
+        <PermissionChatCards botId={me.bot.id} />
       </div>
       {pendingFiles.length > 0 && (
         <div className="attach-chips" aria-label="待发送附件">

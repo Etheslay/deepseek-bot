@@ -1,6 +1,6 @@
 # 权限与授权
 
-状态：D16 契约、存储、网关与 Host 授权后端已合入 develop。设置页读取并修改全局策略（`permission.policy.list` / `permission.policy.set`），并查看、撤销已发放授权（`permission.grant.list` / `permission.grant.revoke`）。聊天卡片及真实 Harness 调用方仍待接线，不代表 D16 整体验收。与 [智能体平台](AGENT_PLATFORM.md) 同步实施。D08 已落地的工具权限门继续生效；后端切片见 [D16 报告](reports/D16-report.md)。
+状态：D16 契约、存储、网关与 Host 授权后端已合入 develop。设置页读取并修改全局策略（`permission.policy.list` / `permission.policy.set`），并查看、撤销已发放授权（`permission.grant.list` / `permission.grant.revoke`）。聊天里的待审批卡片调用 `permission.approval.list` / `permission.approval.decide`，可选仅本次、本会话或永久。真实 Harness 调用方仍待接线，不代表 D16 整体验收。与 [智能体平台](AGENT_PLATFORM.md) 同步实施。D08 已落地的工具权限门继续生效；后端切片见 [D16 报告](reports/D16-report.md)。
 
 ## 1. 三层模型
 
@@ -73,7 +73,7 @@ sequenceDiagram
     B-->>U: 回执卡片（已创建）+ 撤销按钮
 ```
 
-授权卡字段固定：能力列表、作用域（本次/会话/永久）、次数上限、过期时间、申请理由。
+授权卡字段固定：能力列表、作用域（本次/会话/永久）、次数上限、过期时间、申请理由。当前聊天卡片列出该 bot 的 pending 审批：申请理由用工具名，能力用中文名。本会话按契约默认 5 次、2 小时；永久不限次数。`app.start_run` / `exec.shell` / `screen.capture` 以及没有 sessionId 的审批不提供更长授权。决定调用 `permission.approval.decide`，并带回精确 `actionDigest`。
 
 ## 5. 设置页
 
