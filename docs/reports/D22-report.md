@@ -129,6 +129,8 @@
 
 > 按 [开发计划 §4](DEVELOPMENT_PLAN.md) 与 [Git 工作流 §4](GIT_WORKFLOW.md)：本分支未自行合入 `develop`，自审结论由负责人签署后再以 merge commit 合并。
 
-## 9. 提交范围
+## 9. 提交范围与 PR
 
 代码 head：`377a37b`；文档 head：本 docs 提交。自审需覆盖 `2ecb2f9..HEAD` 的全部提交（`git log --oneline 2ecb2f9..HEAD`）。
+
+分支已推送 `origin/feature/system-integration`。本机无 `gh` CLI，PR 需由负责人在浏览器创建：<https://github.com/Etheslay/deepseek-bot/pull/new/feature/system-integration>（base = `develop`）。按 [Git 工作流 §4](GIT_WORKFLOW.md)（必需批准数 0、负责人自审后自行合并），填写 §8 后以 merge commit 合入；本次未执行任何合并动作。
