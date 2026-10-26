@@ -29,7 +29,7 @@ function validFile(): LibraryExportFile {
         bot: {
           name: "designer",
           instructions: "负责界面评审。",
-          avatarUi: { avatar: "mono", shape: 0, color: "#a3a3a3" },
+          avatarUi: { avatar: { kind: "mono" }, shape: 0, color: 2 },
         },
       },
     ],
@@ -91,5 +91,37 @@ describe("parseLibraryExport", () => {
     expect(parseLibraryExport(null).ok).toBe(false);
     expect(parseLibraryExport("nope").ok).toBe(false);
     expect(parseLibraryExport([]).ok).toBe(false);
+  });
+
+  it("accepts a grok avatar snapshot in templates", () => {
+    const file = validFile();
+    const [template] = file.templates;
+    if (!template) throw new Error("fixture must contain a template");
+    template.bot.avatarUi = {
+      avatar: { kind: "grok", shape: "blob", color: "#3b93f0", state: "idle" },
+      shape: 1,
+      color: 4,
+    };
+    expect(parseLibraryExport(file).ok).toBe(true);
+  });
+
+  it("rejects a string avatar snapshot (old shape)", () => {
+    const file = validFile();
+    const [template] = file.templates;
+    if (!template) throw new Error("fixture must contain a template");
+    template.bot.avatarUi = {
+      avatar: "mono" as unknown as { kind: "mono" },
+      shape: 0,
+      color: 0,
+    };
+    expect(parseLibraryExport(file).ok).toBe(false);
+  });
+
+  it("rejects a non-numeric template color index", () => {
+    const file = validFile();
+    const [template] = file.templates;
+    if (!template) throw new Error("fixture must contain a template");
+    template.bot.avatarUi.color = "#a3a3a3" as unknown as number;
+    expect(parseLibraryExport(file).ok).toBe(false);
   });
 });

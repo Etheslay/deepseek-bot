@@ -161,3 +161,13 @@
 - 未验证：GitHub Actions run 细节（本机无 gh CLI，仅负责人截图确认页面 checks 通过）、运行期网络面板/CSP 零远程请求、安装包"下载后重启安装"、真实 Host 端到端、各任务手测截图。
 - 未做（已写入各报告 §5）：D14 mermaid 与 ask_user 前端接线、D25 host 检索、D26 工具网关与 grant 链路、D24 数据备份恢复与打包版更新实测、D17 技能定义与导入导出契约校验；模块文档（BOT_WORKSPACE / DESKTOP_SHELL / RELEASE / THIRD_PARTY_NOTICES）同步仍缺。
 - 新出现：Etheslay 重开 `feature/agent-tools` 并推送 `573421e`（web_search 后端，未合入），已登记进 SPRINTS §4。
+
+## 2026-10-25：D17 技能库与统一导入导出（渲染层闭环）
+
+- 设计先行：`docs/superpowers/specs/2026-10-25-skill-library-design.md`（渲染层闭环 / 版本为自动递增整数 / 统一文件同名跳过，三个口径均经负责人确认）。
+- 契约（协作区小 PR，随 #45 已合入 develop）：`packages/contracts/src/library-export.ts` 新增统一库导出文件 schema 与 `parseLibraryExport()`，附 7 例；`docs/CONTRACTS.md` 增 §8。
+- 本分支 `feature/skills-templates`（从 `68229fa` 切）：`features/skills/skills.ts`（技能定义、版本递增、bot 绑定、`buildSkillContext` 有界且 fence 安全）、`features/skills/library-io.ts`（统一文件导出、整份校验后同名跳过导入）、`skills-panel.tsx`（设置页面板）、`bot-skills-picker.tsx` + `BotForm.skillsSlot`（绑定）、`App.tsx` 发送路径 `withSkillContext()` 拼装。
+- 修正 PR① 的判断错误：模板 `avatarUi` 实为 `{avatar: {kind:"mono"} | {kind:"grok",...}, shape: number, color: number}`，schema 与用例已按真实结构改正，并补了反例用例。
+- 实测（Windows 11 x64 + Node v24.16.0 + pnpm 11.28.5）：desktop **21 文件 / 197 用例通过**（新增 18 例）、desktop typecheck exit 0、contracts **6 文件 / 81 用例通过**、根 `pnpm run lint` exit 0。
+- 未验证：真实 Host 端到端（技能是否被模型遵从需真实 API 手测）、设置页与表单的键盘/读屏手测、CI run 细节（本机无 gh CLI）、截图证据。
+- 未做：工作流模板导入导出、技能历史回退、`capabilities` 强制（归 D16）、Host 持久化与模型侧注入（等 SPRINTS §8 待拍板 #1 与 A 线）。
