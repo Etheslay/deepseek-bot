@@ -9,6 +9,8 @@
 import { z } from "zod";
 import {
   ApprovalSchema,
+  AvatarSchema,
+  BotGroupSchema,
   BotSchema,
   ImportableWorkflowDraftSchema,
   NodeRunSchema,
@@ -56,6 +58,10 @@ export const METHODS = [
   "bot.create",
   "bot.update",
   "bot.archive",
+  "bot.batchCreate",
+  "group.create",
+  "group.list",
+  "creation.revoke",
   "workflow.validate",
   "workflow.save",
   "workflow.export",
@@ -106,6 +112,9 @@ const BotPatchSchema = z
     modelProfileId: UuidSchema.optional(),
     workspaceId: UuidSchema.optional(),
     toolPolicyId: UuidSchema.optional(),
+    // null clears the assignment (nullish, like BotSchema's fields).
+    avatar: AvatarSchema.nullish(),
+    groupId: UuidSchema.nullish(),
   })
   .refine(
     (patch) =>
@@ -113,13 +122,30 @@ const BotPatchSchema = z
       patch.instructions !== undefined ||
       patch.modelProfileId !== undefined ||
       patch.workspaceId !== undefined ||
-      patch.toolPolicyId !== undefined,
+      patch.toolPolicyId !== undefined ||
+      patch.avatar !== undefined ||
+      patch.groupId !== undefined,
     { message: "patch must change at least one field" },
   );
 
 const RevisionRefSchema = z.object({
   id: UuidSchema,
   expectedRevision: UuidSchema,
+});
+
+/**
+ * One member of a chat-driven batch creation (FR-12). Per-bot fields fall
+ * back to the batch `defaults` when omitted; explicit avatars win over
+ * auto-assignment. Every effective modelProfileId/workspaceId must exist
+ * (same validation as bot.create).
+ */
+const BotBatchEntrySchema = z.object({
+  name: NonEmptyStringSchema(TEXT_LIMITS.name),
+  instructions: z.string().max(TEXT_LIMITS.instructions),
+  modelProfileId: UuidSchema.optional(),
+  workspaceId: UuidSchema.optional(),
+  toolPolicyId: UuidSchema.optional(),
+  avatar: AvatarSchema.optional(),
 });
 
 const RunIdRefSchema = z.object({ runId: UuidSchema });
@@ -148,6 +174,10 @@ export const METHOD_CONTRACTS = {
       modelProfileId: UuidSchema,
       workspaceId: UuidSchema,
       toolPolicyId: UuidSchema,
+      // Explicit avatar/group at creation time (v0.2): user-specified values
+      // win; batch creation is the path that auto-assigns.
+      avatar: AvatarSchema.optional(),
+      groupId: UuidSchema.optional(),
     }),
     response: BotSchema,
   },
@@ -162,6 +192,66 @@ export const METHOD_CONTRACTS = {
   "bot.archive": {
     request: RevisionRefSchema,
     response: BotSchema,
+  },
+  /**
+   * Chat-driven batch creation (D15 write layer, FR-12): atomically creates
+   * one group (newGroup) or targets an existing one (groupId — mutually
+   * exclusive) plus 1–20 bots. Avatars: explicit values win; the rest get
+   * distinct shape×color combinations from the canonical pool, unique among
+   * the group's non-archived members (batch-only bots: unique within the
+   * batch); repeats only once every combination is taken. The response
+   * batchId feeds creation.revoke, which archives exactly what this call
+   * created. idempotencyKey makes duplicate submissions return the first
+   * batch. Drafts are separate: bot creation previews stay in-memory
+   * (BotCreationDraftSchema, 不落库) until a real creation method runs.
+   */
+  "bot.batchCreate": {
+    request: z
+      .object({
+        groupId: UuidSchema.optional(),
+        newGroup: z
+          .object({ name: NonEmptyStringSchema(TEXT_LIMITS.name) })
+          .optional(),
+        defaults: z
+          .object({
+            modelProfileId: UuidSchema.optional(),
+            workspaceId: UuidSchema.optional(),
+            toolPolicyId: UuidSchema.optional(),
+          })
+          .optional(),
+        bots: z.array(BotBatchEntrySchema).min(1).max(20),
+        idempotencyKey: UuidSchema.optional(),
+      })
+      .refine(
+        (request) =>
+          !(request.groupId !== undefined && request.newGroup !== undefined),
+        { message: "groupId and newGroup are mutually exclusive" },
+      ),
+    response: z.object({
+      batchId: UuidSchema,
+      group: BotGroupSchema.nullable(),
+      bots: z.array(BotSchema),
+    }),
+  },
+  "group.create": {
+    request: z.object({ name: NonEmptyStringSchema(TEXT_LIMITS.name) }),
+    response: BotGroupSchema,
+  },
+  "group.list": {
+    request: z.object({}),
+    response: z.object({ groups: z.array(BotGroupSchema) }),
+  },
+  /**
+   * Revoke a whole creation batch (FR-12 整批撤销): archives every
+   * non-archived bot the batch created and — when the batch created the
+   * group — the group as well. Revoking twice fails with INVALID_INPUT.
+   */
+  "creation.revoke": {
+    request: z.object({ batchId: UuidSchema }),
+    response: z.object({
+      revokedBotIds: z.array(UuidSchema),
+      revokedGroupId: UuidSchema.nullable(),
+    }),
   },
   "workflow.validate": {
     request: z.object({ workflow: WorkflowDraftSchema }),

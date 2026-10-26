@@ -1,11 +1,11 @@
 /**
- * D15 阶段一 read-layer capabilities (SPRINTS §2.3: 默认允许、零契约变更).
+ * D15 read-layer capabilities (SPRINTS §2.3: 默认允许、零契约变更 when
+ * introduced; list_groups now forwards to group.list since the group model
+ * landed with the write layer).
  *
  * Every tool forwards to an existing contract method through an injected
- * caller — the host wires this to its own method surface; no new contract
- * methods, no direct storage access. `list_groups` has no group entity in
- * CONTRACTS v0.1, so it is registered as an explicit empty-set capability
- * (audited like any other call) until the group model lands.
+ * caller — the host wires this to its own method surface; no direct storage
+ * access.
  */
 import { z } from "zod";
 import type { ToolCapability } from "./types.js";
@@ -23,8 +23,7 @@ const listBotsShape: CapabilityShape = {
 
 const listGroupsShape: CapabilityShape = {
   name: "list_groups",
-  description:
-    "List bot groups. CONTRACTS v0.1 has no group entity yet — returns an empty set (audited).",
+  description: "List bot groups (group.list contract method, D15 write layer).",
   inputSchema: z.object({}).strict(),
 };
 
@@ -56,7 +55,7 @@ export function bindReadTools(caller: ContractCaller): ToolCapability[] {
     },
     {
       ...listGroupsShape,
-      handler: async () => ({ groups: [] }),
+      handler: async (params) => caller("group.list", params),
     },
     {
       ...getRunShape,

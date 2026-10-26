@@ -4,7 +4,14 @@ import {
   ApprovalSchema,
   ArtifactSchema,
   AssistantDeltaSchema,
+  assignBatchAvatars,
+  AVATAR_COLORS,
+  AVATAR_SHAPES,
+  avatarPoolKey,
   BotSchema,
+  BotCreationDraftSchema,
+  BotGroupSchema,
+  canonicalAvatarPool,
   ContractErrorSchema,
   ERROR_CODES,
   EventEnvelopeSchema,
@@ -195,6 +202,84 @@ describe("entities", () => {
 
   it("parses an active bot", () => {
     expect(BotSchema.safeParse(bot).success).toBe(true);
+  });
+
+  it("parses pre-v0.2 bots without avatar/groupId keys (stored snapshots)", () => {
+    expect("avatar" in bot).toBe(false);
+    expect(BotSchema.safeParse(bot).success).toBe(true);
+  });
+
+  it("parses avatar and groupId fields and rejects unknown pool values", () => {
+    const decorated = {
+      ...bot,
+      avatar: { shape: "star5", color: "#3b93f0" },
+      groupId: "77777777-7777-4777-8777-777777777777",
+    };
+    expect(BotSchema.safeParse(decorated).success).toBe(true);
+    expect(
+      BotSchema.safeParse({
+        ...decorated,
+        avatar: { shape: "moon-slice", color: "#3b93f0" },
+      }).success,
+    ).toBe(false);
+    expect(
+      BotSchema.safeParse({
+        ...decorated,
+        avatar: { shape: "star5", color: "#ff00ff" },
+      }).success,
+    ).toBe(false);
+  });
+
+  it("parses bot groups", () => {
+    expect(
+      BotGroupSchema.safeParse({
+        id: UUID,
+        revision: "22222222-2222-4222-8222-222222222222",
+        name: "research-squad",
+        archivedAt: null,
+      }).success,
+    ).toBe(true);
+  });
+
+  it("treats every bot creation draft field as optional", () => {
+    expect(BotCreationDraftSchema.safeParse({}).success).toBe(true);
+    expect(
+      BotCreationDraftSchema.safeParse({
+        name: "scout",
+        instructions: "Look things up.",
+        avatar: { shape: "egg", color: "#f0b429" },
+      }).success,
+    ).toBe(true);
+    expect(
+      BotCreationDraftSchema.safeParse({
+        avatar: { shape: "egg", color: "#ff00ff" },
+      }).success,
+    ).toBe(false);
+  });
+
+  it("assigns distinct avatars, explicit picks win, repeats only after exhaustion", () => {
+    const pool = canonicalAvatarPool();
+    expect(pool).toHaveLength(AVATAR_SHAPES.length * AVATAR_COLORS.length);
+
+    const taken = new Set([avatarPoolKey(pool[0]!), avatarPoolKey(pool[1]!)]);
+    const assigned = assignBatchAvatars({
+      count: 3,
+      explicit: [{ shape: "heart", color: "#e8483f" }, undefined, undefined],
+      taken,
+    });
+    expect(assigned[0]).toEqual({ shape: "heart", color: "#e8483f" });
+    const keys = assigned.slice(1).map(avatarPoolKey);
+    expect(keys).toEqual([avatarPoolKey(pool[2]!), avatarPoolKey(pool[3]!)]);
+    expect(new Set([...keys, ...taken]).size).toBe(4);
+
+    // Exhausted scope: automatic picks cycle over the pool.
+    const everything = new Set(pool.map(avatarPoolKey));
+    const exhausted = assignBatchAvatars({
+      count: 2,
+      explicit: [undefined, undefined],
+      taken: everything,
+    });
+    expect(exhausted).toEqual([pool[0], pool[1]]);
   });
 
   it("requires botId on bot nodes and forbids it on approval nodes", () => {

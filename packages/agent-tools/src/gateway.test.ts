@@ -126,12 +126,16 @@ describe("bindReadTools", () => {
     ]);
   });
 
-  it("list_groups returns an explicit empty set (no group entity in v0.1)", async () => {
-    const tools = bindReadTools(async () => ({}));
+  it("forwards list_groups to the group.list contract method (D15 write layer)", async () => {
+    const caller = vi.fn(async (method: string) =>
+      method === "group.list" ? { groups: [{ id: "g-1" }] } : {},
+    );
+    const tools = bindReadTools(caller);
     const groups = tools.find((tool) => tool.name === "list_groups")!;
     await expect(groups.handler({}, { caller: { id: "ui:1" } })).resolves.toEqual({
-      groups: [],
+      groups: [{ id: "g-1" }],
     });
+    expect(caller).toHaveBeenCalledWith("group.list", {});
   });
 
   it("forwards list_bots and get_run_events with their contract payloads", async () => {

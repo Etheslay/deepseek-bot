@@ -91,3 +91,18 @@
 - 自审记录按规范留空待负责人 Etheslay 填写；PR 合并由本人确认。
 
 - CI 补充（同日）：首次 CI 运行 3 个用例失败（runner TEMP 为 8.3 短名 RUNNER~1，fs.realpathSync 与 fs.promises.realpath 行为不一致，范围与子路径规范化形式分裂）。修复：gate 以同一 canonicalizeToolPath 规范化 grants/产物目录 scope，测试改用规范 scope，新增注入 realpath 的回归测试；本地全绿（358 用例）后推送复验。
+
+## 2026-10-25：D12 运行时集成合并 + D15 工具网关读层
+
+- PR #36（feature/runtime-integration）合入 develop：适配层、审批桥、Host 装配、stdio 桥、桌面接线与 run.resume；随后 PR #37 将 D15 读层（packages/agent-tools：能力注册、zod 校验、JSONL 审计、四个读工具、host 装配点）合入 develop。
+
+## 2026-10-25：D15 工具网关写层（feature/agent-tools 续）
+
+- 读层合入后继续同一任务分支：FR-12 聊天驱动创建的写层三件套（创建草案不落库、批量创建组内自动分配不重复头像、整批撤销）。
+- 契约 v0.2 附加式扩展：BotGroup/Avatar（14×10 规范池）/BotCreationDraft 实体；Bot.avatar/groupId（nullish，兼容存量快照）；新方法 group.create/group.list/bot.batchCreate/creation.revoke；bot.create/update 支持显式 avatar/groupId。PROTOCOL_VERSION 升 0.2（SUPPORTED 保留 0.1），WORKFLOW_SCHEMA_VERSION 解耦保持 0.1。
+- 头像自动分配纯函数入 contracts（assignBatchAvatars：显式优先、组内去重、池尽才重复）；批量创建在 storage 单事务完成（建组+分配+落库+台账），失败整体回滚，idempotencyKey 幂等重放；撤销经 archiveBotUnchecked（无 revision 守卫）+ 批次台账关账。
+- agent-tools 新增 create_bot_draft（纯回显不落库）/create_group/create_bots_batch/revoke_batch 四个写能力（strict schema 镜像契约），list_groups 改转发 group.list；host 装配写层并新增四个方法处理器。
+- migration 0004-creation-batches（bot_groups、bots 加列、creation_batches 台账）；备份为全库快照自动覆盖。
+- 根目录 lint / typecheck / test 全绿：desktop 147、shared 6、contracts 71、storage 124、agent-tools 17、runtime 128、harness-adapter 52、harness-bridge 10、host 26+1 skipped。
+- 未做（记录于 docs/reports/D15-report.md §5）：grant/审批（D16 接入网关桩）、聊天侧调用方、assign_bot_group/update_bot/create_workflow 等写工具、get_workflow 读方法、batch.created 事件（run 域事件模型需先扩展）、真实 Harness/端到端验证。
+- 自审记录留空待负责人 Etheslay 填写；PR 合并由本人确认。

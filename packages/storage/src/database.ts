@@ -371,4 +371,38 @@ CREATE INDEX schedule_misses_schedule ON schedule_misses(schedule_id, detected_a
 ALTER TABLE node_runs ADD COLUMN outputs_json TEXT;
 `,
   },
+  {
+    // D15 write layer (FR-12): bot groups, per-bot avatar/group columns and
+    // the batch ledger behind creation.revoke (整批撤销). Existing bots keep
+    // NULL avatar/group columns — consumers fall back to their own
+    // derivation, exactly like pre-v0.2 run snapshots without the keys.
+    id: 4,
+    name: "0004-creation-batches",
+    sql: /* sql */ `
+CREATE TABLE bot_groups (
+  id TEXT PRIMARY KEY,
+  revision TEXT NOT NULL,
+  name TEXT NOT NULL,
+  archived_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+ALTER TABLE bots ADD COLUMN avatar_shape TEXT;
+ALTER TABLE bots ADD COLUMN avatar_color TEXT;
+ALTER TABLE bots ADD COLUMN group_id TEXT;
+
+CREATE TABLE creation_batches (
+  id TEXT PRIMARY KEY,
+  group_id TEXT,
+  created_group_id TEXT,
+  bot_ids_json TEXT NOT NULL,
+  request_id TEXT,
+  created_at TEXT NOT NULL,
+  revoked_at TEXT
+);
+CREATE UNIQUE INDEX creation_batches_request_id
+  ON creation_batches(request_id) WHERE request_id IS NOT NULL;
+`,
+  },
 ];

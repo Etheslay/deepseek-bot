@@ -26,17 +26,26 @@ import {
 import { EngineError, type LocalScheduler, type WorkflowEngine } from "@deepseek-bot/runtime";
 import {
   archiveBot,
+  archiveBotUnchecked,
+  archiveGroup,
   createBackup,
   createBot,
+  createBotBatch,
+  createGroup,
   getApproval,
+  getBatch,
+  getBot,
+  getGroup,
   getRun,
   getWorkflow,
   listBots,
   listEvents,
+  listGroups,
   listRuns,
   listSchedules,
   listWorkflows,
   getNodeRun,
+  markBatchRevoked,
   restoreBackup,
   saveWorkflow,
   setSetting,
@@ -76,6 +85,17 @@ function invalid(message: string, details?: Record<string, unknown>): EngineErro
   });
 }
 
+/** bot.create/bot.update accept a groupId; it must reference a live group. */
+function requireGroup(db: OpenedDatabase, groupId: string): void {
+  const group = getGroup(db, groupId);
+  if (group === undefined) {
+    throw invalid("group does not exist", { groupId });
+  }
+  if (group.archivedAt !== null) {
+    throw invalid("group is archived", { groupId });
+  }
+}
+
 /**
  * The full CONTRACTS §3 surface. The mapped type keeps each handler bound to
  * its own request/response pair, so the compiler flags any drift from the
@@ -87,6 +107,9 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
     "bot.list": () => ({ bots: listBots(db) }),
 
     "bot.create": (payload, call) => {
+      if (payload.groupId !== undefined) {
+        requireGroup(db, payload.groupId);
+      }
       const result = createBot(db, {
         bot: {
           id: randomUUID(),
@@ -96,6 +119,8 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
           modelProfileId: payload.modelProfileId,
           workspaceId: payload.workspaceId,
           toolPolicyId: payload.toolPolicyId,
+          ...(payload.avatar !== undefined ? { avatar: payload.avatar } : {}),
+          ...(payload.groupId !== undefined ? { groupId: payload.groupId } : {}),
           archivedAt: null,
         },
         ...(call.requestId !== undefined ? { requestId: call.requestId } : {}),
@@ -104,6 +129,9 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
     },
 
     "bot.update": (payload) => {
+      if (payload.patch.groupId !== undefined && payload.patch.groupId !== null) {
+        requireGroup(db, payload.patch.groupId);
+      }
       // Compact explicitly: the contract output carries optional-undefined
       // props that storage's BotPatch (exactOptionalPropertyTypes) rejects.
       const p = payload.patch;
@@ -113,11 +141,101 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
         ...(p.modelProfileId !== undefined ? { modelProfileId: p.modelProfileId } : {}),
         ...(p.workspaceId !== undefined ? { workspaceId: p.workspaceId } : {}),
         ...(p.toolPolicyId !== undefined ? { toolPolicyId: p.toolPolicyId } : {}),
+        ...(p.avatar !== undefined ? { avatar: p.avatar } : {}),
+        ...(p.groupId !== undefined ? { groupId: p.groupId } : {}),
       };
       return updateBot(db, { id: payload.id, expectedRevision: payload.expectedRevision, patch });
     },
 
     "bot.archive": (payload) => archiveBot(db, payload),
+
+    /**
+     * D15 write layer (FR-12): one atomic batch — mint the group when the
+     * request carries newGroup, auto-assign pool-distinct avatars (explicit
+     * values win), record the ledger row that backs creation.revoke.
+     */
+    "bot.batchCreate": (payload) => {
+      const defaults = payload.defaults;
+      const resolve = (value: string | undefined, fallback: string | undefined, field: string): string => {
+        const effective = value ?? fallback;
+        if (effective === undefined) {
+          throw invalid(`batch bot is missing ${field} (no explicit value and no batch default)`);
+        }
+        return effective;
+      };
+      const result = createBotBatch(db, {
+        batchId: randomUUID(),
+        ...(payload.idempotencyKey !== undefined
+          ? { requestId: payload.idempotencyKey }
+          : {}),
+        ...(payload.newGroup !== undefined
+          ? {
+              newGroup: {
+                id: randomUUID(),
+                revision: randomUUID(),
+                name: payload.newGroup.name,
+                archivedAt: null,
+              },
+            }
+          : {}),
+        ...(payload.groupId !== undefined ? { groupId: payload.groupId } : {}),
+        bots: payload.bots.map((entry) => ({
+          bot: {
+            id: randomUUID(),
+            revision: randomUUID(),
+            name: entry.name,
+            instructions: entry.instructions,
+            modelProfileId: resolve(entry.modelProfileId, defaults?.modelProfileId, "modelProfileId"),
+            workspaceId: resolve(entry.workspaceId, defaults?.workspaceId, "workspaceId"),
+            toolPolicyId: resolve(entry.toolPolicyId, defaults?.toolPolicyId, "toolPolicyId"),
+            archivedAt: null,
+          },
+          ...(entry.avatar !== undefined ? { avatar: entry.avatar } : {}),
+        })),
+      });
+      return { batchId: result.batchId, group: result.group, bots: result.bots };
+    },
+
+    "group.create": (payload) =>
+      createGroup(db, {
+        group: {
+          id: randomUUID(),
+          revision: randomUUID(),
+          name: payload.name,
+          archivedAt: null,
+        },
+      }),
+
+    "group.list": () => ({ groups: listGroups(db) }),
+
+    /** FR-12 整批撤销: archive what the batch created, then close the ledger row. */
+    "creation.revoke": (payload) => {
+      const batch = getBatch(db, payload.batchId);
+      if (batch === undefined) {
+        throw invalid("creation batch not found", { batchId: payload.batchId });
+      }
+      const revokedBotIds: string[] = [];
+      for (const botId of batch.botIds) {
+        const before = getBot(db, botId);
+        if (before === undefined) {
+          throw invalid("batch member no longer exists", { botId });
+        }
+        archiveBotUnchecked(db, { id: botId });
+        if (before.archivedAt === null) {
+          revokedBotIds.push(botId);
+        }
+      }
+      let revokedGroupId: string | null = null;
+      if (batch.createdGroupId !== null) {
+        const group = getGroup(db, batch.createdGroupId);
+        if (group !== undefined && group.archivedAt === null) {
+          archiveGroup(db, { id: group.id, expectedRevision: group.revision });
+          revokedGroupId = group.id;
+        }
+      }
+      markBatchRevoked(db, payload.batchId);
+      return { revokedBotIds, revokedGroupId };
+    },
 
     "workflow.validate": (payload) => {
       const issues = validateWorkflowDraft(payload.workflow);
