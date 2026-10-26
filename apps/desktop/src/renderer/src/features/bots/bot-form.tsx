@@ -80,6 +80,8 @@ export function BotForm(
     avatarSlot?: ReactNode;
     /** Rendered after role (group select row). */
     groupSlot?: ReactNode;
+    /** Rendered after the group row (skill bindings, D17). */
+    skillsSlot?: ReactNode;
     /** Create mode: keep the dialog focused on name + avatar. */
     minimal?: boolean;
   },
@@ -226,6 +228,8 @@ export function BotForm(
       )}
 
       {props.groupSlot}
+
+      {props.skillsSlot}
 
       <details className="advanced">
         <summary>高级设置</summary>

@@ -46,10 +46,31 @@ import {
   saveTemplate,
   type BotTemplate,
 } from "./features/templates/bot-templates.js";
+import { BotSkillsPicker } from "./features/skills/bot-skills-picker.js";
+import { SkillsPanel } from "./features/skills/skills-panel.js";
+import {
+  buildSkillContext,
+  loadSkills,
+  setBotSkills,
+  type SkillLibrary,
+} from "./features/skills/skills.js";
 
 
 type Group = { key: number; name: string };
 const UNGROUPED = 1;
+
+/**
+ * Prepend the bot's bound-skill context to an outgoing turn. The bubble keeps
+ * the user's own text; only the text handed to the chat runtime grows.
+ */
+function withSkillContext(
+  build: (botId: string) => string,
+  botId: string,
+  text: string,
+): string {
+  const block = build(botId);
+  return block.length > 0 ? `${block}\n\n${text}` : text;
+}
 
 const EMOJIS = ["👍", "👎", "❤️", "😂", "🎉"] as const;
 type Emoji = (typeof EMOJIS)[number];
@@ -297,6 +318,9 @@ export function App(): JSX.Element {
   const [accent, setAccent] = useState(initialSettings.accent);
   const [botTemplates, setBotTemplates] = useState<BotTemplate[]>(() =>
     listTemplates(window.localStorage),
+  );
+  const [skillLibrary, setSkillLibrary] = useState<SkillLibrary>(() =>
+    loadSkills(window.localStorage),
   );
 
   const saveBotTemplate = (target: UiBot): void => {
@@ -1319,6 +1343,7 @@ const logout = (): void => {
               onTalkTo={(otherKey) => talkTo(selectedBot, otherKey)}
               onCopy={(t) => void copyText(t)}
               onNotify={(message) => setToast(message)}
+              skillContext={(botId) => buildSkillContext(botId, skillLibrary)}
               onOpenBot={(botKey) => {
                 const target = bots.find((b) => b.key === botKey);
                 if (target) {
@@ -1631,6 +1656,24 @@ const logout = (): void => {
                     </div>
                   )
                 }
+                skillsSlot={
+                  editingBot ? (
+                    <BotSkillsPicker
+                      skills={skillLibrary.skills}
+                      selected={skillLibrary.bindings[editingBot.bot.id] ?? []}
+                      onChange={(ids) =>
+                        setSkillLibrary(
+                          setBotSkills(
+                            window.localStorage,
+                            skillLibrary,
+                            editingBot.bot.id,
+                            ids,
+                          ),
+                        )
+                      }
+                    />
+                  ) : undefined
+                }
               />
             </div>
           </div>
@@ -1813,6 +1856,15 @@ const logout = (): void => {
                       </button>
                     </span>
                   </div>
+                </div>
+                <div className="settings-section-title">技能（复用与导入导出）</div>
+                <div className="settings-card">
+                  <SkillsPanel
+                    storage={window.localStorage}
+                    library={skillLibrary}
+                    onChange={setSkillLibrary}
+                    onToast={setToast}
+                  />
                 </div>
                 <div className="settings-section-title">外观</div>
                 <div className="settings-card">
@@ -2188,6 +2240,7 @@ function BotsPlaceholder({
   onAssistant,
   onOpenBot,
   onNotify,
+  skillContext,
 }: {
   bots: UiBot[];
   groups: Group[];
@@ -2208,6 +2261,8 @@ function BotsPlaceholder({
   onAssistant: (text: string) => void;
   onOpenBot: (botKey: number) => void;
   onNotify: (message: string) => void;
+  /** Bound-skill context for a bot, composed at send time (D17). */
+  skillContext: (botId: string) => string;
 }): JSX.Element {
   const service = useService();
   const [draft, setDraft] = useState("");
@@ -2396,7 +2451,7 @@ function BotsPlaceholder({
     const forKey = me.key;
     setStream({ ...emptyStream(), forKey });
     let acc = "";
-    const handle = service.chat.stream(me.bot.id, text, {
+    const handle = service.chat.stream(me.bot.id, withSkillContext(skillContext, me.bot.id, text), {
       onDelta: (chunk) => {
         acc += chunk;
         setStream((prev) =>
@@ -2436,7 +2491,7 @@ function BotsPlaceholder({
       const forKey = me.key;
       setStream({ ...emptyStream(), forKey });
       let acc = "";
-      const handle = service.chat.stream(me.bot.id, text, {
+      const handle = service.chat.stream(me.bot.id, withSkillContext(skillContext, me.bot.id, text), {
         onDelta: (chunk) => {
           acc += chunk;
           setStream((prev) =>
