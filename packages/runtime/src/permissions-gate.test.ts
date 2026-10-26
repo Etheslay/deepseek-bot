@@ -210,7 +210,14 @@ describe("NodeToolGate guards", () => {
   });
 
   it("leaves already-decided approvals alone when the TTL timer fires", async () => {
-    const { gate, db, seeded } = makeGate({ approvalTtlMs: 20 });
+    // The TTL has to survive the gap between `authorize` and the direct
+    // `decideApproval` below, which is wall-clock time on a loaded CI runner.
+    // A 20 ms window loses that race (the approval expires first and
+    // `decideApproval` throws APPROVAL_EXPIRED), so the margin is 500 ms and
+    // the wait below stays past it to still fire the TTL timer. Do not shrink
+    // these two numbers together — the gap is what makes the case stable.
+    const ttlMs = 500;
+    const { gate, db, seeded } = makeGate({ approvalTtlMs: ttlMs });
     const pending = gate.authorize(shellAction);
     await waitFor(() => gate.pendingApprovalIds().length > 0);
     const approvalId = gate.pendingApprovalIds()[0];
@@ -221,7 +228,7 @@ describe("NodeToolGate guards", () => {
     // the TTL timer fire on a non-pending approval: no settle, no expiry.
     decideApproval(db, { id: approvalId, decision: "approved" });
     await waitFor(() => gate.pendingApprovalIds().length >= 0, 100);
-    await new Promise((resolve) => setTimeout(resolve, 60));
+    await new Promise((resolve) => setTimeout(resolve, ttlMs + 100));
     expect(getApproval(db, approvalId)?.status).toBe("approved");
     expect(gate.pendingApprovalIds()).toContain(approvalId);
     void pending;
