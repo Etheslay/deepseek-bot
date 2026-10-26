@@ -65,8 +65,21 @@ pnpm --filter @deepseek-bot/desktop pack:win   # 构建 + electron-builder NSIS 
 | `window:minimize` | 最小化 |
 | `window:toggleMaximize` | 最大化/还原切换 |
 | `window:close` | 关闭窗口（路由到 close 逻辑：默认隐藏到托盘） |
+| `window:set-titlebar-overlay` | 主题切换同步原生窗口控制条颜色（两枚 #rrggbb） |
+| `settings:saveKey` | safeStorage 加密保存 API Key 并登记 `cred:` 引用 |
+| `host:call` | 渲染层 → Host 契约方法（方法白名单在主进程收紧） |
+| `knowledge:import` | 打开文件对话框读一个 .txt/.md（无路径参数） |
+| `updates:check` / `updates:downloadInstall` | 应用内更新检查 / 下载重启安装（D24） |
+| `backups:list` | 只读数据根 backups/*/manifest.json 摘要（D24 收尾切片） |
+| `app:hardwareAcceleration` | 读取/切换硬件加速偏好（userData 文件，重启生效；D24 收尾切片） |
 
-preload 暴露面：`deepseekBot.getAppInfo()` 与 `deepseekBot.window.{show,hide,minimize,toggleMaximize,close}`。不暴露 `ipcRenderer`、`require`、`process`、`fs` 或任意 channel。
+preload 暴露面：`deepseekBot.getAppInfo()`、`deepseekBot.window.{…}`、`deepseekBot.settings.saveKey`、`deepseekBot.host.{call,onMissed}`、`deepseekBot.updates.{check,downloadInstall}`、`deepseekBot.knowledge.importFile`、`deepseekBot.backups.list`、`deepseekBot.app.hardwareAcceleration`。不暴露 `ipcRenderer`、`require`、`process`、`fs` 或任意 channel。
+
+## Host 进程生命周期
+
+- 主进程启动时经 `spawnHostProcess` 拉起 Host 子进程（node ≥24 运行 `packages/host/dist/main.js`，env 注入数据根与凭据解密回调）。
+- **恢复数据后重启（D24 收尾切片）**：`data.restore` 成功会把数据库整体替换，原 Host 的句柄随即作废——主进程在把结果返回给渲染层之前对旧 client 优雅停机并重新 spawn，后续调用落在恢复后的数据上；恢复被拒绝时原 Host 保持原样，稳定错误原样透传。
+- 硬件加速偏好在 `app.ready` 之前同步应用（Chromium 只在此刻接受该开关）。
 
 ## 窗口与托盘行为
 
