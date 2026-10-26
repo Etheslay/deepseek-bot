@@ -92,4 +92,4 @@
 
 `feature/harness-tool-gateway` 从已含 PR #48/#50/#51 的 `2ecb2f9` 创建。八个应用工具已通过离线插件接入真实 Harness，经 Host 每轮认证通道绑定可信身份、进入现有 D16 网关，并在聊天中等待审批后继续原调用。审批卡展示精确参数，旧 `grant.create` 按钮已移除。真实 Electron + 生产 Host + 钉扎 Harness + 本地受控模型已完成「读分组 → 申请创建 → 无写入等待 → 点击仅本次 → 创建一次 → 模型继续回复」验收；这不是付费 DeepSeek API 验收。
 
-完整实现、实际检查、截图、错误路径与未验证边界见 [D16 Harness 工具报告](D16-harness-tools-report.md)。前文各节保留当时的实现范围与检查证据；`ask_user` / `web_search` 的真实聊天接线和原生聊天 D08 工具审批仍为后续工作。最新提交的真人自审仍由 Etheslay 本人填写。
+完整实现、实际检查、截图、错误路径与未验证边界见 [D16 Harness 工具报告](D16-harness-tools-report.md)。前文各节保留当时的实现范围与检查证据。`ask_user` 的桌面回答回传见 [ask_user 回传报告](D16-ask-user-chat-report.md)。`web_search` 的真实聊天接线和原生聊天 D08 工具审批仍为后续工作。最新提交的真人自审仍由 Etheslay 本人填写。

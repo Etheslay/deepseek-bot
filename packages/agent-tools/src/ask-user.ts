@@ -49,7 +49,7 @@ const WAIT_TIMEOUT_MS = 30 * 60_000;
 export interface UserQuestionControls {
   /** Returns detached snapshots; callerId optionally narrows the result. */
   listPending(callerId?: string): AskUserRequest[];
-  answer(requestId: string, callerId: string, answer: unknown): void;
+  answer(requestId: string, callerId: string, answer: unknown): AskUserResult;
   cancel(requestId: string, callerId: string): void;
 }
 
@@ -115,7 +115,7 @@ export class AskUserCoordinator implements UserQuestionControls {
     return requests;
   }
 
-  answer(requestId: string, callerId: string, answer: unknown): void {
+  answer(requestId: string, callerId: string, answer: unknown): AskUserResult {
     const entry = this.requirePending(requestId, callerId);
     const parsed = answerSchema.safeParse(answer);
     if (!parsed.success)
@@ -134,6 +134,7 @@ export class AskUserCoordinator implements UserQuestionControls {
     }
     this.remove(entry);
     entry.resolve(result);
+    return result;
   }
 
   cancel(requestId: string, callerId: string): void {

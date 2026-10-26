@@ -78,6 +78,8 @@ export const METHODS = [
   "chat.send",
   "chat.history",
   "chat.cancel",
+  "question.list",
+  "question.answer",
   "grant.create",
   "grant.list",
   "grant.revoke",
@@ -423,6 +425,53 @@ export const METHOD_CONTRACTS = {
   "chat.cancel": {
     request: z.object({ sessionId: z.string().min(1).max(128) }),
     response: z.object({ cancelled: z.boolean() }),
+  },
+  "question.list": {
+    request: z.object({ botId: UuidSchema }).strict(),
+    response: z.object({
+      questions: z.array(
+        z.object({
+          requestId: UuidSchema,
+          question: z.string().min(1).max(2_000),
+          options: z
+            .array(
+              z.object({
+                id: z.enum(["A", "B", "C", "D"]),
+                label: z.string().min(1).max(1_000),
+              }),
+            )
+            .min(2)
+            .max(4),
+          allowOther: z.boolean(),
+          expiresAt: IsoDateTimeUtcSchema,
+        }),
+      ),
+    }),
+  },
+  "question.answer": {
+    request: z.union([
+      z
+        .object({
+          botId: UuidSchema,
+          requestId: UuidSchema,
+          optionId: z.enum(["A", "B", "C", "D"]),
+        })
+        .strict(),
+      z
+        .object({
+          botId: UuidSchema,
+          requestId: UuidSchema,
+          text: z.string().trim().min(1).max(4_000),
+        })
+        .strict(),
+    ]),
+    response: z.object({
+      requestId: UuidSchema,
+      optionId: z.enum(["A", "B", "C", "D"]).optional(),
+      text: z.string().min(1).max(4_000),
+      messageId: UuidSchema,
+      at: IsoDateTimeUtcSchema,
+    }),
   },
   "grant.create": {
     request: z.object({

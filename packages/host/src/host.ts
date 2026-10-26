@@ -240,6 +240,7 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
 
   let closed = false;
   const agentToolsHolder: { current?: ToolGateway } = {};
+  const questions = new AskUserCoordinator();
   const context: HostContext = {
     db,
     engine,
@@ -249,6 +250,7 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
     resolveApiKey: options.resolveApiKey,
     permissions,
     chat,
+    userQuestions: questions,
     get agentTools(): ToolGateway {
       if (agentToolsHolder.current === undefined) {
         throw new Error("agent tools gateway is not ready yet");
@@ -317,7 +319,6 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
   };
 
   const agentRegistry = new ToolRegistry();
-  const questions = new AskUserCoordinator();
   // D16: every registered tool crosses the Host authorization checkpoint.
   for (const capability of [
     ...bindReadTools((method, payload) => dispatch(method as Method, payload)),

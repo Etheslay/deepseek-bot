@@ -1,6 +1,6 @@
 # 权限与授权
 
-状态：D16 后端、设置页及聊天审批卡已合入 develop；本功能分支将八个应用工具接入真实聊天，并以真实 Electron、Host、钉扎 Harness 和本地受控模型验证授权后继续执行。设置页与聊天卡统一调用 `permission.*`，卡片展示已校验的精确参数，旧 `grant.create` 按钮已移除。`ask_user` / `web_search` 聊天接线、原生聊天 D08 工具审批及付费模型验收仍未完成；不能据此宣称整体平台验收。后端与运行证据见 [D16 报告](reports/D16-report.md) 和 [Harness 工具报告](reports/D16-harness-tools-report.md)。
+状态：D16 后端、设置页及聊天审批卡已合入 develop；本功能分支将八个应用工具接入真实聊天，并以真实 Electron、Host、钉扎 Harness 和本地受控模型验证授权后继续执行。设置页与聊天卡统一调用 `permission.*`，卡片展示已校验的精确参数，旧 `grant.create` 按钮已移除。`ask_user` 的桌面回答经受信方法 `question.list` / `question.answer` 回到等待中的工具，并写入该 bot 的用户聊天记录；回答不授予权限。`web_search` 聊天接线、原生聊天 D08 工具审批及付费模型验收仍未完成；不能据此宣称整体平台验收。后端与运行证据见 [D16 报告](reports/D16-report.md) 和 [Harness 工具报告](reports/D16-harness-tools-report.md)。
 
 ## 1. 三层模型
 
