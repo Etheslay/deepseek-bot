@@ -1,6 +1,6 @@
 # 权限与授权
 
-状态：D16 后端、设置页及聊天审批卡已合入 develop；本功能分支将八个应用工具接入真实聊天，并以真实 Electron、Host、钉扎 Harness 和本地受控模型验证授权后继续执行。设置页与聊天卡统一调用 `permission.*`，卡片展示已校验的精确参数，旧 `grant.create` 按钮已移除。`ask_user` 的桌面回答经受信方法 `question.list` / `question.answer` 回到等待中的工具，并写入该 bot 的用户聊天记录；回答不授予权限。`web_search` 聊天接线、原生聊天 D08 工具审批及付费模型验收仍未完成；不能据此宣称整体平台验收。后端与运行证据见 [D16 报告](reports/D16-report.md) 和 [Harness 工具报告](reports/D16-harness-tools-report.md)。
+状态：D16 后端、设置页及聊天审批卡已合入 develop；本功能分支将八个应用工具接入真实聊天，并以真实 Electron、Host、钉扎 Harness 和本地受控模型验证授权后继续执行。设置页与聊天卡统一调用 `permission.*`，卡片展示已校验的精确参数，旧 `grant.create` 按钮已移除。`ask_user` 的桌面回答经受信方法 `question.list` / `question.answer` 回到等待中的工具，并写入该 bot 的用户聊天记录；回答不授予权限。`web_search` 的聊天调用由 Host 按该 bot 的 ToolPolicy.network 绑定受信句柄：allowed 才出站，disabled 拒绝，approval-required 在聊天中直接拒绝且不创建工作流运行。SearXNG 地址由受信方法 `search.config.get` / `search.config.set` 保存，显式清空优先于启动环境变量。结果经 `search.results.list` 展示，并写入该 bot 的助手聊天记录。其他工具的原生聊天 D08 审批及付费模型验收仍未完成；不能据此宣称整体平台验收。后端与运行证据见 [D16 报告](reports/D16-report.md)、[Harness 工具报告](reports/D16-harness-tools-report.md) 和 [web_search 聊天报告](reports/D16-web-search-chat-report.md)。
 
 ## 1. 三层模型
 
@@ -33,7 +33,7 @@
 
 能力注册表包含未来能力，不会自动产生对应工具；新增工具必须显式绑定能力并同步本文、契约与审计字段。`create_bots_batch` 有 newGroup 时同时需要 create_bot/create_group。草案生成仅回显、不落库，属于 app.read。
 
-`web_search` 先通过 D16 network.search，再通过现有 ToolPolicy.network 及 D08 精确动作授权。工具模型参数不能指定服务地址或传入权限对象；受信调用方经 ToolCallOptions.networkPermissions 绑定当前节点的 D08 句柄。禁止网络时不发请求，要求审批时先等真实审批。网关 JSONL 存摘要；D08 本地 tool.requested 事件按已有规范保存精确搜索参数用于审批。
+`web_search` 先通过 D16 network.search，再通过现有 ToolPolicy.network 及 D08 精确动作授权。工具模型参数不能指定服务地址或传入权限对象；受信调用方经 ToolCallOptions.networkPermissions 绑定句柄。工作流节点仍使用真实 D08 句柄：禁止网络时不发请求，要求审批时先等真实审批。聊天回合没有工作流运行，Host 自有句柄在 allowed 时放行，disabled 时拒绝，approval-required 时以 APPROVAL_REQUIRED 失败且不发请求。网关 JSONL 存摘要；D08 本地 tool.requested 事件按已有规范保存精确搜索参数用于审批。聊天结果卡只渲染已去掉标记的文本。
 
 ## 3. 三档策略
 

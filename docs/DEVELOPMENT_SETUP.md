@@ -101,7 +101,7 @@ $env:DEEPSEEK_BOT_SEARXNG_URL = 'http://127.0.0.1:8080/search'
 pnpm --filter @deepseek-bot/desktop dev
 ```
 
-地址必须为完整搜索端点、HTTPS 或 HTTP 回环地址，不能含凭据、查询串或 fragment。远程 SearXNG 可使用 HTTPS；未设置时 `web_search` 明确报未配置，不选取隐式公共实例。配置地址本身不授权搜索：每次调用仍需受信宿主提供真实 D08 网络权限句柄与取消信号。当前完成后端切片，桌面真实聊天尚未调用此能力，设置环境变量不代表 UI 已有可用搜索入口。搜索查询会发给该服务及其上游引擎，服务须启用 `json` 格式，见 [SearXNG 官方 API](https://docs.searxng.org/dev/search_api.html) 与 [agent-tools 接口说明](../packages/agent-tools/README.md)。
+地址必须为完整搜索端点、HTTPS 或 HTTP 回环地址，不能含凭据、查询串或 fragment。远程 SearXNG 可使用 HTTPS；未设置时 `web_search` 明确报未配置，不选取隐式公共实例。桌面设置里的 SearXNG 地址会覆盖这个环境变量；在设置里清除后，即使进程仍带有环境变量，下次启动也不使用它。设置页只保存地址，不会为了试通去访问实例。配置地址本身不授权搜索：聊天调用由 Host 按该 bot 的网络策略决定是否出站。搜索查询会发给该服务及其上游引擎，服务须启用 `json` 格式，见 [SearXNG 官方 API](https://docs.searxng.org/dev/search_api.html) 与 [agent-tools 接口说明](../packages/agent-tools/README.md)。
 
 ### 通用事项
 

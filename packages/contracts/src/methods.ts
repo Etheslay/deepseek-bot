@@ -80,6 +80,9 @@ export const METHODS = [
   "chat.cancel",
   "question.list",
   "question.answer",
+  "search.config.get",
+  "search.config.set",
+  "search.results.list",
   "grant.create",
   "grant.list",
   "grant.revoke",
@@ -471,6 +474,37 @@ export const METHOD_CONTRACTS = {
       text: z.string().min(1).max(4_000),
       messageId: UuidSchema,
       at: IsoDateTimeUtcSchema,
+    }),
+  },
+  "search.config.get": {
+    request: z.object({}).strict(),
+    response: z.object({ endpoint: z.string().nullable() }),
+  },
+  "search.config.set": {
+    request: z
+      .object({
+        endpoint: z.string().trim().min(1).max(2_000).nullable(),
+      })
+      .strict(),
+    response: z.object({ endpoint: z.string().nullable() }),
+  },
+  "search.results.list": {
+    request: z.object({ botId: UuidSchema }).strict(),
+    response: z.object({
+      searches: z.array(
+        z.object({
+          query: z.string(),
+          results: z.array(
+            z.object({
+              title: z.string(),
+              url: z.string(),
+              snippet: z.string(),
+            }),
+          ),
+          warnings: z.array(z.string()),
+          at: IsoDateTimeUtcSchema,
+        }),
+      ),
     }),
   },
   "grant.create": {

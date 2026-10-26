@@ -43,7 +43,17 @@ async function fixture(
     for await (const chunk of request) chunks.push(chunk);
     const body = Buffer.concat(chunks as Buffer[]).toString();
     response.setHeader("content-type", "application/json");
-    if (request.url === "/ask-user") {
+    if (request.url === "/web-search") {
+      response.end(
+        JSON.stringify({
+          tool: {
+            name: "web_search",
+            description: "web_search",
+            parameters: { type: "object", additionalProperties: false, properties: {} },
+          },
+        }),
+      );
+    } else if (request.url === "/ask-user") {
       response.end(
         JSON.stringify({
           tool: {
@@ -105,7 +115,7 @@ describe("application tool plugin", () => {
   it("registers the eight Host schemas before readiness and forwards exact runtime identity", async () => {
     const { ctx, tools, calls, requests } = await fixture();
     await apply(ctx);
-    expect(tools.map((tool) => tool.name)).toEqual([...names, "ask_user"]);
+    expect(tools.map((tool) => tool.name)).toEqual([...names, "ask_user", "web_search"]);
     expect(calls).toEqual([{ tools: names }]);
     const tool = tools.find((item) => item.name === "create_group")!;
     expect(tool.timeoutMs).toBeGreaterThan(600_000);
@@ -136,12 +146,28 @@ describe("application tool plugin", () => {
       tool: "ask_user",
       params: { question: "Which first?" },
     });
+    const search = tools.find((item) => item.name === "web_search")!;
+    expect(search.timeoutMs).toBe(tool.timeoutMs);
+    expect(
+      await search.execute(
+        { query: "local docs" },
+        { agent: { session: { id: "physical-session" } }, callId: "s1" },
+      ),
+    ).toEqual({ group: { id: "g1" } });
+    expect(calls[3]).toEqual({
+      sessionId: "physical-session",
+      callId: "s1",
+      tool: "web_search",
+      params: { query: "local docs" },
+    });
     expect(requests).toEqual([
       "/app-tools",
       "/ask-user",
+      "/web-search",
       "/app-tools/ready",
       "/app-tools/call",
       "/ask-user/call",
+      "/web-search/call",
     ]);
   });
 
@@ -183,5 +209,42 @@ describe("application tool plugin", () => {
     );
     controller.abort();
     await expect(pending).rejects.toMatchObject({ code: "CANCELLED" });
+  });
+
+  it("shadows a built-in web_search on the agent instead of failing startup", async () => {
+    const { ctx, tools, calls, requests } = await fixture();
+    const listeners = new Map<string, (payload: unknown) => void>();
+    (ctx as { on: (event: string, handler: (payload: unknown) => void) => void }).on = (event, handler) => {
+      listeners.set(event, handler);
+    };
+    const register = ctx.tools.register;
+    ctx.tools.register = (tool: Definition) => {
+      if (tool.name === "web_search") throw new Error('tool "web_search" is already registered');
+      return register(tool);
+    };
+    await apply(ctx);
+    expect(tools.map((tool) => tool.name)).toEqual([...names, "ask_user"]);
+    expect(calls[0]).toEqual({ tools: names });
+    const agentTools: Definition[] = [];
+    listeners.get("agent/created")?.({
+      agent: {
+        ctx: {
+          tools: {
+            register: (tool: Definition) => {
+              agentTools.push(tool);
+              return () => undefined;
+            },
+          },
+        },
+      },
+    });
+    expect(agentTools.map((tool) => tool.name)).toEqual(["web_search"]);
+    expect(
+      await agentTools[0]!.execute(
+        { query: "local docs" },
+        { agent: { session: { id: "physical-session" } }, callId: "s1" },
+      ),
+    ).toEqual({ group: { id: "g1" } });
+    expect(requests).toContain("/web-search/call");
   });
 });

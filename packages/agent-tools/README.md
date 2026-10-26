@@ -62,7 +62,7 @@ const result = await host.agentTools.call(caller, "web_search", {
 
 无配置、提供方 HTTP/JSON 异常返回 `RUNTIME_UNAVAILABLE`，429 返回 `RATE_LIMITED`，超时为 `TOOL_TIMEOUT`，调用取消为 `CANCELLED`；Host 关闭终止活动请求并返回 `RUNTIME_UNAVAILABLE`。异常消息采用固定文本，避免原始查询、端点或响应内容混入网关错误审计。合法空结果返回空数组；上游报告引擎失败时返回“不完整结果”提示。未配置真实服务地址时，不将受控 HTTP 测试宣称为公共实例验证。
 
-独立 Host 进程可在启动前配置 `DEEPSEEK_BOT_SEARXNG_URL`，见[开发环境说明](../../docs/DEVELOPMENT_SETUP.md)。D15 搜索切片不增加公开契约或桌面 IPC；D16 另增人类权限控制面。真实模型调用/聊天渲染仍待接线。
+独立 Host 进程可在启动前配置 `DEEPSEEK_BOT_SEARXNG_URL`，见[开发环境说明](../../docs/DEVELOPMENT_SETUP.md)。桌面可用受信方法保存或清空该地址；已保存的值在下次启动时覆盖环境变量，显式空值也会覆盖。聊天调用由 Host 绑定该 bot 的网络策略句柄，不由模型传入。`/app-tools` 仍只登记八个应用工具，`web_search` 走单独的 `/web-search` 路由。成功结果可记入该聊天 bot 的助手记录；工作流调用不写聊天记录。真实公共 SearXNG 与付费模型验收仍未执行。
 
 ## 检查
 

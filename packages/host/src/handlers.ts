@@ -60,7 +60,7 @@ import {
   revokePermissionGrant, listPermissionApprovals, listPermissionAudit,
 } from "@deepseek-bot/storage";
 import type { AgentPermissionService } from "./agent-permissions.js";
-import { DEFAULT_MODEL_PROFILE_ID, backupDirFor, newBackupId } from "./host.js";
+import { DEFAULT_MODEL_PROFILE_ID, SEARXNG_ENDPOINT_SETTING, backupDirFor, newBackupId } from "./host.js";
 import { chatSessionIdFor, type ChatManager } from "./chat.js";
 import { KNOWN_CAPABILITIES, policyKey, readPolicy, type PolicyLevel } from "./permissions.js";
 import {
@@ -74,6 +74,13 @@ import {
   type ToolGateway,
   type UserQuestionControls,
 } from "@deepseek-bot/agent-tools";
+
+export interface ChatSearchRecord {
+  readonly query: string;
+  readonly results: Array<{ title: string; url: string; snippet: string }>;
+  readonly warnings: string[];
+  readonly at: string;
+}
 
 export interface HostContext {
   readonly permissions: AgentPermissionService;
@@ -90,6 +97,15 @@ export interface HostContext {
   readonly agentTools: ToolGateway;
   /** Trusted ask_user controls. The desktop answers; the model never sees these methods. */
   readonly userQuestions: UserQuestionControls;
+  /** Trusted SearXNG endpoint. The model cannot set or read this through a tool. */
+  readonly webSearch: {
+    currentEndpoint(): string | undefined;
+    setEndpoint(endpoint: string | undefined): void;
+  };
+  /** In-memory chat search cards for one bot. Restart clears them. */
+  readonly searchResults: {
+    list(botId: string): ChatSearchRecord[];
+  };
 }
 
 function grantResponse(row: GrantRow): {
@@ -579,6 +595,26 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
         messageId: message.id,
         at: message.createdAt,
       };
+    },
+
+    "search.config.get": () => ({ endpoint: context.webSearch.currentEndpoint() ?? null }),
+
+    "search.config.set": (payload) => {
+      try {
+        context.webSearch.setEndpoint(payload.endpoint ?? undefined);
+      } catch (error) {
+        if (error instanceof ToolRejectionError) {
+          throw new EngineError({ code: error.code, message: error.message, retryable: false });
+        }
+        throw error;
+      }
+      setSetting(db, SEARXNG_ENDPOINT_SETTING, payload.endpoint);
+      return { endpoint: payload.endpoint };
+    },
+
+    "search.results.list": (payload) => {
+      const bot = requireLiveBot(db, payload.botId);
+      return { searches: context.searchResults.list(bot.id) };
     },
 
     "settings.testConnection": async (payload) => {

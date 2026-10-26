@@ -3,6 +3,8 @@ import { createPortal } from "react-dom";
 import { useBots, type UiBot } from "./features/bots/use-bots.js";
 import { PermissionChatCards } from "./features/permissions/permission-chat.js";
 import { QuestionChatCards } from "./features/questions/question-chat.js";
+import { SearchResultCards } from "./features/search/search-results.js";
+import { SearchSettings } from "./features/search/search-settings.js";
 import { PermissionsPanel } from "./features/permissions/permissions-panel.js";
 import { BotForm } from "./features/bots/bot-form.js";
 import { CustomSelect } from "./components/custom-select.js";
@@ -1859,6 +1861,7 @@ const logout = (): void => {
                     </span>
                   </div>
                 </div>
+                <SearchSettings />
                 <div className="settings-section-title">技能（复用与导入导出）</div>
                 <div className="settings-card">
                   <SkillsPanel
@@ -2678,6 +2681,7 @@ function BotsPlaceholder({
           </>
         )}
         <QuestionChatCards botId={me.bot.id} />
+        <SearchResultCards botId={me.bot.id} />
         <PermissionChatCards botId={me.bot.id} />
       </div>
       {pendingFiles.length > 0 && (
