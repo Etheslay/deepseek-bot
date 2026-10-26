@@ -1,6 +1,6 @@
 # 权限与授权
 
-状态：D16 契约、存储、网关与 Host 授权后端已实现于当前 feature 分支，设置页、聊天卡片及真实 Harness 调用方仍待接线，不代表 D16 整体验收。与 [智能体平台](AGENT_PLATFORM.md) 同步实施。D08 已落地的工具权限门继续生效；本轮交付见 [D16 报告](reports/D16-report.md)。
+状态：D16 契约、存储、网关与 Host 授权后端已合入 develop。设置页读取并修改全局策略（`permission.policy.list` / `permission.policy.set`），并查看、撤销已发放授权（`permission.grant.list` / `permission.grant.revoke`）。聊天卡片及真实 Harness 调用方仍待接线，不代表 D16 整体验收。与 [智能体平台](AGENT_PLATFORM.md) 同步实施。D08 已落地的工具权限门继续生效；后端切片见 [D16 报告](reports/D16-report.md)。
 
 ## 1. 三层模型
 
@@ -45,7 +45,7 @@
 | 每次询问 | 网关弹出审批卡，用户允许后执行 |
 | 从不允许 | 网关拒绝，向模型返回可解释原因 |
 
-默认值：app.read / interaction.ask_user 允许，screen.capture 拒绝，其余询问。app.start_run 固定 ask；exec.shell / screen.capture 只能 ask 或 deny，且三者不接受会话/永久授权。策略由受信 permission.policy.set 修改并持久化；设置页为后续工作。
+默认值：app.read / interaction.ask_user 允许，screen.capture 拒绝，其余询问。app.start_run 固定 ask；exec.shell / screen.capture 只能 ask 或 deny，且三者不接受会话/永久授权。策略由受信 permission.policy.set 修改并持久化。设置页按同一约束展示：启动运行只读为每次询问，本地命令和屏幕感知不提供始终允许。
 
 策略 deny 优先于已有授权。写操作和 network.search 即使策略 allow 也须绑定有效 bot；匿名只可使用策略 allow 的读/提问。网关没有检查器、未知能力或无效身份均拒绝。
 
@@ -89,7 +89,7 @@ sequenceDiagram
   授权记录：查看与撤销
 ```
 
-设置页只改变默认策略；聊天内授权是临时叠加，过期回到默认。两者共用同一张 grant 表，差异在 `scope`。
+设置页只改变默认策略；聊天内授权是临时叠加，过期回到默认。两者共用同一张 grant 表，差异在 `scope`。页面列出 `permission.policy.list` 返回的全部能力。授权记录来自 `permission.grant.list`，不把 `scope=policy` 的全局策略行当成可撤销授权；撤销调用 `permission.grant.revoke`。上面草图里的「本地数据：位置 / 打开目录」仍未接在这一页。
 
 ## 6. 审计与撤销
 

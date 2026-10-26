@@ -80,7 +80,7 @@ Etheslay 主责 Harness、Host、执行、权限、存储和调度；Destinyian 
 | D28 `feature/canvas-cowrite` | Destinyian | D14、D26 | 产物画布从只读预览升级为可共编侧车：bot 写、用户改、bot 续写；版本留痕可回退（原 D31 并入，编号前移） |
 | D30 `feature/chat-runtime` | Etheslay | D12、D15 | 聊天运行时：契约 `chat.send/history/cancel`；Host 每 bot 一个 Harness 会话（`session/resume` 续轮）；`chat_messages` 持久化；渲染层聊天走 Host，删除占位回复 |
 
-D16 当前切片仅交付契约、存储、网关与 Host 授权后端；会话授权重启失效、永久授权保留。设置页、聊天卡片及真实 Harness 工具调用接线未交付，完整 D16 仍未验收，详见 [D16 报告](reports/D16-report.md)。
+D16 后端切片已交付契约、存储、网关与 Host 授权；会话授权重启失效、永久授权保留。设置页已接到 `permission.policy.*` 与 `permission.grant.list` / `permission.grant.revoke`（三档策略、授权记录查看与撤销）。聊天卡片及真实 Harness 工具调用接线未交付，完整 D16 仍未验收，详见 [D16 报告](reports/D16-report.md)。
 
 ## 7. 阶段二里程碑
 
