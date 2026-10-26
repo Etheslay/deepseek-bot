@@ -10,6 +10,7 @@ import {
   type HostProcessClient,
 } from "./host-client.js";
 import { checkUpdates, downloadAndInstallUpdate, setAppVersion } from "./updates.js";
+import { initMainLocale, setMainLanguagePreference, tr } from "./i18n.js";
 import { DATA_ROOT_DIR_NAME, HOST_EVENT_MISSED } from "../shared/ipc-channels.js";
 
 let mainWindow: BrowserWindow | null = null;
@@ -196,17 +197,17 @@ function createTray(win: BrowserWindow): Tray {
  */
 async function saveApiKey(key: unknown): Promise<{ configured: boolean }> {
   if (typeof key !== "string") {
-    throw new Error("API Key 必须是字符串");
+    throw new Error(tr("main.keyMustBeString"));
   }
   const trimmed = key.trim();
   if (trimmed.length < 20 || trimmed.length > 200 || !trimmed.startsWith("sk-")) {
-    throw new Error("API Key 格式不正确");
+    throw new Error(tr("main.keyFormatInvalid"));
   }
   if (!hostClient) {
-    throw new Error("Host 进程尚未就绪，请稍后重试");
+    throw new Error(tr("main.hostNotReady"));
   }
   if (!safeStorage.isEncryptionAvailable()) {
-    throw new Error("系统凭据存储不可用，无法安全保存 Key");
+    throw new Error(tr("main.credentialStoreUnavailable"));
   }
   const id = randomUUID();
   const credentialRef = `cred:${id}`;
@@ -223,10 +224,12 @@ function registerShellIpc(win: BrowserWindow): void {
         name: app.getName(),
         version: app.getVersion(),
         platform: process.platform,
+        locale: app.getLocale(),
       }),
       saveKey: (key) => saveApiKey(key),
       checkUpdates: () => checkUpdates(),
       downloadAndInstallUpdate: () => downloadAndInstallUpdate(),
+      setLanguage: (preference) => setMainLanguagePreference(preference),
       hostCall: (method, payload) => {
         if (!isAllowedHostMethod(method)) {
           return Promise.reject(new Error(`unknown host method`));
@@ -285,6 +288,8 @@ if (gotLock) {
     if (process.platform === "win32") {
       app.setAppUserModelId("com.deepseekbot.desktop");
     }
+    // D22: main speaks the desktop locale until the renderer syncs its choice.
+    initMainLocale(app.getLocale());
     // D24: version source for update checks; silent first check fails soft
     // (no releases yet) and only surfaces when the renderer asks.
     setAppVersion(app.getVersion());

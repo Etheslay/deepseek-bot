@@ -6,9 +6,10 @@
 import { useEffect, useMemo, useRef, useState, type JSX } from "react";
 import {
   filterSearch,
-  SEARCH_KIND_LABELS,
+  searchKindLabels,
   type SearchItem,
 } from "./search-core.js";
+import { t } from "../../i18n.js";
 
 export function GlobalSearch(props: {
   open: boolean;
@@ -64,13 +65,13 @@ export function GlobalSearch(props: {
         className="gs-panel"
         role="dialog"
         aria-modal="true"
-        aria-label="全局搜索"
+        aria-label={t("search.dialog")}
         onClick={(event) => event.stopPropagation()}
       >
         <input
           ref={inputRef}
           className="gs-input"
-          placeholder="搜索 Bot、消息、操作…（Esc 关闭）"
+          placeholder={t("search.placeholder")}
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           onKeyDown={(event) => {
@@ -90,11 +91,11 @@ export function GlobalSearch(props: {
           }}
         />
         {query.trim() === "" ? (
-          <div className="gs-hint">输入以搜索 Bot / 会话消息 / 快速操作</div>
+          <div className="gs-hint">{t("search.emptyHint")}</div>
         ) : results.length === 0 ? (
-          <div className="gs-hint">没有匹配结果</div>
+          <div className="gs-hint">{t("search.noResults")}</div>
         ) : (
-          <ul className="gs-list" ref={listRef} role="listbox" aria-label="搜索结果">
+          <ul className="gs-list" ref={listRef} role="listbox" aria-label={t("search.results")}>
             {results.map((item, index) => (
               <li key={item.id}>
                 <button
@@ -106,7 +107,7 @@ export function GlobalSearch(props: {
                   onClick={() => choose(item)}
                 >
                   <span className={"gs-kind gs-kind--" + item.kind}>
-                    {SEARCH_KIND_LABELS[item.kind]}
+                    {searchKindLabels()[item.kind]}
                   </span>
                   <span className="gs-title">{item.title}</span>
                   {item.subtitle && <span className="gs-sub">{item.subtitle}</span>}

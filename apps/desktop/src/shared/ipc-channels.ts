@@ -1,4 +1,6 @@
 /** Allowlisted IPC invoke channels for the desktop shell. */
+import type { LanguagePreference } from "./i18n/types.js";
+
 export const IPC_CHANNELS = {
   APP_GET_INFO: "app:getInfo",
   WINDOW_SHOW: "window:show",
@@ -14,10 +16,19 @@ export const IPC_CHANNELS = {
   /** D24: app-update checks via electron-updater against GitHub Releases. */
   UPDATES_CHECK: "updates:check",
   UPDATES_DOWNLOAD_INSTALL: "updates:downloadInstall",
+  /** D22: mirror the persisted UI language into the main process. */
+  I18N_SET_LANGUAGE: "i18n:setLanguage",
 } as const;
 
 /** Main → renderer event channel for scheduler skip-and-notify notices (FR-08). */
 export const HOST_EVENT_MISSED = "host:event:missed";
+
+/** D22 main → renderer: a tray menu bot entry was clicked. */
+export const SYSTEM_EVENT_TRAY_BOT = "system:event:tray-bot";
+/** D22 main → renderer: a system notification was clicked. */
+export const SYSTEM_EVENT_NOTIFICATION = "system:event:notification";
+/** D22 main → renderer: native window focus changed (notification gating). */
+export const SYSTEM_EVENT_WINDOW_FOCUS = "system:event:window-focus";
 
 /**
  * Data root directory name, mirroring storage's layout constant. Duplicated
@@ -36,6 +47,8 @@ export type AppInfo = {
   name: string;
   version: string;
   platform: NodeJS.Platform;
+  /** Desktop locale reported by Electron, used for "跟随系统" (D22). */
+  locale: string;
 };
 
 /** D24: update check result surfaced to the renderer. */
@@ -74,6 +87,21 @@ export function assertValidTitleBarOverlayColors(
     throw new IpcDeniedError(
       "INVALID_PAYLOAD",
       "titlebar overlay colors must be #rrggbb strings: { color, symbolColor }",
+    );
+  }
+}
+
+/**
+ * D22: the language preference main will mirror for tray and notification
+ * strings. Anything else is rejected before it reaches the main process.
+ */
+export function assertValidLanguagePreference(
+  value: unknown,
+): asserts value is LanguagePreference {
+  if (value !== "system" && value !== "zh" && value !== "en") {
+    throw new IpcDeniedError(
+      "INVALID_PAYLOAD",
+      "language preference must be one of: system, zh, en",
     );
   }
 }

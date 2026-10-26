@@ -2,10 +2,12 @@ import { ipcMain, type IpcMainInvokeEvent } from "electron";
 import {
   IPC_CHANNELS,
   assertAllowedChannel,
+  assertValidLanguagePreference,
   assertValidTitleBarOverlayColors,
   type AppInfo,
   type UpdateStatus,
 } from "../../shared/ipc-channels.js";
+import type { LanguagePreference } from "../../shared/i18n/types.js";
 import {
   assertAuthorizedSender,
   type SenderGuard,
@@ -27,6 +29,8 @@ export type IpcHandlers = {
   checkUpdates: () => Promise<UpdateStatus>;
   /** D24: download the update and restart into the installer. */
   downloadAndInstallUpdate: () => Promise<UpdateStatus>;
+  /** D22: mirror the UI language preference so tray/notifications match. */
+  setLanguage: (preference: LanguagePreference) => void;
 };
 
 /**
@@ -114,6 +118,15 @@ export function registerIpcHandlers(
     wrap(IPC_CHANNELS.UPDATES_DOWNLOAD_INSTALL, () =>
       handlers.downloadAndInstallUpdate(),
     ),
+  );
+  ipcMain.handle(
+    IPC_CHANNELS.I18N_SET_LANGUAGE,
+    (event: IpcMainInvokeEvent, preference: unknown) => {
+      assertAllowedChannel(IPC_CHANNELS.I18N_SET_LANGUAGE);
+      assertAuthorizedSender(event, isAuthorized);
+      assertValidLanguagePreference(preference);
+      handlers.setLanguage(preference);
+    },
   );
 }
 

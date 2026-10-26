@@ -1,0 +1,33 @@
+/**
+ * Capability labels (D22).
+ *
+ * Capability ids come from the contract and are stable data; only their display
+ * text is localized. The map holds message keys, so switching language changes
+ * what the user reads without touching any stored value. Both the settings panel
+ * and the in-chat approval cards import this one table — it used to be duplicated
+ * (and frozen at import time) in each file.
+ */
+import type { CapabilityId } from "@deepseek-bot/contracts";
+import { t, type MessageKey } from "../../i18n.js";
+
+const CAPABILITY_LABEL_KEYS = {
+  "app.read": "permissions.readAppData",
+  "app.create_group": "shell.createGroup",
+  "app.create_bot": "permissions.createBot",
+  "app.update_bot": "permissions.updateBot",
+  "app.create_workflow": "permissions.updateWorkflow",
+  "app.start_run": "permissions.startRun",
+  "app.cancel_run": "permissions.cancelRun",
+  "app.revoke_creation": "permissions.revokeCreationBatch",
+  "interaction.ask_user": "permissions.askUser",
+  "network.search": "permissions.webSearch",
+  "fs.read": "permissions.readWorkspaceFiles",
+  "fs.write": "permissions.writeWorkspaceFiles",
+  "exec.shell": "permissions.executeLocalCommand",
+  "screen.capture": "permissions.screenAndWindowAwareness",
+  "connector.invoke": "permissions.invokeConnector",
+} as const satisfies Record<CapabilityId, MessageKey>;
+
+export function capabilityLabel(capability: CapabilityId): string {
+  return t(CAPABILITY_LABEL_KEYS[capability]);
+}

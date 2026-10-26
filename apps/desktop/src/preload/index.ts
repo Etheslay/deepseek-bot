@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
 import { HOST_EVENT_MISSED, IPC_CHANNELS } from "../shared/ipc-channels.js";
+import type { LanguagePreference } from "../shared/i18n/types.js";
 
 export type HostMissedNotice = {
   scheduleId: string;
@@ -47,6 +48,10 @@ export type DesktopBridge = {
     /** Scheduler skip-and-notify notices (FR-08); returns an unsubscribe. */
     onMissed: (listener: (notices: HostMissedNotice[]) => void) => () => void;
   };
+  /** D22: mirror the UI language into main so tray/notification strings match. */
+  i18n: {
+    setLanguage: (preference: LanguagePreference) => Promise<void>;
+  };
 };
 
 const api: DesktopBridge = {
@@ -75,6 +80,10 @@ const api: DesktopBridge = {
       ipcRenderer.on(HOST_EVENT_MISSED, handler);
       return () => ipcRenderer.removeListener(HOST_EVENT_MISSED, handler);
     },
+  },
+  i18n: {
+    setLanguage: (preference) =>
+      ipcRenderer.invoke(IPC_CHANNELS.I18N_SET_LANGUAGE, preference),
   },
 };
 

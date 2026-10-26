@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { t } from "../i18n.js";
 
 export type CustomSelectOption = {
   value: string | number;
@@ -36,7 +37,7 @@ export function CustomSelect({ value, options, onChange, ariaLabel, disabled = f
       {open && (
         <>
           <div className="menu-overlay" onClick={() => setOpen(false)} />
-          <div className="custom-select-menu" role="listbox" aria-label={ariaLabel + "列表"}>
+          <div className="custom-select-menu" role="listbox" aria-label={t("components.listLabel", [ariaLabel])}>
             {options.map((o) => (
               <button
                 key={o.value}

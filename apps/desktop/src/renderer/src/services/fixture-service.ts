@@ -31,6 +31,7 @@ import { createFixtureRunService } from "../features/run-monitor/run-service.js"
 // ("./fixtures/*"); validated against EventEnvelopeSchema in openSession.
 import successRunFixture from "@deepseek-bot/contracts/fixtures/success-run.json";
 import cancelRunFixture from "@deepseek-bot/contracts/fixtures/cancel-run.json";
+import { t } from "../i18n.js";
 
 const SESSION_BOT_A = "11111111-1111-4111-8111-111111111111";
 
@@ -62,11 +63,16 @@ const SEED_BOTS: Bot[] = [
   },
 ];
 
-const SEED_SESSIONS: ChatSessionView[] = [
+/**
+ * Session titles are rendered copy, so they are built per call: a frozen module
+ * constant would keep showing the language the page booted in (D22).
+ */
+function seedSessions(): ChatSessionView[] {
+  return [
   {
     sessionId: "sess-success-run",
     botId: SESSION_BOT_A,
-    title: "note-summarizer · 摘要任务",
+    title: t("services.fixtureBotSummary"),
     startedAt: "2026-10-24T10:00:00Z",
     replayEventCount: successRunFixture.events.length,
     status: "ended",
@@ -74,12 +80,13 @@ const SEED_SESSIONS: ChatSessionView[] = [
   {
     sessionId: "sess-cancel-run",
     botId: SESSION_BOT_A,
-    title: "note-summarizer · 已取消的任务",
+    title: t("services.fixtureBotCancelled"),
     startedAt: "2026-10-24T09:30:00Z",
     replayEventCount: cancelRunFixture.events.length,
     status: "ended",
   },
-];
+  ];
+}
 
 const SESSION_FIXTURES: Record<string, { events: unknown[] }> = {
   "sess-success-run": successRunFixture,
@@ -210,7 +217,7 @@ export function createFixtureService(): DesktopService {
           ...bot,
           id: crypto.randomUUID(),
           revision: crypto.randomUUID(),
-          name: `${bot.name} 副本`,
+          name: t("common.copyOf", [bot.name]),
           archivedAt: null,
         };
         const checked = validateBot(copy);
@@ -257,7 +264,7 @@ export function createFixtureService(): DesktopService {
 
     chat: {
       async listSessions(botId) {
-        return SEED_SESSIONS.filter((s) => s.botId === botId);
+        return seedSessions().filter((s) => s.botId === botId);
       },
 
       async openSession(sessionId) {
@@ -301,7 +308,7 @@ export function createFixtureService(): DesktopService {
         const chunkDelayMs = options?.chunkDelayMs ?? 60;
         const chunkCount = options?.chunkCount ?? 8;
         const simulateFailure = options?.simulateFailure;
-        const reply = `（占位回复）已收到：「${userText.slice(0, 40)}」。真实模型会话将在 D06/D12 接入。`;
+        const reply = t("services.placeholderReply", [userText.slice(0, 40)]);
 
         const schedule = (delay: number, fn: () => void): void => {
           timers.push(setTimeout(() => { if (!settled) fn(); }, delay));
@@ -311,14 +318,14 @@ export function createFixtureService(): DesktopService {
           handlers.onTool({
             toolName: "read_workspace_file",
             state: "requested",
-            summary: "读取工作区样例文件",
+            summary: t("services.fixtureReadTool"),
           } satisfies ToolStatus);
         });
         schedule(chunkDelayMs * 2, () => {
           handlers.onTool({
             toolName: "read_workspace_file",
             state: "succeeded",
-            summary: "已读取 1 个文件",
+            summary: t("services.fixtureReadDone"),
           } satisfies ToolStatus);
         });
         const chunkSize = Math.ceil(reply.length / chunkCount);
@@ -331,8 +338,8 @@ export function createFixtureService(): DesktopService {
                   code: simulateFailure,
                   message:
                     simulateFailure === "RATE_LIMITED"
-                      ? "请求过于频繁，请稍后重试。"
-                      : "请求失败，请检查模型配置。",
+                      ? t("chat.rateLimited")
+                      : t("chat.requestFailed"),
                   retryable: simulateFailure === "RATE_LIMITED",
                 },
               });
@@ -371,12 +378,12 @@ export function createFixtureService(): DesktopService {
         if (artifact.mediaType === "text/markdown" || artifact.mediaType === "text/plain") {
           return {
             kind: "text",
-            content: `# ${artifact.relativePath}\n\n（占位预览）该文件在 D04 落地后来自真实产物目录；当前仅演示安全文本预览。`,
+            content: t("services.placeholderPreview", [artifact.relativePath]),
           };
         }
         return {
           kind: "blocked",
-          reason: `mediaType ${artifact.mediaType} 不做内联预览（防脚本执行，QA-14）。`,
+          reason: t("services.inlinePreviewBlocked", [artifact.mediaType]),
         };
       },
     },

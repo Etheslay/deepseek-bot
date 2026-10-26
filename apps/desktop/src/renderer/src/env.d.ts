@@ -1,10 +1,13 @@
 export {};
 
+type LanguagePreference = "system" | "zh" | "en";
+
 type DesktopBridge = {
   getAppInfo: () => Promise<{
     name: string;
     version: string;
     platform: string;
+    locale: string;
   }>;
   window: {
     show: () => Promise<void>;
@@ -35,6 +38,11 @@ type DesktopBridge = {
   };
   host: {
     call: (method: string, payload: unknown) => Promise<unknown>;
+    onMissed: (listener: (notices: unknown[]) => void) => () => void;
+  };
+  /** D22: mirror the UI language into the main process (tray, notifications). */
+  i18n: {
+    setLanguage: (preference: LanguagePreference) => Promise<void>;
   };
 };
 

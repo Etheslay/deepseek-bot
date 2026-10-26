@@ -12,24 +12,8 @@ import {
   type CapabilityId,
   type PermissionDecisionRequest,
 } from "@deepseek-bot/contracts";
-
-const CAPABILITY_LABELS: Record<CapabilityId, string> = {
-  "app.read": "读取应用数据",
-  "app.create_group": "创建分组",
-  "app.create_bot": "创建 bot",
-  "app.update_bot": "修改 bot",
-  "app.create_workflow": "修改工作流",
-  "app.start_run": "启动运行",
-  "app.cancel_run": "取消运行",
-  "app.revoke_creation": "撤销创建批次",
-  "interaction.ask_user": "向用户提问",
-  "network.search": "联网搜索",
-  "fs.read": "读取工作目录文件",
-  "fs.write": "写入工作目录文件",
-  "exec.shell": "执行本地命令",
-  "screen.capture": "屏幕与窗口感知",
-  "connector.invoke": "调用连接器",
-};
+import { t, type MessageKey } from "../../i18n.js";
+import { capabilityLabel } from "./capability-labels.js";
 
 const SESSION_USES = 5;
 const SESSION_MINUTES = 120;
@@ -77,34 +61,42 @@ export function approvalDecision(
   };
 }
 
-const CHOICE_LABEL: Record<CardChoice, string> = {
-  once: "仅本次",
-  session: "本会话",
-  permanent: "永久允许",
-  deny: "拒绝",
+const CHOICE_LABEL_KEYS: Record<CardChoice, MessageKey> = {
+  once: "shell.scopeOnce",
+  session: "shell.scopeSession",
+  permanent: "shell.scopeAlwaysAllow",
+  deny: "permissions.deny",
 };
 
-function capabilityLine(capabilities: readonly CapabilityId[]): string {
-  return capabilities.map((capability) => CAPABILITY_LABELS[capability]).join("、");
+function choiceLabel(choice: CardChoice): string {
+  return t(CHOICE_LABEL_KEYS[choice]);
 }
+
+function capabilityLine(capabilities: readonly CapabilityId[]): string {
+  return capabilities.map(capabilityLabel).join(t("d22.listSeparator"));
+}
+
+type Notice = { key: MessageKey; params?: readonly (string | number)[] };
 
 export function PermissionChatCards({ botId }: { botId: string }): JSX.Element | null {
   const [approvals, setApprovals] = useState<AppApproval[] | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<Notice | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const load = useCallback(async (): Promise<void> => {
     const response = await window.deepseekBot.host.call("permission.approval.list", { botId });
     const parsed = PERMISSION_METHODS["permission.approval.list"].response.parse(response);
     setApprovals(parsed.approvals.filter((approval) => approval.status === "pending"));
-    setNotice((current) => (current === "授权请求读取失败" ? null : current));
+    setNotice((current) =>
+      current?.key === "permissions.approvalListLoadFailed" ? null : current,
+    );
   }, [botId]);
 
   useEffect(() => {
     let cancelled = false;
     const run = (): void => {
       void load().catch(() => {
-        if (!cancelled) setNotice("授权请求读取失败");
+        if (!cancelled) setNotice({ key: "permissions.approvalListLoadFailed" });
       });
     };
     run();
@@ -121,11 +113,15 @@ export function PermissionChatCards({ botId }: { botId: string }): JSX.Element |
       .call("permission.approval.decide", approvalDecision(approval, choice))
       .then((response) => {
         PERMISSION_METHODS["permission.approval.decide"].response.parse(response);
-        setNotice(choice === "deny" ? "已拒绝" : `已允许：${CHOICE_LABEL[choice]}`);
+        setNotice(
+          choice === "deny"
+            ? { key: "permissions.denied" }
+            : { key: "permissions.approvedLine", params: [choiceLabel(choice)] },
+        );
         return load();
       })
       .catch(() => {
-        setNotice("审批决定失败");
+        setNotice({ key: "permissions.decisionFailed" });
       })
       .finally(() => {
         setBusyId(null);
@@ -143,18 +139,18 @@ export function PermissionChatCards({ botId }: { botId: string }): JSX.Element |
             key={approval.id}
             className="choice-card"
             role="group"
-            aria-label={`授权 ${approval.tool}`}
+            aria-label={t("permissions.approvalFor", [approval.tool])}
           >
-            <div className="choice-question">是否允许这些操作？</div>
-            <p className="choice-answered">申请：{approval.tool}</p>
-            <p className="choice-answered">能力：{capabilityLine(approval.capabilities)}</p>
-            <p className="choice-answered">仅本次 1 次，到期 {approval.expiresAt}</p>
+            <div className="choice-question">{t("permissions.allowQuestion")}</div>
+            <p className="choice-answered">{t("permissions.requestLine", [approval.tool])}</p>
+            <p className="choice-answered">{t("permissions.capabilitiesLine", [capabilityLine(approval.capabilities)])}</p>
+            <p className="choice-answered">{t("permissions.onceGrant", [approval.expiresAt])}</p>
             {choices.includes("session") ? (
               <p className="choice-answered">
-                本会话 {SESSION_USES} 次、{SESSION_MINUTES / 60} 小时
+                {t("permissions.sessionGrant", [SESSION_USES, SESSION_MINUTES / 60])}
               </p>
             ) : null}
-            {choices.includes("permanent") ? <p className="choice-answered">永久不限次数</p> : null}
+            {choices.includes("permanent") ? <p className="choice-answered">{t("permissions.permanentGrant")}</p> : null}
             <div className="choice-options">
               {choices.map((choice) => (
                 <button
@@ -164,7 +160,7 @@ export function PermissionChatCards({ botId }: { botId: string }): JSX.Element |
                   disabled={busyId === approval.id}
                   onClick={() => choose(approval, choice)}
                 >
-                  {CHOICE_LABEL[choice]}
+                  {choiceLabel(choice)}
                 </button>
               ))}
               <button
@@ -173,13 +169,13 @@ export function PermissionChatCards({ botId }: { botId: string }): JSX.Element |
                 disabled={busyId === approval.id}
                 onClick={() => choose(approval, "deny")}
               >
-                {CHOICE_LABEL.deny}
+                {choiceLabel("deny")}
               </button>
             </div>
           </div>
         );
       })}
-      {notice !== null ? <p className="sys-line">{notice}</p> : null}
+      {notice !== null ? <p className="sys-line">{t(notice.key, notice.params ?? [])}</p> : null}
     </div>
   );
 }

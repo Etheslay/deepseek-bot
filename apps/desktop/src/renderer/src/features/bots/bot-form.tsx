@@ -11,41 +11,65 @@ import { useEffect, useState, type JSX, type ReactNode } from "react";
 import { validateBot } from "../../services/contract-validation.js";
 import type { BotDraft } from "../../services/desktop-service.js";
 import { CustomSelect } from "../../components/custom-select.js";
+import { t, type MessageKey } from "../../i18n.js";
 
 const MODEL_OPTIONS = [
   { id: "44444444-4444-4444-8444-444444444444", label: "DeepSeek · deepseek-chat" },
 ];
 
-const WORKSPACE_OPTIONS = [
-  { id: "55555555-5555-4555-8555-555555555555", label: "工作区 A（样例）" },
-  { id: "55555555-5555-4555-8555-555555555556", label: "工作区 B（样例）" },
+/**
+ * Sample workspace / policy fixtures. `labelKey` is UI copy (so the labels can
+ * switch language), `id` is the contract value that gets stored.
+ */
+const WORKSPACE_OPTIONS: readonly { id: string; labelKey: MessageKey }[] = [
+  { id: "55555555-5555-4555-8555-555555555555", labelKey: "bots.workspaceASample" },
+  { id: "55555555-5555-4555-8555-555555555556", labelKey: "bots.workspaceBSample" },
 ];
 
-const TOOL_POLICY_OPTIONS = [
-  { id: "66666666-6666-4666-8666-666666666666", label: "默认工具策略（只读）" },
+const TOOL_POLICY_OPTIONS: readonly { id: string; labelKey: MessageKey }[] = [
+  { id: "66666666-6666-4666-8666-666666666666", labelKey: "bots.defaultToolPolicyReadOnly" },
 ];
 
 export type FieldErrors = Partial<Record<keyof BotDraft, string>>;
 
-/** Common tone presets (UI-only; merged into instructions on submit). */
-export const TONE_PRESETS: readonly string[] = [
-  "傲娇",
-  "撒娇",
-  "可爱",
-  "呆萌",
-  "严肃",
-  "凶悍",
-  "幽默",
-  "温柔",
-  "毒舌",
-  "冷静",
-  "热血",
-] as const;
+/**
+ * Tone presets (D22): `id` is stable UI state, `labelKey` is what the user reads
+ * and `instruction` is the literal merged into the bot instructions for the
+ * model. The instruction text stays Chinese on purpose — it is model-facing
+ * input, not interface copy, and re-wording it would silently change bot output.
+ */
+export type TonePreset = {
+  readonly id: string;
+  readonly labelKey: MessageKey;
+  readonly instruction: string;
+};
+
+export const CUSTOM_TONE_ID = "custom";
+
+export const TONE_PRESETS: readonly TonePreset[] = [
+  { id: "tsundere", labelKey: "bots.toneTsundere", instruction: "傲娇" }, // i18n-ignore: model-facing
+  { id: "coquettish", labelKey: "bots.toneCoquettish", instruction: "撒娇" }, // i18n-ignore: model-facing
+  { id: "cute", labelKey: "bots.toneCute", instruction: "可爱" }, // i18n-ignore: model-facing
+  { id: "adorkable", labelKey: "bots.toneAdorkable", instruction: "呆萌" }, // i18n-ignore: model-facing
+  { id: "serious", labelKey: "bots.toneSerious", instruction: "严肃" }, // i18n-ignore: model-facing
+  { id: "fierce", labelKey: "bots.toneFierce", instruction: "凶悍" }, // i18n-ignore: model-facing
+  { id: "humorous", labelKey: "bots.toneHumorous", instruction: "幽默" }, // i18n-ignore: model-facing
+  { id: "gentle", labelKey: "bots.toneGentle", instruction: "温柔" }, // i18n-ignore: model-facing
+  { id: "sharp", labelKey: "bots.toneSharpTongued", instruction: "毒舌" }, // i18n-ignore: model-facing
+  { id: "calm", labelKey: "bots.toneCalm", instruction: "冷静" }, // i18n-ignore: model-facing
+  { id: "hot-blooded", labelKey: "bots.toneHotBlooded", instruction: "热血" }, // i18n-ignore: model-facing
+];
 
 /** Create dialog keeps only the lighter, positive presets. */
-const MINIMAL_TONES = TONE_PRESETS.filter(
-  (tone) => !["傲娇", "严肃", "凶悍", "毒舌"].includes(tone),
-);
+const MINIMAL_TONE_IDS = new Set([
+  "coquettish",
+  "cute",
+  "adorkable",
+  "humorous",
+  "gentle",
+  "calm",
+  "hot-blooded",
+]);
 
 export function validateBotDraft(draft: BotDraft): FieldErrors {
   const entity = {
@@ -115,9 +139,9 @@ export function BotForm(
   };
 
 
-  const toggleTone = (tone: string): void => {
+  const toggleTone = (id: string): void => {
     setSelectedTones((prev) =>
-      prev.includes(tone) ? prev.filter((t) => t !== tone) : [...prev, tone],
+      prev.includes(id) ? prev.filter((toneId) => toneId !== id) : [...prev, id],
     );
   };
 
@@ -125,12 +149,16 @@ export function BotForm(
   const instructionsWithTones = (instructions: string): string => {
     const custom = customDraft.trim();
     const tones = selectedTones
-      .filter((t) => t !== "自定义" || custom.length > 0)
-      .map((t) => (t === "自定义" ? custom : t));
+      .filter((id) => id !== CUSTOM_TONE_ID || custom.length > 0)
+      .map((id) =>
+        id === CUSTOM_TONE_ID ? custom : (TONE_PRESETS.find((tone) => tone.id === id)?.instruction ?? ""),
+      )
+      .filter((value) => value.length > 0);
     if (tones.length === 0) {
       return instructions;
     }
-    const suffix = `（语气：${tones.join("、")}）`;
+    // Model-facing suffix: the phrasing is part of the prompt, not interface copy.
+    const suffix = `（语气：${tones.join("、")}）`; // i18n-ignore: model-facing prompt text
     return instructions.includes(suffix) ? instructions : instructions + suffix;
   };
 
@@ -151,8 +179,8 @@ export function BotForm(
     if (!result.ok) {
       setSubmitError(
         result.errorCode === "REVISION_CONFLICT"
-          ? "保存冲突：机器人已被其他窗口修改，已刷新为最新数据。"
-          : `保存失败（${result.errorCode ?? "INVALID_INPUT"}）`,
+          ? t("bots.saveConflictReloaded")
+          : t("bots.saveFailed", [result.errorCode ?? "INVALID_INPUT"]),
       );
     }
   };
@@ -166,8 +194,8 @@ export function BotForm(
         value={draft.name}
         maxLength={60}
         autoFocus
-        placeholder="给你的 Bot 起个名字"
-        aria-label="机器人名称"
+        placeholder={t("bots.namePlaceholder")}
+        aria-label={t("bots.botName")}
         aria-invalid={Boolean(fieldErrors.name)}
         onChange={(e) => set("name", e.target.value)}
         onKeyDown={(e) => {
@@ -185,43 +213,46 @@ export function BotForm(
         value={draft.instructions}
         maxLength={4000}
         rows={4}
-        placeholder="描述这个 Bot 的角色、语气和边界…"
-        aria-label="角色说明"
+        placeholder={t("bots.instructionsPlaceholder")}
+        aria-label={t("bots.roleDescription")}
         aria-invalid={Boolean(fieldErrors.instructions)}
         onChange={(e) => set("instructions", e.target.value)}
       />
       {fieldErrors.instructions && <em className="field-error">{fieldErrors.instructions}</em>}
-      <span className="form-hint">可选：说明它能做什么、不能做什么；最大 4000 字。</span>
+      <span className="form-hint">{t("bots.instructionsHint")}</span>
 
-      <span className="tone-label">性格</span>
-      <div className="tone-picker" role="group" aria-label="语气选择（可多选）">
-        {(props.minimal ? MINIMAL_TONES : TONE_PRESETS).map((tone) => (
+      <span className="tone-label">{t("bots.personality")}</span>
+      <div className="tone-picker" role="group" aria-label={t("bots.toneSelection")}>
+        {(props.minimal
+          ? TONE_PRESETS.filter((tone) => MINIMAL_TONE_IDS.has(tone.id))
+          : TONE_PRESETS
+        ).map((tone) => (
           <button
-            key={tone}
+            key={tone.id}
             type="button"
-            className={"tone-chip" + (selectedTones.includes(tone) ? " selected" : "")}
-            aria-pressed={selectedTones.includes(tone)}
-            onClick={() => toggleTone(tone)}
+            className={"tone-chip" + (selectedTones.includes(tone.id) ? " selected" : "")}
+            aria-pressed={selectedTones.includes(tone.id)}
+            onClick={() => toggleTone(tone.id)}
           >
-            {tone}
+            {t(tone.labelKey)}
           </button>
         ))}
         <button
           type="button"
-          className={"tone-chip" + (selectedTones.includes("自定义") ? " selected" : "")}
-          aria-pressed={selectedTones.includes("自定义")}
-          onClick={() => toggleTone("自定义")}
+          className={"tone-chip" + (selectedTones.includes(CUSTOM_TONE_ID) ? " selected" : "")}
+          aria-pressed={selectedTones.includes(CUSTOM_TONE_ID)}
+          onClick={() => toggleTone(CUSTOM_TONE_ID)}
         >
-          自定义
+          {t("bots.custom")}
         </button>
       </div>
-      {selectedTones.includes("自定义") && (
+      {selectedTones.includes(CUSTOM_TONE_ID) && (
         <div className="tone-custom">
           <input
             value={customDraft}
             maxLength={12}
-            placeholder="输入你的自定义语气"
-            aria-label="自定义语气"
+            placeholder={t("bots.customToneInputPlaceholder")}
+            aria-label={t("bots.customTone")}
             onChange={(e) => setCustomDraft(e.target.value)}
           />
         </div>
@@ -232,33 +263,39 @@ export function BotForm(
       {props.skillsSlot}
 
       <details className="advanced">
-        <summary>高级设置</summary>
+        <summary>{t("bots.advancedSettings")}</summary>
         {/* 不能用 label 包裹：label 会把点击转发给内部触发按钮，选中后菜单立即重开（假死） */}
         <div className="form-field">
-          <span>模型配置</span>
+          <span>{t("bots.modelProfile")}</span>
           <CustomSelect
             value={draft.modelProfileId}
             options={MODEL_OPTIONS.map((o) => ({ value: o.id, label: o.label }))}
             onChange={(v) => set("modelProfileId", v)}
-            ariaLabel="模型配置"
+            ariaLabel={t("bots.modelProfile")}
           />
         </div>
         <div className="form-field">
-          <span>工作目录</span>
+          <span>{t("bots.workspace")}</span>
           <CustomSelect
             value={draft.workspaceId}
-            options={WORKSPACE_OPTIONS.map((o) => ({ value: o.id, label: o.label }))}
+            options={WORKSPACE_OPTIONS.map((option) => ({
+              value: option.id,
+              label: t(option.labelKey),
+            }))}
             onChange={(v) => set("workspaceId", v)}
-            ariaLabel="工作目录"
+            ariaLabel={t("bots.workspace")}
           />
         </div>
         <div className="form-field">
-          <span>工具授权</span>
+          <span>{t("bots.toolPolicy")}</span>
           <CustomSelect
             value={draft.toolPolicyId}
-            options={TOOL_POLICY_OPTIONS.map((o) => ({ value: o.id, label: o.label }))}
+            options={TOOL_POLICY_OPTIONS.map((option) => ({
+              value: option.id,
+              label: t(option.labelKey),
+            }))}
             onChange={(v) => set("toolPolicyId", v)}
-            ariaLabel="工具授权"
+            ariaLabel={t("bots.toolPolicy")}
           />
         </div>
       </details>
@@ -267,7 +304,7 @@ export function BotForm(
 
       <div className="modal-foot">
         <button type="button" className="ghost-btn" onClick={props.onCancel}>
-          取消
+          {t("shell.cancel")}
         </button>
         <button
           type="button"
