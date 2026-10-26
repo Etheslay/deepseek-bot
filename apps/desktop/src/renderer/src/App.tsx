@@ -2,6 +2,7 @@ import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type C
 import { createPortal } from "react-dom";
 import { useBots, type UiBot } from "./features/bots/use-bots.js";
 import { PermissionChatCards } from "./features/permissions/permission-chat.js";
+import { QuestionChatCards } from "./features/questions/question-chat.js";
 import { PermissionsPanel } from "./features/permissions/permissions-panel.js";
 import { BotForm } from "./features/bots/bot-form.js";
 import { CustomSelect } from "./components/custom-select.js";
@@ -2676,6 +2677,7 @@ function BotsPlaceholder({
             )}
           </>
         )}
+        <QuestionChatCards botId={me.bot.id} />
         <PermissionChatCards botId={me.bot.id} />
       </div>
       {pendingFiles.length > 0 && (

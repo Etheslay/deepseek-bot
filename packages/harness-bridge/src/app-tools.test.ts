@@ -43,7 +43,17 @@ async function fixture(
     for await (const chunk of request) chunks.push(chunk);
     const body = Buffer.concat(chunks as Buffer[]).toString();
     response.setHeader("content-type", "application/json");
-    if (request.url === "/app-tools") {
+    if (request.url === "/ask-user") {
+      response.end(
+        JSON.stringify({
+          tool: {
+            name: "ask_user",
+            description: "ask_user",
+            parameters: { type: "object", additionalProperties: false, properties: {} },
+          },
+        }),
+      );
+    } else if (request.url === "/app-tools") {
       response.statusCode = options.status ?? 200;
       response.end(
         JSON.stringify({
@@ -95,7 +105,7 @@ describe("application tool plugin", () => {
   it("registers the eight Host schemas before readiness and forwards exact runtime identity", async () => {
     const { ctx, tools, calls, requests } = await fixture();
     await apply(ctx);
-    expect(tools.map((tool) => tool.name)).toEqual(names);
+    expect(tools.map((tool) => tool.name)).toEqual([...names, "ask_user"]);
     expect(calls).toEqual([{ tools: names }]);
     const tool = tools.find((item) => item.name === "create_group")!;
     expect(tool.timeoutMs).toBeGreaterThan(600_000);
@@ -112,7 +122,27 @@ describe("application tool plugin", () => {
     expect(tool.output.render(params, { ok: true })).toEqual([
       { type: "text", text: '{"ok":true}' },
     ]);
-    expect(requests).toEqual(["/app-tools", "/app-tools/ready", "/app-tools/call"]);
+    const ask = tools.find((item) => item.name === "ask_user")!;
+    expect(ask.timeoutMs).toBeGreaterThan(30 * 60_000);
+    expect(
+      await ask.execute(
+        { question: "Which first?" },
+        { agent: { session: { id: "physical-session" } }, callId: "q1" },
+      ),
+    ).toEqual({ group: { id: "g1" } });
+    expect(calls[2]).toEqual({
+      sessionId: "physical-session",
+      callId: "q1",
+      tool: "ask_user",
+      params: { question: "Which first?" },
+    });
+    expect(requests).toEqual([
+      "/app-tools",
+      "/ask-user",
+      "/app-tools/ready",
+      "/app-tools/call",
+      "/ask-user/call",
+    ]);
   });
 
   it("rejects unsupported control tools without registering any tool", async () => {

@@ -81,6 +81,7 @@ export async function startApplicationToolServer(
 ): Promise<ApplicationToolServer> {
   const turns = new Map<string, TurnState>();
   const schemas = gateway.capabilities.schemas(APPLICATION_TOOLS);
+  const askUserSchema = gateway.capabilities.schemas(["ask_user"])[0];
   let closed = false;
   const server = createServer((request, response) => {
     void handle(request, response).catch(() =>
@@ -108,9 +109,15 @@ export async function startApplicationToolServer(
       send(response, 200, { tools: schemas });
       return;
     }
+    if (request.method === "GET" && request.url === "/ask-user") {
+      send(response, 200, { tool: askUserSchema });
+      return;
+    }
     if (
       request.method !== "POST" ||
-      (request.url !== "/app-tools/ready" && request.url !== "/app-tools/call")
+      (request.url !== "/app-tools/ready" &&
+        request.url !== "/app-tools/call" &&
+        request.url !== "/ask-user/call")
     ) {
       send(response, 404, failure("INVALID_INPUT", "unknown application tool route"));
       return;
@@ -147,7 +154,11 @@ export async function startApplicationToolServer(
       send(response, 403, failure("UNAUTHORIZED_PATH", "application tool session mismatch"));
       return;
     }
-    if (!(APPLICATION_TOOLS as readonly string[]).includes(parsed.tool)) {
+    if (
+      request.url === "/ask-user/call"
+        ? parsed.tool !== "ask_user"
+        : !(APPLICATION_TOOLS as readonly string[]).includes(parsed.tool)
+    ) {
       send(response, 400, failure("INVALID_INPUT", "tool is not available in chat"));
       return;
     }

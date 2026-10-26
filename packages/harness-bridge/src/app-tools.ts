@@ -15,6 +15,7 @@ export const APPLICATION_TOOL_NAMES = [
 ] as const;
 
 const CALL_TIMEOUT_MS = 660_000;
+const ASK_USER_TIMEOUT_MS = 31 * 60_000;
 const STARTUP_TIMEOUT_MS = 30_000;
 const CODES = new Set([
   "INVALID_INPUT",
@@ -83,6 +84,24 @@ function catalog(value: unknown): ToolSchema[] {
     names.add(tool.name);
     return { name: tool.name, description: tool.description, parameters: tool.parameters };
   });
+}
+
+function askUserTool(value: unknown): ToolSchema {
+  if (
+    !object(value) ||
+    !object(value.tool) ||
+    value.tool.name !== "ask_user" ||
+    typeof value.tool.description !== "string" ||
+    !object(value.tool.parameters) ||
+    value.tool.parameters.type !== "object"
+  ) {
+    throw new Error("invalid catalog");
+  }
+  return {
+    name: "ask_user",
+    description: value.tool.description,
+    parameters: value.tool.parameters,
+  };
 }
 
 /** Authenticated local transport never reflects server text, URLs, or tokens in errors. */
@@ -161,13 +180,17 @@ export async function applyApplicationTools(ctx: ApplicationToolContext): Promis
     )
       throw new Error("invalid application transport");
     const origin = url.origin;
+    const tools = ctx.tools;
     const startupSignal = AbortSignal.timeout(STARTUP_TIMEOUT_MS);
     const schemas = catalog(await request(origin, token, "/app-tools", startupSignal));
-    for (const schema of schemas) {
+    const askUser = askUserTool(
+      await request(origin, token, "/ask-user", AbortSignal.timeout(STARTUP_TIMEOUT_MS)),
+    );
+    const bindRemote = (schema: ToolSchema, path: string, timeoutMs: number): void => {
       unregister.push(
-        ctx.tools.register({
+        tools.register({
           ...schema,
-          timeoutMs: CALL_TIMEOUT_MS,
+          timeoutMs,
           output: {
             schema: {},
             render: (_args, value) => [{ type: "text", text: JSON.stringify(value) }],
@@ -182,11 +205,11 @@ export async function applyApplicationTools(ctx: ApplicationToolContext): Promis
             ) {
               throw new ApplicationToolError("INVALID_INPUT");
             }
-            const timeout = AbortSignal.timeout(CALL_TIMEOUT_MS);
+            const timeout = AbortSignal.timeout(timeoutMs);
             const signal =
               exec.signal === undefined ? timeout : AbortSignal.any([exec.signal, timeout]);
             try {
-              const payload = await request(origin, token, "/app-tools/call", signal, {
+              const payload = await request(origin, token, path, signal, {
                 sessionId,
                 callId: exec.callId,
                 tool: schema.name,
@@ -215,7 +238,9 @@ export async function applyApplicationTools(ctx: ApplicationToolContext): Promis
           },
         }),
       );
-    }
+    };
+    for (const schema of schemas) bindRemote(schema, "/app-tools/call", CALL_TIMEOUT_MS);
+    bindRemote(askUser, "/ask-user/call", ASK_USER_TIMEOUT_MS);
     const ready = await request(origin, token, "/app-tools/ready", startupSignal, {
       tools: schemas.map((schema) => schema.name),
     });

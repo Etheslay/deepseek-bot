@@ -69,7 +69,11 @@ import {
   revokeGrant,
   type GrantRow,
 } from "@deepseek-bot/storage";
-import type { ToolGateway } from "@deepseek-bot/agent-tools";
+import {
+  ToolRejectionError,
+  type ToolGateway,
+  type UserQuestionControls,
+} from "@deepseek-bot/agent-tools";
 
 export interface HostContext {
   readonly permissions: AgentPermissionService;
@@ -84,6 +88,8 @@ export interface HostContext {
   readonly chat: ChatManager;
   /** D15 agent tool gateway; `tool.invoke` routes model calls through it. */
   readonly agentTools: ToolGateway;
+  /** Trusted ask_user controls. The desktop answers; the model never sees these methods. */
+  readonly userQuestions: UserQuestionControls;
 }
 
 function grantResponse(row: GrantRow): {
@@ -129,6 +135,13 @@ function invalid(message: string, details?: Record<string, unknown>): EngineErro
 }
 
 /** bot.create/bot.update accept a groupId; it must reference a live group. */
+function requireLiveBot(db: OpenedDatabase, botId: string) {
+  const bot = getBot(db, botId);
+  if (bot === undefined) throw invalid(`bot '${botId}' was not found`);
+  if (bot.archivedAt !== null) throw invalid("archived bots cannot chat");
+  return bot;
+}
+
 function requireGroup(db: OpenedDatabase, groupId: string): void {
   const group = getGroup(db, groupId);
   if (group === undefined) {
@@ -520,6 +533,53 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
     }),
 
     "chat.cancel": (payload) => ({ cancelled: chat.cancel(payload.sessionId) }),
+
+    "question.list": (payload) => {
+      const bot = requireLiveBot(db, payload.botId);
+      return {
+        questions: context.userQuestions.listPending(chatSessionIdFor(bot.id)).map((request) => ({
+          requestId: request.requestId,
+          question: request.question,
+          options: request.options.map((option) => ({ id: option.id, label: option.label })),
+          allowOther: request.allowOther,
+          expiresAt: request.expiresAt,
+        })),
+      };
+    },
+
+    "question.answer": (payload) => {
+      const bot = requireLiveBot(db, payload.botId);
+      let result;
+      try {
+        result = context.userQuestions.answer(
+          payload.requestId,
+          chatSessionIdFor(bot.id),
+          "optionId" in payload ? { optionId: payload.optionId } : { text: payload.text },
+        );
+      } catch (error) {
+        if (error instanceof ToolRejectionError) {
+          throw new EngineError({
+            code: error.code,
+            message: error.message,
+            retryable: false,
+          });
+        }
+        throw error;
+      }
+      const message = appendChatMessage(db, {
+        botId: bot.id,
+        sessionId: chatSessionIdFor(bot.id),
+        role: "user",
+        text: result.text,
+      });
+      return {
+        requestId: result.requestId,
+        ...(result.optionId !== undefined ? { optionId: result.optionId } : {}),
+        text: result.text,
+        messageId: message.id,
+        at: message.createdAt,
+      };
+    },
 
     "settings.testConnection": async (payload) => {
       const credentialRef = getSettingRaw(db, "apiKeyRef");
