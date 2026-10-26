@@ -4,7 +4,7 @@
  * permission.approval.decide. Once / session / permanent follow the contract:
  * per-action capabilities and missing sessions cannot take a longer grant.
  */
-import { useCallback, useEffect, useState, type JSX } from "react";
+import { useCallback, useEffect, useRef, useState, type JSX } from "react";
 import {
   PERMISSION_METHODS,
   requiresPerActionApproval,
@@ -89,18 +89,33 @@ function capabilityLine(capabilities: readonly CapabilityId[]): string {
 }
 
 export function PermissionChatCards({ botId }: { botId: string }): JSX.Element | null {
+  // Each bot owns its component lifetime: a completed request from a closed
+  // chat must never replace the next bot's approval cards or notices.
+  return <BotPermissionChatCards key={botId} botId={botId} />;
+}
+
+function BotPermissionChatCards({ botId }: { botId: string }): JSX.Element | null {
   const [approvals, setApprovals] = useState<AppApproval[] | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const active = useRef(true);
+  const loadSequence = useRef(0);
 
   const load = useCallback(async (): Promise<void> => {
+    const sequence = ++loadSequence.current;
     const response = await window.deepseekBot.host.call("permission.approval.list", { botId });
     const parsed = PERMISSION_METHODS["permission.approval.list"].response.parse(response);
-    setApprovals(parsed.approvals.filter((approval) => approval.status === "pending"));
+    if (!active.current || sequence !== loadSequence.current) return;
+    setApprovals(
+      parsed.approvals.filter(
+        (approval) => approval.status === "pending" && approval.botId === botId,
+      ),
+    );
     setNotice((current) => (current === "授权请求读取失败" ? null : current));
   }, [botId]);
 
   useEffect(() => {
+    active.current = true;
     let cancelled = false;
     const run = (): void => {
       void load().catch(() => {
@@ -110,6 +125,7 @@ export function PermissionChatCards({ botId }: { botId: string }): JSX.Element |
     run();
     const timer = setInterval(run, 4_000);
     return () => {
+      active.current = false;
       cancelled = true;
       clearInterval(timer);
     };
@@ -121,14 +137,15 @@ export function PermissionChatCards({ botId }: { botId: string }): JSX.Element |
       .call("permission.approval.decide", approvalDecision(approval, choice))
       .then((response) => {
         PERMISSION_METHODS["permission.approval.decide"].response.parse(response);
+        if (!active.current) return;
         setNotice(choice === "deny" ? "已拒绝" : `已允许：${CHOICE_LABEL[choice]}`);
         return load();
       })
       .catch(() => {
-        setNotice("审批决定失败");
+        if (active.current) setNotice("审批决定失败");
       })
       .finally(() => {
-        setBusyId(null);
+        if (active.current) setBusyId(null);
       });
   };
 
@@ -148,6 +165,10 @@ export function PermissionChatCards({ botId }: { botId: string }): JSX.Element |
             <div className="choice-question">是否允许这些操作？</div>
             <p className="choice-answered">申请：{approval.tool}</p>
             <p className="choice-answered">能力：{capabilityLine(approval.capabilities)}</p>
+            <p className="choice-answered">待执行参数：</p>
+            <pre className="permission-params" aria-label="待执行参数">
+              {JSON.stringify(approval.params, null, 2)}
+            </pre>
             <p className="choice-answered">仅本次 1 次，到期 {approval.expiresAt}</p>
             {choices.includes("session") ? (
               <p className="choice-answered">

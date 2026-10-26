@@ -17,14 +17,16 @@
  * holds the replaced database); the caller restarts the process.
  */
 import { randomUUID } from "node:crypto";
-import { mkdirSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { methodContract, type Method, type ToolPolicy } from "@deepseek-bot/contracts";
 import {
   DshSdkExecutor,
   SessionRegistry,
   startApprovalBridgeServer,
   writeProfilePatches,
+  prepareAppToolProfile,
   type DshSdkExecutorOptions,
   type RunningApprovalBridge,
 } from "@deepseek-bot/harness-adapter";
@@ -43,6 +45,7 @@ import { buildHandlers, type HostContext } from "./handlers.js";
 import { AgentPermissionService } from "./agent-permissions.js";
 import { AskUserCoordinator, JsonlAuditSink, ToolGateway, ToolRegistry, bindAskUserTool, bindReadTools, bindWriteTools, type UserQuestionControls } from "@deepseek-bot/agent-tools";
 import { WebSearchService, bindWebSearchTool, type WebSearchOptions } from "@deepseek-bot/agent-tools";
+import { startApplicationToolServer } from "./app-tool-channel.js";
 
 export interface HostOptions {
   /** Data root (storage layout: database, harness home, artifacts, backups). */
@@ -200,7 +203,15 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
       },
   };
   const executor = new DshSdkExecutor(executorOptions, { sessionRegistry });
-  const chat = new ChatManager(executorOptions);
+  const packagedBridge = fileURLToPath(new URL("./harness-bridge/", import.meta.url));
+  const bridgePackageDir = existsSync(join(packagedBridge, "package.json"))
+    ? packagedBridge : fileURLToPath(new URL("../../harness-bridge/", import.meta.url));
+  const chat = new ChatManager(executorOptions, {
+    prepareProfile: () => prepareAppToolProfile({ dshHome: layout.harnessHome, bridgePackageDir }),
+    openTurn: (sessionId, caller, signal) => {
+      return applicationTools.openTurn({ sessionId, caller, signal });
+    },
+  });
   const bridge = await startApprovalBridgeServer({
     sessions: (sessionId) => sessionRegistry.resolve(sessionId),
   });
@@ -322,6 +333,7 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
     grants: permissions,
   });
   agentToolsHolder.current = agentTools;
+  const applicationTools = await startApplicationToolServer(agentTools);
 
   return {
     layout,
@@ -352,6 +364,7 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
         await bridge.close();
       } finally {
         try {
+          await applicationTools?.close();
           await chat.disposeAll();
         } finally {
           db.close();

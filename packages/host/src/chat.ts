@@ -10,8 +10,9 @@
  * context. That keeps multi-turn chat coherent without depending on harness
  * session persistence.
  *
- * Approval-requiring tools fail closed for chat sessions on purpose in this
- * slice: chat sessions are not registered in the bridge's session registry.
+ * Application tools use a per-turn private channel into the D16 gateway.
+ * Native approval-requiring tools still fail closed: chat sessions are not
+ * registered in the workflow engine's D08 session registry.
  */
 import { randomUUID } from "node:crypto";
 import type { Bot } from "@deepseek-bot/contracts";
@@ -24,6 +25,8 @@ import {
   type HarnessAttemptOptions,
   type TurnOutcome,
 } from "@deepseek-bot/harness-adapter";
+import type { ToolCaller } from "@deepseek-bot/agent-tools";
+import type { ApplicationToolTurn } from "./app-tool-channel.js";
 
 export function chatSessionIdFor(botId: string): string {
   return `chat:${botId}`;
@@ -40,12 +43,52 @@ interface ChatSession {
   lastSessionId: string;
   busy: boolean;
   active: HarnessAttempt | null;
+  controller: AbortController | null;
+  settled: Promise<void> | null;
+}
+
+export interface ChatToolWiring {
+  prepareProfile(): void;
+  openTurn(sessionId: string, caller: ToolCaller, signal: AbortSignal): ApplicationToolTurn;
+}
+
+/** Cancelling a turn must not wait for a desktop credential RPC to return. */
+async function whileActive<T>(task: Promise<T>, signal: AbortSignal): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const detach = () => signal.removeEventListener("abort", cancel);
+    const cancel = () => {
+      detach();
+      reject(
+        new EngineError({
+          code: "CANCELLED",
+          message: "chat turn was cancelled",
+          retryable: false,
+        }),
+      );
+    };
+    signal.addEventListener("abort", cancel, { once: true });
+    void task.then(
+      (value) => {
+        detach();
+        resolve(value);
+      },
+      (error) => {
+        detach();
+        reject(error);
+      },
+    );
+    if (signal.aborted) cancel();
+  });
 }
 
 export class ChatManager {
   private readonly sessions = new Map<string, ChatSession>();
+  private closed = false;
 
-  constructor(private readonly options: DshSdkExecutorOptions) {}
+  constructor(
+    private readonly options: DshSdkExecutorOptions,
+    private readonly tools: ChatToolWiring,
+  ) {}
 
   /** Live sessions (diagnostics / tests). */
   get size(): number {
@@ -57,9 +100,21 @@ export class ChatManager {
     text: string,
     history: ReadonlyArray<ChatHistoryEntry> = [],
   ): Promise<TurnOutcome & { sessionId: string }> {
+    if (this.closed)
+      throw new EngineError({
+        code: "RUNTIME_UNAVAILABLE",
+        message: "chat runtime is closed",
+        retryable: false,
+      });
     let session = this.sessions.get(bot.id);
     if (session === undefined) {
-      session = { lastSessionId: chatSessionIdFor(bot.id), busy: false, active: null };
+      session = {
+        lastSessionId: chatSessionIdFor(bot.id),
+        busy: false,
+        active: null,
+        controller: null,
+        settled: null,
+      };
       this.sessions.set(bot.id, session);
     }
     if (session.busy) {
@@ -70,16 +125,53 @@ export class ChatManager {
       });
     }
     session.busy = true;
+    const controller = new AbortController();
+    session.controller = controller;
+    let finish!: () => void;
+    session.settled = new Promise((resolve) => {
+      finish = resolve;
+    });
+    const sessionId = `chat:${bot.id}:${randomUUID()}`;
+    session.lastSessionId = sessionId;
     let attempt: HarnessAttempt | null = null;
+    let turn: ApplicationToolTurn | null = null;
+    const abortAttempt = () => {
+      if (attempt !== null) void attempt.kill();
+    };
+    controller.signal.addEventListener("abort", abortAttempt, { once: true });
     try {
-      const inputs = await this.options.resolveBotInputs(bot).catch((error: unknown) => {
+      const inputs = await whileActive(
+        this.options.resolveBotInputs(bot).catch((error: unknown) => {
+          throw new EngineError({
+            code: "INVALID_INPUT",
+            message: `无法解析模型凭据：${error instanceof Error ? error.message : String(error)}。请到设置里重新保存 API Key。`,
+            retryable: false,
+          });
+        }),
+        controller.signal,
+      );
+      if (controller.signal.aborted)
         throw new EngineError({
-          code: "INVALID_INPUT",
-          message: `无法解析模型凭据：${error instanceof Error ? error.message : String(error)}。请到设置里重新保存 API Key。`,
+          code: "CANCELLED",
+          message: "chat turn was cancelled",
           retryable: false,
         });
-      });
-      attempt = new HarnessAttempt(this.buildOptions(inputs));
+      try {
+        this.tools.prepareProfile();
+      } catch {
+        throw new EngineError({
+          code: "RUNTIME_UNAVAILABLE",
+          message: "application tools plugin is unavailable; rebuild the Host and bridge",
+          retryable: false,
+        });
+      }
+      turn = this.tools.openTurn(
+        sessionId,
+        { id: chatSessionIdFor(bot.id), botId: bot.id, sessionId: chatSessionIdFor(bot.id) },
+        controller.signal,
+      );
+      const baseOptions = this.buildOptions(inputs);
+      attempt = new HarnessAttempt({ ...baseOptions, env: { ...baseOptions.env, ...turn.env } });
       session.active = attempt;
       await attempt.start({
         cwd: inputs.workspacePath,
@@ -89,17 +181,21 @@ export class ChatManager {
           ? { maxTokens: inputs.profile.limits.maxTokens }
           : {}),
       });
-      const sessionId = `chat:${bot.id}:${randomUUID()}`;
+      await turn.waitReady();
       const prompt = this.composePrompt(bot, text, history);
-      const outcome = await attempt.runTurn(sessionId, prompt);
+      const outcome = await attempt.runTurn(sessionId, prompt, controller.signal);
       session.lastSessionId = sessionId;
       return { ...outcome, sessionId };
     } finally {
+      controller.abort();
+      if (turn !== null) await turn.close();
+      if (attempt !== null) await attempt.dispose().catch(() => undefined);
+      controller.signal.removeEventListener("abort", abortAttempt);
       session.active = null;
+      session.controller = null;
       session.busy = false;
-      if (attempt !== null) {
-        await attempt.dispose().catch(() => undefined);
-      }
+      finish();
+      session.settled = null;
     }
   }
 
@@ -108,28 +204,27 @@ export class ChatManager {
     const session =
       this.sessions.get(botId) ??
       [...this.sessions.values()].find((candidate) => candidate.lastSessionId === sessionId);
-    if (session === undefined || session.active === null) {
+    if (session === undefined || !session.busy || session.controller === null) {
       return false;
     }
-    void session.active.dispose().catch(() => undefined);
-    session.active = null;
+    session.controller.abort();
     return true;
   }
 
   async disposeAll(): Promise<void> {
+    this.closed = true;
     for (const session of this.sessions.values()) {
-      if (session.active !== null) {
-        await session.active.dispose().catch(() => undefined);
-      }
+      session.controller?.abort();
     }
+    await Promise.allSettled(
+      [...this.sessions.values()].flatMap((session) =>
+        session.settled === null ? [] : [session.settled],
+      ),
+    );
     this.sessions.clear();
   }
 
-  private composePrompt(
-    bot: Bot,
-    text: string,
-    history: ReadonlyArray<ChatHistoryEntry>,
-  ): string {
+  private composePrompt(bot: Bot, text: string, history: ReadonlyArray<ChatHistoryEntry>): string {
     const parts: string[] = [];
     if (bot.instructions.trim().length > 0) {
       parts.push(bot.instructions.trim());

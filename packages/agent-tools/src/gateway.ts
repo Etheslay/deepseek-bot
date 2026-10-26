@@ -7,6 +7,7 @@
  * audit trail; digests + registered schema are the trace).
  */
 import { createHash } from "node:crypto";
+import { z } from "zod";
 import {
   ToolRejectionError,
   type AuditRecord,
@@ -50,6 +51,19 @@ export class ToolRegistry {
       name,
       description,
     }));
+  }
+
+  /** Model-facing input schemas; validation still belongs to call(). */
+  schemas(names: readonly string[]): Array<{ name: string; description: string; parameters: Record<string, unknown> }> {
+    return names.map((name) => {
+      const capability = this.capabilities.get(name);
+      if (capability === undefined) throw new Error("required application capability is missing");
+      return {
+        name,
+        description: capability.description,
+        parameters: z.toJSONSchema(capability.inputSchema, { io: "input", unrepresentable: "any" }),
+      };
+    });
   }
 }
 

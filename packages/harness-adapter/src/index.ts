@@ -47,8 +47,10 @@ export {
   BRIDGE_MOUNT_PATCH,
   TELEMETRY_DISABLED_PATCH,
   installBridgeIntoProfile,
+  prepareAppToolProfile,
   writeProfilePatches,
   type BridgeInstallOptions,
   type CommandRunner,
   type ProfilePatchPaths,
+  type AppToolProfileOptions,
 } from "./profile-assets.js";

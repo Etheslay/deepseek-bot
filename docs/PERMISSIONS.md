@@ -1,6 +1,6 @@
 # 权限与授权
 
-状态：D16 契约、存储、网关与 Host 授权后端已合入 develop。设置页读取并修改全局策略（`permission.policy.list` / `permission.policy.set`），并查看、撤销已发放授权（`permission.grant.list` / `permission.grant.revoke`）。聊天里的待审批卡片调用 `permission.approval.list` / `permission.approval.decide`，可选仅本次、本会话或永久。真实 Harness 调用方仍待接线，不代表 D16 整体验收。与 [智能体平台](AGENT_PLATFORM.md) 同步实施。D08 已落地的工具权限门继续生效；后端切片见 [D16 报告](reports/D16-report.md)。
+状态：D16 后端、设置页及聊天审批卡已合入 develop；本功能分支将八个应用工具接入真实聊天，并以真实 Electron、Host、钉扎 Harness 和本地受控模型验证授权后继续执行。设置页与聊天卡统一调用 `permission.*`，卡片展示已校验的精确参数，旧 `grant.create` 按钮已移除。`ask_user` / `web_search` 聊天接线、原生聊天 D08 工具审批及付费模型验收仍未完成；不能据此宣称整体平台验收。后端与运行证据见 [D16 报告](reports/D16-report.md) 和 [Harness 工具报告](reports/D16-harness-tools-report.md)。
 
 ## 1. 三层模型
 
