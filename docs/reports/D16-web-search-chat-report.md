@@ -40,7 +40,7 @@ SearXNG 地址来自桌面 `search.config.set`，键为 `searxng.endpoint`。非
 - 未用真实 Electron 点击设置或结果卡。桌面测试使用 jsdom。
 - 真实 Harness 进程没有执行一次 `web_search` 调用，只确认工具被该会话覆盖且八个应用工具仍可用。
 - 未执行远程 CI、安装包、签名或 GitHub 保护规则复核。
-- 其他工具的原生聊天 D08 审批和 D18 不在本片。记忆的写入、检索和删除见 [D18 记忆报告](D18-memory-report.md)；知识导入仍为后续。
+- 其他工具的原生聊天 D08 审批和 D18 不在本片。记忆的写入、检索和删除见 [D18 记忆报告](D18-memory-report.md)；知识导入见 [知识导入报告](D18-knowledge-import-report.md)。
 
 ## 4. Etheslay 本人自审
 

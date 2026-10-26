@@ -11,6 +11,7 @@ import {
 } from "./host-client.js";
 import { checkUpdates, downloadAndInstallUpdate, setAppVersion } from "./updates.js";
 import { DATA_ROOT_DIR_NAME, HOST_EVENT_MISSED } from "../shared/ipc-channels.js";
+import { pickKnowledgeFile } from "./knowledge-import.js";
 
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
@@ -225,6 +226,7 @@ function registerShellIpc(win: BrowserWindow): void {
         platform: process.platform,
       }),
       saveKey: (key) => saveApiKey(key),
+      importKnowledge: () => pickKnowledgeFile(win),
       checkUpdates: () => checkUpdates(),
       downloadAndInstallUpdate: () => downloadAndInstallUpdate(),
       hostCall: (method, payload) => {

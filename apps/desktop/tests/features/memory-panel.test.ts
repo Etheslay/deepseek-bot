@@ -101,4 +101,62 @@ describe("memory panel", () => {
     });
     expect(container.textContent).toContain("已删除记忆");
   });
+
+  it("writes an accepted file with memory.write and does not write a rejected file", async () => {
+    const calls: Array<{ method: string; payload: unknown }> = [];
+    const imports: Array<{ ok: true; text: string } | { ok: false; code: "format" | "cancelled" }> = [
+      { ok: false, code: "format" },
+      { ok: false, code: "cancelled" },
+      { ok: true, text: "Imported note" },
+    ];
+    window.deepseekBot = {
+      knowledge: {
+        importFile: async () => {
+          const next = imports.shift();
+          if (next === undefined) throw new Error("unexpected import");
+          return next;
+        },
+      },
+      host: {
+        call: async (method: string, payload: unknown) => {
+          calls.push({ method, payload });
+          if (method === "memory.list") return { memories: [] };
+          if (method === "memory.write") {
+            return {
+              id: MEMORY,
+              botId: BOT,
+              text: (payload as { text: string }).text,
+              at: "2026-10-26T12:02:00.000Z",
+            };
+          }
+          throw new Error(`unexpected method ${method}`);
+        },
+      },
+    } as unknown as Window["deepseekBot"];
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    roots.push(root);
+    await act(async () => {
+      root.render(createElement(MemoryPanel, { botId: BOT }));
+    });
+    await act(async () => {
+      click(container, "导入知识");
+    });
+    expect(container.textContent).toContain("只接受 .txt 和 .md 文件");
+    expect(calls.some((call) => call.method === "memory.write")).toBe(false);
+    await act(async () => {
+      click(container, "导入知识");
+    });
+    expect(calls.some((call) => call.method === "memory.write")).toBe(false);
+    await act(async () => {
+      click(container, "导入知识");
+    });
+    expect(calls).toContainEqual({
+      method: "memory.write",
+      payload: { botId: BOT, text: "Imported note" },
+    });
+    expect(container.textContent).toContain("已导入知识");
+    expect(JSON.stringify(calls)).not.toContain("filePath");
+  });
 });

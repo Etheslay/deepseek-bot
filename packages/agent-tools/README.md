@@ -68,7 +68,7 @@ const result = await host.agentTools.call(caller, "web_search", {
 
 `memory_write` 保存一条只属于当前 bot 的笔记，`memory_search` 在该 bot 的笔记里做不区分大小写的子串检索。空查询返回最新记录。参数只有 `text`，或可选的 `query` 与 `limit`（1–50，默认 20）。不能传入 botId，也没有删除工具。调用方必须带受信 `caller.botId`；缺失时返回 `UNAUTHORIZED_PATH`。
 
-`memory.read` 默认允许，`memory.write` 默认询问。允许检索时仍然必须是有效 bot。桌面用 `memory.list` / `memory.write` / `memory.delete` 查看、写入和删除当前 bot 的笔记；删的是那一行，没有墓碑。其他 bot 的列表为空，用别人的 id 删除会得到 `INVALID_INPUT`，原记录还在。`/app-tools` 仍只登记八个应用工具，记忆走单独的 `/memory` 路由。网关 JSONL 只记摘要。知识导入不在这一切片。
+`memory.read` 默认允许，`memory.write` 默认询问。允许检索时仍然必须是有效 bot。桌面用 `memory.list` / `memory.write` / `memory.delete` 查看、写入和删除当前 bot 的笔记；删的是那一行，没有墓碑。其他 bot 的列表为空，用别人的 id 删除会得到 `INVALID_INPUT`，原记录还在。`/app-tools` 仍只登记八个应用工具，记忆走单独的 `/memory` 路由。网关 JSONL 只记摘要。桌面可将一个不超过 16 KiB 的 `.txt` 或 `.md` 文件写成当前 bot 的一条记忆；模型不能选择文件。
 
 ## 检查
 
