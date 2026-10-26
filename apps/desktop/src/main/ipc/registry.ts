@@ -4,6 +4,7 @@ import {
   assertAllowedChannel,
   assertValidTitleBarOverlayColors,
   type AppInfo,
+  type HardwareAccelerationStatus,
   type UpdateStatus,
 } from "../../shared/ipc-channels.js";
 import {
@@ -29,6 +30,10 @@ export type IpcHandlers = {
   checkUpdates: () => Promise<UpdateStatus>;
   /** D24: download the update and restart into the installer. */
   downloadAndInstallUpdate: () => Promise<UpdateStatus>;
+  /** D24 leftover: summaries of existing backups in the data root. */
+  listBackups: () => import("../../shared/ipc-channels.js").BackupSummary[];
+  /** D24 leftover: read or toggle the hardware-acceleration preference. */
+  hardwareAcceleration: (enabled: unknown) => Promise<HardwareAccelerationStatus>;
 };
 
 /**
@@ -120,6 +125,19 @@ export function registerIpcHandlers(
     wrap(IPC_CHANNELS.UPDATES_DOWNLOAD_INSTALL, () =>
       handlers.downloadAndInstallUpdate(),
     ),
+  );
+  ipcMain.handle(IPC_CHANNELS.BACKUPS_LIST, (event: IpcMainInvokeEvent) => {
+    assertAllowedChannel(IPC_CHANNELS.BACKUPS_LIST);
+    assertAuthorizedSender(event, isAuthorized);
+    return handlers.listBackups();
+  });
+  ipcMain.handle(
+    IPC_CHANNELS.APP_HARDWARE_ACCELERATION,
+    (event: IpcMainInvokeEvent, enabled: unknown) => {
+      assertAllowedChannel(IPC_CHANNELS.APP_HARDWARE_ACCELERATION);
+      assertAuthorizedSender(event, isAuthorized);
+      return handlers.hardwareAcceleration(enabled);
+    },
   );
 }
 

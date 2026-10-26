@@ -28,6 +28,13 @@ describe("IPC allowlist", () => {
     expect(() => assertAllowedChannel(IPC_CHANNELS.UPDATES_DOWNLOAD_INSTALL)).not.toThrow();
   });
 
+  it("registers the D24 backup and hardware-acceleration channels", () => {
+    expect(ALLOWED_CHANNELS.has(IPC_CHANNELS.BACKUPS_LIST)).toBe(true);
+    expect(ALLOWED_CHANNELS.has(IPC_CHANNELS.APP_HARDWARE_ACCELERATION)).toBe(true);
+    expect(() => assertAllowedChannel(IPC_CHANNELS.BACKUPS_LIST)).not.toThrow();
+    expect(() => assertAllowedChannel(IPC_CHANNELS.APP_HARDWARE_ACCELERATION)).not.toThrow();
+  });
+
   it("rejects unknown channels with a stable error code", () => {
     try {
       assertAllowedChannel("shell:exec");

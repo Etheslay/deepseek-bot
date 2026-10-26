@@ -45,6 +45,15 @@ export type DesktopBridge = {
   knowledge: {
     importFile: () => Promise<import("../shared/knowledge-import.js").KnowledgeImportResult>;
   };
+  /** D24 leftover: backup summaries and the hardware-acceleration shell pref. */
+  backups: {
+    list: () => Promise<import("../shared/ipc-channels.js").BackupSummary[]>;
+  };
+  app: {
+    hardwareAcceleration: (
+      enabled?: boolean,
+    ) => Promise<import("../shared/ipc-channels.js").HardwareAccelerationStatus>;
+  };
   host: {
     call: (method: string, payload: unknown) => Promise<unknown>;
     /** Scheduler skip-and-notify notices (FR-08); returns an unsubscribe. */
@@ -72,6 +81,13 @@ const api: DesktopBridge = {
   },
   knowledge: {
     importFile: () => ipcRenderer.invoke(IPC_CHANNELS.KNOWLEDGE_IMPORT),
+  },
+  backups: {
+    list: () => ipcRenderer.invoke(IPC_CHANNELS.BACKUPS_LIST),
+  },
+  app: {
+    hardwareAcceleration: (enabled?: boolean) =>
+      ipcRenderer.invoke(IPC_CHANNELS.APP_HARDWARE_ACCELERATION, enabled),
   },
   host: {
     call: (method, payload) => ipcRenderer.invoke(IPC_CHANNELS.HOST_CALL, method, payload),
