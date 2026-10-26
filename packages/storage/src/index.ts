@@ -26,6 +26,8 @@ export * from "./repos/schedules.js";
 export * from "./repos/schedule-misses.js";
 export * from "./repos/runs.js";
 export * from "./repos/events.js";
+export * from "./repos/tasks.js";
+export * from "./repos/task-events.js";
 export * from "./repos/approvals.js";
 export * from "./repos/artifacts.js";
 export * from "./repos/artifact-versions.js";

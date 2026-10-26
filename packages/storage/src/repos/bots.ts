@@ -24,6 +24,7 @@ export interface BotPatch {
   readonly modelProfileId?: string;
   readonly workspaceId?: string;
   readonly toolPolicyId?: string;
+  readonly role?: Bot["role"];
   readonly avatar?: Bot["avatar"];
   readonly groupId?: string | null;
 }
@@ -39,6 +40,7 @@ interface BotRow {
   avatar_shape: string | null;
   avatar_color: string | null;
   group_id: string | null;
+  role: string;
   archived_at: string | null;
   created_at: string;
 }
@@ -56,6 +58,9 @@ function rowToBot(row: BotRow): Bot {
       ? { avatar: { shape: row.avatar_shape, color: row.avatar_color } }
       : {}),
     ...(row.group_id !== null ? { groupId: row.group_id } : {}),
+    // Pre-0012 rows read as 'standard' via the migration default; a NULL
+    // (impossible after 0012) still falls back to the schema default.
+    ...(row.role !== undefined && row.role !== null ? { role: row.role } : {}),
     archivedAt: row.archived_at,
   });
   if (!parsed.success) {
@@ -72,6 +77,30 @@ export interface CreateBotResult {
   readonly bot: Bot;
   /** False when an earlier request with the same requestId already created it. */
   readonly created: boolean;
+}
+
+/**
+ * FR-1: a group carries at most one coordinator. The check runs inside the
+ * caller's transaction on every write path that can mint or move one. An
+ * ungrouped coordinator is allowed (it simply cannot dispatch anywhere).
+ */
+export function assertCoordinatorUniqueness(
+  db: OpenedDatabase,
+  input: { groupId: string | null; excludeBotId?: string },
+): void {
+  if (input.groupId === null) return;
+  const row = db.raw
+    .prepare(
+      "SELECT id FROM bots WHERE group_id = ? AND role = 'coordinator' " +
+        "AND archived_at IS NULL AND id != ? LIMIT 1;",
+    )
+    .get(input.groupId, input.excludeBotId ?? "") as { id: string } | undefined;
+  if (row !== undefined) {
+    throw invalidInput("this group already has a coordinator bot", {
+      groupId: input.groupId,
+      coordinatorBotId: row.id,
+    });
+  }
 }
 
 export function createBot(
@@ -91,6 +120,9 @@ export function createBot(
   }
 
   requireProfileAndWorkspace(db, bot);
+  if (bot.role === "coordinator") {
+    assertCoordinatorUniqueness(db, { groupId: bot.groupId ?? null });
+  }
   try {
     insertBotRow(db, bot, input.requestId ?? null, now);
   } catch (error) {
@@ -112,9 +144,9 @@ export function insertBotRow(
   db.raw
     .prepare(
       "INSERT INTO bots (id, revision, name, instructions, model_profile_id, " +
-        "workspace_id, tool_policy_id, avatar_shape, avatar_color, group_id, " +
+        "workspace_id, tool_policy_id, avatar_shape, avatar_color, group_id, role, " +
         "archived_at, created_request_id, created_at, updated_at) " +
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
     )
     .run(
       bot.id,
@@ -127,6 +159,7 @@ export function insertBotRow(
       bot.avatar?.shape ?? null,
       bot.avatar?.color ?? null,
       bot.groupId ?? null,
+      bot.role,
       bot.archivedAt,
       requestId,
       now,
@@ -220,6 +253,7 @@ export function updateBot(
         : row.group_id !== null
           ? { groupId: row.group_id }
           : {}),
+      role: input.patch.role ?? row.role,
       archivedAt: row.archived_at,
     });
     // Reads omit unassigned avatar/group keys; keep the update response in
@@ -238,6 +272,7 @@ export function updateBot(
       ...(parsed.groupId !== undefined && parsed.groupId !== null
         ? { groupId: parsed.groupId }
         : {}),
+      role: parsed.role,
       archivedAt: parsed.archivedAt,
     };
     if (
@@ -246,12 +281,20 @@ export function updateBot(
     ) {
       requireProfileAndWorkspace(db, merged);
     }
+    // Role or group writes can mint or move a coordinator: re-check the
+    // per-group uniqueness after the merge, excluding this bot itself.
+    if (merged.role === "coordinator") {
+      assertCoordinatorUniqueness(db, {
+        groupId: merged.groupId ?? null,
+        excludeBotId: merged.id,
+      });
+    }
     const nextRevision = randomUUID();
     db.raw
       .prepare(
         "UPDATE bots SET revision = ?, name = ?, instructions = ?, " +
           "model_profile_id = ?, workspace_id = ?, tool_policy_id = ?, " +
-          "avatar_shape = ?, avatar_color = ?, group_id = ?, updated_at = ? " +
+          "avatar_shape = ?, avatar_color = ?, group_id = ?, role = ?, updated_at = ? " +
           "WHERE id = ? AND revision = ?;",
       )
       .run(
@@ -264,6 +307,7 @@ export function updateBot(
         merged.avatar?.shape ?? null,
         merged.avatar?.color ?? null,
         merged.groupId ?? null,
+        merged.role,
         isoNow(db.now),
         input.id,
         input.expectedRevision,
