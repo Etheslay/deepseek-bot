@@ -29,25 +29,57 @@ import { WORKFLOW_SCHEMA_VERSION } from "./version.js";
  * a data contract: batch creation assigns members distinct combinations, so
  * every consumer must compare the same pool. Renderers map these ids to
  * their own visuals; ids are stable, palettes evolve only via a contract PR.
+ *
+ * The 2026-10 shape pass replaced the traced-outline set with a compiled
+ * primitive family (blob / pebble / bean / … / leaf). Ids already handed out to
+ * stored avatars are NOT deleted: they move to `AVATAR_SHAPE_IDS_RETIRED`, so
+ * existing rows keep validating and keep rendering, while nothing new is ever
+ * assigned a retired id. Same rule for retired colours in
+ * `AVATAR_COLORS_RETIRED`.
  */
 export const AVATAR_SHAPES = [
-  "circle",
   "blob",
   "squircle",
-  "star4",
+  "cylinder",
+  "hex",
+  "gem",
+  "crystal",
+  "shield",
+  "arch",
   "cloud",
+  "leaf",
   "heart",
-  "flower6",
-  "egg",
-  "capsule",
-  "triangle",
-  "pentagon",
+] as const;
+
+/** Kept for compatibility: valid input, never assigned. */
+export const AVATAR_SHAPE_IDS_RETIRED = [
+  "circle",
+  "star4",
   "star5",
+  "flower6",
+  "pentagon",
   "hexagon",
   "pumpkin",
+  "triangle",
+  "egg",
+  "capsule",
 ] as const;
 
 export const AVATAR_COLORS = [
+  "#A27952",
+  "#FF3E51",
+  "#FF781C",
+  "#FFAF38",
+  "#00C972",
+  "#1CC3B0",
+  "#2A92FE",
+  "#A97EFE",
+  "#FF5EB1",
+  "#959595",
+] as const;
+
+/** Kept for compatibility: valid input, never assigned. */
+export const AVATAR_COLORS_RETIRED = [
   "#8b5e3c",
   "#e8483f",
   "#f08a24",
@@ -61,8 +93,8 @@ export const AVATAR_COLORS = [
 ] as const;
 
 export const AvatarSchema = z.object({
-  shape: z.enum(AVATAR_SHAPES),
-  color: z.enum(AVATAR_COLORS),
+  shape: z.enum([...AVATAR_SHAPES, ...AVATAR_SHAPE_IDS_RETIRED]),
+  color: z.enum([...AVATAR_COLORS, ...AVATAR_COLORS_RETIRED]),
 });
 
 export type Avatar = z.infer<typeof AvatarSchema>;

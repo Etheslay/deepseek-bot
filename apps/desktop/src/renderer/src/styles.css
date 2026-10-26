@@ -5831,10 +5831,68 @@ select option {
   overflow: visible;
 }
 
+/* ---------- Grok Ball body tones: one colour per theme ----------
+   The persisted avatar colour is the light-theme value. `data-tone` maps it
+   back to its pair, so a dark panel gets the deeper tone instead of a colour
+   that glows out of it. A hex outside the palette carries no tone and renders
+   as itself in both themes. `:root` is the dark theme; light overrides. */
+:root {
+  --gb-body-brown: #855C36;
+  --gb-body-red: #E02135;
+  --gb-body-orange: #FF6700;
+  --gb-body-yellow: #FF9800;
+  --gb-body-green: #009957;
+  --gb-body-cyan: #00A592;
+  --gb-body-blue: #0E74E0;
+  --gb-body-violet: #804EE0;
+  --gb-body-magenta: #E02A88;
+  --gb-body-gray: #777777;
+}
+
+:root[data-theme="light"] {
+  --gb-body-brown: #A27952;
+  --gb-body-red: #FF3E51;
+  --gb-body-orange: #FF781C;
+  --gb-body-yellow: #FFAF38;
+  --gb-body-green: #00C972;
+  --gb-body-cyan: #1CC3B0;
+  --gb-body-blue: #2A92FE;
+  --gb-body-violet: #A97EFE;
+  --gb-body-magenta: #FF5EB1;
+  --gb-body-gray: #959595;
+}
+
+.grok-ball[data-tone="brown"],
+.color-btn[data-tone="brown"] { --gb-body: var(--gb-body-brown); }
+.grok-ball[data-tone="red"],
+.color-btn[data-tone="red"] { --gb-body: var(--gb-body-red); }
+.grok-ball[data-tone="orange"],
+.color-btn[data-tone="orange"] { --gb-body: var(--gb-body-orange); }
+.grok-ball[data-tone="yellow"],
+.color-btn[data-tone="yellow"] { --gb-body: var(--gb-body-yellow); }
+.grok-ball[data-tone="green"],
+.color-btn[data-tone="green"] { --gb-body: var(--gb-body-green); }
+.grok-ball[data-tone="cyan"],
+.color-btn[data-tone="cyan"] { --gb-body: var(--gb-body-cyan); }
+.grok-ball[data-tone="blue"],
+.color-btn[data-tone="blue"] { --gb-body: var(--gb-body-blue); }
+.grok-ball[data-tone="violet"],
+.color-btn[data-tone="violet"] { --gb-body: var(--gb-body-violet); }
+.grok-ball[data-tone="magenta"],
+.color-btn[data-tone="magenta"] { --gb-body: var(--gb-body-magenta); }
+.grok-ball[data-tone="gray"],
+.color-btn[data-tone="gray"] { --gb-body: var(--gb-body-gray); }
+
+/* The swatch wears the same tone the ball will, so picking a colour is not a
+   promise the avatar then breaks when the theme flips. */
+.color-btn[data-tone] {
+  background: var(--gb-body);
+}
+
 /* ---------- Grok Ball: theme inversion + fixed-slot plaque ---------- */
 /* Light = dark body + light eyes; Dark = light body + dark eyes.
-   The body is a shaded gradient now, so the mono palette is fed through the
-   --gb-mono-* stops instead of a flat fill; eyes still swap via CSS. */
+   The body is one flat colour, so the mono palette is fed straight through
+   --avatar-mono-bg; the eyes still swap via CSS. */
 .grok-ball .gb-body {
   transition: opacity 200ms ease;
 }
@@ -6242,19 +6300,55 @@ select option {
 
 /* --- choice card (A/B/C/D) --- */
 
+/* Choice card: elevated surface, letter badges, hover lift + arrow. */
+@keyframes choiceIn {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 .choice-card {
-  margin-top: 8px;
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  padding: 10px 12px;
-  background: var(--panel);
-  max-width: 420px;
+  margin-top: 10px;
+  max-width: 440px;
+  padding: 14px;
+  border-radius: 18px;
+  border: 1px solid rgba(127, 127, 127, 0.18);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0) 48%),
+    var(--panel);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.24);
+  animation: choiceIn 0.22s ease-out both;
+}
+
+[data-theme="light"] .choice-card {
+  border-color: rgba(15, 23, 42, 0.08);
+  background: linear-gradient(180deg, #ffffff, rgba(255, 255, 255, 0.72)), var(--panel);
+  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.1);
 }
 
 .choice-question {
-  font-size: 0.86rem;
-  font-weight: 600;
-  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 2px 2px 12px;
+  font-size: 0.88rem;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
+
+.choice-question::before {
+  content: "";
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--mention-color, #6ea8ff);
+  box-shadow: 0 0 0 4px rgba(110, 168, 255, 0.16);
 }
 
 .permission-params {
@@ -6271,44 +6365,98 @@ select option {
 .choice-options {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 
 .choice-option {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   width: 100%;
+  padding: 11px 12px;
   text-align: left;
-  padding: 7px 10px;
-  border-radius: 10px;
-  border: 1px solid var(--border);
-  background: var(--raised);
+  border-radius: 14px;
+  border: 1px solid rgba(127, 127, 127, 0.2);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0));
   color: inherit;
   font: inherit;
-  font-size: 0.84rem;
+  font-size: 0.86rem;
   cursor: pointer;
+  transition:
+    transform 0.16s ease,
+    border-color 0.16s ease,
+    background 0.16s ease,
+    box-shadow 0.16s ease;
+}
+
+[data-theme="light"] .choice-option {
+  border-color: rgba(15, 23, 42, 0.09);
+  background: #ffffff;
 }
 
 .choice-option:hover {
+  transform: translateY(-1px);
   border-color: var(--mention-color, #6ea8ff);
+  background: linear-gradient(180deg, rgba(110, 168, 255, 0.16), rgba(110, 168, 255, 0.05));
+  box-shadow:
+    0 10px 22px rgba(0, 0, 0, 0.18),
+    inset 0 0 0 1px rgba(110, 168, 255, 0.22);
+}
+
+[data-theme="light"] .choice-option:hover {
+  background: linear-gradient(180deg, rgba(37, 99, 235, 0.1), rgba(37, 99, 235, 0.03));
+  box-shadow:
+    0 10px 20px rgba(15, 23, 42, 0.1),
+    inset 0 0 0 1px rgba(37, 99, 235, 0.2);
+}
+
+.choice-option:active {
+  transform: translateY(0) scale(0.995);
 }
 
 .choice-option:focus-visible {
   outline: 2px solid var(--mention-color, #6ea8ff);
-  outline-offset: 1px;
+  outline-offset: 2px;
+}
+
+.choice-option::after {
+  content: "→";
+  margin-left: auto;
+  font-size: 0.95rem;
+  color: var(--mention-color, #6ea8ff);
+  opacity: 0;
+  transform: translateX(-5px);
+  transition:
+    opacity 0.16s ease,
+    transform 0.16s ease;
+}
+
+.choice-option:hover::after,
+.choice-option:focus-visible::after {
+  opacity: 1;
+  transform: translateX(0);
 }
 
 .choice-key {
   flex: none;
-  width: 22px;
-  height: 22px;
+  width: 26px;
+  height: 26px;
   display: grid;
   place-items: center;
-  border-radius: 7px;
-  background: var(--md-inline-bg, rgba(127, 127, 127, 0.16));
-  font-size: 0.72rem;
+  border-radius: 9px;
+  border: 1px solid rgba(110, 168, 255, 0.3);
+  background: rgba(110, 168, 255, 0.14);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  color: var(--mention-color, #6ea8ff);
+  font-size: 0.74rem;
   font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+[data-theme="light"] .choice-key {
+  border-color: rgba(37, 99, 235, 0.22);
+  background: rgba(37, 99, 235, 0.08);
+  color: #2563eb;
 }
 
 .choice-other .choice-key {
@@ -6316,8 +6464,21 @@ select option {
 }
 
 .choice-answered {
-  font-size: 0.8rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  border: 1px dashed rgba(127, 127, 127, 0.3);
+  background: rgba(127, 127, 127, 0.1);
+  font-size: 0.82rem;
   color: var(--muted);
+}
+
+.choice-answered::before {
+  content: "✓";
+  color: #22c55e;
+  font-weight: 700;
 }
 
 /* --- delivery notice (avatar stack) --- */
@@ -6783,4 +6944,20 @@ select option {
   gap: 8px;
   font-size: 12px;
   cursor: pointer;
+}
+
+.gaze-avatar { display: inline-flex; flex: 0 0 auto; }
+.mention-ball { width: 15px; height: 15px; flex: 0 0 auto; }
+.mention-chip { gap: 5px; }
+
+/* ---------- composer send button: follows the active bot ----------
+   The send button is the loudest accent on the pane, so it wears the bot's own
+   colour instead of a fixed one. `--bot-color` / `--bot-ink` come from the chat
+   page (App.tsx) and are the same pair the user bubble is tinted with; the ink
+   is chosen for contrast against that colour, so the arrow stays readable on a
+   pale body as well as a deep one. With no bot colour both fall back to the
+   previous accent/white pairing, and the disabled state is untouched. */
+.send-btn:not(:disabled) {
+  background: var(--bot-color, var(--accent, #ffffff));
+  color: var(--bot-ink, #ffffff);
 }

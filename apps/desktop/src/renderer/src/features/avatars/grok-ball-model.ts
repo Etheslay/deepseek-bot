@@ -1,26 +1,40 @@
 /**
- * Pure geometry and state model for the Grok Ball avatar.
+ * Geometry and state model for the Grok Ball avatar.
  *
- * The renderer keeps all animation in `grok-ball.tsx`; this module stays
- * deterministic so the projection, contour sampling and keyframe interpolation
- * can be unit tested without a DOM.
+ * Two jobs, both deterministic and DOM-free so they can be unit tested:
+ *
+ *   1. compile the body silhouettes (see "Silhouette compiler" below);
+ *   2. hold the eye / state keyframes that the renderer interpolates.
+ *
+ * The renderer lives in `grok-ball.tsx`; the solid that these silhouettes are
+ * lofted into lives in `grok-ball-3d.ts`.
  */
 
 export type GrokBallShapeId =
-  | "circle"
+  // The primitive family, i.e. what the picker offers.
   | "blob"
   | "squircle"
-  | "star4"
+  | "cylinder"
+  | "hex"
+  | "gem"
+  | "crystal"
+  | "shield"
+  | "arch"
   | "cloud"
+  | "leaf"
   | "heart"
-  | "flower6"
-  | "egg"
-  | "capsule"
-  | "triangle"
-  | "pentagon"
+  // Retained ids: stored avatars keep referring to them, so they must stay
+  // renderable even though nothing hands them out any more.
+  | "circle"
+  | "star4"
   | "star5"
+  | "flower6"
+  | "pentagon"
   | "hexagon"
-  | "pumpkin";
+  | "pumpkin"
+  | "triangle"
+  | "egg"
+  | "capsule";
 
 export type GrokBallState =
   | "idle"
@@ -48,6 +62,12 @@ export type ShapeDefinition = {
   creases?: number;
   /** Draw the little pumpkin stalk on top of the body. */
   stem?: boolean;
+  /**
+   * How fat the body is front-to-back, as a fraction of its own radius
+   * (1 = a true sphere, 0.5 = a cushion). The solid loft uses this, so it is
+   * part of the silhouette contract, not a render tweak.
+   */
+  plump?: number;
 };
 
 const CENTER = 50;
@@ -70,7 +90,7 @@ function radialRing(
     rotateDeg?: number;
   } = {},
 ): Point[] {
-  const { count = 180, scaleX = 1, scaleY = 1, rotateDeg = 0 } = options;
+  const { count = 192, scaleX = 1, scaleY = 1, rotateDeg = 0 } = options;
   const rot = (rotateDeg * Math.PI) / 180;
   const cosR = Math.cos(rot);
   const sinR = Math.sin(rot);
@@ -86,41 +106,36 @@ function radialRing(
 }
 
 /**
- * Regular n-gon radius, blended (`round` 0→1) toward a circle so the corners
- * become soft instead of sharp.
+ * Circular binomial blur of a radial silhouette r(θ).
+ *
+ * Used by the retained lobe bodies: it takes the last edge off a harmonic
+ * crest without changing the body's size. `step` is in radians and the blur
+ * wraps, so the seam at ±π never shows a notch.
  */
-function roundedPolygonRadius(
-  sides: number,
-  round: number,
-  size: number,
+function blurRadius(
+  radius: (angle: number) => number,
+  step: number,
+  passes = 2,
 ): (angle: number) => number {
-  const inner = Math.cos(Math.PI / sides);
-  const step = TAU / sides;
-  return (angle) => {
-    const wrapped = ((angle % step) + step) % step;
-    const poly = (size * inner) / Math.cos(wrapped - step / 2);
-    return size + (poly - size) * (1 - round);
-  };
+  const weights = [1, 4, 6, 4, 1];
+  const total = weights.reduce((sum, weight) => sum + weight, 0);
+  let blurred = radius;
+  for (let pass = 0; pass < passes; pass++) {
+    const source = blurred;
+    blurred = (angle) =>
+      weights.reduce(
+        (sum, weight, index) =>
+          sum + weight * source(angle + (index - 2) * step),
+        0,
+      ) / total;
+  }
+  return blurred;
 }
 
-/** Polar form of a superellipse |x|^n + |y|^n = a^n. */
-function superellipseRadius(
-  exponent: number,
-  size: number,
+function harmonic(
+  offset: number,
+  ...terms: Array<[number, number, number]>
 ): (angle: number) => number {
-  return (angle) => {
-    const c = Math.abs(Math.cos(angle)) ** exponent;
-    const s = Math.abs(Math.sin(angle)) ** exponent;
-    return size / Math.max(c + s, 1e-6) ** (1 / exponent);
-  };
-}
-
-/** Stadium silhouette: a segment swept by a disk. */
-function capsuleRadius(length: number, thickness: number): (angle: number) => number {
-  return (angle) => thickness + (length / 2) * Math.abs(Math.cos(angle));
-}
-
-function harmonic(offset: number, ...terms: Array<[number, number, number]>): (angle: number) => number {
   // terms: [amplitude, frequency, phase]
   return (angle) =>
     offset +
@@ -130,149 +145,459 @@ function harmonic(offset: number, ...terms: Array<[number, number, number]>): (a
     );
 }
 
-/** Classic parametric heart, normalised into the 100×100 box. */
-function heartPoints(): Point[] {
-  const raw: Point[] = [];
-  const count = 180;
-  for (let i = 0; i < count; i++) {
-    const t = (Math.PI * 2 * i) / count;
-    const x = 16 * Math.sin(t) ** 3;
-    const y =
-      13 * Math.cos(t) -
-      5 * Math.cos(2 * t) -
-      2 * Math.cos(3 * t) -
-      Math.cos(4 * t);
-    raw.push([x, y]);
-  }
-  const xs = raw.map(([x]) => x);
-  const ys = raw.map(([, y]) => y);
-  const minX = Math.min(...xs);
-  const maxX = Math.max(...xs);
-  const minY = Math.min(...ys);
-  const maxY = Math.max(...ys);
-  const scale = 82 / Math.max(maxX - minX, maxY - minY);
-  const cx = (minX + maxX) / 2;
-  const cy = (minY + maxY) / 2;
-  // Tilt the heart so the tip points down-left, like the reference picker.
-  const rot = (-28 * Math.PI) / 180;
-  const cosR = Math.cos(rot);
-  const sinR = Math.sin(rot);
-  return raw.map(([x, y]) => {
-    const px = (x - cx) * scale;
-    const py = -(y - cy) * scale + 2;
-    return [CENTER + px * cosR - py * sinR, CENTER + px * sinR + py * cosR];
+// ---------------------------------------------------------------------------
+// Silhouette compiler
+// ---------------------------------------------------------------------------
+
+/**
+ * Every new body is written as one sentence in a small vocabulary of implicit
+ * 2D primitives — a disc, a polyline swept by a disc, and smooth weld/carve
+ * combiners — then ray-bisected into a silhouette. Nothing is a traced outline.
+ *
+ * That vocabulary is what enforces the two rules the old harmonic set kept
+ * breaking:
+ *
+ *   · no square corners — a polygon is never drawn as straight edges; it is a
+ *     polyline swept by a disc whose radius IS the corner radius, so a corner
+ *     cannot come out sharp;
+ *   · no needle tips — the same radius blunts every vertex, and `weld`/`carve`
+ *     remove the crease where two lobes meet.
+ *
+ * `f(x, y) < 0` inside, `0` on the edge. Bisecting a ray from the centre also
+ * guarantees a single-valued r(θ), which is the property the solid loft and the
+ * support-function silhouette depend on.
+ */
+type Implicit = (x: number, y: number) => number;
+
+const disc = (r: number): Implicit => (x, y) => Math.hypot(x, y) - r;
+
+const shifted =
+  (f: Implicit, dx: number, dy: number): Implicit =>
+  (x, y) => f(x - dx, y - dy);
+
+/** Union welded over `k` px: lobes meet without a crease. */
+const weld =
+  (a: Implicit, b: Implicit, k: number): Implicit =>
+  (x, y) => {
+    const fa = a(x, y);
+    const fb = b(x, y);
+    const h = Math.max(k - Math.abs(fa - fb), 0) / k;
+    return Math.min(fa, fb) - h * h * k * 0.25;
+  };
+
+/** Intersection filleted over `k` px: corners and bites stay round. */
+const carve =
+  (a: Implicit, b: Implicit, k: number): Implicit =>
+  (x, y) => {
+    const fa = a(x, y);
+    const fb = b(x, y);
+    const h = Math.max(k - Math.abs(fa - fb), 0) / k;
+    return Math.max(fa, fb) + h * h * k * 0.25;
+  };
+
+function segmentDistance(
+  x: number,
+  y: number,
+  ax: number,
+  ay: number,
+  bx: number,
+  by: number,
+): number {
+  const dx = bx - ax;
+  const dy = by - ay;
+  const squared = dx * dx + dy * dy;
+  const t =
+    squared === 0
+      ? 0
+      : Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / squared));
+  return Math.hypot(x - (ax + dx * t), y - (ay + dy * t));
+}
+
+/**
+ * A closed polyline swept by a disc of `radius` — the rounded-polygon engine.
+ * Points are centre-relative in the 100×100 local space.
+ */
+const swept =
+  (points: ReadonlyArray<readonly [number, number]>, radius: number): Implicit =>
+  (x, y) => {
+    let nearest = Infinity;
+    for (let i = 0; i < points.length; i++) {
+      const a = points[i]!;
+      const b = points[(i + 1) % points.length]!;
+      nearest = Math.min(
+        nearest,
+        segmentDistance(x, y, a[0], a[1], b[0], b[1]),
+      );
+    }
+    return nearest - radius;
+  };
+
+/** Vertices of a regular polygon; `rotateDeg: -90` puts one vertex up. */
+function polygonPoints(
+  sides: number,
+  radius: number,
+  rotateDeg = -90,
+  squashY = 1,
+): Array<[number, number]> {
+  const rot = (rotateDeg * Math.PI) / 180;
+  return Array.from({ length: sides }, (_, i) => {
+    const angle = (TAU * i) / sides + rot;
+    return [Math.cos(angle) * radius, Math.sin(angle) * radius * squashY];
   });
 }
+
+/** A rounded rectangle with the given half-size and corner radius. */
+function roundedBox(halfW: number, halfH: number, corner: number): Implicit {
+  const insetW = Math.max(halfW - corner, 0);
+  const insetH = Math.max(halfH - corner, 0);
+  const corners: Array<[number, number]> = [
+    [-insetW, -insetH],
+    [insetW, -insetH],
+    [insetW, insetH],
+    [-insetW, insetH],
+  ];
+  return swept(corners, corner);
+}
+
+/** Ray-bisect an implicit outline into a radial function r(θ). */
+function implicitRadius(f: Implicit, samples = 192): (angle: number) => number {
+  const table: number[] = [];
+  for (let i = 0; i < samples; i++) {
+    const angle = (TAU * i) / samples;
+    const cx = Math.cos(angle);
+    const cy = Math.sin(angle);
+    let lo = 0;
+    let hi = 66;
+    if (f(cx * hi, cy * hi) < 0) {
+      // Never escapes the probe circle: keep the sample finite.
+      table.push(hi);
+      continue;
+    }
+    for (let step = 0; step < 24; step++) {
+      const mid = (lo + hi) / 2;
+      if (f(cx * mid, cy * mid) < 0) {
+        lo = mid;
+      } else {
+        hi = mid;
+      }
+    }
+    table.push((lo + hi) / 2);
+  }
+  return (angle: number) => {
+    let a = angle % TAU;
+    if (a < 0) {
+      a += TAU;
+    }
+    const pos = (a / TAU) * samples;
+    const base = Math.floor(pos);
+    const t = pos - base;
+    const x = table[base % samples]!;
+    const y = table[(base + 1) % samples]!;
+    return x * (1 - t) + y * t;
+  };
+}
+
+/**
+ * Compile an implicit body into a dense contour ring in the 100×100 space.
+ *
+ * `fit` keeps the plate honest: `weld` bulges outward by up to k/4 and a swept
+ * corner sits at (vertex distance + radius), so a body can quietly grow past
+ * the 50 px radius the slot allows. Rather than hand-tune every radius, the
+ * compiled outline is scaled back into the plate once.
+ */
+function outline(f: Implicit, options: { rotateDeg?: number; fit?: number } = {}): Point[] {
+  const radius = implicitRadius(f);
+  let peak = 0;
+  for (let i = 0; i < 192; i++) {
+    peak = Math.max(peak, radius((TAU * i) / 192));
+  }
+  const limit = options.fit ?? 47;
+  const scale = peak > limit ? limit / peak : 1;
+  return radialRing(scale === 1 ? radius : (angle: number) => radius(angle) * scale, options);
+}
+
 export const GROK_BALL_SHAPES: Record<GrokBallShapeId, ShapeDefinition> = {
+  blob: {
+    id: "blob",
+    points: outline(weld(disc(40), shifted(disc(34), 8, -7), 22)),
+    eyeY: 48,
+    eyeSpacing: 24,
+    plump: 0.94,
+  },
+  squircle: {
+    id: "squircle",
+    points: outline(roundedBox(38, 38, 21)),
+    eyeY: 50,
+    eyeSpacing: 24,
+    plump: 0.76,
+  },
+  cylinder: {
+    id: "cylinder",
+    points: outline(roundedBox(33, 43, 13)),
+    eyeY: 49,
+    eyeSpacing: 24,
+    plump: 0.72,
+  },
+  hex: {
+    id: "hex",
+    points: outline(swept(polygonPoints(6, 37, 0), 9)),
+    eyeY: 50,
+    eyeSpacing: 24,
+    plump: 0.7,
+  },
+  gem: {
+    id: "gem",
+    points: outline(swept(polygonPoints(4, 34, -90), 16)),
+    eyeY: 50,
+    eyeSpacing: 22,
+    plump: 0.6,
+  },
+  crystal: {
+    id: "crystal",
+    points: outline(swept(polygonPoints(6, 38, -90, 0.74), 9)),
+    eyeY: 49,
+    eyeSpacing: 22,
+    plump: 0.66,
+  },
+  shield: {
+    id: "shield",
+    points: outline(
+      swept(
+        [
+          [-29, -33],
+          [29, -33],
+          [27, 4],
+          [0, 33],
+          [-27, 4],
+        ],
+        16,
+      ),
+    ),
+    eyeY: 44,
+    eyeSpacing: 22,
+    plump: 0.68,
+  },
+  arch: {
+    id: "arch",
+    points: outline(
+      weld(shifted(disc(27), 0, -14), roundedBox(27, 43, 7), 9),
+    ),
+    eyeY: 44,
+    eyeSpacing: 22,
+    plump: 0.66,
+  },
+  cloud: {
+    id: "cloud",
+    points: outline(
+      weld(
+        weld(shifted(disc(23), -20, 7), disc(28), 12),
+        shifted(disc(22), 22, 8),
+        12,
+      ),
+    ),
+    eyeY: 51,
+    eyeSpacing: 24,
+    plump: 0.7,
+  },
+  leaf: {
+    id: "leaf",
+    // Two long arcs crossing top and bottom: a lens, points included.
+    points: outline(
+      carve(shifted(disc(54), -26, 0), shifted(disc(54), 26, 0), 16),
+    ),
+    eyeY: 50,
+    eyeSpacing: 22,
+    plump: 0.6,
+  },
+  heart: {
+    id: "heart",
+    points: outline(
+      weld(
+        weld(
+          shifted(disc(22), -14, -10),
+          shifted(disc(22), 14, -10),
+          10,
+        ),
+        swept(
+          [
+            [-29, -5],
+            [0, 31],
+            [29, -5],
+          ],
+          13,
+        ),
+        10,
+      ),
+    ),
+    eyeX: 3,
+    eyeY: 44,
+    eyeSpacing: 20,
+    eyeScale: 0.92,
+    plump: 0.66,
+  },
+  // --- retired ids: still renderable, no longer handed out -----------------
   circle: {
     id: "circle",
     points: radialRing(() => 44),
     eyeY: 48,
     eyeSpacing: 24,
-  },
-  blob: {
-    id: "blob",
-    points: radialRing(harmonic(40, [3.8, 3, 0.5], [1.4, 2, -0.6]), { rotateDeg: 8 }),
-    eyeY: 48,
-    eyeSpacing: 24,
-  },
-  squircle: {
-    id: "squircle",
-    points: radialRing(superellipseRadius(4.4, 44), { rotateDeg: 18 }),
-    eyeY: 50,
-    eyeSpacing: 24,
-  },
-  star4: {
-    id: "star4",
-    points: radialRing(harmonic(40, [6, 4, 0])),
-    eyeY: 48,
-    eyeSpacing: 22,
-    creases: 4,
-  },
-  cloud: {
-    id: "cloud",
-    points: radialRing(harmonic(39.5, [4.5, 3, 1.1]), { scaleY: 0.97 }),
-    eyeY: 49,
-    eyeSpacing: 24,
-  },
-  heart: {
-    id: "heart",
-    points: heartPoints(),
-    eyeX: 6,
-    eyeY: 40,
-    eyeSpacing: 20,
-    eyeScale: 0.92,
-  },
-  flower6: {
-    id: "flower6",
-    points: radialRing(harmonic(40, [4.2, 6, 0])),
-    eyeY: 48,
-    eyeSpacing: 22,
-    creases: 6,
+    plump: 1,
   },
   egg: {
     id: "egg",
-    points: radialRing((a) => 40 * (1 - 0.1 * Math.cos(a)), { scaleY: 1.1 }),
+    points: radialRing(blurRadius((a) => 40 * (1 - 0.1 * Math.cos(a)), 0.1), {
+      scaleY: 1.1,
+    }),
     eyeY: 47,
     eyeSpacing: 22,
+    plump: 0.95,
   },
   capsule: {
     id: "capsule",
-    points: radialRing(capsuleRadius(44, 24), { rotateDeg: -8 }),
+    // A stadium: a segment swept by a disc, written directly as r(θ).
+    points: radialRing(blurRadius((a) => 24 + 22 * Math.abs(Math.cos(a)), 0.1), {
+      rotateDeg: -8,
+    }),
     eyeY: 50,
-    eyeSpacing: 26,
+    eyeSpacing: 24,
+    plump: 0.64,
   },
-  triangle: {
-    id: "triangle",
-    points: radialRing(roundedPolygonRadius(3, 0.52, 45), { rotateDeg: 90 }),
-    eyeY: 54,
+  star4: {
+    id: "star4",
+    points: radialRing(blurRadius(harmonic(40, [4.2, 4, 0]), 0.2)),
+    eyeY: 48,
     eyeSpacing: 22,
-  },
-  pentagon: {
-    id: "pentagon",
-    points: radialRing(roundedPolygonRadius(5, 0.5, 45), { rotateDeg: 90 }),
-    eyeY: 51,
-    eyeSpacing: 23,
+    creases: 4,
+    plump: 0.52,
   },
   star5: {
     id: "star5",
-    points: radialRing(harmonic(40, [6.5, 5, 0])),
-    eyeY: 48,
+    points: radialRing(blurRadius(harmonic(40, [4.6, 5, 0]), 0.19), {
+      rotateDeg: -90,
+    }),
+    eyeY: 49,
     eyeSpacing: 22,
     creases: 5,
+    plump: 0.5,
+  },
+  flower6: {
+    id: "flower6",
+    points: radialRing(blurRadius(harmonic(40, [3.2, 6, 0]), 0.17)),
+    eyeY: 48,
+    eyeSpacing: 22,
+    creases: 6,
+    plump: 0.48,
+  },
+  pentagon: {
+    id: "pentagon",
+    points: outline(swept(polygonPoints(5, 33, -90), 12)),
+    eyeY: 51,
+    eyeSpacing: 23,
+    plump: 0.68,
   },
   hexagon: {
     id: "hexagon",
-    points: radialRing(roundedPolygonRadius(6, 0.56, 45)),
+    points: outline(swept(polygonPoints(6, 33, 0), 12)),
     eyeY: 50,
     eyeSpacing: 24,
+    plump: 0.7,
   },
   pumpkin: {
     id: "pumpkin",
-    points: radialRing(harmonic(40, [3.4, 6, 0]), { scaleY: 1.03 }),
+    points: radialRing(blurRadius(harmonic(40, [3.4, 6, 0]), 0.12), {
+      scaleY: 1.03,
+    }),
     eyeY: 48,
     eyeSpacing: 22,
     creases: 6,
     stem: true,
+    plump: 0.86,
+  },
+  triangle: {
+    id: "triangle",
+    // The old ▽: kept renderable, and now standing on its base.
+    points: outline(swept(polygonPoints(3, 31, -90), 12)),
+    eyeY: 58,
+    eyeSpacing: 21,
+    plump: 0.66,
   },
 };
 
+/**
+ * The shapes the picker offers. Ids that are not listed here stay renderable —
+ * stored avatars keep referring to them — they are simply no longer handed out.
+ */
 export const GROK_BALL_SHAPE_IDS: GrokBallShapeId[] = [
-  "circle",
   "blob",
   "squircle",
-  "star4",
+  "cylinder",
+  "hex",
+  "gem",
+  "crystal",
+  "shield",
+  "arch",
   "cloud",
+  "leaf",
   "heart",
-  "flower6",
-  "egg",
-  "capsule",
-  "triangle",
-  "pentagon",
-  "star5",
-  "hexagon",
-  "pumpkin",
 ];
+
+/**
+ * Angle → silhouette radius, in the 100×100 local space.
+ */
+export type RadiusLookup = (theta: number) => number;
+
+const RADIAL_SLOTS = 240;
+
+/**
+ * Reduce a point ring to one radial function r(θ) about the shape center.
+ *
+ * Every body here is star-shaped about its center (a ray from the center
+ * crosses the outline once) — which is exactly what the compiler above
+ * guarantees — so the whole silhouette collapses to a single function, and that
+ * is what the solid loft and the support-function outline consume.
+ */
+export function radialLookupOf(
+  points: Point[],
+  slots = RADIAL_SLOTS,
+): RadiusLookup {
+  const sums = new Array<number>(slots).fill(0);
+  const counts = new Array<number>(slots).fill(0);
+  for (const [x, y] of points) {
+    const dx = x - CENTER;
+    const dy = y - CENTER;
+    const slot =
+      Math.round((Math.atan2(dy, dx) / TAU) * slots + slots) % slots;
+    sums[slot]! += Math.hypot(dx, dy);
+    counts[slot]! += 1;
+  }
+  const table: number[] = [];
+  for (let i = 0; i < slots; i++) {
+    table.push(counts[i]! > 0 ? sums[i]! / counts[i]! : 0);
+  }
+  // Borrow from the nearest filled slot (wrap both ways).
+  for (let pass = 0; pass < 2; pass++) {
+    for (let i = 0; i < slots; i++) {
+      if (table[i] === 0) {
+        const prev = table[(i - 1 + slots) % slots]!;
+        const next = table[(i + 1) % slots]!;
+        table[i] = (prev + next) / 2;
+      }
+    }
+  }
+  return (theta: number) => {
+    let angle = theta % TAU;
+    if (angle < 0) {
+      angle += TAU;
+    }
+    const pos = (angle / TAU) * slots;
+    const base = Math.floor(pos);
+    const t = pos - base;
+    const a = table[base % slots]!;
+    const b = table[(base + 1) % slots]!;
+    return a * (1 - t) + b * t;
+  };
+}
+
 /** Sample a closed contour at an even parameter resolution. */
 export function sampleContour(points: Point[], resolution = 64): Point[] {
   if (points.length === 0) {
@@ -317,43 +642,101 @@ export function contourPath(points: Point[]): string {
   return parts.join(" ");
 }
 
-export type EyeProjection = {
-  x: number;
-  y: number;
-  z: number;
-  visible: boolean;
+export type EyeRingFrame = {
+  /** Eight control points around one eye, in local eye space. */
+  points: Point[];
+  color: string;
 };
 
-/**
- * Project one eye from a unit sphere.
- *
- * `gaze` is a 2D vector in [-1, 1]. The eye is rotated around the Y and X
- * axes, then orthographically projected. A negative z means the eye rotated
- * behind the ball and must be hidden.
- */
-export function projectEye(
-  gaze: { x: number; y: number },
-  side: -1 | 1,
-): EyeProjection {
-  const baseX = side * 0.34;
-  const yaw = gaze.x * 0.55;
-  const pitch = gaze.y * 0.42;
+function eyeRing(
+  rx: number,
+  ry: number,
+  tilt: number,
+  offsetY = 0,
+  color = "#f8fafc",
+): EyeRingFrame {
+  const points: Point[] = [];
+  for (let i = 0; i < 8; i++) {
+    const angle = (Math.PI * 2 * i) / 8;
+    const x = Math.cos(angle) * rx;
+    const y = Math.sin(angle) * ry + offsetY;
+    const cos = Math.cos(tilt);
+    const sin = Math.sin(tilt);
+    points.push([x * cos - y * sin, x * sin + y * cos]);
+  }
+  return { points, color };
+}
 
-  const cosYaw = Math.cos(yaw);
-  const sinYaw = Math.sin(yaw);
-  const x1 = baseX * cosYaw + 1 * sinYaw;
-  const z1 = -baseX * sinYaw + 1 * cosYaw;
+export type StateFrame = {
+  left: EyeRingFrame;
+  right: EyeRingFrame;
+  bodyTilt: number;
+  bodyScale: number;
+  aura: string | null;
+};
 
-  const cosPitch = Math.cos(pitch);
-  const sinPitch = Math.sin(pitch);
-  const y2 = 0 * cosPitch - z1 * sinPitch;
-  const z2 = 0 * sinPitch + z1 * cosPitch;
+export const GROK_BALL_STATE_FRAMES: Record<GrokBallState, StateFrame> = {
+  idle: {
+    left: eyeRing(6.2, 9.6, -0.3),
+    right: eyeRing(6.2, 9.6, -0.3),
+    bodyTilt: 0,
+    bodyScale: 1,
+    aura: null,
+  },
+  thinking: {
+    left: eyeRing(5.2, 8.4, -0.2),
+    right: eyeRing(5.8, 9.2, 0.16),
+    bodyTilt: -0.03,
+    bodyScale: 0.99,
+    aura: "#60a5fa",
+  },
+  working: {
+    left: eyeRing(5.6, 8.0, 0.14),
+    right: eyeRing(5.6, 8.0, -0.14),
+    bodyTilt: 0.02,
+    bodyScale: 1.01,
+    aura: "#22c55e",
+  },
+  waiting: {
+    left: eyeRing(6.8, 10.6, -0.1),
+    right: eyeRing(6.8, 10.6, -0.1),
+    bodyTilt: 0,
+    bodyScale: 1,
+    aura: "#f59e0b",
+  },
+  blocked: {
+    left: eyeRing(5.6, 7.2, 0.42, 0, "#fecaca"),
+    right: eyeRing(5.6, 7.2, -0.42, 0, "#fecaca"),
+    bodyTilt: 0,
+    bodyScale: 1,
+    aura: "#ef4444",
+  },
+  done: {
+    left: eyeRing(6.6, 8.2, -0.18, 0, "#bbf7d0"),
+    right: eyeRing(6.6, 8.2, 0.18, 0, "#bbf7d0"),
+    bodyTilt: 0,
+    bodyScale: 1,
+    aura: "#22c55e",
+  },
+};
 
+export function interpolateStateFrame(
+  from: StateFrame,
+  to: StateFrame,
+  t: number,
+): StateFrame {
   return {
-    x: x1,
-    y: y2,
-    z: z2,
-    visible: z2 > 0,
+    left: {
+      points: interpolatePoints(from.left.points, to.left.points, t),
+      color: mixColor(from.left.color, to.left.color, t),
+    },
+    right: {
+      points: interpolatePoints(from.right.points, to.right.points, t),
+      color: mixColor(from.right.color, to.right.color, t),
+    },
+    bodyTilt: from.bodyTilt + (to.bodyTilt - from.bodyTilt) * t,
+    bodyScale: from.bodyScale + (to.bodyScale - from.bodyScale) * t,
+    aura: t < 0.5 ? from.aura : to.aura,
   };
 }
 
@@ -390,127 +773,49 @@ export function mixColor(a: string, b: string, t: number): string {
   return `#${mixed.map((channel) => channel.toString(16).padStart(2, "0")).join("")}`;
 }
 
-export type ShadePalette = {
-  /** Lit tone, sampled toward the upper-left highlight. */
-  hi: string;
-  /** Base body tone. */
-  mid: string;
-  /** Occluded tone for the lower-right side. */
-  shade: string;
-};
+/**
+ * Body palette. The extreme black/white is deliberately absent: that is the
+ * theme-aware mono ball, whose swatch renders black on the light theme and
+ * white on the dark one.
+ *
+ * Each tone carries a value per theme. The brighter one belongs to the light
+ * theme and the deeper one to the dark theme, so a body keeps its contrast
+ * against the surface instead of glowing out of a dark panel. The `light`
+ * value is canonical: it is what gets persisted, and `toneKeyFor` maps a
+ * stored colour back to its pair.
+ */
+export const GROK_BALL_TONES = [
+  { key: "brown", light: "#A27952", dark: "#855C36" },
+  { key: "red", light: "#FF3E51", dark: "#E02135" },
+  { key: "orange", light: "#FF781C", dark: "#FF6700" },
+  { key: "yellow", light: "#FFAF38", dark: "#FF9800" },
+  { key: "green", light: "#00C972", dark: "#009957" },
+  { key: "cyan", light: "#1CC3B0", dark: "#00A592" },
+  { key: "blue", light: "#2A92FE", dark: "#0E74E0" },
+  { key: "violet", light: "#A97EFE", dark: "#804EE0" },
+  { key: "magenta", light: "#FF5EB1", dark: "#E02A88" },
+  { key: "gray", light: "#959595", dark: "#777777" },
+] as const;
+
+export type GrokBallToneKey = (typeof GROK_BALL_TONES)[number]["key"];
+
+/** The canonical (light-theme) swatch values, i.e. what the contract stores. */
+export const GROK_BALL_COLORS: string[] = GROK_BALL_TONES.map((tone) => tone.light);
 
 /**
- * Three-stop palette for the soft-blob body gradient.
- *
- * The light source is fixed at the upper-left (~45° azimuth), so the model
- * only has to derive a lit tone and an occluded tone from the base color.
+ * The CSS hook for a colour: the tone key when the colour is in the palette,
+ * and `null` for anything else (a retired or hand-picked hex), which then
+ * renders as itself in both themes.
  */
-export function shadePalette(base: string): ShadePalette {
-  return {
-    hi: mixColor(base, "#ffffff", 0.55),
-    mid: base,
-    shade: mixColor(base, "#000000", 0.34),
-  };
-}
-
-export type EyeRingFrame = {
-  /** Eight control points around one eye, in local eye space. */
-  points: Point[];
-  color: string;
-};
-
-function eyeRing(
-  rx: number,
-  ry: number,
-  tilt: number,
-  offsetY = 0,
-  color = "#f8fafc",
-): EyeRingFrame {
-  const points: Point[] = [];
-  for (let i = 0; i < 8; i++) {
-    const angle = (Math.PI * 2 * i) / 8;
-    const x = Math.cos(angle) * rx;
-    const y = Math.sin(angle) * ry + offsetY;
-    const cos = Math.cos(tilt);
-    const sin = Math.sin(tilt);
-    points.push([x * cos - y * sin, x * sin + y * cos]);
+export function toneKeyFor(color: string): GrokBallToneKey | null {
+  const wanted = color.trim().toLowerCase();
+  for (const tone of GROK_BALL_TONES) {
+    if (tone.light.toLowerCase() === wanted || tone.dark.toLowerCase() === wanted) {
+      return tone.key;
+    }
   }
-  return { points, color };
+  return null;
 }
-
-export type StateFrame = {
-  left: EyeRingFrame;
-  right: EyeRingFrame;
-  bodyTilt: number;
-  bodyScale: number;
-  aura: string | null;
-};
-
-export const GROK_BALL_STATE_FRAMES: Record<GrokBallState, StateFrame> = {
-  idle: {
-    left: eyeRing(4.4, 7.2, 0),
-    right: eyeRing(4.4, 7.2, 0),
-    bodyTilt: 0,
-    bodyScale: 1,
-    aura: null,
-  },
-  thinking: {
-    left: eyeRing(3.6, 6.2, -0.16),
-    right: eyeRing(4.0, 6.8, 0.12),
-    bodyTilt: -0.03,
-    bodyScale: 0.99,
-    aura: "#60a5fa",
-  },
-  working: {
-    left: eyeRing(3.9, 6.4, 0.08),
-    right: eyeRing(3.9, 6.4, -0.08),
-    bodyTilt: 0.02,
-    bodyScale: 1.01,
-    aura: "#22c55e",
-  },
-  waiting: {
-    left: eyeRing(5.0, 8.0, 0),
-    right: eyeRing(5.0, 8.0, 0),
-    bodyTilt: 0,
-    bodyScale: 1,
-    aura: "#f59e0b",
-  },
-  blocked: {
-    left: eyeRing(4.0, 5.8, 0.22, 0, "#fecaca"),
-    right: eyeRing(4.0, 5.8, -0.22, 0, "#fecaca"),
-    bodyTilt: 0,
-    bodyScale: 1,
-    aura: "#ef4444",
-  },
-  done: {
-    left: eyeRing(4.8, 6.2, -0.1, 0, "#bbf7d0"),
-    right: eyeRing(4.8, 6.2, 0.1, 0, "#bbf7d0"),
-    bodyTilt: 0,
-    bodyScale: 1,
-    aura: "#22c55e",
-  },
-};
-
-export function interpolateStateFrame(
-  from: StateFrame,
-  to: StateFrame,
-  t: number,
-): StateFrame {
-  return {
-    left: {
-      points: interpolatePoints(from.left.points, to.left.points, t),
-      color: mixColor(from.left.color, to.left.color, t),
-    },
-    right: {
-      points: interpolatePoints(from.right.points, to.right.points, t),
-      color: mixColor(from.right.color, to.right.color, t),
-    },
-    bodyTilt: from.bodyTilt + (to.bodyTilt - from.bodyTilt) * t,
-    bodyScale: from.bodyScale + (to.bodyScale - from.bodyScale) * t,
-    aura: t < 0.5 ? from.aura : to.aura,
-  };
-}
-
 
 /** Fixed-slot identity roles; `inline` renders a static (non-animated) glyph. */
 export type GrokBallVariant = "sidebar" | "message-header" | "preview" | "inline";
@@ -528,29 +833,3 @@ export const GROK_BALL_STATIC_VARIANTS: readonly GrokBallVariant[] = ["inline"];
 export function isStaticVariant(variant: GrokBallVariant): boolean {
   return GROK_BALL_STATIC_VARIANTS.includes(variant);
 }
-
-/**
- * Body palette, matching the reference picker's swatches. The black/white
- * extreme is not listed here: it is the theme-aware mono ball, whose swatch
- * renders black on the light theme and white on the dark theme.
- */
-export const GROK_BALL_COLORS = [
-  "#8b5e3c",
-  "#e8483f",
-  "#f08a24",
-  "#f0b429",
-  "#3ecf8e",
-  "#2fbfa0",
-  "#3b93f0",
-  "#8b5cf6",
-  "#e152b0",
-  "#a3a3a3",
-];
-
-
-
-
-
-
-
-

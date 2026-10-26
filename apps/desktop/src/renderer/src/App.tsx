@@ -24,8 +24,10 @@ import {
 import type { StreamHandle } from "./services/desktop-service.js";
 import { Avatar as AvatarView } from "./features/avatars/avatar.js";
 import { AvatarPicker } from "./features/avatars/avatar-picker.js";
+import { GazeAvatar } from "./features/avatars/gaze-avatar.js";
 import {
   avatarColor,
+  bubbleInk,
   type Avatar as AvatarKind,
 } from "./features/avatars/avatar-meta.js";
 import { WorkflowEditor } from "./features/workflow-editor/workflow-editor.js";
@@ -201,6 +203,7 @@ export function App(): JSX.Element {
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editingBot, setEditingBot] = useState<UiBot | null>(null);
+
   const [shape, setShape] = useState(0);
   const [color, setColor] = useState(2);
   const [avatar, setAvatar] = useState<AvatarKind>(() => ({
@@ -919,9 +922,9 @@ const logout = (): void => {
   return (
     <div className="shell">
       <header className="top">
-        <span className="page-chip">
+        <span className="page-chip" data-gaze-zone="">
           {selectedBotEntry ? (
-            <AvatarView avatar={selectedBotEntry.avatar} variant="message-header" />
+            <GazeAvatar avatar={selectedBotEntry.avatar} variant="message-header" />
           ) : (
             <BlobMark />
           )}
@@ -1098,9 +1101,9 @@ const logout = (): void => {
             </svg>
           </button>
         </div>
-        <div className="side-identity">
+        <div className="side-identity" data-gaze-zone="">
           <span className="big-avatar">
-            <AvatarView avatar={{ kind: "grok", shape: "circle", color: "#3b93f0" }} variant="preview" size={84} />
+            <GazeAvatar avatar={{ kind: "grok", shape: "circle", color: "#3b93f0" }} variant="preview" size={84} />
           </span>
           <span className="identity-name">DeepSeek Bot</span>
         </div>
@@ -1161,6 +1164,7 @@ const logout = (): void => {
                   {members.map((b) => (
                   <button
                     key={b.key}
+                    data-gaze-zone=""
                     type="button"
                     draggable
                     onDragStart={(e) => {
@@ -1192,6 +1196,7 @@ const logout = (): void => {
                       setDragOverGroup(null);
                     }}
                     className={selectedBot === b.key ? "tab active" : "tab"}
+
                     onClick={() => {
                       setSelectedBot(b.key);
                       setQuoteDraft(null);
@@ -1202,7 +1207,7 @@ const logout = (): void => {
                       setMenu({ x: e.clientX, y: e.clientY, botKey: b.key });
                     }}
                   >
-                    <AvatarView avatar={b.avatar} variant="sidebar" size={36} />
+                    <GazeAvatar avatar={b.avatar} variant="sidebar" size={36} />
                     <span className="tab-label">
                       <span className="tab-title">
                         {b.bot.name}
@@ -1286,7 +1291,7 @@ const logout = (): void => {
           ) : restoredSession !== null && selectedBot !== null ? (
             <div className="restored-view">
               <header className="pair-head">
-                <span className="page-chip">{restoredSession.title}</span>
+                <span className="page-chip" data-gaze-zone="">{restoredSession.title}</span>
               </header>
               <div className="pair-body">
                 <div className="msg-notice">
@@ -2533,18 +2538,24 @@ function BotsPlaceholder({
   };
 
   return (
-    <div className="chat-page">
+    <div
+      className="chat-page"
+      /* SPRINTS §6 #8: the user bubble follows the current bot's colour, and so
+         does the composer's send button. The pair is scoped to the page rather
+         than to the message list, because the composer is its sibling — a
+         variable set on `.chat` cannot reach it. Switching bots re-tints only
+         this pane. */
+      style={
+        {
+          "--bot-color": avatarColor(me.avatar),
+          "--bot-ink": bubbleInk(avatarColor(me.avatar)),
+        } as CSSProperties
+      }
+    >
       <p className="sys-line" aria-live="polite">
         静态占位 · 无网络请求 · 不同分组的 Bot 无法主动交流
       </p>
-      <div
-        className="chat"
-        ref={listRef}
-        /* SPRINTS §6 #8: the user bubble follows the current bot's colour.
-           The variable is scoped to this conversation, so switching bots
-           re-tints only this pane. */
-        style={{ "--bot-color": avatarColor(me.avatar) } as CSSProperties}
-      >
+      <div className="chat" ref={listRef}>
         {msgs.map((m, index) => {
           const prev = msgs[index - 1];
           const showTime =
