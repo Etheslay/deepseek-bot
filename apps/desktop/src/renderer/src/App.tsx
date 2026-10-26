@@ -222,11 +222,27 @@ export function App(): JSX.Element {
   } = useBots(UNGROUPED);
 
   const [menu, setMenu] = useState<MenuState | null>(null);
+  // Inline rename: the key of the sidebar row being edited and its draft name.
+  // `renameScope` matters because the same bot is shown twice — once in the
+  // sidebar row and once in the header plate — and only the place the gesture
+  // came from may turn into a field, or two editors appear at once.
+  const [renameKey, setRenameKey] = useState<number | null>(null);
+  const [renameScope, setRenameScope] = useState<"row" | "header">("row");
+  const [renameDraft, setRenameDraft] = useState("");
+  const renameInputRef = useRef<HTMLInputElement | null>(null);
+  const renameOpenedAtRef = useRef(0);
   const [menuDialog, setMenuDialog] = useState<DialogState | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<UiBot | null>(null);
   const [dialogText, setDialogText] = useState("");
 
   const [selectedBot, setSelectedBot] = useState<number | null>(null);
+  /**
+   * The bot the sidebar header speaks for: whichever conversation is active,
+   * falling back to the first bot before one is picked. The header used to be a
+   * fixed "DeepSeek Bot" plate, which meant it contradicted the list under it as
+   * soon as any bot existed.
+   */
+  const headerBot = bots.find((b) => b.key === selectedBot) ?? bots[0] ?? null;
   const [toast, setToast] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [artifactsOpen, setArtifactsOpen] = useState(false);
@@ -522,6 +538,53 @@ export function App(): JSX.Element {
       setToast("已创建");
     }
     return result;
+  };
+
+  /**
+   * Open the inline rename field. Deferred by one task on purpose: mounting it
+   * synchronously inside the double-click lets the tail of that click sequence
+   * blur the fresh field, which fires the blur-commit and closes it again. The
+   * deferral lets the click finish first.
+   */
+  const startRename = (botKey: number, name: string, scope: "row" | "header" = "row"): void => {
+    window.setTimeout(() => {
+      renameOpenedAtRef.current = performance.now();
+      setRenameScope(scope);
+      setRenameKey(botKey);
+      setRenameDraft(name);
+    }, 0);
+  };
+
+  /**
+   * Blur handler for the rename field. A blur within the first moments of
+   * opening is the tail of the opening gesture, not the user leaving, so the
+   * caret goes back instead of the edit being committed away.
+   */
+  const handleRenameBlur = (uiBot: UiBot, raw: string): void => {
+    if (performance.now() - renameOpenedAtRef.current < 400) {
+      renameInputRef.current?.focus();
+      return;
+    }
+    void commitRename(uiBot, raw);
+  };
+
+  /**
+   * Commit an inline rename. The bot's other fields are untouched — the store
+   * takes a partial patch — so renaming can never disturb the model profile or
+   * the instructions. Empty and unchanged names are treated as a cancel.
+   */
+  const commitRename = async (uiBot: UiBot, raw: string): Promise<void> => {
+    setRenameKey(null);
+    const name = raw.trim();
+    if (name === "" || name === uiBot.bot.name) {
+      return;
+    }
+    const result = await updateBotEntity(uiBot.bot.id, { name });
+    if (result.ok) {
+      setToast("已改名");
+    } else {
+      setToast(result.errorCode === "REVISION_CONFLICT" ? "改名冲突，请重试" : "改名失败");
+    }
   };
 
   const pinBot = (botKey: number): void => {
@@ -1098,9 +1161,52 @@ const logout = (): void => {
         </div>
         <div className="side-identity" data-gaze-zone="">
           <span className="big-avatar">
-            <GazeAvatar avatar={{ kind: "grok", shape: "circle", color: "#3b93f0" }} variant="preview" size={84} />
+            <GazeAvatar
+              avatar={headerBot?.avatar ?? { kind: "grok", shape: "circle", color: "#3b93f0" }}
+              variant="preview"
+              size={84}
+            />
           </span>
-          <span className="identity-name">DeepSeek Bot</span>
+          {headerBot !== null && renameKey === headerBot.key && renameScope === "header" ? (
+            <input
+              className="tab-rename identity-rename"
+              value={renameDraft}
+              /* A ref callback focuses and selects on mount. `autoFocus` alone
+                 lost the race against the double-click that created the field,
+                 so the text arrived unselected and unfocused. */
+              ref={(el) => {
+                renameInputRef.current = el;
+                el?.focus();
+                el?.select();
+              }}
+              maxLength={80}
+              aria-label={`重命名 ${headerBot.bot.name}`}
+              onChange={(e) => setRenameDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  void commitRename(headerBot, renameDraft);
+                } else if (e.key === "Escape") {
+                  e.preventDefault();
+                  setRenameKey(null);
+                }
+              }}
+              onBlur={() => handleRenameBlur(headerBot, renameDraft)}
+            />
+          ) : (
+            <span
+              className="identity-name"
+              title={headerBot === null ? undefined : "双击改名"}
+              onDoubleClick={() => {
+                if (headerBot === null) {
+                  return;
+                }
+                startRename(headerBot.key, headerBot.bot.name, "header");
+              }}
+            >
+              {headerBot?.bot.name ?? "DeepSeek Bot"}
+            </span>
+          )}
         </div>
         {groups.map((g) => {
           const members = bots.filter((b) => b.group === g.key);
@@ -1156,7 +1262,37 @@ const logout = (): void => {
               </button>
               {!collapsedGroups.includes(g.key) && (
                 <div className="tabs" aria-label={`机器人列表-${g.name}`}>
-                  {members.map((b) => (
+                  {members.map((b) =>
+                  renameKey === b.key && renameScope === "row" ? (
+                    /* Inline rename: the row becomes an editable field in place.
+                       Esc cancels, Enter or blur commits, and the store takes a
+                       partial patch so nothing but the name can change. */
+                    <div key={b.key} className = "tab tab-renaming" data-gaze-zone="">
+                      <GazeAvatar avatar={b.avatar} variant="sidebar" size={36} />
+                      <input
+                        className="tab-rename"
+                        value={renameDraft}
+                        ref={(el) => {
+                          renameInputRef.current = el;
+                          el?.focus();
+                          el?.select();
+                        }}
+                        maxLength={80}
+                        aria-label={`重命名 ${b.bot.name}`}
+                        onChange={(e) => setRenameDraft(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            void commitRename(b, renameDraft);
+                          } else if (e.key === "Escape") {
+                            e.preventDefault();
+                            setRenameKey(null);
+                          }
+                        }}
+                        onBlur={() => handleRenameBlur(b, renameDraft)}
+                      />
+                    </div>
+                  ) : (
                   <button
                     key={b.key}
                     data-gaze-zone=""
@@ -1197,6 +1333,7 @@ const logout = (): void => {
                       setQuoteDraft(null);
                       ensureChat(b);
                     }}
+                    onDoubleClick={() => startRename(b.key, b.bot.name)}
                     onContextMenu={(e) => {
                       e.preventDefault();
                       setMenu({ x: e.clientX, y: e.clientY, botKey: b.key });
@@ -1211,7 +1348,8 @@ const logout = (): void => {
 
                     </span>
                   </button>
-                ))}
+                  )
+                )}
                 {dragging && members.length === 0 && (
                   <div className="drop-hint">拖到这里移入「{g.name}」</div>
                 )}
@@ -1427,6 +1565,20 @@ const logout = (): void => {
             <button type="button" role="menuitem" className="menu-item" onClick={() => toggleUnread(menuBot.key)}>
               <MenuIcon d="M18 8a6 6 0 1 0-12 0c0 7-3 8-3 8h18s-3-1-3-8M10.3 21a2 2 0 0 0 3.4 0" />
               {menuBot.unread ? "标为已读" : "标为未读"}
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className="menu-item"
+              onClick={() => {
+                // Same inline editor the double-click opens: renaming should not
+                // require opening the whole edit dialog.
+                startRename(menuBot.key, menuBot.bot.name);
+                setMenu(null);
+              }}
+            >
+              <MenuIcon d="M4 7h10M4 12h7M4 17h10M18 5v9M15 11l3 3 3-3" />
+              改名
             </button>
             <button
               type="button"
