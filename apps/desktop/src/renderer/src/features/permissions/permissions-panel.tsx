@@ -1,63 +1,133 @@
 /**
  * Settings panel for the D16 permission model: per-capability policy
- * (始终允许 / 每次询问 / 从不允许) plus the human-issued grant list with
- * revoke. Reads and writes go through the contract (`policy.*`, `grant.*`).
+ * (始终允许 / 每次询问 / 从不允许) plus issued grant records with revoke.
+ * Reads and writes go through `permission.policy.*` and `permission.grant.*`.
  */
 import { useCallback, useEffect, useState } from "react";
+import {
+  PERMISSION_METHODS,
+  isPermissionModeAllowed,
+  type CapabilityId,
+  type PermissionGrant,
+  type PermissionMode,
+} from "@deepseek-bot/contracts";
 
-type PolicyLevel = "always" | "ask" | "never";
+const MODE_LABELS: Record<PermissionMode, string> = {
+  allow: "始终允许",
+  ask: "每次询问",
+  deny: "从不允许",
+};
 
-interface GrantRow {
-  readonly id: string;
-  readonly capability: string;
-  readonly botId: string | null;
-  readonly scope: "once" | "session" | "persistent";
-  readonly maxUses: number;
-  readonly used: number;
-  readonly expiresAt: string | null;
-  readonly revokedAt: string | null;
-  readonly createdAt: string;
+const CAPABILITY_LABELS: Record<CapabilityId, string> = {
+  "app.read": "读取应用数据",
+  "app.create_group": "创建分组",
+  "app.create_bot": "创建 bot",
+  "app.update_bot": "修改 bot",
+  "app.create_workflow": "修改工作流",
+  "app.start_run": "启动运行",
+  "app.cancel_run": "取消运行",
+  "app.revoke_creation": "撤销创建批次",
+  "interaction.ask_user": "向用户提问",
+  "network.search": "联网搜索",
+  "fs.read": "读取工作目录文件",
+  "fs.write": "写入工作目录文件",
+  "exec.shell": "执行本地命令",
+  "screen.capture": "屏幕与窗口感知",
+  "connector.invoke": "调用连接器",
+};
+
+const SCOPE_LABELS = {
+  once: "本次",
+  session: "本会话",
+  permanent: "永久",
+} as const;
+
+const MODES = ["allow", "ask", "deny"] as const satisfies readonly PermissionMode[];
+
+type IssuedGrant = PermissionGrant & { scope: keyof typeof SCOPE_LABELS };
+
+function isIssuedGrant(grant: PermissionGrant): grant is IssuedGrant {
+  return grant.scope === "once" || grant.scope === "session" || grant.scope === "permanent";
 }
 
-const CAPABILITY_LABELS: Record<string, string> = {
-  "app.read": "读取应用数据（列表 / 运行详情）",
-  "app.write": "创建或修改 Bot、分组与工作流草案",
-  "connector.invoke": "调用连接器（联网搜索等）",
-  "app.start_run": "启动工作流运行（固定每次询问）",
-  "screen.capture": "窗口截图与 OCR（固定从不允许）",
-};
+function allowedModes(capability: CapabilityId): PermissionMode[] {
+  return MODES.filter((mode) => isPermissionModeAllowed(capability, mode));
+}
 
-const POLICY_LABELS: Record<PolicyLevel, string> = {
-  always: "始终允许",
-  ask: "每次询问",
-  never: "从不允许",
-};
+function isMode(value: string): value is PermissionMode {
+  return value === "allow" || value === "ask" || value === "deny";
+}
 
-const FORCED = new Set(["app.start_run", "screen.capture"]);
+type HostCall = (method: string, payload: unknown) => Promise<unknown>;
+
+async function loadPermissionSettings(call: HostCall): Promise<{
+  policies: { capability: CapabilityId; mode: PermissionMode }[];
+  grants: IssuedGrant[];
+}> {
+  const [policyResponse, grantResponse] = await Promise.all([
+    call("permission.policy.list", {}),
+    call("permission.grant.list", {}),
+  ]);
+  return {
+    policies: PERMISSION_METHODS["permission.policy.list"].response.parse(policyResponse).policies,
+    grants: PERMISSION_METHODS["permission.grant.list"].response
+      .parse(grantResponse)
+      .grants.filter(isIssuedGrant),
+  };
+}
+
+function grantUsage(grant: IssuedGrant): string {
+  if (grant.revokedAt !== null) return "已撤销";
+  const limit = grant.maxUses === null ? "不限" : String(grant.maxUses);
+  return `已用 ${grant.uses}/${limit}`;
+}
 
 export function PermissionsPanel() {
-  const [policies, setPolicies] = useState<Record<string, PolicyLevel> | null>(null);
-  const [grants, setGrants] = useState<GrantRow[]>([]);
+  const [policies, setPolicies] = useState<
+    { capability: CapabilityId; mode: PermissionMode }[] | null
+  >(null);
+  const [grants, setGrants] = useState<IssuedGrant[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
+  const [noticeError, setNoticeError] = useState(false);
 
   const reload = useCallback(async (): Promise<void> => {
-    const [policyResponse, grantResponse] = await Promise.all([
-      window.deepseekBot.host.call("policy.get", {}) as Promise<{
-        policies: Record<string, PolicyLevel>;
-      }>,
-      window.deepseekBot.host.call("grant.list", {}) as Promise<{ grants: GrantRow[] }>,
-    ]);
-    setPolicies(policyResponse.policies);
-    setGrants(grantResponse.grants);
+    const snapshot = await loadPermissionSettings((method, payload) =>
+      window.deepseekBot.host.call(method, payload),
+    );
+    setPolicies(snapshot.policies);
+    setGrants(snapshot.grants);
   }, []);
 
   useEffect(() => {
-    void reload().catch(() => setNotice("权限数据读取失败"));
+    void reload().catch(() => {
+      setNoticeError(true);
+      setNotice("权限数据读取失败");
+    });
   }, [reload]);
 
   if (policies === null) {
-    return null;
+    return (
+      <div className="settings-card">
+        <p className={noticeError ? "form-error" : "settings-soon"}>{notice ?? "正在读取权限…"}</p>
+      </div>
+    );
   }
+
+  const savePolicy = (capability: CapabilityId, mode: PermissionMode): void => {
+    if (!isPermissionModeAllowed(capability, mode)) return;
+    void window.deepseekBot.host
+      .call("permission.policy.set", { capability, mode })
+      .then((response) => {
+        PERMISSION_METHODS["permission.policy.set"].response.parse(response);
+        setNoticeError(false);
+        setNotice(`已保存：${CAPABILITY_LABELS[capability]} → ${MODE_LABELS[mode]}`);
+        return reload();
+      })
+      .catch(() => {
+        setNoticeError(true);
+        setNotice("策略保存失败");
+      });
+  };
 
   return (
     <div className="settings-card">
@@ -65,43 +135,41 @@ export function PermissionsPanel() {
         <span>模型能力策略</span>
         <span className="settings-soon">调用工具前先过策略与授权</span>
       </div>
-      {Object.entries(policies).map(([capability, policy]) => (
-        <div className="settings-row" key={capability}>
-          <span>{CAPABILITY_LABELS[capability] ?? capability}</span>
-          <select
-            className="settings-select"
-            value={policy}
-            disabled={FORCED.has(capability)}
-            aria-label={`${capability} 策略`}
-            onChange={(event) => {
-              const next = event.target.value as PolicyLevel;
-              void window.deepseekBot.host
-                .call("policy.set", { capability, policy: next })
-                .then(() => {
-                  setNotice(`已保存：${CAPABILITY_LABELS[capability] ?? capability} → ${POLICY_LABELS[next]}`);
-                  void reload();
-                });
-            }}
-          >
-            {(Object.keys(POLICY_LABELS) as PolicyLevel[]).map((level) => (
-              <option key={level} value={level}>
-                {POLICY_LABELS[level]}
-              </option>
-            ))}
-          </select>
-        </div>
-      ))}
+      {policies.map((policy) => {
+        const choices = allowedModes(policy.capability);
+        return (
+          <div className="settings-row" key={policy.capability}>
+            <span>{CAPABILITY_LABELS[policy.capability]}</span>
+            <select
+              className="settings-select"
+              value={policy.mode}
+              disabled={choices.length < 2}
+              aria-label={`${policy.capability} 策略`}
+              onChange={(event) => {
+                const next = event.target.value;
+                if (isMode(next)) savePolicy(policy.capability, next);
+              }}
+            >
+              {choices.map((mode) => (
+                <option key={mode} value={mode}>
+                  {MODE_LABELS[mode]}
+                </option>
+              ))}
+            </select>
+          </div>
+        );
+      })}
       <div className="settings-row">
         <span>已发放授权</span>
-        <span className="settings-soon">{grants.length === 0 ? "暂无" : `${grants.length} 条`}</span>
+        <span className="settings-soon">
+          {grants.length === 0 ? "暂无" : `${grants.length} 条`}
+        </span>
       </div>
-      {grants.slice(0, 8).map((grant) => (
+      {grants.map((grant) => (
         <div className="settings-row" key={grant.id}>
           <span>
-            {grant.capability} · {grant.scope} ·{" "}
-            {grant.revokedAt !== null
-              ? "已撤销"
-              : `已用 ${grant.used}/${grant.maxUses === 0 ? "∞" : grant.maxUses}`}
+            {CAPABILITY_LABELS[grant.capability]} · {SCOPE_LABELS[grant.scope]} ·{" "}
+            {grantUsage(grant)}
           </span>
           {grant.revokedAt === null ? (
             <button
@@ -109,10 +177,16 @@ export function PermissionsPanel() {
               className="pill-btn"
               onClick={() => {
                 void window.deepseekBot.host
-                  .call("grant.revoke", { id: grant.id })
-                  .then(() => {
+                  .call("permission.grant.revoke", { grantId: grant.id })
+                  .then((response) => {
+                    PERMISSION_METHODS["permission.grant.revoke"].response.parse(response);
+                    setNoticeError(false);
                     setNotice("授权已撤销");
-                    void reload();
+                    return reload();
+                  })
+                  .catch(() => {
+                    setNoticeError(true);
+                    setNotice("撤销失败");
                   });
               }}
             >
@@ -121,7 +195,9 @@ export function PermissionsPanel() {
           ) : null}
         </div>
       ))}
-      {notice !== null ? <p className="settings-ok">{notice}</p> : null}
+      {notice !== null ? (
+        <p className={noticeError ? "form-error" : "settings-ok"}>{notice}</p>
+      ) : null}
     </div>
   );
 }

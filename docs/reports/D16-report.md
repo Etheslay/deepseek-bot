@@ -69,3 +69,13 @@
 本分支同步 `origin/develop`（PR #46，merge base 后提交 `68229fa`）时，与该分支内另一套 D16 后端发生语义冲突。保留 develop 的聊天/设置 UI、聊天存储与 grants 迁移 5/6，并将本报告所述精确授权后端以迁移 7 追加；没有重写既有迁移校验和。`tool.invoke` 未从请求体伪造可信 bot 身份，因此 PR #45 的旧式 `policy.*` / `grant.*` 控制不能授权此安全网关；没有接入受信 Harness 调用方仍会 fail closed。旧设置/聊天授权 UI 与本权限控制面的完整适配未验证，不能视作已验收。
 
 合并后检查：`pnpm lint`、`pnpm typecheck`、`pnpm test`、`git diff --check` 均退出 0。全仓测试包结果：contracts 83、storage 147、agent-tools 69、desktop 179、host 61 通过 + 1 跳过；其他包按命令输出通过。真实 API smoke 保持跳过，真实聊天 Harness 工具链、权限 UI 到新授权后端的端到端流程和远程 CI 未验证。迁移测试确认 0001–0004 校验和和数据保留，并验证新 schema 版本为 7。
+
+## 7. 设置页切片（2026-10-26）
+
+§4 描述的是后端切片当时的缺口。本切片只把既有设置页 `PermissionsPanel` 接到已合入的 `permission.policy.list` / `permission.policy.set` 与 `permission.grant.list` / `permission.grant.revoke`。聊天授权卡和真实 Harness 工具调用仍然没做。旧的 `policy.get` / `policy.set` / `grant.list` / `grant.revoke` 仍留在 Host，设置页不再调用它们。
+
+设置页列出策略接口返回的全部能力。`app.start_run` 只有「每次询问」且控件只读；`exec.shell` 与 `screen.capture` 不提供「始终允许」。授权列表不展示 `scope=policy` 的全局策略行。草图中的「本地数据：位置 / 打开目录」没有接。
+
+检查环境：Windows、Node v24.22.1、pnpm 11.28.5。基线 `origin/develop` `a0af1f5`。`pnpm lint`、`pnpm typecheck`、`pnpm test`、`git diff --check` 均退出 0。其中桌面套件在格式化前为 20 文件 / 183 通过；全仓 `pnpm test` 在格式化之后退出 0，host 仍为 61 通过 + 1 跳过（真实 API smoke 未启用）。没有手点 Electron 设置页，没有远程 CI，没有付费 API 请求。
+
+本切片自审（Etheslay 本人填写）：自审人：＿＿＿＿　提交 SHA：＿＿＿＿　日期：＿＿＿＿　结论：＿＿＿＿
