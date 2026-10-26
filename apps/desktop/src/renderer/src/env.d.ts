@@ -35,7 +35,8 @@ type DesktopBridge = {
   };
   knowledge: {
     importFile: () => Promise<
-      { ok: true; text: string } | { ok: false; code: "format" | "size" | "empty" | "encoding" | "cancelled" | "read" }
+      | { ok: true; title: string; text: string }
+      | { ok: false; code: "format" | "size" | "empty" | "encoding" | "cancelled" | "read" }
     >;
   };
   host: {

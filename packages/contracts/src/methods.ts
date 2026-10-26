@@ -86,6 +86,12 @@ export const METHODS = [
   "memory.list",
   "memory.write",
   "memory.delete",
+  "memory.retention.get",
+  "memory.retention.set",
+  "knowledge.list",
+  "knowledge.write",
+  "knowledge.delete",
+  "knowledge.search",
   "connector.list",
   "connector.register",
   "connector.enable",
@@ -555,6 +561,106 @@ export const METHOD_CONTRACTS = {
       })
       .strict(),
     response: z.object({ deleted: z.literal(true) }),
+  },
+  /**
+   * D18 retention policy for memory notes and knowledge docs. Zero means
+   * "keep everything" (the default) — a broken stored value reads as zero
+   * so a corrupt setting can never widen deletion. Applied at host start
+   * and after every write.
+   */
+  "memory.retention.get": {
+    request: z.object({}).strict(),
+    response: z.object({
+      policy: z.object({
+        /** Days a memory note stays; 0 keeps it until deleted by hand. */
+        retentionDays: z.int().min(0),
+        /** Newest N memory notes kept per bot; 0 is unlimited. */
+        memoryMaxPerBot: z.int().min(0),
+        /** Newest N knowledge docs kept per bot; 0 is unlimited. */
+        knowledgeMaxPerBot: z.int().min(0),
+      }),
+    }),
+  },
+  "memory.retention.set": {
+    request: z.object({
+      policy: z.object({
+        retentionDays: z.int().min(0).max(36_500),
+        memoryMaxPerBot: z.int().min(0).max(100_000),
+        knowledgeMaxPerBot: z.int().min(0).max(10_000),
+      }),
+    }),
+    response: z.object({
+      policy: z.object({
+        retentionDays: z.int().min(0),
+        memoryMaxPerBot: z.int().min(0),
+        knowledgeMaxPerBot: z.int().min(0),
+      }),
+    }),
+  },
+  /**
+   * D18 knowledge documents (独立知识表): per-bot long-form text, separate
+   * from the 4k memory notes. list returns summaries (no text) so a full
+   * library stays under the 1 MiB message cap; search ranks windows by
+   * local TF-IDF cosine with an exact-phrase bonus and returns bounded
+   * snippets. Deletion and visibility are bot-scoped like memory.
+   */
+  "knowledge.list": {
+    request: z.object({ botId: UuidSchema }).strict(),
+    response: z.object({
+      docs: z.array(
+        z.object({
+          id: UuidSchema,
+          botId: UuidSchema,
+          title: NonEmptyStringSchema(TEXT_LIMITS.name),
+          size: z.int().min(1),
+          at: IsoDateTimeUtcSchema,
+        }),
+      ),
+    }),
+  },
+  "knowledge.write": {
+    request: z.object({
+      botId: UuidSchema,
+      title: z.string().trim().min(1).max(TEXT_LIMITS.name),
+      text: z.string().trim().min(1).max(TEXT_LIMITS.knowledgeText),
+    }).strict(),
+    response: z.object({
+      id: UuidSchema,
+      botId: UuidSchema,
+      title: NonEmptyStringSchema(TEXT_LIMITS.name),
+      size: z.int().min(1),
+      at: IsoDateTimeUtcSchema,
+    }),
+  },
+  "knowledge.delete": {
+    request: z
+      .object({
+        botId: UuidSchema,
+        docId: UuidSchema,
+      })
+      .strict(),
+    response: z.object({ deleted: z.literal(true) }),
+  },
+  "knowledge.search": {
+    request: z
+      .object({
+        botId: UuidSchema,
+        query: z.string().trim().min(1).max(2_000),
+        limit: z.int().min(1).max(10).default(5),
+      })
+      .strict(),
+    response: z.object({
+      hits: z.array(
+        z.object({
+          docId: UuidSchema,
+          title: NonEmptyStringSchema(TEXT_LIMITS.name),
+          /** Ranked similarity, capped at 1. Unranked (score 0) never returns. */
+          score: z.number().min(0).max(1),
+          snippet: z.string().min(1).max(400),
+          at: IsoDateTimeUtcSchema,
+        }),
+      ),
+    }),
   },
   /**
    * Trusted desktop catalog. Registration always starts disabled.

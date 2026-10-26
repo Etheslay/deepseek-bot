@@ -500,5 +500,22 @@ CREATE TABLE connectors (
 CREATE INDEX connectors_created ON connectors(created_at);
 `,
   },
+  {
+    // D18 (独立知识表): long-form per-bot knowledge documents, separate from
+    // the 4k memory notes. Whole documents, no chunk table — retrieval
+    // windows and their vectors are computed at query time.
+    id: 10,
+    name: "0010-knowledge-docs",
+    sql: /* sql */ `
+CREATE TABLE knowledge_docs (
+  id TEXT PRIMARY KEY,
+  bot_id TEXT NOT NULL REFERENCES bots(id),
+  title TEXT NOT NULL,
+  text TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX knowledge_docs_bot_created ON knowledge_docs(bot_id, created_at);
+`,
+  },
 ];
 

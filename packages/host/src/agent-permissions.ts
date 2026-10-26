@@ -40,6 +40,7 @@ const CAPABILITIES: Readonly<Record<string, readonly CapabilityId[]>> = {
   web_search: ["network.search"],
   memory_search: ["memory.read"],
   memory_write: ["memory.write"],
+  knowledge_search: ["memory.read"],
 };
 function digest(call: Omit<PermissionCall, "actionDigest">): string {
   return createHash("sha256").update(stableStringify(call)).digest("hex");

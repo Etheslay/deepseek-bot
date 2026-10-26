@@ -1,6 +1,9 @@
 /**
- * Notes for the open bot. The panel lists, writes and deletes through
- * trusted memory methods. Text is rendered as text, not HTML.
+ * Notes and knowledge for the open bot. Memory notes list/write/delete
+ * through trusted memory methods; knowledge documents (D18 独立知识表)
+ * list/import/search/delete through trusted knowledge methods; the
+ * retention policy (保留策略) edits the shared memory.retention settings
+ * key. All text is rendered as text, never HTML.
  */
 import { useCallback, useEffect, useRef, useState, type JSX } from "react";
 import { METHOD_CONTRACTS } from "@deepseek-bot/contracts";
@@ -12,16 +15,44 @@ type MemoryNote = {
   at: string;
 };
 
+type KnowledgeDoc = {
+  id: string;
+  botId: string;
+  title: string;
+  size: number;
+  at: string;
+};
+
+type KnowledgeHit = {
+  docId: string;
+  title: string;
+  score: number;
+  snippet: string;
+  at: string;
+};
+
+type RetentionPolicy = {
+  retentionDays: number;
+  memoryMaxPerBot: number;
+  knowledgeMaxPerBot: number;
+};
+
 function importNotice(code: "format" | "size" | "empty" | "encoding" | "read"): string {
   if (code === "format") return "只接受 .txt 和 .md 文件";
-  if (code === "size") return "文件超过 16 KiB，或正文超过 4000 字";
+  if (code === "size") return "文件超过 256 KiB，或正文超过 100000 字";
   if (code === "empty") return "文件没有可导入的正文";
   if (code === "encoding") return "文件不是 UTF-8 文本";
   return "无法读取该文件";
 }
 
 export function MemoryPanel({ botId }: { botId: string }): JSX.Element {
-  return <BotMemory key={botId} botId={botId} />;
+  return (
+    <section className="memory-panel" aria-label="记忆">
+      <BotMemory key={botId} botId={botId} />
+      <KnowledgeSection key={`k-${botId}`} botId={botId} />
+      <RetentionControls />
+    </section>
+  );
 }
 
 function BotMemory({ botId }: { botId: string }): JSX.Element {
@@ -63,27 +94,6 @@ function BotMemory({ botId }: { botId: string }): JSX.Element {
     };
   }, [load]);
 
-  async function importFile(): Promise<void> {
-    if (busy) return;
-    setBusy(true);
-    try {
-      const picked = await window.deepseekBot.knowledge.importFile();
-      if (!active.current) return;
-      if (!picked.ok) {
-        if (picked.code !== "cancelled") setNotice(importNotice(picked.code));
-        return;
-      }
-      await window.deepseekBot.host.call("memory.write", { botId, text: picked.text });
-      if (!active.current) return;
-      setNotice("已导入知识");
-      await load();
-    } catch {
-      if (active.current) setNotice("记忆保存失败");
-    } finally {
-      if (active.current) setBusy(false);
-    }
-  }
-
   async function save(): Promise<void> {
     const text = draft.trim();
     if (text.length === 0 || busy) return;
@@ -117,7 +127,7 @@ function BotMemory({ botId }: { botId: string }): JSX.Element {
   }
 
   return (
-    <section className="memory-panel" aria-label="记忆">
+    <div>
       <div>
         <input
           aria-label="记忆内容"
@@ -126,9 +136,6 @@ function BotMemory({ botId }: { botId: string }): JSX.Element {
         />
         <button type="button" onClick={() => void save()}>
           保存记忆
-        </button>
-        <button type="button" onClick={() => void importFile()}>
-          导入知识
         </button>
       </div>
       <input
@@ -145,6 +152,202 @@ function BotMemory({ botId }: { botId: string }): JSX.Element {
           </button>
         </div>
       ))}
-    </section>
+    </div>
+  );
+}
+
+function KnowledgeSection({ botId }: { botId: string }): JSX.Element {
+  const [docs, setDocs] = useState<KnowledgeDoc[] | null>(null);
+  const [hits, setHits] = useState<KnowledgeHit[] | null>(null);
+  const [query, setQuery] = useState("");
+  const [notice, setNotice] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const active = useRef(true);
+
+  const load = useCallback(async (): Promise<void> => {
+    const response = await window.deepseekBot.host.call("knowledge.list", { botId });
+    const parsed = METHOD_CONTRACTS["knowledge.list"].response.parse(response);
+    if (!active.current) return;
+    setDocs(parsed.docs);
+    setNotice((current) => (current === "知识库读取失败" ? null : current));
+  }, [botId]);
+
+  useEffect(() => {
+    active.current = true;
+    let cancelled = false;
+    void load().catch(() => {
+      if (!cancelled) setNotice("知识库读取失败");
+    });
+    return () => {
+      active.current = false;
+      cancelled = true;
+    };
+  }, [load]);
+
+  async function importFile(): Promise<void> {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const picked = await window.deepseekBot.knowledge.importFile();
+      if (!active.current) return;
+      if (!picked.ok) {
+        if (picked.code !== "cancelled") setNotice(importNotice(picked.code));
+        return;
+      }
+      await window.deepseekBot.host.call("knowledge.write", {
+        botId,
+        title: picked.title,
+        text: picked.text,
+      });
+      if (!active.current) return;
+      setNotice("已导入知识");
+      await load();
+    } catch {
+      if (active.current) setNotice("知识导入失败");
+    } finally {
+      if (active.current) setBusy(false);
+    }
+  }
+
+  async function search(): Promise<void> {
+    const trimmed = query.trim();
+    if (trimmed.length === 0 || busy) return;
+    setBusy(true);
+    try {
+      const response = await window.deepseekBot.host.call("knowledge.search", {
+        botId,
+        query: trimmed,
+      });
+      const parsed = METHOD_CONTRACTS["knowledge.search"].response.parse(response);
+      if (!active.current) return;
+      setHits(parsed.hits);
+    } catch {
+      if (active.current) setNotice("知识检索失败");
+    } finally {
+      if (active.current) setBusy(false);
+    }
+  }
+
+  async function remove(docId: string): Promise<void> {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await window.deepseekBot.host.call("knowledge.delete", { botId, docId });
+      if (!active.current) return;
+      setNotice("已删除知识");
+      setHits(null);
+      await load();
+    } catch {
+      if (active.current) setNotice("知识删除失败");
+    } finally {
+      if (active.current) setBusy(false);
+    }
+  }
+
+  return (
+    <div>
+      <div>
+        <button type="button" onClick={() => void importFile()}>
+          导入知识
+        </button>
+        <input
+          aria-label="检索知识"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+        />
+        <button type="button" onClick={() => void search()}>
+          搜索知识
+        </button>
+      </div>
+      {notice !== null ? <div role="status">{notice}</div> : null}
+      {(hits ?? []).map((hit) => (
+        <div key={`${hit.docId}:${hit.at}:${hit.snippet}`}>
+          <div>{hit.title}</div>
+          <div>{hit.snippet}</div>
+        </div>
+      ))}
+      {hits !== null && hits.length === 0 ? <div role="status">没有匹配的知识</div> : null}
+      {(docs ?? []).map((doc) => (
+        <div key={doc.id}>
+          <div>
+            {doc.title}（{doc.size} 字）
+          </div>
+          <button type="button" onClick={() => void remove(doc.id)}>
+            删除
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+const ZERO_POLICY: RetentionPolicy = {
+  retentionDays: 0,
+  memoryMaxPerBot: 0,
+  knowledgeMaxPerBot: 0,
+};
+
+function RetentionControls(): JSX.Element {
+  const [policy, setPolicy] = useState<RetentionPolicy>(ZERO_POLICY);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    void window.deepseekBot.host
+      .call("memory.retention.get", {})
+      .then((response) => {
+        const parsed = METHOD_CONTRACTS["memory.retention.get"].response.parse(response);
+        if (active) setPolicy(parsed.policy);
+      })
+      .catch(() => {
+        if (active) setNotice("保留策略读取失败");
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  function update(field: keyof RetentionPolicy, raw: string): void {
+    const value = Number.parseInt(raw, 10);
+    setPolicy((current) => ({
+      ...current,
+      [field]: Number.isInteger(value) && value >= 0 ? value : 0,
+    }));
+  }
+
+  async function save(): Promise<void> {
+    try {
+      const response = await window.deepseekBot.host.call("memory.retention.set", { policy });
+      const parsed = METHOD_CONTRACTS["memory.retention.set"].response.parse(response);
+      setPolicy(parsed.policy);
+      setNotice("已保存保留策略");
+    } catch {
+      setNotice("保留策略保存失败");
+    }
+  }
+
+  return (
+    <div>
+      <div>保留策略（0 表示不限制；超限或过期会在保存后清理）</div>
+      <input
+        aria-label="记忆保留天数"
+        value={policy.retentionDays}
+        onChange={(event) => update("retentionDays", event.target.value)}
+      />
+      <input
+        aria-label="每bot记忆上限"
+        value={policy.memoryMaxPerBot}
+        onChange={(event) => update("memoryMaxPerBot", event.target.value)}
+      />
+      <input
+        aria-label="每bot知识上限"
+        value={policy.knowledgeMaxPerBot}
+        onChange={(event) => update("knowledgeMaxPerBot", event.target.value)}
+      />
+      <button type="button" onClick={() => void save()}>
+        保存策略
+      </button>
+      {notice !== null ? <div role="status">{notice}</div> : null}
+    </div>
   );
 }

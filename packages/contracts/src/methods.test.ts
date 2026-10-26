@@ -26,7 +26,7 @@ describe("method whitelist", () => {
   it("defines a contract for every whitelisted method and nothing else", () => {
     const contractMethods = Object.keys(METHOD_CONTRACTS).sort();
     expect(contractMethods).toEqual([...METHODS].sort());
-    expect(METHODS).toHaveLength(56);
+    expect(METHODS).toHaveLength(62);
   });
 
   it("covers every method group from CONTRACTS §3", () => {
@@ -41,6 +41,7 @@ describe("method whitelist", () => {
       "events",
       "grant",
       "group",
+      "knowledge",
       "memory",
       "permission",
       "policy",
@@ -268,6 +269,81 @@ describe("parseRequest", () => {
       parseRequest(envelope("creation.revoke", { batchId: "nope" }), "creation.revoke")
         .success,
     ).toBe(false);
+  });
+
+  it("validates knowledge payloads (D18 independent knowledge table)", () => {
+    const botId = "77777777-7777-4777-8777-777777777777";
+    const docId = "99999999-9999-4999-8999-999999999999";
+    expect(
+      parseRequest(envelope("knowledge.list", { botId }), "knowledge.list")
+        .success,
+    ).toBe(true);
+    expect(
+      parseRequest(
+        envelope("knowledge.write", {
+          botId,
+          title: "产品手册",
+          text: "很长的正文……",
+        }),
+        "knowledge.write",
+      ).success,
+    ).toBe(true);
+    expect(
+      parseRequest(
+        envelope("knowledge.write", { botId, title: "t", text: "  " }),
+        "knowledge.write",
+      ).success,
+    ).toBe(false);
+    expect(
+      parseRequest(
+        envelope("knowledge.delete", { botId, docId }),
+        "knowledge.delete",
+      ).success,
+    ).toBe(true);
+    const search = parseRequest(
+      envelope("knowledge.search", { botId, query: "部署流程" }),
+      "knowledge.search",
+    );
+    expect(search.success).toBe(true);
+    if (search.success) {
+      expect(search.payload.limit).toBe(5);
+    }
+    expect(
+      parseRequest(
+        envelope("knowledge.search", { botId, query: "" }),
+        "knowledge.search",
+      ).success,
+    ).toBe(false);
+  });
+
+  it("validates the retention policy payloads (D18 保留策略)", () => {
+    expect(
+      parseRequest(envelope("memory.retention.get", {}), "memory.retention.get")
+        .success,
+    ).toBe(true);
+    const policy = { retentionDays: 30, memoryMaxPerBot: 500, knowledgeMaxPerBot: 100 };
+    expect(
+      parseRequest(
+        envelope("memory.retention.set", { policy }),
+        "memory.retention.set",
+      ).success,
+    ).toBe(true);
+    expect(
+      parseRequest(
+        envelope("memory.retention.set", {
+          policy: { retentionDays: -1, memoryMaxPerBot: 0, knowledgeMaxPerBot: 0 },
+        }),
+        "memory.retention.set",
+      ).success,
+    ).toBe(false);
+    expect(
+      parseRequest(
+        envelope("memory.retention.set", {
+          policy: { retentionDays: 0, memoryMaxPerBot: 0, knowledgeMaxPerBot: 0 },
+        }),
+        "memory.retention.set",
+      ).success,
+    ).toBe(true);
   });
 });
 
