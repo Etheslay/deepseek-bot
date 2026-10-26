@@ -23,6 +23,7 @@
 | `app.create_workflow` | 创建工作流与节点/连线 | 中 | 每次询问 |
 | `app.start_run` | 启动运行（消耗 API 预算） | 高 | 每次询问（不可改为始终允许） |
 | `app.cancel_run` | 取消运行 | 中 | 每次询问 |
+| `app.dispatch_task` | v0.5：协调者向同组另一 bot 派发一段指令（触发执行者的一个聊天回合） | 中 | 每次询问；允许 once/session/permanent 授权（一次派发 = 一个聊天回合的成本，上限远小于一次工作流运行；执行者自身的高危工具仍受其各自策略约束。与 `app.start_run` 的差异：start_run 是整图多节点预算消耗且不可收敛，故锁定 ask；dispatch 的消耗有单回合上界且审批卡展示任务原文。接力链单卡覆盖全部预声明跳，但每跳执行前重验授权，撤销/降档立即停链） |
 | `app.revoke_creation` | 撤销创建批次 | 中 | 每次询问 |
 | `interaction.ask_user` | 等待人类回答 | 低 | 始终允许；回答不授予权限 |
 | `fs.read` / `fs.write` | 工作目录文件读写 | 中 | D08 路径策略 + 审批 |
@@ -34,6 +35,8 @@
 | `memory.write` | 写入当前 bot 的记忆 | 中 | 每次询问；模型不能删除 |
 
 能力注册表包含未来能力，不会自动产生对应工具；新增工具必须显式绑定能力并同步本文、契约与审计字段。`create_bots_batch` 有 newGroup 时同时需要 create_bot/create_group。草案生成仅回显、不落库，属于 app.read。
+
+v0.5 manager-orchestration（TASK_MANAGER_ORCHESTRATION.md §3.4）：新增模型工具 `save_workflow`（绑定 `app.create_workflow`）、`dispatch_task`（绑定 `app.dispatch_task`）与只读工具 `list_tasks`（绑定 `app.read`），聊天应用工具目录由八个扩至十一个。`dispatch_task` 在授权之外追加协调者三重规则并按受信 `ToolCaller.botId` 查库：调用者必须是 coordinator、目标必须同组且非自身——任何不满足在网关层返回可解释拒绝（不是 UI 隐藏），`task.dispatch` 方法层再权威重验一次。权柄不变式：manager 能做的只有"派发一段指令"；它不拥有执行者，不读其记忆，不改其配置，不能替它审批。执行者的一切工具调用仍按其自身 grant/策略审批与审计（一条派发至少产生发起者的 dispatch 审计与执行者回合内各自记录，审计双身份）。角色 `role` 没有任何模型写入口——`bot.batchCreate` 入参为 strict，未来绑定 `update_bot` 工具时必须剥离 role（写进工具定义的测试）。模型无法自授角色或授权（`permission.*` 本就不在模型注册表）。
 
 `web_search` 先通过 D16 network.search，再通过现有 ToolPolicy.network 及 D08 精确动作授权。工具模型参数不能指定服务地址或传入权限对象；受信调用方经 ToolCallOptions.networkPermissions 绑定句柄。工作流节点仍使用真实 D08 句柄：禁止网络时不发请求，要求审批时先等真实审批。聊天回合没有工作流运行，Host 自有句柄在 allowed 时放行，disabled 时拒绝，approval-required 时以 APPROVAL_REQUIRED 失败且不发请求。网关 JSONL 存摘要；D08 本地 tool.requested 事件按已有规范保存精确搜索参数用于审批。聊天结果卡只渲染已去掉标记的文本。
 
