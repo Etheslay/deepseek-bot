@@ -2530,18 +2530,24 @@ function BotsPlaceholder({
   };
 
   return (
-    <div className="chat-page">
+    <div
+      className="chat-page"
+      /* SPRINTS §6 #8: the user bubble follows the current bot's colour, and so
+         does the composer's send button. The pair is scoped to the page rather
+         than to the message list, because the composer is its sibling — a
+         variable set on `.chat` cannot reach it. Switching bots re-tints only
+         this pane. */
+      style={
+        {
+          "--bot-color": avatarColor(me.avatar),
+          "--bot-ink": bubbleInk(avatarColor(me.avatar)),
+        } as CSSProperties
+      }
+    >
       <p className="sys-line" aria-live="polite">
         静态占位 · 无网络请求 · 不同分组的 Bot 无法主动交流
       </p>
-      <div
-        className="chat"
-        ref={listRef}
-        /* SPRINTS §6 #8: the user bubble follows the current bot's colour.
-           The variable is scoped to this conversation, so switching bots
-           re-tints only this pane. */
-        style={{ "--bot-color": avatarColor(me.avatar) } as CSSProperties}
-      >
+      <div className="chat" ref={listRef}>
         {msgs.map((m, index) => {
           const prev = msgs[index - 1];
           const showTime =

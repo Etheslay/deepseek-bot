@@ -6947,3 +6947,17 @@ select option {
 }
 
 .gaze-avatar { display: inline-flex; flex: 0 0 auto; }
+.mention-ball { width: 15px; height: 15px; flex: 0 0 auto; }
+.mention-chip { gap: 5px; }
+
+/* ---------- composer send button: follows the active bot ----------
+   The send button is the loudest accent on the pane, so it wears the bot's own
+   colour instead of a fixed one. `--bot-color` / `--bot-ink` come from the chat
+   page (App.tsx) and are the same pair the user bubble is tinted with; the ink
+   is chosen for contrast against that colour, so the arrow stays readable on a
+   pale body as well as a deep one. With no bot colour both fall back to the
+   previous accent/white pairing, and the disabled state is untouched. */
+.send-btn:not(:disabled) {
+  background: var(--bot-color, var(--accent, #ffffff));
+  color: var(--bot-ink, #ffffff);
+}
