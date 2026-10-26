@@ -9,7 +9,7 @@
 | 切片 | 提交 | 内容 |
 | --- | --- | --- |
 | 渲染片 | `8799004`（依赖先行）、`5df2470` | bot 回复渲染 Markdown（GFM 标题/列表/表格/链接）、代码块高亮、KaTeX 行内与独立公式 |
-| 交互片 | `13acf47` | 内联提及跳转、多 bot 交付通知、选项卡片、定向回复可见化、用户气泡颜色跟随当前 bot 主题色 |
+| 交互片 | `13acf47` | 内联提及跳转、多 bot 交付通知、选项卡片、定向回复可见化（用户气泡随 bot 色**当时未实现**，见 §5 更正） |
 
 ### 1.1 渲染片
 
@@ -23,7 +23,7 @@
 
 - [`features/chat/mentions.ts`](../../apps/desktop/src/renderer/src/features/chat/mentions.ts)：`linkMentions(html, MentionTable)` 在净化后的 HTML 上把已知 bot 名替换为可点击提及 chip（对 SPRINTS §6 模式 3）。
 - `App.tsx` 内新增三类聊天元信息组件：居中的 bot→bot 交付说明行、多 bot 交付通知（头像栈 + 计数，逐个可点直达该 bot 会话，模式 1）、选项卡片（`choices` 字段，问题 + A/B/C/D 选项，模式 4）。
-- 用户气泡颜色：把当前会话 bot 的主题色写入 CSS 变量 `--accent`，用户气泡随色（模式 8）。
+- ~~用户气泡颜色：把当前会话 bot 的主题色写入 CSS 变量 `--accent`，用户气泡随色（模式 8）。~~ **该句为补记时的错误陈述，已更正**：`13acf47` 从未按 bot 写入任何颜色变量，`--accent` 是设置页的全局强调色；用户气泡背景在 `styles.css` 中被固定为 `var(--grok-user-bubble)` 并带 `!important`。此项由后续分支 `fix/chat-user-bubble-bot-color` 真正补齐（见 §5）。
 
 ## 2. 过程决策（补记时整理）
 
@@ -53,6 +53,7 @@
 - **运行期零远程请求未抓证**：验收第 2 条要求网络面板或 CSP 日志留证，本次只有静态 `git grep` 结果，**未验证**。
 - **真实链路未接**：聊天回复仍是渲染层夹具数据，`chat.*` 未经 Host；选项卡片未接已落 develop 的 `ask_user`；均挂在 SPRINTS §8 待拍板 #1（Renderer↔Host 方案）。
 - **手测截图未留**：无 `docs/reports/assets/d14/`。
+- **更正（2026-10-26）**：SPRINTS §6 模式 8「用户气泡随 bot 色」在 D14 交付时**并未实现**（见 §1.2 的更正说明），由后续分支 `fix/chat-user-bubble-bot-color` 补齐——会话容器按当前 bot 注入 `--bot-color`，气泡背景改为 `color-mix` 22% 混色、边框 38% 着色，变量缺失时保持原石墨灰。该分支实测：desktop 23 文件 / 208 用例、`typecheck`、根 `lint`、`pnpm --dir apps/desktop run build` 全部通过；深浅两主题下的观感仍需手测确认。
 - 流程偏差：本任务与 D25/D26/D24 挤在同一条串行分支经单个 PR 合入，偏离"一任务一分支"；lockfile 与 CI 配置改动未拆独立小 PR。已在 [SPRINTS §4](../SPRINTS.md) 记录。
 
 ## 6. 自审记录（由负责人填写）

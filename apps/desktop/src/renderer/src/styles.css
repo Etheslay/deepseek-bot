@@ -5913,9 +5913,20 @@ select option {
   font-weight: 500;
 }
 
-/* 3. user bubble: graphite, Grok-style radius */
+/* 3. user bubble: tinted with the current bot's colour (SPRINTS §6 #8),
+   Grok-style radius. `--bot-color` is written per conversation by the chat
+   pane; when it is absent the graphite default is kept untouched. The mix
+   stays low (22%) so text contrast survives both themes; the border carries
+   the hue more visibly without changing the fill's readability. */
 .msg-row.user .msg-bubble {
-  background: var(--grok-user-bubble) !important;
+  background: color-mix(
+      in srgb,
+      var(--bot-color, var(--grok-user-bubble)) 22%,
+      var(--grok-user-bubble)
+    )
+    !important;
+  border: 1px solid
+    color-mix(in srgb, var(--bot-color, var(--grok-user-bubble)) 38%, transparent);
   color: var(--text) !important;
   border-radius: 22px;
   padding: 10px 16px;
