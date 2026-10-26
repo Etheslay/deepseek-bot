@@ -500,5 +500,33 @@ CREATE TABLE connectors (
 CREATE INDEX connectors_created ON connectors(created_at);
 `,
   },
+  {
+    // D28 co-edit sidecar: immutable version trail for bot workspace files.
+    // Rows are metadata only — version content lives as files under
+    // `<root>/artifacts/coedit-versions/` (content_path), so backups that
+    // include the artifacts tree carry the snapshots with it. Every save,
+    // revert and reconciled bot write appends a row; nothing is ever
+    // updated or deleted except the oldest rows beyond the per-file cap.
+    id: 10,
+    name: "0010-artifact-versions",
+    sql: /* sql */ `
+CREATE TABLE artifact_versions (
+  id TEXT PRIMARY KEY,
+  bot_id TEXT NOT NULL REFERENCES bots(id),
+  relative_path TEXT NOT NULL,
+  revision INTEGER NOT NULL CHECK (revision >= 1),
+  author TEXT NOT NULL CHECK (author IN ('user', 'bot')),
+  media_type TEXT NOT NULL,
+  size INTEGER NOT NULL CHECK (size >= 0),
+  checksum_algorithm TEXT NOT NULL CHECK (checksum_algorithm = 'sha256'),
+  checksum_value TEXT NOT NULL,
+  content_path TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  UNIQUE (bot_id, relative_path, revision)
+);
+CREATE INDEX artifact_versions_lookup
+  ON artifact_versions(bot_id, relative_path, revision DESC);
+`,
+  },
 ];
 
