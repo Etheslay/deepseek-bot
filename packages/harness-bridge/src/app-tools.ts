@@ -14,7 +14,9 @@ export const APPLICATION_TOOL_NAMES = [
   "revoke_batch",
 ] as const;
 
-const CALL_TIMEOUT_MS = 660_000;
+// Allow ten minutes for human approval plus two minutes for the service call.
+const CALL_TIMEOUT_MS = 720_000;
+const MCP_DIRECTORY_MAX_BYTES = 256 * 1024;
 const ASK_USER_TIMEOUT_MS = 31 * 60_000;
 // Local Stable Diffusion renders can take minutes on slow GPUs.
 const CONNECTOR_TIMEOUT_MS = 10 * 60_000;
@@ -117,6 +119,36 @@ function connectorTools(value: unknown): ToolSchema[] {
   ];
 }
 
+/** Only Host-issued opaque MCP names can cross this optional directory. */
+function mcpTools(value: unknown): ToolSchema[] {
+  if (
+    !object(value) ||
+    !Array.isArray(value.tools) ||
+    value.tools.length > 200 ||
+    !Array.isArray(value.warnings) ||
+    !value.warnings.every((warning: unknown) => typeof warning === "string") ||
+    Buffer.byteLength(JSON.stringify(value), "utf8") > MCP_DIRECTORY_MAX_BYTES
+  ) {
+    throw new Error("invalid MCP catalog");
+  }
+  const names = new Set<string>();
+  return value.tools.map((tool: unknown) => {
+    if (
+      !object(tool) ||
+      typeof tool.name !== "string" ||
+      !/^mcp__[a-f0-9]{32}__[a-f0-9]{12}$/.test(tool.name) ||
+      names.has(tool.name) ||
+      typeof tool.description !== "string" ||
+      !object(tool.parameters) ||
+      tool.parameters.type !== "object"
+    ) {
+      throw new Error("invalid MCP catalog");
+    }
+    names.add(tool.name);
+    return { name: tool.name, description: tool.description, parameters: tool.parameters };
+  });
+}
+
 function askUserTool(value: unknown): ToolSchema {
   if (
     !object(value) ||
@@ -138,7 +170,11 @@ function askUserTool(value: unknown): ToolSchema {
 const MEMORY_TOOL_NAMES = ["memory_write", "memory_search", "knowledge_search"] as const;
 
 function memoryTools(value: unknown): ToolSchema[] {
-  if (!object(value) || !Array.isArray(value.tools) || value.tools.length !== MEMORY_TOOL_NAMES.length) {
+  if (
+    !object(value) ||
+    !Array.isArray(value.tools) ||
+    value.tools.length !== MEMORY_TOOL_NAMES.length
+  ) {
     throw new Error("invalid catalog");
   }
   const tools: unknown[] = value.tools;
@@ -181,6 +217,7 @@ async function request(
   path: string,
   signal: AbortSignal,
   body?: unknown,
+  maxBytes = 1024 * 1024,
 ): Promise<unknown> {
   // http.request has no hidden fetch headers deadline shorter than the
   // ten-minute human approval wait. The caller's signal owns the deadline.
@@ -202,7 +239,7 @@ async function request(
         let bytes = 0;
         response.on("data", (chunk: Buffer) => {
           bytes += chunk.length;
-          if (bytes > 1024 * 1024) {
+          if (bytes > maxBytes) {
             outgoing.destroy(new Error("application response too large"));
             return;
           }
@@ -265,6 +302,22 @@ export async function applyApplicationTools(ctx: ApplicationToolContext): Promis
     const webSearch = webSearchTool(
       await request(origin, token, "/web-search", AbortSignal.timeout(STARTUP_TIMEOUT_MS)),
     );
+    let mcp: ToolSchema[] = [];
+    try {
+      mcp = mcpTools(
+        await request(
+          origin,
+          token,
+          "/mcp",
+          AbortSignal.timeout(STARTUP_TIMEOUT_MS),
+          undefined,
+          MCP_DIRECTORY_MAX_BYTES,
+        ),
+      );
+    } catch {
+      // Optional MCP discovery fails closed without disabling regular tools.
+      // Do not reflect server warnings, endpoint details, or credentials.
+    }
     const bindRemote = (
       schema: ToolSchema,
       path: string,
@@ -338,7 +391,11 @@ export async function applyApplicationTools(ctx: ApplicationToolContext): Promis
       ctx.on?.("agent/created", (payload: unknown) => {
         if (!object(payload) || !object(payload.agent)) return;
         const agentCtx = payload.agent.ctx;
-        if (!object(agentCtx) || !object(agentCtx.tools) || typeof agentCtx.tools.register !== "function") {
+        if (
+          !object(agentCtx) ||
+          !object(agentCtx.tools) ||
+          typeof agentCtx.tools.register !== "function"
+        ) {
           return;
         }
         const scoped = agentCtx.tools as {
@@ -353,9 +410,21 @@ export async function applyApplicationTools(ctx: ApplicationToolContext): Promis
         }
       });
     }
-    const ready = await request(origin, token, "/app-tools/ready", startupSignal, {
-      tools: schemas.map((schema) => schema.name),
-    });
+    const mcpStart = unregister.length;
+    try {
+      for (const schema of mcp) bindRemote(schema, "/mcp/call", CALL_TIMEOUT_MS);
+    } catch {
+      for (const dispose of unregister.splice(mcpStart).reverse()) dispose();
+    }
+    const ready = await request(
+      origin,
+      token,
+      "/app-tools/ready",
+      AbortSignal.timeout(STARTUP_TIMEOUT_MS),
+      {
+        tools: schemas.map((schema) => schema.name),
+      },
+    );
     if (!object(ready) || ready.ok !== true) throw new Error("readiness rejected");
   } catch {
     for (const dispose of unregister.reverse()) dispose();

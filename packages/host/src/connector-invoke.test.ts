@@ -67,6 +67,14 @@ async function enabledConnector(
 }
 
 describe("invokeConnector (D19 txt2img)", () => {
+  it("does not send Stable Diffusion calls to an MCP connector", async () => {
+    const db = tempDb();
+    const connector = registerConnector(db, { name: "mcp", kind: "mcp-http", endpoint: "http://127.0.0.1:9/mcp" });
+    setConnectorEnabled(db, { id: connector.id, enabled: true });
+    try {
+      await expect(invokeConnector(db, "unused", { connectorId: connector.id, action: "txt2img", params: { prompt: "test" } }, { now: () => new Date() })).rejects.toThrow("Stable Diffusion");
+    } finally { db.close(); }
+  });
   it("posts the render parameters and writes the returned image", async () => {
     const db = tempDb();
     const { url, bodies } = await fakeSd(() => ({ json: { images: [PNG.toString("base64")] } }));

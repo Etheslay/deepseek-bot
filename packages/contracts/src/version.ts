@@ -16,15 +16,17 @@
  * over bot workspace files; existing methods are untouched, so this is again
  * a minor-only bump and "0.1"–"0.3" senders stay accepted.
  */
-export const CONTRACT_VERSION = "0.4" as const;
+// v0.5 adds MCP HTTP discovery/grants and mcp.call; prior senders stay accepted.
+export const CONTRACT_VERSION = "0.5" as const;
 export const PROTOCOL_VERSION = CONTRACT_VERSION;
-/** Workflow documents did not change in v0.3/v0.4; keep the document version. */
+/** Workflow documents did not change in v0.3–v0.5; keep the document version. */
 export const WORKFLOW_SCHEMA_VERSION = "0.1" as const;
 
 export const SUPPORTED_PROTOCOL_VERSIONS: readonly string[] = [
   "0.1",
   "0.2",
   "0.3",
+  "0.4",
   PROTOCOL_VERSION,
 ];
 

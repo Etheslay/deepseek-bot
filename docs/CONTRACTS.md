@@ -1,6 +1,8 @@
-# 接口与数据契约 v0.4
+# 接口与数据契约 v0.5
 
 本文件定义本项目前后端契约，不是 DeepSeek Harness 官方 API。状态：v0.1 已冻结（2026-10-23，D00 验收记录见 D00 Issue）；v0.2 为 D15 写层扩展；v0.3（2026-10-26，D16 后端）新增人类权限控制方法；v0.4（2026-10-26，D28 共编侧车）新增 `artifacts.*` 方法组，`protocolVersion` 升至 0.4，继续接受 0.1–0.3 发送方。工作流文档 `schemaVersion` 保持 0.1（存量数据可读）。后续变更按 §7 提升版本并由变更负责人自审同步使用方。可执行实现位于 `packages/contracts/`：schema、§7 夹具与双方共用契约测试见 [packages/contracts/README.md](../packages/contracts/README.md)。所有字段均需后端校验，TypeScript 类型不能替代运行时校验。
+
+v0.5（D19 MCP HTTP 契约片）新增连接器类型、MCP 工具发现与逐机器人精确工具授权方法，以及独立能力 `mcp.call`。当前 `protocolVersion` 为 0.5，继续接受 0.1–0.4 发送方；工作流 `schemaVersion` 仍为 0.1。本片仅交付可执行契约，不代表 MCP Host、存储迁移、桌面设置或真实服务联调已经完成。
 
 ## 1. 通用规则
 
@@ -32,11 +34,18 @@
 | BotArtifact | relativePath, mediaType, size, updatedAt, checksum | v0.4：bot 工作区可编辑文件，按 (botId, relativePath) 寻址；mediaType 由扩展名映射，text/html 与二进制不进内联编辑（QA-14） |
 | ArtifactVersion | id, botId, relativePath, revision, author(user\|bot), mediaType, size, checksum, createdAt | v0.4：只追加版本链，同文件 revision 唯一；快照内容存于数据根 `artifacts/coedit-versions/<botId>/`（含产物备份即含版本）；回退以新版本落盘，不改写历史 |
 | CapabilityPolicy | capability, mode | v0.3；全局 allow/ask/deny 默认策略，受高风险能力限制 |
+| ConnectorKind | sd-webui / mcp-http | v0.5；register 省略 kind 时默认 sd-webui；现有连接器响应 kind 可选以兼容旧 Host，后续实现应始终输出类型；旧记录按 sd-webui 解释 |
+| McpTool | name, description?, inputSchema | v0.5；name 为 1–200 字符精确名称，description ≤4000 字符，inputSchema 为 JSON 对象（record unknown）；发现最多 200 项，不把远端描述当指令或授权 |
+| McpServerGrant | serverId, allowedTools | 单个服务器的精确工具白名单，最多 200 个唯一名称；名称 1–200 字符，禁止 `*`/`?` 通配符，不进行大小写或空白归一化；空数组表示不允许该服务器的工具 |
 | PermissionGrant | id, capability, botId, mode, scope, sessionId, generation, approvalId, maxUses, uses, expiresAt, createdAt, revokedAt | v0.3；scope=policy 为全局策略行，其余为 bot 专属 once/session/permanent 授权；计数在执行前原子扣减 |
 | AppApproval | id, invocationId, callerId, botId, sessionId, tool, capabilities, params, actionDigest, generation, status, createdAt, expiresAt, decidedAt | v0.3；精确参数预览与 10 分钟期限，独立于 D08 Approval；重启失效 |
 | PermissionAudit | id, sequence, at, actor, callerId, botId, tool, capabilities, actionDigest, grantIds, approvalId, decision | v0.3；只追加，保存摘要与决策元数据，不保存参数原文 |
 
 ## 3. 方法边界
+
+v0.5 的 MCP 控制方法只供受信桌面调用，不能注册为模型工具。`mcp-http` 后续传输仅使用本机 HTTP 回环端点，允许 `/mcp` 等路径；端点的 scheme、回环主机、凭据与重定向等检查由 Host 实现承担，当前契约仍只校验 endpoint 字符串长度与形状字段。`connector.register` 和 `connector.setEndpoint` 不因配置地址而自动调用服务。
+
+MCP 实际调用使用独立能力 `mcp.call`，默认 `ask`，禁止全局 `allow` 与 session/permanent 授权；只允许绑定精确动作、代次与一次消费的 once 审批。`deny` 可全面禁用。既有 `connector.invoke` 策略或授权不能替代该审批；`ToolPolicy.mcp` 的服务器/工具白名单也是独立门槛，不能代替人类逐次批准。此规则本片落实为能力和授权 schema，Host 执行检查与错误路径将在后续实现片完成。
 
 | 方法组 | 语义 | 幂等/错误重点 |
 | --- | --- | --- |
@@ -57,6 +66,9 @@
 | permission.grant.list / revoke | v0.3 人类查询/撤销授权 | botId 可筛选；默认仅有效记录，最多 100；撤销已存在授权幂等 |
 | permission.approval.list / decide | v0.3 人类读取精确动作/批准或拒绝 | 列表默认 pending；决定必须匹配 approvalId、expectedActionDigest、代次、期限；scope 默认 once，session 可指定 maxUses/ttlMinutes；一次消费 |
 | permission.audit.list | v0.3 人类按 botId、afterSequence 查询追加式审计 | 默认最多 50，最高 100；模型不能写入/删除或调用控制方法 |
+| connector.mcp.discover | v0.5 受信桌面契约：`{id: UUID}` → `{tools: McpTool[], at: UTC ISO}` | 请求严格字段；最多 200 个工具。Host 后续负责启用状态、mcp-http 类型、端点与远端响应验证 |
+| connector.mcp.grants.get | v0.5 受信桌面契约：`{botId: UUID}` → `{servers: McpServerGrant[]}` | 请求严格字段；返回最多 50 个服务器，仅当前 bot 的授权 |
+| connector.mcp.grants.set | v0.5 受信桌面契约：`{botId: UUID, id: UUID, allowedTools: string[]}` → `{servers: McpServerGrant[]}` | 仅替换指定 bot 与连接器的工具白名单；最多 200 个唯一精确名称，空数组清空；不得扩大其他服务器权限。后续 Host 校验名称确实存在于该服务器的发现结果 |
 | memory.list / write / delete | v0.3 人类查看、写入和删除当前 bot 的记忆 | 只作用于 payload.botId；空查询返回最近记录，默认 20、最多 50；删除未命中返回 INVALID_INPUT，不暴露其他 bot 的记录 |
 | memory.retention.get / set | v0.3 保留策略（记忆 + 知识共用）：retentionDays / memoryMaxPerBot / knowledgeMaxPerBot | 0 = 不限制（默认）；损坏值按 0 读——损坏的设置只会让清理变保守；Host 启动与每次写入后执行清扫 |
 | knowledge.list / write / delete | v0.3 当前 bot 的独立知识文档（迁移 `0010-knowledge-docs`） | 正文上限 100000 字（独立于 4000 字记忆）；list 只回摘要（不回正文，1 MiB 消息上限安全）；删除 bot 域隔离同记忆 |

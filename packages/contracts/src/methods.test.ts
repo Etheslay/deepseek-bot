@@ -27,7 +27,7 @@ describe("method whitelist", () => {
   it("defines a contract for every whitelisted method and nothing else", () => {
     const contractMethods = Object.keys(METHOD_CONTRACTS).sort();
     expect(contractMethods).toEqual([...METHODS].sort());
-    expect(METHODS).toHaveLength(77);
+    expect(METHODS).toHaveLength(80);
   });
 
   it("covers every method group from CONTRACTS §3", () => {
@@ -60,18 +60,18 @@ describe("method whitelist", () => {
 });
 
 describe("protocol version", () => {
-  it("accepts v0.4 and previous v0.1–v0.3 senders", () => {
+  it("accepts v0.5 and previous v0.1–v0.4 senders", () => {
     expect(isProtocolVersionSupported("0.2")).toBe(true);
     expect(isProtocolVersionSupported("0.1")).toBe(true);
     expect(isProtocolVersionSupported("0.3")).toBe(true);
     expect(isProtocolVersionSupported("0.4")).toBe(true);
-    expect(isProtocolVersionSupported("0.5")).toBe(false);
+    expect(isProtocolVersionSupported("0.5")).toBe(true);
     expect(isProtocolVersionSupported("1.0")).toBe(false);
   });
 
   it("rejects unknown or higher protocol versions outright", () => {
     const result = RequestEnvelopeSchema.safeParse({
-      protocolVersion: "0.5",
+      protocolVersion: "0.6",
       requestId: REQUEST_ID,
       method: "bot.list",
       payload: {},

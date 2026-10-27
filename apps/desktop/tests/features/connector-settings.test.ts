@@ -15,6 +15,239 @@ beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 });
 
+const BOT2 = "44444444-4444-4444-8444-444444444444";
+const OTHER = "55555555-5555-4555-8555-555555555555";
+const AT = "2026-10-26T12:00:00.000Z";
+
+async function edit(container: ParentNode, label: string, value: string): Promise<void> {
+  const input = container.querySelector(`[aria-label="${label}"]`);
+  if (!(input instanceof HTMLInputElement || input instanceof HTMLSelectElement)) {
+    throw new Error(`missing control ${label}`);
+  }
+  await act(async () => {
+    const prototype =
+      input instanceof HTMLInputElement ? HTMLInputElement.prototype : HTMLSelectElement.prototype;
+    Object.getOwnPropertyDescriptor(prototype, "value")?.set?.call(input, value);
+    input.dispatchEvent(
+      new Event(input instanceof HTMLInputElement ? "input" : "change", { bubbles: true }),
+    );
+  });
+}
+
+async function mountMcp(override?: (method: string, payload: unknown) => unknown): Promise<{
+  container: HTMLDivElement;
+  calls: Array<{ method: string; payload: unknown }>;
+}> {
+  const calls: Array<{ method: string; payload: unknown }> = [];
+  window.deepseekBot = {
+    host: {
+      call: async (method: string, payload: unknown) => {
+        calls.push({ method, payload });
+        const result = override?.(method, payload);
+        if (result !== undefined) return result;
+        if (method === "connector.list")
+          return {
+            connectors: [ID, OTHER].map((id) => ({
+              id,
+              name: id === ID ? "MCP One" : "MCP Two",
+              kind: "mcp-http",
+              enabled: true,
+              credentialRef: null,
+              endpoint: "http://127.0.0.1:8080/mcp",
+              at: AT,
+              updatedAt: AT,
+            })),
+          };
+        if (method === "bot.list")
+          return {
+            bots: [ID, BOT2].map((id) => ({
+              id,
+              name: id === ID ? "Bot One" : "Bot Two",
+              revision: ID,
+              instructions: "",
+              modelProfileId: ID,
+              workspaceId: ID,
+              toolPolicyId: ID,
+              archivedAt: null,
+            })),
+          };
+        if (method === "connector.mcp.grants.get" || method === "connector.mcp.grants.set")
+          return { servers: [] };
+        if (method === "connector.mcp.discover")
+          return { tools: ["read", "write"].map((name) => ({ name, inputSchema: {} })), at: AT };
+        if (method === "connector.register") return {};
+        throw new Error(`unexpected ${method}`);
+      },
+    },
+  } as unknown as Window["deepseekBot"];
+  const container = document.createElement("div");
+  document.body.appendChild(container);
+  const root = createRoot(container);
+  roots.push(root);
+  await act(async () => root.render(createElement(ConnectorSettings)));
+  return { container, calls };
+}
+
+describe("MCP settings", () => {
+  it("registers MCP without a leftover SD credential", async () => {
+    const { container, calls } = await mountMcp();
+    await edit(container, "凭据引用", REF);
+    await edit(container, "连接器类型", "mcp-http");
+    expect(container.querySelector('[aria-label="凭据引用"]')).toBeNull();
+    await edit(container, "连接器名称", "MCP");
+    await edit(container, "连接器端点", "http://127.0.0.1:8080/mcp");
+    await act(async () => click(container, "注册"));
+    expect(calls).toContainEqual({
+      method: "connector.register",
+      payload: {
+        name: "MCP",
+        kind: "mcp-http",
+        endpoint: "http://127.0.0.1:8080/mcp",
+      },
+    });
+  });
+
+  it("discovers only on request and saves exactly one checked tool per bot", async () => {
+    const { container, calls } = await mountMcp();
+    expect(calls.some(({ method }) => method === "connector.mcp.discover")).toBe(false);
+    await act(async () => click(container, "发现工具"));
+    expect(container.querySelectorAll('input[type="checkbox"]:checked')).toHaveLength(0);
+    await act(async () =>
+      (container.querySelector('[aria-label="允许工具 read"]') as HTMLInputElement).click(),
+    );
+    await act(async () => click(container, "保存工具白名单"));
+    expect(calls).toContainEqual({
+      method: "connector.mcp.grants.set",
+      payload: { botId: ID, id: ID, allowedTools: ["read"] },
+    });
+    await edit(container, "MCP 机器人", BOT2);
+    expect(container.querySelectorAll('input[type="checkbox"]:checked')).toHaveLength(0);
+    await act(async () => click(container, "清空工具白名单"));
+    expect(calls).toContainEqual({
+      method: "connector.mcp.grants.set",
+      payload: { botId: BOT2, id: ID, allowedTools: [] },
+    });
+    expect(container.textContent).toContain("每次 MCP 调用都需要单次审批");
+  });
+
+  it("keeps unavailable saved tools until explicitly removed", async () => {
+    const { container, calls } = await mountMcp((method) =>
+      method === "connector.mcp.grants.get"
+        ? { servers: [{ serverId: ID, allowedTools: ["old"] }] }
+        : undefined,
+    );
+    await act(async () => click(container, "发现工具"));
+    expect(container.textContent).toContain("未在本次发现中提供");
+    await act(async () => click(container, "保存工具白名单"));
+    expect(calls).toContainEqual({
+      method: "connector.mcp.grants.set",
+      payload: { botId: ID, id: ID, allowedTools: ["old"] },
+    });
+  });
+
+  it("reports discovery and save errors without granting anything", async () => {
+    const { container } = await mountMcp((method) => {
+      if (method === "connector.mcp.discover" || method === "connector.mcp.grants.set")
+        return Promise.reject(new Error("disconnected"));
+      return undefined;
+    });
+    await act(async () => click(container, "发现工具"));
+    expect(container.textContent).toContain("工具发现失败");
+    await act(async () => click(container, "清空工具白名单"));
+    expect(container.textContent).toContain("工具白名单保存失败");
+  });
+
+  it("ignores discovery results after switching servers", async () => {
+    let resolve!: (value: unknown) => void;
+    const pending = new Promise((done) => {
+      resolve = done;
+    });
+    const { container } = await mountMcp((method) =>
+      method === "connector.mcp.discover" ? pending : undefined,
+    );
+    await act(async () => click(container, "发现工具"));
+    await edit(container, "MCP 服务", OTHER);
+    await act(async () => resolve({ tools: [{ name: "stale", inputSchema: {} }], at: AT }));
+    expect(container.textContent).not.toContain("stale");
+  });
+
+  it("loads each bot's saved grants and ignores a late grant response", async () => {
+    let resolve!: (value: unknown) => void;
+    const pending = new Promise((done) => {
+      resolve = done;
+    });
+    let first = true;
+    const { container } = await mountMcp((method, payload) => {
+      if (method !== "connector.mcp.grants.get") return undefined;
+      if ((payload as { botId: string }).botId === ID && first) {
+        first = false;
+        return pending;
+      }
+      return {
+        servers: [
+          {
+            serverId: ID,
+            allowedTools: [(payload as { botId: string }).botId === ID ? "read" : "write"],
+          },
+        ],
+      };
+    });
+    await edit(container, "MCP 机器人", BOT2);
+    await act(async () => resolve({ servers: [{ serverId: ID, allowedTools: ["stale"] }] }));
+    expect(container.textContent).toContain("write");
+    expect(container.textContent).not.toContain("stale");
+    await edit(container, "MCP 机器人", ID);
+    expect(
+      (container.querySelector('[aria-label="允许工具 read"]') as HTMLInputElement).checked,
+    ).toBe(true);
+    expect(container.querySelector('[aria-label="允许工具 write"]')).toBeNull();
+  });
+
+  it("reports empty tools and prevents discovery of disabled services", async () => {
+    const { container, calls } = await mountMcp((method) => {
+      if (method === "connector.list")
+        return {
+          connectors: [
+            {
+              id: ID,
+              name: "Stopped",
+              kind: "mcp-http",
+              enabled: false,
+              credentialRef: null,
+              endpoint: "http://127.0.0.1:8080/mcp",
+              at: AT,
+              updatedAt: AT,
+            },
+          ],
+        };
+      return undefined;
+    });
+    const discover = [...container.querySelectorAll("button")].find(
+      (button) => button.textContent === "发现工具",
+    );
+    expect(discover?.disabled).toBe(true);
+    expect(container.textContent).toContain("服务已停用");
+    expect(calls.some(({ method }) => method === "connector.mcp.discover")).toBe(false);
+    const enabled = await mountMcp((method) =>
+      method === "connector.mcp.discover" ? { tools: [], at: AT } : undefined,
+    );
+    await act(async () => click(enabled.container, "发现工具"));
+    expect(enabled.container.textContent).toContain("服务未返回可用工具");
+  });
+
+  it("disables grant writes when existing authorization cannot be read", async () => {
+    const { container, calls } = await mountMcp((method) =>
+      method === "connector.mcp.grants.get" ? Promise.reject(new Error("read failed")) : undefined,
+    );
+    expect(container.textContent).toContain("工具白名单读取失败");
+    const save = [...container.querySelectorAll("button")].find(
+      (button) => button.textContent === "保存工具白名单",
+    );
+    expect(save?.disabled).toBe(true);
+    expect(calls.some(({ method }) => method === "connector.mcp.grants.set")).toBe(false);
+  });
+});
+
 afterEach(() => {
   for (const root of roots.splice(0)) {
     act(() => {

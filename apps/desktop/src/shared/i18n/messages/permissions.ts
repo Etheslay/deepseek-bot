@@ -23,6 +23,7 @@ export const permissionsMessages = {
   "permissions.issuedGrants": { zh: "已发放授权", en: "Issued grants" },
   "permissions.loadFailed": { zh: "权限数据读取失败", en: "Failed to load permission data" },
   "permissions.loading": { zh: "正在读取权限…", en: "Loading permissions…" },
+  "permissions.mcpCall": { zh: "调用 MCP 工具", en: "Call MCP tools" },
   "permissions.memoryRead": { zh: "检索记忆", en: "Search memory" },
   "permissions.memoryWrite": { zh: "写入记忆", en: "Write memory" },
   "permissions.modeAllow": { zh: "始终允许", en: "Always allow" },

@@ -170,6 +170,9 @@ function BotPermissionChatCards(props: {
     <div className="permission-chat-cards">
       {approvals?.map((approval) => {
         const choices = approvalChoices(approval);
+        const preview = approval.tool === "mcp_call"
+          ? { connectorName: approval.params.connectorName, endpoint: approval.params.endpoint, toolName: approval.params.toolName, arguments: approval.params.arguments }
+          : approval.params;
         return (
           <div
             key={approval.id}
@@ -184,7 +187,7 @@ function BotPermissionChatCards(props: {
             </p>
             <p className="choice-answered">{t("permissions.pendingParamsLabel")}</p>
             <pre className="permission-params" aria-label={t("permissions.pendingParamsAria")}>
-              {JSON.stringify(approval.params, null, 2)}
+              {JSON.stringify(preview, null, 2)}
             </pre>
             <p className="choice-answered">{t("permissions.onceGrant", [approval.expiresAt])}</p>
             {choices.includes("session") ? (

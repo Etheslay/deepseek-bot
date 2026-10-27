@@ -1,10 +1,8 @@
 /**
  * Local connector catalog. Register, list, enable and disable stay on this
- * machine. Nothing here opens a session or calls the connector; the
- * endpoint (D19) is the loopback address of the local service and is only
- * stored, never probed.
+ * machine. MCP discovery contacts a service only after an explicit click.
  */
-import { useCallback, useEffect, useState, type JSX } from "react";
+import { useCallback, useEffect, useRef, useState, type JSX } from "react";
 import { METHOD_CONTRACTS } from "@deepseek-bot/contracts";
 import { type Notice, noticeText, t, useLanguage } from "../../i18n.js";
 
@@ -14,11 +12,13 @@ type ConnectorRecord = {
   enabled: boolean;
   credentialRef: string | null;
   endpoint: string | null;
+  kind?: "sd-webui" | "mcp-http" | undefined;
 };
 
 export function ConnectorSettings(): JSX.Element {
   const [connectors, setConnectors] = useState<ConnectorRecord[] | null>(null);
   const [name, setName] = useState("");
+  const [kind, setKind] = useState<"sd-webui" | "mcp-http">("sd-webui");
   const [credentialRef, setCredentialRef] = useState("");
   const [endpoint, setEndpoint] = useState("");
   useLanguage();
@@ -51,7 +51,8 @@ export function ConnectorSettings(): JSX.Element {
     try {
       await window.deepseekBot.host.call("connector.register", {
         name: trimmed,
-        ...(ref.length === 0 ? {} : { credentialRef: ref }),
+        ...(kind === "mcp-http" ? { kind } : {}),
+        ...(kind === "mcp-http" || ref.length === 0 ? {} : { credentialRef: ref }),
         ...(url.length === 0 ? {} : { endpoint: url }),
       });
       setName("");
@@ -106,24 +107,39 @@ export function ConnectorSettings(): JSX.Element {
         <div className="settings-row">
           <span>{t("runs.name")}</span>
           <span className="key-input-wrap">
+            <select
+              aria-label={t("connectors.kindLabel")}
+              className="settings-select"
+              value={kind}
+              onChange={(event) => setKind(event.target.value as typeof kind)}
+            >
+              <option value="sd-webui">Stable Diffusion WebUI</option>
+              <option value="mcp-http">MCP HTTP</option>
+            </select>
             <input
               aria-label={t("connectors.name")}
               className="settings-select key-input"
               value={name}
               onChange={(event) => setName(event.target.value)}
             />
-            <input
-              aria-label={t("connectors.credentialRef")}
-              className="settings-select key-input"
-              value={credentialRef}
-              placeholder={t("connectors.credentialRefPlaceholder")}
-              onChange={(event) => setCredentialRef(event.target.value)}
-            />
+            {kind === "sd-webui" ? (
+              <input
+                aria-label={t("connectors.credentialRef")}
+                className="settings-select key-input"
+                value={credentialRef}
+                placeholder={t("connectors.credentialRefPlaceholder")}
+                onChange={(event) => setCredentialRef(event.target.value)}
+              />
+            ) : null}
             <input
               aria-label={t("connectors.endpoint")}
               className="settings-select key-input"
               value={endpoint}
-              placeholder={t("connectors.endpointPlaceholder")}
+              placeholder={
+                kind === "mcp-http"
+                  ? t("connectors.endpointPlaceholderMcp")
+                  : t("connectors.endpointPlaceholder")
+              }
               onChange={(event) => setEndpoint(event.target.value)}
             />
             <button
@@ -146,6 +162,11 @@ export function ConnectorSettings(): JSX.Element {
             onSaveEndpoint={(value) => void saveEndpoint(connector.id, value)}
           />
         ))}
+        {(connectors ?? []).some((connector) => connector.kind === "mcp-http") ? (
+          <McpSettings
+            connectors={(connectors ?? []).filter((connector) => connector.kind === "mcp-http")}
+          />
+        ) : null}
       </div>
     </>
   );
@@ -172,7 +193,9 @@ function ConnectorRow({
           aria-label={t("connectors.endpointAria", [connector.name])}
           className="settings-select key-input"
           value={draft}
-          placeholder="http://127.0.0.1:7860"
+          placeholder={
+            connector.kind === "mcp-http" ? "http://127.0.0.1:8080/mcp" : "http://127.0.0.1:7860"
+          }
           onChange={(event) => setDraft(event.target.value)}
         />
         <button
@@ -187,6 +210,217 @@ function ConnectorRow({
           {connector.enabled ? t("automation.disable") : t("automation.enable")}
         </button>
       </span>
+    </div>
+  );
+}
+
+function McpSettings({ connectors }: { connectors: ConnectorRecord[] }): JSX.Element {
+  const [bots, setBots] = useState<Array<{ id: string; name: string }> | null>(null);
+  const [botId, setBotId] = useState("");
+  const [serverId, setServerId] = useState(connectors[0]?.id ?? "");
+  const [error, setError] = useState(false);
+  useEffect(() => {
+    let active = true;
+    void window.deepseekBot.host
+      .call("bot.list", {})
+      .then((response) => {
+        const parsed = METHOD_CONTRACTS["bot.list"].response.parse(response);
+        if (!active) return;
+        const available = parsed.bots.filter((bot) => bot.archivedAt === null);
+        setBots(available);
+        setBotId(available[0]?.id ?? "");
+      })
+      .catch(() => {
+        if (active) setError(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+  const connector = connectors.find((item) => item.id === serverId) ?? connectors[0];
+  return (
+    <section aria-label={t("connectors.mcpToolGrants")}>
+      <p>{t("connectors.mcpGrantHint")}</p>
+      <label>
+        {t("shell.bot")}{" "}
+        <select
+          className="settings-select"
+          aria-label={t("connectors.mcpBots")}
+          value={botId}
+          onChange={(event) => setBotId(event.target.value)}
+        >
+          {(bots ?? []).map((bot) => (
+            <option key={bot.id} value={bot.id}>
+              {bot.name}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label>
+        {t("connectors.servicePicker")}
+        <select
+          className="settings-select"
+          aria-label={t("connectors.mcpServices")}
+          value={connector?.id ?? ""}
+          onChange={(event) => setServerId(event.target.value)}
+        >
+          {connectors.map((item) => (
+            <option key={item.id} value={item.id}>
+              {item.name}
+            </option>
+          ))}
+        </select>
+      </label>
+      {error ? <p role="alert">{t("connectors.botListFailedForGrants")}</p> : null}
+      {bots?.length === 0 ? <p role="status">{t("connectors.noBotsToGrant")}</p> : null}
+      {connector && botId ? (
+        <McpTools
+          key={`${botId}:${connector.id}:${connector.enabled}:${connector.endpoint}`}
+          botId={botId}
+          connector={connector}
+        />
+      ) : null}
+    </section>
+  );
+}
+
+function McpTools({
+  botId,
+  connector,
+}: {
+  botId: string;
+  connector: ConnectorRecord;
+}): JSX.Element {
+  const alive = useRef(true);
+  const [allowed, setAllowed] = useState<string[]>([]);
+  const [tools, setTools] = useState<Array<{
+    name: string;
+    description?: string | undefined;
+  }> | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [discovering, setDiscovering] = useState(false);
+  const [saving, setSaving] = useState(false);
+  useLanguage();
+  const [notice, setNotice] = useState<Notice | null>(null);
+  useEffect(() => {
+    alive.current = true;
+    void window.deepseekBot.host
+      .call("connector.mcp.grants.get", { botId })
+      .then((response) => {
+        const parsed = METHOD_CONTRACTS["connector.mcp.grants.get"].response.parse(response);
+        if (!alive.current) return;
+        setAllowed(
+          parsed.servers.find((server) => server.serverId === connector.id)?.allowedTools ?? [],
+        );
+        setLoading(false);
+      })
+      .catch(() => {
+        if (alive.current) setNotice({ key: "connectors.allowlistLoadFailed" });
+      });
+    return () => {
+      alive.current = false;
+    };
+  }, [botId, connector.id]);
+
+  async function discover(): Promise<void> {
+    if (!connector.enabled || !connector.endpoint || discovering) return;
+    setDiscovering(true);
+    setNotice(null);
+    try {
+      const response = await window.deepseekBot.host.call("connector.mcp.discover", {
+        id: connector.id,
+      });
+      const parsed = METHOD_CONTRACTS["connector.mcp.discover"].response.parse(response);
+      if (!alive.current) return;
+      setTools(parsed.tools);
+      if (parsed.tools.length === 0) setNotice({ key: "connectors.noToolsReturned" });
+    } catch {
+      if (alive.current) setNotice({ key: "connectors.discoverFailed" });
+    } finally {
+      if (alive.current) setDiscovering(false);
+    }
+  }
+
+  async function save(names: string[]): Promise<void> {
+    if (loading || saving) return;
+    setSaving(true);
+    try {
+      const response = await window.deepseekBot.host.call("connector.mcp.grants.set", {
+        botId,
+        id: connector.id,
+        allowedTools: names,
+      });
+      const parsed = METHOD_CONTRACTS["connector.mcp.grants.set"].response.parse(response);
+      if (!alive.current) return;
+      setAllowed(
+        parsed.servers.find((server) => server.serverId === connector.id)?.allowedTools ?? [],
+      );
+      setNotice(
+        names.length === 0 ? { key: "connectors.allowlistCleared" } : { key: "connectors.allowlistSaved" },
+      );
+    } catch {
+      if (alive.current) setNotice({ key: "connectors.allowlistSaveFailed" });
+    } finally {
+      if (alive.current) setSaving(false);
+    }
+  }
+
+  const unavailable = allowed.filter((name) => !tools?.some((tool) => tool.name === name));
+  const choices = [
+    ...(tools ?? []),
+    ...unavailable.map((name) => ({ name, description: t("connectors.toolNotDiscovered") })),
+  ];
+  return (
+    <div className="settings-card">
+      {!connector.enabled ? <p role="status">{t("connectors.serviceDisabled")}</p> : null}
+      {!connector.endpoint ? <p role="status">{t("connectors.serviceNoEndpoint")}</p> : null}
+      <button
+        className="pill-btn"
+        type="button"
+        disabled={!connector.enabled || !connector.endpoint || discovering}
+        onClick={() => void discover()}
+      >
+        {discovering ? t("connectors.discoveringTools") : t("connectors.discoverTools")}
+      </button>
+      {loading ? <p role="status">{t("connectors.loadingAllowlist")}</p> : null}
+      <fieldset disabled={loading || saving}>
+        <legend>{t("connectors.allowlistLegend")}</legend>
+        {choices.map((tool) => (
+          <label className="settings-row" key={tool.name}>
+            <input
+              type="checkbox"
+              aria-label={t("connectors.allowToolAria", [tool.name])}
+              checked={allowed.includes(tool.name)}
+              onChange={(event) =>
+                setAllowed((current) =>
+                  event.target.checked
+                    ? [...current, tool.name]
+                    : current.filter((name) => name !== tool.name),
+                )
+              }
+            />
+            <span>{tool.name}</span>
+            {tool.description ? <span>{tool.description}</span> : null}
+          </label>
+        ))}
+      </fieldset>
+      <button
+        className="pill-btn"
+        type="button"
+        disabled={loading || saving}
+        onClick={() => void save(allowed)}
+      >
+        {t("connectors.saveAllowlist")}
+      </button>
+      <button
+        className="pill-btn"
+        type="button"
+        disabled={loading || saving}
+        onClick={() => void save([])}
+      >
+        {t("connectors.clearAllowlist")}
+      </button>
+      {notice !== null ? <p role="status">{noticeText(notice)}</p> : null}
     </div>
   );
 }

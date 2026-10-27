@@ -28,6 +28,7 @@ const CAPABILITY_LABEL_KEYS = {
   "exec.shell": "permissions.executeLocalCommand",
   "screen.capture": "permissions.screenAndWindowAwareness",
   "connector.invoke": "permissions.invokeConnector",
+  "mcp.call": "permissions.mcpCall",
 } as const satisfies Record<CapabilityId, MessageKey>;
 
 export function capabilityLabel(capability: CapabilityId): string {

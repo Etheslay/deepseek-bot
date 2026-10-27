@@ -122,3 +122,38 @@ describe("connector endpoint (D19)", () => {
     }
   });
 });
+
+it("keeps connector kinds distinct and validates MCP transport endpoints", () => {
+  const { db, cleanup } = tempDb();
+  try {
+    expect(registerConnector(db, { name: "legacy" })).toHaveProperty("kind", "sd-webui");
+    const mcp = registerConnector(db, {
+      name: "MCP",
+      kind: "mcp-http",
+      endpoint: "http://localhost:8000/mcp",
+    });
+    expect(mcp).toMatchObject({ kind: "mcp-http", endpoint: "http://127.0.0.1:8000/mcp" });
+    expect(
+      setConnectorEndpoint(db, { id: mcp.id, endpoint: "https://[::1]:8000/tools" }).endpoint,
+    ).toBe("https://[::1]:8000/tools");
+    for (const endpoint of [
+      "http://example.com/mcp",
+      "file:///mcp",
+      "http://u:p@127.0.0.1/mcp",
+      "http://@127.0.0.1/mcp",
+      "http://127.0.0.1/mcp?q=1",
+      "http://127.0.0.1/mcp#x",
+    ]) {
+      expect(() => registerConnector(db, { name: "bad", kind: "mcp-http", endpoint })).toThrow();
+    }
+    expect(() =>
+      registerConnector(db, { name: "auth", kind: "mcp-http", credentialRef: CREDENTIAL_REF }),
+    ).toThrow(/credential/);
+    expect(() =>
+      db.raw.prepare("UPDATE connectors SET kind='unknown' WHERE id=?").run(mcp.id),
+    ).toThrow();
+  } finally {
+    db.close();
+    cleanup();
+  }
+});
