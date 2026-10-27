@@ -3382,9 +3382,9 @@ function BotsPlaceholder({
                             key={key}
                             type="button"
                             className="stack-avatar"
-                            title={t("shell.openSessionWith", [target?.bot.name ?? "?"])}
-                            aria-label={t("shell.openSessionWith", [target?.bot.name ?? "?"])}
-                            onClick={() => onOpenBot(key)}
+                            title={t("shell.viewExchangesWith", [target?.bot.name ?? "?"])}
+                            aria-label={t("shell.viewExchangesWith", [target?.bot.name ?? "?"])}
+                            onClick={() => setDetailOther(key)}
                           >
                             <AvatarView
                               avatar={target?.avatar ?? me.avatar}
@@ -3577,15 +3577,6 @@ function BotsPlaceholder({
       />
       <div className="composer">
         <div className="composer-menu-wrap">
-          <button
-            type="button"
-            className="composer-plus composer-skill"
-            aria-label={t("skills.menuLabel")}
-            title={t("skills.dialogTitle")}
-            onClick={() => setSkillMenuOpen((v) => !v)}
-          >
-            ⚡
-          </button>
           {skillMenuOpen && (
             <>
               <div className="menu-overlay" onClick={() => setSkillMenuOpen(false)} />
@@ -3653,6 +3644,18 @@ function BotsPlaceholder({
                 >
                   <MenuIcon d="M21 12.5 12.5 21a5 5 0 0 1-7-7l8-8a3.5 3.5 0 0 1 5 5l-8 8a1.8 1.8 0 0 1-2.5-2.5L15 4.5" />
                   {t("shell.addAttachment")}
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="menu-item"
+                  onClick={() => {
+                    setPlusOpen(false);
+                    setSkillMenuOpen(true);
+                  }}
+                >
+                  <MenuIcon d="M13 2 4.5 12.5 H11 L9.5 21 L19 9.5 H12 Z" />
+                  {t("skills.menuLabel")}
                 </button>
                 <button
                   type="button"
