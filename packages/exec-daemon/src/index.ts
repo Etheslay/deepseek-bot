@@ -1,2 +1,8 @@
-/** D21 contract/dependency stage; the backend is delivered by the implementation PR. */
-export {};
+export {
+  createScreenBackend,
+  type CaptureResult,
+  type ScreenBackend,
+  type ScreenBackendOptions,
+} from "./backend.js";
+export { ScreenBackendError, type ScreenBackendCode } from "./errors.js";
+export type { ListedWindow, WindowIdentity } from "./windows.js";

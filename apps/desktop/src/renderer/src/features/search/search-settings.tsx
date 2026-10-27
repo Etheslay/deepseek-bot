@@ -3,11 +3,13 @@
  */
 import { useCallback, useEffect, useState, type JSX } from "react";
 import { METHOD_CONTRACTS } from "@deepseek-bot/contracts";
+import { type Notice, noticeText, t, useLanguage } from "../../i18n.js";
 
 export function SearchSettings(): JSX.Element {
   const [endpoint, setEndpoint] = useState("");
   const [saved, setSaved] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  useLanguage();
+  const [notice, setNotice] = useState<Notice | null>(null);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async (): Promise<void> => {
@@ -15,13 +17,13 @@ export function SearchSettings(): JSX.Element {
     const parsed = METHOD_CONTRACTS["search.config.get"].response.parse(response);
     setSaved(parsed.endpoint);
     setEndpoint(parsed.endpoint ?? "");
-    setNotice((current) => (current === "搜索配置读取失败" ? null : current));
+    setNotice((current) => (current?.key === "search.configReadFailed" ? null : current));
   }, []);
 
   useEffect(() => {
     let active = true;
     void load().catch(() => {
-      if (active) setNotice("搜索配置读取失败");
+      if (active) setNotice({ key: "search.configReadFailed" });
     });
     return () => {
       active = false;
@@ -36,10 +38,10 @@ export function SearchSettings(): JSX.Element {
         const parsed = METHOD_CONTRACTS["search.config.set"].response.parse(response);
         setSaved(parsed.endpoint);
         setEndpoint(parsed.endpoint ?? "");
-        setNotice(parsed.endpoint === null ? "已清除搜索地址" : "已保存搜索地址");
+        setNotice(parsed.endpoint === null ? { key: "search.endpointCleared" } : { key: "search.endpointSaved" });
       })
       .catch(() => {
-        setNotice("搜索地址保存失败");
+        setNotice({ key: "search.endpointSaveFailed" });
       })
       .finally(() => {
         setBusy(false);
@@ -48,16 +50,16 @@ export function SearchSettings(): JSX.Element {
 
   return (
     <>
-      <div className="settings-section-title">网络搜索（SearXNG，只保存地址）</div>
+      <div className="settings-section-title">{t("search.sectionTitle")}</div>
       <div className="settings-card">
         <div className="settings-row">
-          <span>SearXNG 地址</span>
+          <span>{t("search.endpointLabel")}</span>
           <span className="key-input-wrap">
             <input
-              aria-label="SearXNG 地址"
+              aria-label={t("search.endpointLabel")}
               className="settings-select key-input"
               value={endpoint}
-              placeholder={saved ?? "未配置"}
+              placeholder={saved ?? t("shell.notConfigured")}
               onChange={(event) => setEndpoint(event.target.value)}
             />
             <button
@@ -66,14 +68,14 @@ export function SearchSettings(): JSX.Element {
               disabled={busy || endpoint.trim().length === 0}
               onClick={() => save(endpoint.trim())}
             >
-              保存
+              {t("shell.save")}
             </button>
             <button type="button" className="pill-btn" disabled={busy || saved === null} onClick={() => save(null)}>
-              清除
+              {t("search.clear")}
             </button>
           </span>
         </div>
-        {notice !== null ? <div role="status">{notice}</div> : null}
+        {notice !== null ? <div role="status">{noticeText(notice)}</div> : null}
       </div>
     </>
   );

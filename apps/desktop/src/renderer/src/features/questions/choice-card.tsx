@@ -10,6 +10,7 @@
  * focus ring.
  */
 import type { JSX } from "react";
+import { t } from "../../i18n.js";
 
 export type ChoiceOption = { id: string; label: string };
 
@@ -29,7 +30,7 @@ export type ChoiceCardProps = {
   onChoose?: (option: ChoiceOption) => void;
 };
 
-const EXPIRED_NOTE = "该问题已过期或已取消，可直接输入补充。";
+const EXPIRED_NOTE = t("questions.expiredHint");
 
 export function ChoiceCard({
   question,

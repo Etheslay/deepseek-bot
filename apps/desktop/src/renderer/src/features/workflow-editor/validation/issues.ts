@@ -8,6 +8,7 @@
 import type { Bot, WorkflowDraft, WorkflowIssue } from "@deepseek-bot/contracts";
 import { WorkflowDraftSchema, validateWorkflowDraft } from "@deepseek-bot/contracts";
 import { schemaIssuesToWorkflowIssues } from "../workflow-service.js";
+import { t } from "../../../i18n.js";
 
 /**
  * Editor-level rules on top of schema + graph validation:
@@ -23,21 +24,21 @@ export function editorRuleIssues(draft: WorkflowDraft, bots: readonly Bot[]): Wo
       if (node.botId === undefined) {
         issues.push({
           code: "INVALID_INPUT",
-          message: `节点 ${node.id} 尚未选择机器人`,
+          message: t("workflow.nodeWithoutBot", [node.id]),
           nodeId: node.id,
           field: "botId",
         });
       } else if (!bot) {
         issues.push({
           code: "INVALID_INPUT",
-          message: `节点 ${node.id} 引用了不存在的机器人 ${node.botId}`,
+          message: t("workflow.unknownBot", [node.id, node.botId]),
           nodeId: node.id,
           field: "botId",
         });
       } else if (bot.archivedAt !== null) {
         issues.push({
           code: "INVALID_INPUT",
-          message: `机器人「${bot.name}」已归档，不能用于工作流`,
+          message: t("workflow.botArchived", [bot.name]),
           nodeId: node.id,
           field: "botId",
         });
@@ -48,7 +49,7 @@ export function editorRuleIssues(draft: WorkflowDraft, bots: readonly Bot[]): Wo
       if (binding.inputKey.length > 0 && seen.has(binding.inputKey)) {
         issues.push({
           code: "INVALID_INPUT",
-          message: `节点 ${node.id} 的输入绑定 ${binding.inputKey} 重复`,
+          message: t("workflow.duplicateBinding", [node.id, binding.inputKey]),
           nodeId: node.id,
           field: `inputBindings.${binding.inputKey}`,
         });

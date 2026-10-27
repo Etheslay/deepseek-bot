@@ -7,6 +7,7 @@ import {
   toneKeyFor,
 } from "./grok-ball-model.js";
 import { Avatar as AvatarView } from "./avatar.js";
+import { t } from "../../i18n.js";
 
 export function AvatarPicker(props: {
   value: Avatar;
@@ -23,7 +24,7 @@ export function AvatarPicker(props: {
 
   return (
     <div className="avatar-picker">
-      <div className="shape-grid" role="radiogroup" aria-label="形状">
+      <div className="shape-grid" role="radiogroup" aria-label={t("avatars.shape")}>
         {GROK_BALL_SHAPE_IDS.map((id) => (
           <button
             key={id}
@@ -40,7 +41,7 @@ export function AvatarPicker(props: {
           </button>
         ))}
       </div>
-      <div className="color-grid" role="radiogroup" aria-label="颜色">
+      <div className="color-grid" role="radiogroup" aria-label={t("avatars.color")}>
         <button
           type="button"
           role="radio"
@@ -49,8 +50,8 @@ export function AvatarPicker(props: {
             "color-btn mono-color" + (props.value.kind === "mono" ? " selected" : "")
           }
           style={{ background: "var(--avatar-mono-bg)" }}
-          aria-label={props.theme === "light" ? "黑色（跟随主题）" : "白色（跟随主题）"}
-          title={props.theme === "light" ? "黑色（跟随主题）" : "白色（跟随主题）"}
+          aria-label={props.theme === "light" ? t("avatars.blackMono") : t("avatars.whiteMono")}
+          title={props.theme === "light" ? t("avatars.blackMono") : t("avatars.whiteMono")}
           onClick={() => props.onChange({ kind: "mono" })}
         />
         {GROK_BALL_COLORS.map((c) => {
@@ -70,7 +71,7 @@ export function AvatarPicker(props: {
               data-tone={tone ?? undefined}
               style={tone === null ? { background: c } : undefined}
               onClick={() => pickGrok(shape, c)}
-              aria-label={`颜色 ${c}`}
+              aria-label={t("avatars.colorValue", [c])}
             />
           );
         })}

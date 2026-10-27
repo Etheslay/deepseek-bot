@@ -3,6 +3,8 @@
  * searchable index from UI state. The host-side retrieval replaces the
  * index source later; filtering semantics stay.
  */
+import { t } from "../../i18n.js";
+
 export type SearchItem = {
   id: string;
   kind: "bot" | "message" | "action";
@@ -52,8 +54,14 @@ export function filterSearch(items: SearchItem[], query: string): SearchItem[] {
   );
 }
 
-export const SEARCH_KIND_LABELS: Record<SearchItem["kind"], string> = {
-  bot: "Bot",
-  message: "消息",
-  action: "快速操作",
-};
+/**
+ * Kind chips are rendered copy, so the labels are read from the live catalogue
+ * rather than frozen in a module constant (D22).
+ */
+export function searchKindLabels(): Record<SearchItem["kind"], string> {
+  return {
+    bot: "Bot",
+    message: t("search.kindMessage"),
+    action: t("search.kindAction"),
+  };
+}

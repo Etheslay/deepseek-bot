@@ -11,6 +11,8 @@
  * sits in an `aria-live` region and the seconds tick every second, so folding
  * them into the same node would make screen readers repeat the line.
  */
+
+import { t, type MessageKey } from "../../i18n.js";
 export type ThinkingStatus = {
   readonly text: string;
   readonly hint: string | null;
@@ -30,7 +32,7 @@ export const MAX_SUMMARY_CHARS = 24;
 /** Seconds become visible only once the wait is long enough to feel stuck. */
 export const ELAPSED_HINT_AFTER_MS = 10_000;
 
-type Intent = { readonly pattern: RegExp; readonly copy: string };
+type Intent = { readonly pattern: RegExp; readonly copyKey: MessageKey };
 
 /**
  * Ordered: the first match wins. Review comes before the search family because
@@ -38,13 +40,13 @@ type Intent = { readonly pattern: RegExp; readonly copy: string };
  * as @设计师 cannot fire the "设计" intent.
  */
 const INTENTS: readonly Intent[] = [
-  { pattern: /工作流|workflow|编排/i, copy: "正在起草工作流" },
-  { pattern: /记忆|笔记|知识/i, copy: "正在翻记忆" },
-  { pattern: /代码|实现|重构|测试|函数|bug|报错/i, copy: "正在读代码" },
-  { pattern: /评审|检查|审阅|复查/i, copy: "正在评审" },
-  { pattern: /搜索|搜一下|查询|资料|联网|上网/i, copy: "正在查资料" },
-  { pattern: /计划|方案|设计|架构/i, copy: "正在拟定方案" },
-  { pattern: /文件|文档|整理|总结|周报|纪要/i, copy: "正在整理内容" },
+  { pattern: /工作流|workflow|编排/i, copyKey: "chat.intentWorkflow" },
+  { pattern: /记忆|笔记|知识/i, copyKey: "chat.intentMemory" },
+  { pattern: /代码|实现|重构|测试|函数|bug|报错/i, copyKey: "chat.intentCode" },
+  { pattern: /评审|检查|审阅|复查/i, copyKey: "chat.intentReview" },
+  { pattern: /搜索|搜一下|查询|资料|联网|上网/i, copyKey: "chat.intentResearch" },
+  { pattern: /计划|方案|设计|架构/i, copyKey: "chat.intentPlan" },
+  { pattern: /文件|文档|整理|总结|周报|纪要/i, copyKey: "chat.intentDocs" },
 ];
 
 /** Mentions stripped and whitespace collapsed, before the length cap. */
@@ -87,10 +89,10 @@ export function thinkingStatus(
   const cleaned = cleanRequest(input.request);
   const intent = INTENTS.find((entry) => entry.pattern.test(cleaned));
   if (intent) {
-    return { text: intent.copy, hint };
+    return { text: t(intent.copyKey), hint };
   }
   const summary = capSummary(cleaned);
   return summary.length === 0
-    ? { text: "正在处理…", hint }
-    : { text: `正在处理「${summary}」`, hint };
+    ? { text: t("chat.thinkingBusy"), hint }
+    : { text: t("chat.thinkingBusyWith", [summary]), hint };
 }

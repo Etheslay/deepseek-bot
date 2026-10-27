@@ -47,5 +47,26 @@ export default tseslint.config(
       },
     },
   },
+  {
+    files: ["packages/exec-daemon/assets/**/*.cjs", "packages/exec-daemon/scripts/**/*.mjs"],
+    languageOptions: {
+      globals: {
+        Buffer: "readonly",
+        URL: "readonly",
+        WebAssembly: "readonly",
+        __dirname: "readonly",
+        __filename: "readonly",
+        console: "readonly",
+        globalThis: "readonly",
+        process: "readonly",
+        require: "readonly",
+      },
+    },
+  },
+  {
+    files: ["packages/exec-daemon/assets/**/*.cjs"],
+    rules: {
+      "@typescript-eslint/no-require-imports": "off",
+    },
+  },
 );
-

@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
 import {
   ELAPSED_HINT_AFTER_MS,
@@ -6,6 +7,12 @@ import {
   summarizeRequest,
   thinkingStatus,
 } from "../../src/renderer/src/features/chat/thinking-status.js";
+
+import { setLanguagePreference } from "../../src/renderer/src/i18n.js";
+
+/* The assertions below quote Chinese copy; pin the language instead of inheriting
+   the machine locale (D22 routes this copy through the catalogue). */
+setLanguagePreference("zh");
 
 const noHint = (request: string): string | null =>
   thinkingStatus({ request, elapsedMs: 0, hasText: false })?.text ?? null;

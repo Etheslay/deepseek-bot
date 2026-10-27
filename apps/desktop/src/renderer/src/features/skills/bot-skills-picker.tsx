@@ -5,6 +5,7 @@
  */
 import type { JSX } from "react";
 import type { SkillDefinition } from "./skills.js";
+import { t } from "../../i18n.js";
 
 export function BotSkillsPicker(props: {
   skills: readonly SkillDefinition[];
@@ -21,11 +22,11 @@ export function BotSkillsPicker(props: {
 
   return (
     <div className="form-field skills-bind">
-      <span>技能（按勾选顺序拼进消息上下文）</span>
+      <span>{t("skills.pickerTitle")}</span>
       {props.skills.length === 0 ? (
-        <p className="form-hint">还没有技能。先到设置 → 技能 里新建一个。</p>
+        <p className="form-hint">{t("skills.pickerEmpty")}</p>
       ) : (
-        <div className="skills-bind-list" role="group" aria-label="为该 bot 启用技能">
+        <div className="skills-bind-list" role="group" aria-label={t("skills.pickerLabel")}>
           {props.skills.map((skill) => (
             <label key={skill.id} className="skills-bind-item">
               <input

@@ -7,6 +7,7 @@
 import { useRef, useState, type JSX } from "react";
 import type { WorkflowDraft } from "@deepseek-bot/contracts";
 import type { WorkflowImportResult } from "../workflow-service.js";
+import { t } from "../../../i18n.js";
 
 const MAX_TEMPLATE_BYTES = 1_048_576;
 
@@ -32,23 +33,23 @@ export function ImportDialog(props: {
         className="modal wf-import-modal"
         role="dialog"
         aria-modal="true"
-        aria-label="导入工作流模板"
+        aria-label={t("workflow.importDialogTitle")}
         onClick={(event) => event.stopPropagation()}
       >
         <header className="modal-head">
-          <h3>导入模板</h3>
-          <button type="button" className="modal-close" aria-label="关闭" onClick={props.onCancel}>
+          <h3>{t("workflow.importTitle")}</h3>
+          <button type="button" className="modal-close" aria-label={t("shell.close")} onClick={props.onCancel}>
             ×
           </button>
         </header>
         <div className="modal-body wf-dialog-form">
           <p className="wf-dialog-hint">
-            粘贴或选择本地 JSON 模板（形如 {"{ schemaVersion, workflow }"}，≤1 MiB）。不接远程 URL；模板内容只作数据校验，不执行、不授权。
+            {t("workflow.importHint", ["{ schemaVersion, workflow }"])}
           </p>
           <textarea
             className="wf-textarea wf-import-textarea"
             value={props.text}
-            aria-label="模板 JSON"
+            aria-label={t("workflow.templateJson")}
             placeholder='{"schemaVersion":"0.1","workflow":{...}}'
             spellCheck={false}
             onChange={(event) => props.onTextChange(event.target.value)}
@@ -60,14 +61,14 @@ export function ImportDialog(props: {
               disabled={props.busy}
               onClick={() => fileRef.current?.click()}
             >
-              选择本地文件…
+              {t("workflow.chooseLocalFile")}
             </button>
             <input
               ref={fileRef}
               type="file"
               accept=".json,application/json"
               className="wf-file-input"
-              aria-label="模板文件"
+              aria-label={t("workflow.templateFile")}
               onChange={(event) => {
                 const file = event.target.files?.[0];
                 if (file) {
@@ -82,10 +83,10 @@ export function ImportDialog(props: {
               disabled={props.busy || props.text.trim().length === 0 || tooLarge}
               onClick={props.onSubmit}
             >
-              {props.busy ? "校验中…" : "校验模板"}
+              {props.busy ? t("workflow.validatingTemplate") : t("workflow.validateTemplate")}
             </button>
           </div>
-          {tooLarge && <p className="form-error">模板超过 1 MiB 契约消息上限。</p>}
+          {tooLarge && <p className="form-error">{t("workflow.templateSizeExceeded")}</p>}
           {props.result && <ImportResultView result={props.result} onConfirm={props.onConfirm} />}
         </div>
       </div>
@@ -102,7 +103,7 @@ function ImportResultView(props: {
     return (
       <div className="wf-import-result" role="alert">
         <p className="form-error">
-          已拒绝：模板 schemaVersion 不受支持（DATA_VERSION_UNSUPPORTED）。需要显式升级，不做静默兼容。
+          {t("workflow.templateVersionRejected")}
         </p>
       </div>
     );
@@ -110,7 +111,7 @@ function ImportResultView(props: {
   if (!result.accepted) {
     return (
       <div className="wf-import-result" role="alert">
-        <p className="form-error">模板未通过校验（{result.errorCode ?? "INVALID_INPUT"}）：</p>
+        <p className="form-error">{t("workflow.templateValidationFailed", [result.errorCode ?? "INVALID_INPUT"])}</p>
         <ul className="wf-import-errors">
           {result.errors.map((issue, index) => (
             <li key={index}>
@@ -130,17 +131,14 @@ function ImportResultView(props: {
   return (
     <div className="wf-import-result accepted" role="status">
       <p>
-        模板可用：<strong>{draft.name}</strong> · {draft.nodes.length} 个节点（
-        {draft.nodes.filter((node) => node.type === "bot").length} Bot /{" "}
-        {draft.nodes.filter((node) => node.type === "approval").length} 审批）·{" "}
-        {draft.edges.length} 条连线 · 并发 {draft.limits.maxConcurrentNodes}
+        {t("workflow.templateAccepted")}<strong>{draft.name}</strong> {t("workflow.templateSummary", [draft.nodes.length, draft.nodes.filter((node) => node.type === "bot").length, draft.nodes.filter((node) => node.type === "approval").length, draft.edges.length, draft.limits.maxConcurrentNodes])}
       </p>
       <button
         type="button"
         className="primary-btn"
         onClick={() => props.onConfirm(draft)}
       >
-        载入画布（作为未保存草稿）
+        {t("workflow.loadAsDraft")}
       </button>
     </div>
   );
@@ -168,31 +166,31 @@ export function ExportDialog(props: {
         className="modal wf-export-modal"
         role="dialog"
         aria-modal="true"
-        aria-label="导出工作流模板"
+        aria-label={t("workflow.exportDialogTitle")}
         onClick={(event) => event.stopPropagation()}
       >
         <header className="modal-head">
-          <h3>导出模板 · {props.workflowName}</h3>
-          <button type="button" className="modal-close" aria-label="关闭" onClick={props.onClose}>
+          <h3>{t("workflow.exportTitle", [props.workflowName])}</h3>
+          <button type="button" className="modal-close" aria-label={t("shell.close")} onClick={props.onClose}>
             ×
           </button>
         </header>
         <div className="modal-body wf-dialog-form">
           <p className="wf-dialog-hint">
-            workflow.export 输出的 {"{ schemaVersion, workflow }"} JSON；节点、连线与 limits 完整保留。
+            {t("workflow.exportHint", ["{ schemaVersion, workflow }"])}
           </p>
           <textarea
             className="wf-textarea wf-export-textarea"
             value={props.json}
             readOnly
-            aria-label="模板 JSON"
+            aria-label={t("workflow.templateJson")}
             spellCheck={false}
             onFocus={(event) => event.target.select()}
           />
         </div>
         <footer className="modal-foot">
           <button type="button" className="ghost-btn" onClick={download}>
-            下载 JSON
+            {t("workflow.downloadJson")}
           </button>
           <button
             type="button"
@@ -201,7 +199,7 @@ export function ExportDialog(props: {
               void props.onCopy(props.json).then(() => setCopied(true));
             }}
           >
-            {copied ? "已复制" : "复制 JSON"}
+            {copied ? t("shell.copied") : t("workflow.copyJson")}
           </button>
         </footer>
       </div>

@@ -8,8 +8,10 @@
  */
 import { useEffect, useRef, useState, type JSX } from "react";
 import { thinkingStatus } from "./thinking-status.js";
+import { t, useLanguage } from "../../i18n.js";
 
 export function ThinkingLine(props: { request: string }): JSX.Element {
+  useLanguage();
   const startedAt = useRef<number>(Date.now());
   const [elapsedMs, setElapsedMs] = useState<number>(0);
 
@@ -29,7 +31,7 @@ export function ThinkingLine(props: { request: string }): JSX.Element {
   return (
     <span className="thinking-line">
       <span role="status" aria-live="polite">
-        {status?.text ?? "正在处理…"}
+        {status?.text ?? t("chat.thinkingBusy")}
       </span>
       {status?.hint ? (
         <span className="thinking-hint" aria-hidden="true">

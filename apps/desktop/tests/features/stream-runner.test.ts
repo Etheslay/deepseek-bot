@@ -46,6 +46,7 @@ function run(
   forKey: number,
   onAssistant: (text: string) => void,
   update: StreamUpdater,
+  onSettled?: (result: StreamResult) => void,
 ): StreamHandle {
   // The component resets the stream state before starting a turn; mirror that.
   update(() => ({ text: "", tools: [], failure: null, cancelled: false, forKey }));
@@ -56,6 +57,7 @@ function run(
     forKey,
     update,
     onAssistant,
+    ...(onSettled !== undefined ? { onSettled } : {}),
   });
 }
 
@@ -92,6 +94,29 @@ describe("runChatStream (U5: one shared starter for composer, retry and cards)",
     const handle = run(stream, 7, vi.fn(), update);
     await handle.finish();
     expect(state()?.cancelled).toBe(true);
+  });
+
+  it("reports the settled result so D22 can update the tray and notify (U5)", async () => {
+    const { stream } = fakeStream({ cancelled: false, failure: null });
+    const { update } = installUpdater();
+    const settled = vi.fn();
+    const handle = run(stream, 7, vi.fn(), update, settled);
+    await handle.finish();
+    expect(settled).toHaveBeenCalledWith({ cancelled: false, failure: null });
+  });
+
+  it("still settles when the turn is cancelled or fails, with the raw result", async () => {
+    for (const result of [
+      { cancelled: true, failure: null },
+      { cancelled: false, failure: { code: "AUTH_FAILED", message: "bad key", retryable: false } },
+    ] as StreamResult[]) {
+      const { stream } = fakeStream(result);
+      const { update } = installUpdater();
+      const settled = vi.fn();
+      const handle = run(stream, 7, vi.fn(), update, settled);
+      await handle.finish();
+      expect(settled).toHaveBeenCalledWith(result);
+    }
   });
 
   it("ignores updates that belong to another bot chat", async () => {
