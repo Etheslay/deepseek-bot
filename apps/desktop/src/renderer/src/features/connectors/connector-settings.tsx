@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useRef, useState, type JSX } from "react";
 import { METHOD_CONTRACTS } from "@deepseek-bot/contracts";
 import { type Notice, noticeText, t, useLanguage } from "../../i18n.js";
+import { CustomSelect } from "../../components/custom-select.js";
 
 type ConnectorRecord = {
   id: string;
@@ -107,15 +108,15 @@ export function ConnectorSettings(): JSX.Element {
         <div className="settings-row connector-register">
           <span className="connector-register-label">{t("connectors.registerLabel")}</span>
           <span className="connector-fields">
-            <select
-              aria-label={t("connectors.kindLabel")}
-              className="settings-select"
+            <CustomSelect
+              ariaLabel={t("connectors.kindLabel")}
               value={kind}
-              onChange={(event) => setKind(event.target.value as typeof kind)}
-            >
-              <option value="sd-webui">Stable Diffusion WebUI</option>
-              <option value="mcp-http">MCP HTTP</option>
-            </select>
+              options={[
+                { value: "sd-webui", label: "Stable Diffusion WebUI" },
+                { value: "mcp-http", label: "MCP HTTP" },
+              ]}
+              onChange={(next) => setKind(next as typeof kind)}
+            />
             <input
               aria-label={t("connectors.name")}
               className="settings-select key-input"
@@ -244,33 +245,21 @@ function McpSettings({ connectors }: { connectors: ConnectorRecord[] }): JSX.Ele
       <p>{t("connectors.mcpGrantHint")}</p>
       <label>
         {t("shell.bot")}{" "}
-        <select
-          className="settings-select"
-          aria-label={t("connectors.mcpBots")}
+        <CustomSelect
+          ariaLabel={t("connectors.mcpBots")}
           value={botId}
-          onChange={(event) => setBotId(event.target.value)}
-        >
-          {(bots ?? []).map((bot) => (
-            <option key={bot.id} value={bot.id}>
-              {bot.name}
-            </option>
-          ))}
-        </select>
+          options={(bots ?? []).map((bot) => ({ value: bot.id, label: bot.name }))}
+          onChange={(next) => setBotId(next)}
+        />
       </label>
       <label>
         {t("connectors.servicePicker")}
-        <select
-          className="settings-select"
-          aria-label={t("connectors.mcpServices")}
+        <CustomSelect
+          ariaLabel={t("connectors.mcpServices")}
           value={connector?.id ?? ""}
-          onChange={(event) => setServerId(event.target.value)}
-        >
-          {connectors.map((item) => (
-            <option key={item.id} value={item.id}>
-              {item.name}
-            </option>
-          ))}
-        </select>
+          options={connectors.map((item) => ({ value: item.id, label: item.name }))}
+          onChange={(next) => setServerId(next)}
+        />
       </label>
       {error ? <p role="alert">{t("connectors.botListFailedForGrants")}</p> : null}
       {bots?.length === 0 ? <p role="status">{t("connectors.noBotsToGrant")}</p> : null}

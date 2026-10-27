@@ -6,7 +6,15 @@
  * UI-only types (ChatSessionView) live here because CONTRACTS v0.1 has no
  * Session entity — they must never be promoted into packages/contracts.
  */
-import type { ArtifactVersion, Bot, BotArtifact, ErrorCode, EventEnvelope, Task } from "@deepseek-bot/contracts";
+import type {
+  ArtifactVersion,
+  Bot,
+  BotArtifact,
+  ErrorCode,
+  EventEnvelope,
+  Task,
+} from "@deepseek-bot/contracts";
+import type { BackupSummary } from "../../../shared/ipc-channels.js";
 import type { WorkflowServiceApi } from "../features/workflow-editor/workflow-service.js";
 import type { RunServiceApi } from "../features/run-monitor/run-service.js";
 import type { TaskServiceApi } from "../features/run-monitor/tasks/task-service.js";
@@ -174,4 +182,26 @@ export interface DesktopService {
   runs: RunServiceApi;
   /** v0.5 manager orchestration: dispatched-task query + human cancel. */
   tasks: TaskServiceApi;
+
+  /**
+   * D24 leftover vault: backup/restore entry plus data counts. listBackups
+   * reads the data root's manifests through a desktop IPC channel (no host
+   * contract method); create/restore/describe forward to the host's data.*
+   * methods. After a successful restore the main process restarts the Host
+   * child before this resolves, so follow-up calls hit the restored data.
+   */
+  vault: {
+    listBackups(): Promise<BackupSummary[]>;
+    createBackup(): Promise<{ backupId: string; createdAt: string; sizeBytes: number }>;
+    restore(backupId: string): Promise<{ restored: true; hostRestarted: boolean }>;
+    describe(): Promise<{ schemaVersion: string; counts: Record<string, number> }>;
+  };
+  /**
+   * D24 leftover: hardware-acceleration shell preference. Reads the current
+   * value; passing a boolean persists it (restart required to apply).
+   */
+  hardwareAcceleration(enabled?: boolean): Promise<{
+    enabled: boolean;
+    restartRequired: boolean;
+  }>;
 }

@@ -649,6 +649,64 @@ CREATE TABLE task_events (
 CREATE INDEX task_events_task_sequence ON task_events(task_id, sequence);
 `,
   },
+  {
+    // D20 local event rules: one bot, default off. A matching local event
+    // starts one run; the same event cannot start a second one. A disabled
+    // rule records a skip instead. No network and no remote relay.
+    id: 16,
+    name: "0016-event-rules",
+    sql: /* sql */ `
+CREATE TABLE event_rules (
+  id TEXT PRIMARY KEY,
+  bot_id TEXT NOT NULL REFERENCES bots(id),
+  name TEXT NOT NULL,
+  workflow_id TEXT NOT NULL REFERENCES workflows(id),
+  event_type TEXT NOT NULL CHECK (event_type IN ('run.failed', 'run.completed')),
+  enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)),
+  cursor_event_rowid INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX event_rules_bot ON event_rules(bot_id, created_at);
+
+CREATE TABLE event_rule_records (
+  id TEXT PRIMARY KEY,
+  rule_id TEXT NOT NULL REFERENCES event_rules(id) ON DELETE CASCADE,
+  event_id TEXT NOT NULL,
+  outcome TEXT NOT NULL CHECK (outcome IN ('started', 'duplicate', 'skipped')),
+  run_id TEXT,
+  reason TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE UNIQUE INDEX event_rule_records_primary
+  ON event_rule_records(rule_id, event_id)
+  WHERE outcome IN ('started', 'skipped');
+CREATE INDEX event_rule_records_rule ON event_rule_records(rule_id, created_at);
+`,
+  },
+  {
+    // D20 local review: an enabled rule can hold a matching event instead of
+    // starting a run. One pending item per (rule, event). Disabled rules
+    // still skip and do not enter this table. No network and no remote relay.
+    id: 17,
+    name: "0017-event-rule-reviews",
+    sql: /* sql */ `
+ALTER TABLE event_rules ADD COLUMN review INTEGER NOT NULL DEFAULT 0
+  CHECK (review IN (0, 1));
+
+CREATE TABLE event_rule_reviews (
+  id TEXT PRIMARY KEY,
+  rule_id TEXT NOT NULL REFERENCES event_rules(id) ON DELETE CASCADE,
+  event_id TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('pending', 'approved', 'denied')),
+  run_id TEXT,
+  created_at TEXT NOT NULL,
+  decided_at TEXT,
+  UNIQUE (rule_id, event_id)
+);
+CREATE INDEX event_rule_reviews_status ON event_rule_reviews(status, created_at);
+`,
+  },
 
 ];
 

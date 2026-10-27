@@ -12,6 +12,7 @@ import {
   type PermissionMode,
 } from "@deepseek-bot/contracts";
 import { t, useLanguage, type MessageKey } from "../../i18n.js";
+import { CustomSelect } from "../../components/custom-select.js";
 import { capabilityLabel } from "./capability-labels.js";
 
 /** Permission modes are contract data; only their labels are localized (D22). */
@@ -136,22 +137,17 @@ export function PermissionsPanel() {
         return (
           <div className="settings-row" key={policy.capability}>
             <span>{capabilityLabel(policy.capability)}</span>
-            <select
-              className="settings-select"
+            {/* A native <select> cannot drop the Windows blue selection wash, so
+                this uses the app's own list, styled like the choice card. */}
+            <CustomSelect
               value={policy.mode}
+              options={choices.map((mode) => ({ value: mode, label: t(MODE_LABEL_KEYS[mode]) }))}
+              ariaLabel={t("permissions.capabilityPolicy", [policy.capability])}
               disabled={choices.length < 2}
-              aria-label={t("permissions.capabilityPolicy", [policy.capability])}
-              onChange={(event) => {
-                const next = event.target.value;
+              onChange={(next) => {
                 if (isMode(next)) savePolicy(policy.capability, next);
               }}
-            >
-              {choices.map((mode) => (
-                <option key={mode} value={mode}>
-                  {t(MODE_LABEL_KEYS[mode])}
-                </option>
-              ))}
-            </select>
+            />
           </div>
         );
       })}

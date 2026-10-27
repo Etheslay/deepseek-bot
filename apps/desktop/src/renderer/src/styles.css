@@ -7429,6 +7429,29 @@ select:focus-visible {
   outline-offset: 2px;
 }
 
+/* ---------- D24 保险库分区（备份/恢复） ---------- */
+.vault-note {
+  margin: 0 0 8px;
+}
+
+.vault-backup-list {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.vault-backup-item {
+  align-items: center;
+}
+
+.vault-backup-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
 /* ---------- D22: system integration (notification + Chrome import settings) ---------- */
 
 .settings-hint {
@@ -7923,13 +7946,17 @@ select:focus-visible {
   min-width: 0;
 }
 
+/* The kind picker is a CustomSelect now, so the layout has to reach the wrapper
+   as well as the native class it replaced. */
 .connector-fields .settings-select,
+.connector-fields .custom-select,
 .connector-fields .key-input {
   width: auto;
   flex: 1 1 10rem;
 }
 
-.connector-fields .settings-select:first-child {
+.connector-fields .settings-select:first-child,
+.connector-fields .custom-select:first-child {
   flex: 0 1 auto;
 }
 
@@ -8022,6 +8049,7 @@ select:focus-visible {
   }
 
   .connector-fields .settings-select,
+  .connector-fields .custom-select,
   .connector-fields .key-input {
     flex: 1 1 100%;
   }
@@ -8078,4 +8106,27 @@ select:focus-visible {
   word-break: break-word;
   font: inherit;
   font-size: 0.85rem;
+}
+
+/*
+ * 设置行里的下拉控件：.custom-select 基类是 flex:1（表单里要撑满），
+ * 但设置行是 space-between 的一行标签 + 控件，必须保持原生 .settings-select
+ * 那样的紧凑尺寸，否则控件会吃掉整行宽度。
+ */
+.settings-row .custom-select {
+  flex: 0 0 auto;
+  min-width: 132px;
+}
+
+.settings-row .custom-select-trigger {
+  width: auto;
+  height: auto;
+  padding: 0.35rem 0.6rem;
+  font-size: 0.9rem;
+}
+
+.settings-row .custom-select-menu {
+  right: 0;
+  left: auto;
+  min-width: 100%;
 }

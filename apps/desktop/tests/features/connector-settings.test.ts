@@ -21,17 +21,31 @@ const AT = "2026-10-26T12:00:00.000Z";
 
 async function edit(container: ParentNode, label: string, value: string): Promise<void> {
   const input = container.querySelector(`[aria-label="${label}"]`);
-  if (!(input instanceof HTMLInputElement || input instanceof HTMLSelectElement)) {
-    throw new Error(`missing control ${label}`);
+  if (input instanceof HTMLInputElement) {
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+      setter?.call(input, value);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    return;
   }
-  await act(async () => {
-    const prototype =
-      input instanceof HTMLInputElement ? HTMLInputElement.prototype : HTMLSelectElement.prototype;
-    Object.getOwnPropertyDescriptor(prototype, "value")?.set?.call(input, value);
-    input.dispatchEvent(
-      new Event(input instanceof HTMLInputElement ? "input" : "change", { bubbles: true }),
-    );
-  });
+  // The dropdowns are the app's own control now (a native <select> cannot drop
+  // the Windows selection wash), so pick the option by its value.
+  if (input instanceof HTMLButtonElement) {
+    await act(async () => {
+      input.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    const box = input.closest(".custom-select");
+    const option = box?.querySelector<HTMLButtonElement>(`.custom-select-item[data-value="${value}"]`);
+    if (!(option instanceof HTMLButtonElement)) {
+      throw new Error(`missing option ${value} on ${label}`);
+    }
+    await act(async () => {
+      option.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    return;
+  }
+  throw new Error(`missing control ${label}`);
 }
 
 async function mountMcp(override?: (method: string, payload: unknown) => unknown): Promise<{

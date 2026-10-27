@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useState, type JSX } from "react";
 import { METHOD_CONTRACTS } from "@deepseek-bot/contracts";
 import { type MessageKey, type Notice, noticeText, t, useLanguage } from "../../i18n.js";
+import { CustomSelect } from "../../components/custom-select.js";
 
 type TriggerRule = {
   id: string;
@@ -141,28 +142,26 @@ function TriggerRules(): JSX.Element {
           placeholder={t("automation.ruleNamePlaceholder")}
           onChange={(event) => setName(event.target.value)}
         />
-        <select
-          className="settings-select automation-field"
-          aria-label={t("automation.targetWorkflowField")}
+        <CustomSelect
+          className="automation-field"
+          ariaLabel={t("automation.targetWorkflowField")}
           value={workflowId}
-          onChange={(event) => setWorkflowId(event.target.value)}
-        >
-          <option value="">{t("automation.selectWorkflowOption")}</option>
-          {workflows.map((workflow) => (
-            <option key={workflow.id} value={workflow.id}>
-              {workflow.name}
-            </option>
-          ))}
-        </select>
-        <select
-          className="settings-select automation-field"
-          aria-label={t("automation.triggerEventField")}
+          options={[
+            { value: "", label: t("automation.selectWorkflowOption") },
+            ...workflows.map((workflow) => ({ value: workflow.id, label: workflow.name })),
+          ]}
+          onChange={(next) => setWorkflowId(next)}
+        />
+        <CustomSelect
+          className="automation-field"
+          ariaLabel={t("automation.triggerEventField")}
           value={eventType}
-          onChange={(event) => setEventType(event.target.value as TriggerRule["eventType"])}
-        >
-          <option value="run.failed">{eventLabel("run.failed")}</option>
-          <option value="run.completed">{eventLabel("run.completed")}</option>
-        </select>
+          options={[
+            { value: "run.failed", label: eventLabel("run.failed") },
+            { value: "run.completed", label: eventLabel("run.completed") },
+          ]}
+          onChange={(next) => setEventType(next as TriggerRule["eventType"])}
+        />
         <button className="pill-btn automation-save" type="button" disabled={busy} onClick={() => void save()}>
           {t("automation.saveRule")}
         </button>

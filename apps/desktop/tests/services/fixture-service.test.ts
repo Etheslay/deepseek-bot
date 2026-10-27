@@ -245,3 +245,41 @@ describe("FixtureService artifacts (D28 co-edit)", () => {
     expect(content).toMatchObject({ kind: "text", content: "# 版本快照内容\n" });
   });
 });
+
+describe("FixtureService vault (D24 leftover)", () => {
+  it("creates backups, lists them newest-first and refuses unknown restores", async () => {
+    const before = await service.vault.listBackups();
+    expect(before.length).toBeGreaterThan(0);
+
+    const created = await service.vault.createBackup();
+    expect(created.backupId).toMatch(/^fixture-backup-/);
+    const listed = await service.vault.listBackups();
+    expect(listed[0]!.backupId).toBe(created.backupId);
+    expect(listed).toHaveLength(before.length + 1);
+
+    await expect(service.vault.restore("nope")).rejects.toMatchObject({
+      code: "INVALID_INPUT",
+    });
+    await expect(service.vault.restore(created.backupId)).resolves.toEqual({
+      restored: true,
+      hostRestarted: true,
+    });
+  });
+
+  it("describe reports the schema version and entity counts", async () => {
+    const result = await service.vault.describe();
+    expect(result.schemaVersion).toBe("11");
+    expect(result.counts.bots).toBeGreaterThan(0);
+  });
+
+  it("hardwareAcceleration flips in memory and reports a restart need", async () => {
+    await expect(service.hardwareAcceleration()).resolves.toEqual({
+      enabled: true,
+      restartRequired: false,
+    });
+    await expect(service.hardwareAcceleration(false)).resolves.toEqual({
+      enabled: false,
+      restartRequired: true,
+    });
+  });
+});

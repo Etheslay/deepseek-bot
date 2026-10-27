@@ -39,6 +39,7 @@ import {
   NodeExecutionError,
   WorkflowEngine,
   LocalScheduler,
+  evaluateEventRules,
   evaluateToolAction,
   type ScheduleMissNotice,
 } from "@deepseek-bot/runtime";
@@ -383,19 +384,27 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
   // D18 保留策略: apply configured limits once at startup so expiry and
   // caps hold even when nothing writes for a while.
   sweepRetention(db, readRetentionPolicy(db), now());
-  // D20 事件自动化: catch up on events that accumulated while the host was
-  // down (enqueued as reason "missed", never silently replayed), then keep
-  // scanning the persisted stream on an interval.
+  // D20 review queue: catch up on events that accumulated while the host
+  // was down (enqueued as reason "missed", never silently replayed). The
+  // same tick evaluates local event rules, which start one run, hold one
+  // pending review, or record a disabled skip. Neither path opens a network
+  // connection.
   const bootAt = now();
-  evaluateTriggerRules(db, { bootAt });
-  const triggerTimer = setInterval(() => {
+  const scanLocalEvents = (): void => {
     try {
       evaluateTriggerRules(db, { bootAt });
     } catch {
       // A failed scan retries on the next tick; the cursor only advances
       // after a successful pass, so nothing is skipped.
     }
-  }, options.triggers?.intervalMs ?? 5_000);
+    try {
+      evaluateEventRules(db, engine);
+    } catch {
+      // A failed rule keeps its cursor and is retried on the next tick.
+    }
+  };
+  scanLocalEvents();
+  const triggerTimer = setInterval(scanLocalEvents, options.triggers?.intervalMs ?? 5_000);
   triggerTimer.unref?.();
 
   let closed = false;
@@ -655,6 +664,7 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
     async shutdown(): Promise<void> {
       if (closed) return;
       closed = true;
+      clearInterval(triggerTimer);
       screen.close();
       permissions.close();
       mcp.close();

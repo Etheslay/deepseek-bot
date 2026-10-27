@@ -75,7 +75,10 @@ pnpm --filter @deepseek-bot/desktop pack:win   # 构建 + electron-builder NSIS 
 | `window:set-titlebar-overlay` | 主题切换时重涂原生窗口控制条（两枚 `#rrggbb`） |
 | `settings:saveKey` | safeStorage 加密保存 API Key，仅回传 `cred:` 引用 |
 | `host:call` | 渲染层 → Host 契约调用（方法白名单在主进程与 Host 双重校验） |
+| `knowledge:import` | 打开文件对话框读一个 .txt/.md（无路径参数） |
 | `updates:check` / `updates:downloadInstall` | D24 应用内更新（GitHub Releases 源） |
+| `backups:list` | 只读数据根 `backups/*/manifest.json` 摘要（D24） |
+| `app:hardwareAcceleration` | 读取/切换硬件加速偏好（userData 文件，重启生效；D24） |
 | `i18n:setLanguage` | D22：把 `system\|zh\|en` 偏好镜像给主进程（托盘、通知跟随） |
 | `tray:sync` | D22：渲染层推送托盘状态（Bot 列表、活跃 Bot、未读、状态、32px PNG 头像） |
 | `notification:show` | D22：请求弹一条系统通知，回报 `{shown, reason}` |
@@ -85,7 +88,13 @@ pnpm --filter @deepseek-bot/desktop pack:win   # 构建 + electron-builder NSIS 
 
 所有跨边界 payload 在 `src/shared/system-integration.ts` 严格校验后才会被主进程使用：条目上限（托盘 50）、名字长度、状态枚举、图标必须是 `data:image/png;base64,` 且 ≤64 KiB、Chrome profile token 拒绝分隔符与 `..`。
 
-preload 暴露面：`deepseekBot.{getAppInfo, window.*, settings.saveKey, updates.*, host.{call,onMissed}, i18n.setLanguage, system.{tray.sync, notifications.show, chrome.*, onTrayAction, onNotificationClick, onWindowFocus}}`。不暴露 `ipcRenderer`、`require`、`process`、`fs` 或任意 channel。
+preload 暴露面：`deepseekBot.{getAppInfo, window.*, settings.saveKey, updates.*, knowledge.importFile, backups.list, app.hardwareAcceleration, host.{call,onMissed}, i18n.setLanguage, system.{tray.sync, notifications.show, chrome.*, onTrayAction, onNotificationClick, onWindowFocus}}`。不暴露 `ipcRenderer`、`require`、`process`、`fs` 或任意 channel。
+
+## Host 进程生命周期
+
+- 主进程启动时经 `spawnHostProcess` 拉起 Host 子进程（node ≥24 运行 `packages/host/dist/main.js`，env 注入数据根与凭据解密回调）。
+- **恢复数据后重启（D24）**：`data.restore` 成功会把数据库整体替换，原 Host 的句柄随即作废——主进程在把结果返回给渲染层之前对旧 client 优雅停机并重新 spawn，后续调用落在恢复后的数据上；恢复被拒绝时原 Host 保持原样，稳定错误原样透传。
+- 硬件加速偏好在 `app.ready` 之前同步应用（Chromium 只在此刻接受该开关）。
 
 ## 界面语言（D22）
 
