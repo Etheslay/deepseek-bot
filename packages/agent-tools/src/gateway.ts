@@ -127,8 +127,12 @@ export class ToolGateway {
       if (options.signal?.aborted) throw new ToolRejectionError("CANCELLED", "tool call was cancelled");
       grant.revalidate?.();
       executing = true;
-      const result = await capability.handler(parsed.data, context);
-      await this.audit(caller.id, tool, parsed.data, result, "ok", undefined, undefined, now, undefined, caller, grant);
+      const result = await capability.handler(parsed.data, {
+        ...context,
+        ...(grant.revalidate === undefined ? {} : { revalidateAuthorization: grant.revalidate }),
+      });
+      const failed = capability.resultFailed?.(result) === true;
+      await this.audit(caller.id, tool, parsed.data, result, failed ? "error" : "ok", failed ? "RUNTIME_ERROR" : undefined, failed ? "tool reported failure" : undefined, now, undefined, caller, grant);
       return result;
     } catch (error) {
       const code: GatewayRejectionCode | "RUNTIME_ERROR" =

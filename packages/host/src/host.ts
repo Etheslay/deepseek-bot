@@ -58,6 +58,8 @@ import {
   ToolRejectionError,
   WebSearchService,
   bindConnectorTools,
+  bindMcpTool,
+  McpInvokeInputSchema,
   bindKnowledgeTools,
   bindMemoryTools,
   bindWebSearchTool,
@@ -69,6 +71,7 @@ import {
 import { startApplicationToolServer } from "./app-tool-channel.js";
 import { evaluateTriggerRules } from "./triggers.js";
 import { invokeConnector } from "./connectors.js";
+import { McpService } from "./mcp.js";
 
 export interface HostOptions {
   /** Data root (storage layout: database, harness home, artifacts, backups). */
@@ -115,6 +118,7 @@ export interface DeepSeekBotHost {
   handleMethod(method: Method, payload: unknown, requestId?: string): Promise<unknown>;
   /** D15 agent tool gateway (read + write layers; every call audited). */
   readonly agentTools: ToolGateway;
+  readonly mcp: McpService;
   /** Trusted in-process human controls. Never registered as model capabilities. */
   readonly userQuestions: UserQuestionControls;
   /**
@@ -204,6 +208,7 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
   });
   const bootGeneration = incrementBootGeneration(db);
   const permissions = new AgentPermissionService(db, bootGeneration);
+  const mcp = new McpService(db, layout.connectorOutputs);
   const patches = writeProfilePatches(layout.harnessHome);
   const now = options.now ?? (() => new Date());
 
@@ -316,6 +321,7 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
     now,
     resolveApiKey: options.resolveApiKey,
     permissions,
+    mcp,
     chat,
     userQuestions: questions,
     webSearch: {
@@ -432,6 +438,7 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
         return invokeConnector(db, layout.connectorOutputs, { connectorId, action, params }, { now });
       },
     }),
+    bindMcpTool((input, context) => mcp.invoke(input, context)),
     ...bindKnowledgeTools({
       search(botId, query, limit) {
         const bot = getBot(db, botId);
@@ -447,7 +454,20 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
   const agentTools = new ToolGateway({
     registry: agentRegistry,
     audit: new JsonlAuditSink(join(layout.logs, "agent-tools-audit.jsonl")),
-    grants: permissions,
+    grants: {
+      async check(tool, caller, params, options) {
+        const input = tool === "mcp_call" ? McpInvokeInputSchema.parse(params) : undefined;
+        if (input) mcp.check(input, caller);
+        const authorization = await permissions.check(tool, caller, params, options);
+        return {
+          ...authorization,
+          revalidate() {
+            authorization.revalidate?.();
+            if (input) mcp.check(input, caller);
+          },
+        };
+      },
+    },
   });
   agentToolsHolder.current = agentTools;
   const chatNetworkPermissions = (caller: ToolCaller): ToolNetworkPermissions => ({
@@ -455,6 +475,7 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
   });
   const applicationTools = await startApplicationToolServer(agentTools, {
     networkPermissions: chatNetworkPermissions,
+    mcp,
   });
 
   return {
@@ -466,6 +487,7 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
     bootGeneration,
     recoveredRuns,
     agentTools,
+    mcp,
     userQuestions: {
       listPending: (callerId) => questions.listPending(callerId),
       answer: (requestId, callerId, answer) => questions.answer(requestId, callerId, answer),
@@ -480,6 +502,7 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
       if (closed) return;
       closed = true;
       permissions.close();
+      mcp.close();
       questions.close();
       webSearch.close();
       scheduler.stop();

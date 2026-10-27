@@ -4,6 +4,7 @@
  * and never contacts the connector.
  */
 import { randomUUID } from "node:crypto";
+import type { ConnectorKind } from "@deepseek-bot/contracts";
 import type { OpenedDatabase } from "../database.js";
 import { isValidCredentialRef } from "../credentials.js";
 import { invalidInput } from "../errors.js";
@@ -14,6 +15,7 @@ export const CONNECTOR_NAME_MAX = 200;
 export interface ConnectorRow {
   readonly id: string;
   readonly name: string;
+  readonly kind: ConnectorKind;
   readonly enabled: boolean;
   readonly credentialRef: string | null;
   readonly endpoint: string | null;
@@ -24,6 +26,7 @@ export interface ConnectorRow {
 type ConnectorSqlRow = {
   id: string;
   name: string;
+  kind: ConnectorKind;
   enabled: number;
   credential_ref: string | null;
   endpoint: string | null;
@@ -60,6 +63,34 @@ export function connectorEndpoint(value: string | null | undefined): string | nu
   return trimmed;
 }
 
+/** MCP Streamable HTTP allows a transport path, but no embedded auth or URL state. */
+export function mcpConnectorEndpoint(value: string | null | undefined): string | null {
+  if (value == null || value.trim() === "") return null;
+  const trimmed = value.trim();
+  let url: URL;
+  try {
+    url = new URL(trimmed);
+  } catch {
+    throw invalidInput("connector endpoint must be an absolute http(s) URL");
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:")
+    throw invalidInput("connector endpoint must use http or https");
+  if (!["localhost", "127.0.0.1", "[::1]"].includes(url.hostname.toLowerCase()))
+    throw invalidInput("connector endpoint must be a loopback address");
+  const authority =
+    trimmed.split(/[\\/]/).find((part, index) => index >= 2 && part.length > 0) ?? "";
+  if (
+    url.username ||
+    url.password ||
+    authority.includes("@") ||
+    trimmed.includes("?") ||
+    trimmed.includes("#")
+  )
+    throw invalidInput("MCP endpoint must not contain credentials, query or fragment");
+  if (url.hostname.toLowerCase() === "localhost") url.hostname = "127.0.0.1";
+  return url.href;
+}
+
 function connectorName(name: string): string {
   const trimmed = name.trim();
   if (trimmed.length < 1 || trimmed.length > CONNECTOR_NAME_MAX) {
@@ -80,6 +111,7 @@ function mapRow(row: ConnectorSqlRow): ConnectorRow {
   return {
     id: row.id,
     name: row.name,
+    kind: row.kind,
     enabled: row.enabled === 1,
     credentialRef: row.credential_ref,
     endpoint: row.endpoint,
@@ -91,7 +123,7 @@ function mapRow(row: ConnectorSqlRow): ConnectorRow {
 export function getConnector(db: OpenedDatabase, id: string): ConnectorRow {
   const row = db.raw
     .prepare(
-      "SELECT id, name, enabled, credential_ref, endpoint, created_at, updated_at FROM connectors WHERE id = ?;",
+      "SELECT id, name, kind, enabled, credential_ref, endpoint, created_at, updated_at FROM connectors WHERE id = ?;",
     )
     .get(id) as unknown as ConnectorSqlRow | undefined;
   if (row === undefined) throw invalidInput("connector was not found");
@@ -100,25 +132,47 @@ export function getConnector(db: OpenedDatabase, id: string): ConnectorRow {
 
 export function registerConnector(
   db: OpenedDatabase,
-  input: { id?: string; name: string; credentialRef?: string | null; endpoint?: string | null },
+  input: {
+    id?: string;
+    kind?: ConnectorKind;
+    name: string;
+    credentialRef?: string | null;
+    endpoint?: string | null;
+  },
 ): ConnectorRow {
+  const kind = input.kind ?? "sd-webui";
+  if (kind !== "sd-webui" && kind !== "mcp-http") throw invalidInput("unsupported connector kind");
+  if (kind === "mcp-http" && input.credentialRef != null)
+    throw invalidInput("MCP credentials are unsupported");
   const at = isoNow(db.now);
   const row: ConnectorRow = {
     id: input.id ?? randomUUID(),
     name: connectorName(input.name),
+    kind,
     enabled: false,
     credentialRef: connectorCredential(input.credentialRef),
-    endpoint: connectorEndpoint(input.endpoint),
+    endpoint:
+      kind === "mcp-http"
+        ? mcpConnectorEndpoint(input.endpoint)
+        : connectorEndpoint(input.endpoint),
     createdAt: at,
     updatedAt: at,
   };
   try {
     db.raw
       .prepare(
-        "INSERT INTO connectors (id, name, enabled, credential_ref, endpoint, created_at, updated_at) " +
-          "VALUES (?, ?, 0, ?, ?, ?, ?);",
+        "INSERT INTO connectors (id, name, kind, enabled, credential_ref, endpoint, created_at, updated_at) " +
+          "VALUES (?, ?, ?, 0, ?, ?, ?, ?);",
       )
-      .run(row.id, row.name, row.credentialRef, row.endpoint, row.createdAt, row.updatedAt);
+      .run(
+        row.id,
+        row.name,
+        row.kind,
+        row.credentialRef,
+        row.endpoint,
+        row.createdAt,
+        row.updatedAt,
+      );
   } catch (error) {
     constraintError(error, "register connector");
   }
@@ -129,7 +183,7 @@ export function registerConnector(
 export function listConnectors(db: OpenedDatabase): ConnectorRow[] {
   const rows = db.raw
     .prepare(
-      "SELECT id, name, enabled, credential_ref, endpoint, created_at, updated_at FROM connectors " +
+      "SELECT id, name, kind, enabled, credential_ref, endpoint, created_at, updated_at FROM connectors " +
         "ORDER BY created_at DESC, rowid DESC;",
     )
     .all() as unknown as ConnectorSqlRow[];
@@ -154,7 +208,11 @@ export function setConnectorEndpoint(
   input: { id: string; endpoint: string | null },
 ): ConnectorRow {
   const at = isoNow(db.now);
-  const endpoint = connectorEndpoint(input.endpoint);
+  const connector = getConnector(db, input.id);
+  const endpoint =
+    connector.kind === "mcp-http"
+      ? mcpConnectorEndpoint(input.endpoint)
+      : connectorEndpoint(input.endpoint);
   const result = db.raw
     .prepare("UPDATE connectors SET endpoint = ?, updated_at = ? WHERE id = ?;")
     .run(endpoint, at, input.id);

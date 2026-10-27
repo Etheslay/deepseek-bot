@@ -64,6 +64,9 @@ export async function invokeConnector(
   const prompt = input.params.prompt.trim();
   if (prompt.length === 0) throw invalid("prompt must not be empty");
   const connector = getConnector(db, input.connectorId);
+  if (connector.kind !== "sd-webui") {
+    throw invalid("this action requires a Stable Diffusion connector");
+  }
   if (!connector.enabled) {
     throw invalid(`connector '${connector.name}' is disabled`);
   }
