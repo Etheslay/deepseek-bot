@@ -6,7 +6,8 @@
 
 | 模块 | 对应契约 | 说明 |
 | --- | --- | --- |
-| `version.ts` | §1、§7 | `PROTOCOL_VERSION`（`"0.5"`，SUPPORTED 含 0.1–0.4）与 `WORKFLOW_SCHEMA_VERSION`（保持 `"0.1"`，工作流文档未变）；`isProtocolVersionSupported` 拒绝未知更高版本 |
+| `version.ts` | §1、§7 | `PROTOCOL_VERSION`（`"0.6"`，SUPPORTED 含 0.1–0.5）与 `WORKFLOW_SCHEMA_VERSION`（保持 `"0.1"`，工作流文档未变）；`isProtocolVersionSupported` 拒绝未知更高版本 |
+| `screen.ts` | §3、D21 屏幕感知边界 | D21 受信桌面 `screen.*` 严格请求/响应、窗口 token、结果元数据及读取限额；契约不代表采集/OCR 实现 |
 | `primitives.ts` | §1 | UUID、UTC ISO 8601 时间戳、IANA 时区、绝对/相对路径、media type、sha-256 |
 | `errors.ts` | §6 | 16 个稳定错误码与错误对象（code/message/retryable/requestId/details） |
 | `status.ts` | §5 | Run / NodeRun 状态机：迁移表、终态判断、`assert*Transition` |
@@ -47,4 +48,4 @@ pnpm --filter @deepseek-bot/contracts test
 
 ## 变更规则
 
-CONTRACTS §7：新增可选字段可兼容扩展；删除/更名必需字段、状态语义或事件顺序变化必须提升版本并提供迁移说明，由变更负责人自审并同步使用方。私有 workspace 包版本当前为 `0.1.0`；通信协议版本由 `PROTOCOL_VERSION` 独立标识（当前 `0.5`）。
+CONTRACTS §7：新增可选字段可兼容扩展；删除/更名必需字段、状态语义或事件顺序变化必须提升版本并提供迁移说明，由变更负责人自审并同步使用方。私有 workspace 包版本当前为 `0.1.0`；通信协议版本由 `PROTOCOL_VERSION` 独立标识（当前 `0.6`）。
