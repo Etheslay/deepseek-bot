@@ -1,0 +1,29 @@
+{
+  "pins": {
+    "tesseract.js": "7.0.0",
+    "tesseract.js-core": "7.0.0",
+    "@tesseract.js-data/eng": "1.0.0",
+    "@tesseract.js-data/chi_sim": "1.0.0"
+  },
+  "langVariant": "4.0.0_best_int",
+  "coreFiles": [
+    "tesseract-core.js",
+    "tesseract-core.wasm",
+    "tesseract-core-lstm.js",
+    "tesseract-core-lstm.wasm",
+    "tesseract-core-simd.js",
+    "tesseract-core-simd.wasm",
+    "tesseract-core-simd-lstm.js",
+    "tesseract-core-simd-lstm.wasm",
+    "tesseract-core-relaxedsimd.js",
+    "tesseract-core-relaxedsimd.wasm",
+    "tesseract-core-relaxedsimd-lstm.js",
+    "tesseract-core-relaxedsimd-lstm.wasm"
+  ],
+  "langFiles": ["eng.traineddata.gz", "chi_sim.traineddata.gz"],
+  "licenseFiles": [
+    "licenses/tesseract.js.LICENSE.md",
+    "licenses/tesseract.js-core.LICENSE",
+    "licenses/tesseract-data.json"
+  ]
+}

@@ -7,13 +7,22 @@
  */
 import { useState, type JSX } from "react";
 import type { ApprovalBaseline } from "../events/run-view.js";
-import { approvalDecidable, approvalTtlLabel, APPROVAL_TTL_COPY } from "../events/run-view.js";
+import { approvalDecidable, approvalTtlCopy, approvalTtlLabel } from "../events/run-view.js";
+import { formatFullDateTime, t } from "../../../i18n.js";
 
-const DECISION_LABELS: Record<string, string> = {
-  approved: "已允许",
-  denied: "已拒绝",
-  expired: "已过期",
-};
+/** Resolved decisions are contract data; only the label is localized (D22). */
+function decisionLabel(decision: string): string {
+  switch (decision) {
+    case "approved":
+      return t("runs.approved");
+    case "denied":
+      return t("permissions.denied");
+    case "expired":
+      return t("runs.expired");
+    default:
+      return decision;
+  }
+}
 
 function shortDigest(digest: string): string {
   return `${digest.slice(0, 12)}…${digest.slice(-8)}`;
@@ -40,8 +49,8 @@ export function ApprovalCard(props: {
       await onDecide(baseline, decision);
       setNote(
         decision === "approved"
-          ? "已允许（审批一次消费，等待执行）"
-          : "已拒绝（stop-descendants，后继不再执行）",
+          ? t("runs.approvedAwaitingExecution")
+          : t("runs.deniedStopDescendants"),
       );
     } catch (error) {
       // Refusals are informative: consumed / expired / generation-stale.
@@ -53,13 +62,13 @@ export function ApprovalCard(props: {
 
   const stateLine = (): string => {
     if (invalidReason === "generation") {
-      return "已失效（启动代次绑定）";
+      return t("runs.invalidatedByGeneration");
     }
     if (invalidReason === "expired") {
-      return "已过期";
+      return t("runs.expired");
     }
     if (resolved !== undefined) {
-      return `${DECISION_LABELS[resolved.decision] ?? resolved.decision}（一次消费，不可重放）`;
+      return t("runs.decidedOnceNoReplay", [decisionLabel(resolved.decision)]);
     }
     return approvalTtlLabel(baseline);
   };
@@ -71,44 +80,44 @@ export function ApprovalCard(props: {
         (approvalDecidable(baseline) ? " pending" : " settled")
       }
       role="group"
-      aria-label={`审批 ${approval.id}`}
+      aria-label={t("runs.approvalAriaLabel", [approval.id])}
     >
       <div className="rm-approval-head">
-        <span className="rm-approval-title">审批请求</span>
+        <span className="rm-approval-title">{t("runs.approvalRequest")}</span>
         <span className="rm-approval-ttl">{stateLine()}</span>
       </div>
       <dl className="rm-approval-params">
         <div className="rm-param">
-          <dt>动作摘要（actionDigest）</dt>
+          <dt>{t("runs.actionDigestLabel")}</dt>
           <dd className="rm-digest" title={approval.actionDigest}>
             {shortDigest(approval.actionDigest)}
           </dd>
         </div>
         <div className="rm-param">
-          <dt>目标资源（将执行的写操作）</dt>
+          <dt>{t("runs.targetResource")}</dt>
           <dd className="rm-resource">{approval.resource}</dd>
         </div>
         <div className="rm-param">
-          <dt>有效期至</dt>
+          <dt>{t("runs.validUntil")}</dt>
           <dd>
-            {new Date(approval.expiresAt).toLocaleString()}（默认 {APPROVAL_TTL_COPY}）
+            {t("runs.expiresAtWithDefaultTtl", [formatFullDateTime(approval.expiresAt), approvalTtlCopy()])}
           </dd>
         </div>
         <div className="rm-param">
-          <dt>所属运行 / 节点</dt>
+          <dt>{t("runs.owningRunNode")}</dt>
           <dd>
             run {approval.runId.slice(0, 8)} · nodeRun {approval.nodeRunId.slice(0, 8)}
           </dd>
         </div>
       </dl>
-      <div className="rm-approval-actions" role="group" aria-label="审批操作">
+      <div className="rm-approval-actions" role="group" aria-label={t("runs.approvalActions")}>
         <button
           type="button"
           className="primary-btn rm-approve-btn"
           disabled={!decidable}
           onClick={() => void decide("approved")}
         >
-          允许
+          {t("runs.allow")}
         </button>
         <button
           type="button"
@@ -116,10 +125,10 @@ export function ApprovalCard(props: {
           disabled={!decidable}
           onClick={() => void decide("denied")}
         >
-          拒绝
+          {t("permissions.deny")}
         </button>
         <span className="rm-approval-note" role="status">
-          {note ?? (resolved ? `决定时间：${new Date(resolved.resolvedAt).toLocaleString()}` : "")}
+          {note ?? (resolved ? t("runs.decidedAt", [formatFullDateTime(resolved.resolvedAt)]) : "")}
         </span>
       </div>
     </div>
@@ -141,12 +150,12 @@ export function ApprovalInboxItem(props: {
     >
       <span className="rm-inbox-state">
         {baseline.resolved
-          ? (DECISION_LABELS[baseline.resolved.decision] ?? baseline.resolved.decision)
+          ? decisionLabel(baseline.resolved.decision)
           : baseline.invalidReason === "generation"
-            ? "已失效（代次）"
+            ? t("runs.invalidatedGeneration")
             : baseline.invalidReason === "expired"
-              ? "已过期"
-              : "待决定"}
+              ? t("runs.expired")
+              : t("runs.pendingDecision")}
       </span>
       <span className="rm-inbox-res">{approval.resource}</span>
       <span className="rm-inbox-run">run {approval.runId.slice(0, 8)}</span>

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildSearchIndex,
   filterSearch,
-  SEARCH_KIND_LABELS,
+  searchKindLabels,
 } from "../../src/renderer/src/features/search/search-core.js";
 
 const bots = [
@@ -57,8 +57,9 @@ describe("global search core", () => {
   });
 
   it("labels all three kinds", () => {
-    expect(SEARCH_KIND_LABELS.bot).toBeTruthy();
-    expect(SEARCH_KIND_LABELS.message).toBeTruthy();
-    expect(SEARCH_KIND_LABELS.action).toBeTruthy();
+    const labels = searchKindLabels();
+    expect(labels.bot).toBeTruthy();
+    expect(labels.message).toBeTruthy();
+    expect(labels.action).toBeTruthy();
   });
 });

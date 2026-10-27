@@ -1,9 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   ALLOWED_CHANNELS,
+  HOST_EVENT_MISSED,
   IPC_CHANNELS,
   IpcDeniedError,
+  SYSTEM_EVENT_NOTIFICATION_CLICK,
+  SYSTEM_EVENT_TRAY_ACTION,
+  SYSTEM_EVENT_WINDOW_FOCUS,
   assertAllowedChannel,
+  assertValidLanguagePreference,
   assertValidTitleBarOverlayColors,
 } from "../src/shared/ipc-channels.js";
 import { assertAuthorizedSender } from "../src/main/ipc/guards.js";
@@ -33,6 +38,36 @@ describe("IPC allowlist", () => {
     expect(ALLOWED_CHANNELS.has(IPC_CHANNELS.APP_HARDWARE_ACCELERATION)).toBe(true);
     expect(() => assertAllowedChannel(IPC_CHANNELS.BACKUPS_LIST)).not.toThrow();
     expect(() => assertAllowedChannel(IPC_CHANNELS.APP_HARDWARE_ACCELERATION)).not.toThrow();
+  });
+
+  it("registers the D22 language, tray, notification and chrome channels", () => {
+    for (const channel of [
+      IPC_CHANNELS.I18N_SET_LANGUAGE,
+      IPC_CHANNELS.TRAY_SYNC,
+      IPC_CHANNELS.NOTIFICATION_SHOW,
+      IPC_CHANNELS.CHROME_SCAN,
+      IPC_CHANNELS.CHROME_PREVIEW,
+      IPC_CHANNELS.CHROME_IMPORT,
+      IPC_CHANNELS.CHROME_STATE,
+      IPC_CHANNELS.CHROME_CLEAR,
+      IPC_CHANNELS.CHROME_EXPORT,
+    ]) {
+      expect(ALLOWED_CHANNELS.has(channel)).toBe(true);
+      expect(() => assertAllowedChannel(channel)).not.toThrow();
+    }
+  });
+
+  it("keeps the D22 event channels distinct from the invoke channels", () => {
+    const events = [
+      HOST_EVENT_MISSED,
+      SYSTEM_EVENT_TRAY_ACTION,
+      SYSTEM_EVENT_NOTIFICATION_CLICK,
+      SYSTEM_EVENT_WINDOW_FOCUS,
+    ];
+    for (const channel of events) {
+      expect(ALLOWED_CHANNELS.has(channel)).toBe(false);
+      expect(() => assertAllowedChannel(channel)).toThrow(IpcDeniedError);
+    }
   });
 
   it("rejects unknown channels with a stable error code", () => {
@@ -65,6 +100,30 @@ describe("titlebar overlay payload validation", () => {
   ])("rejects %s with INVALID_PAYLOAD", (_label, payload) => {
     try {
       assertValidTitleBarOverlayColors(payload);
+      expect.unreachable("expected throw");
+    } catch (error) {
+      expect(error).toBeInstanceOf(IpcDeniedError);
+      expect((error as IpcDeniedError).code).toBe("INVALID_PAYLOAD");
+    }
+  });
+});
+
+describe("language preference payload validation", () => {
+  it("accepts the three preferences the UI can persist", () => {
+    for (const value of ["system", "zh", "en"]) {
+      expect(() => assertValidLanguagePreference(value)).not.toThrow();
+    }
+  });
+
+  it.each([
+    ["unknown language", "fr"],
+    ["wrong case", "ZH"],
+    ["empty", ""],
+    ["null", null],
+    ["object payload", { preference: "zh" }],
+  ])("rejects %s with INVALID_PAYLOAD", (_label, payload) => {
+    try {
+      assertValidLanguagePreference(payload);
       expect.unreachable("expected throw");
     } catch (error) {
       expect(error).toBeInstanceOf(IpcDeniedError);

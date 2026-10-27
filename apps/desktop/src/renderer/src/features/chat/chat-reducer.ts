@@ -7,6 +7,7 @@
  */
 import type { ErrorCode, EventEnvelope } from "@deepseek-bot/contracts";
 import type { ChatFailure, ToolStatus } from "../../services/desktop-service.js";
+import { formatFullDateTime, t } from "../../i18n.js";
 
 export type ToolCard = {
   toolName: string;
@@ -74,25 +75,25 @@ export type ReplayItem =
 export function eventLabel(event: EventEnvelope): string {
   switch (event.type) {
     case "run.created":
-      return "任务已创建";
+      return t("chat.runCreated");
     case "run.statusChanged": {
       const p = event.payload as { from?: string; to?: string; reason?: string };
-      return `任务状态：${p.from ?? "?"} → ${p.to ?? "?"}${p.reason ? `（${p.reason}）` : ""}`;
+      return t("chat.runStatusChanged", [p.from ?? "?", p.to ?? "?", p.reason ? `（${p.reason}）` : ""]);
     }
     case "node.statusChanged": {
       const p = event.payload as { nodeId?: string; from?: string; to?: string; reason?: string };
-      return `节点 ${p.nodeId ?? "?"}：${p.from ?? "?"} → ${p.to ?? "?"}${p.reason ? `（${p.reason}）` : ""}`;
+      return t("chat.nodeStatusChanged", [p.nodeId ?? "?", p.from ?? "?", p.to ?? "?", p.reason ? `（${p.reason}）` : ""]);
     }
     case "run.completed":
-      return "任务已完成";
+      return t("chat.runCompleted");
     case "run.failed":
-      return "任务失败";
+      return t("chat.runFailed");
     case "tool.requested":
-      return "工具请求";
+      return t("chat.toolRequest");
     case "approval.requested":
-      return "等待审批";
+      return t("chat.awaitingApproval");
     case "approval.resolved":
-      return "审批已处理";
+      return t("chat.approvalResolved");
     default:
       return event.type;
   }
@@ -102,7 +103,7 @@ export function replayTimeline(events: EventEnvelope[]): ReplayItem[] {
   const items: ReplayItem[] = [];
   let lastStamp = "";
   for (const event of events) {
-    const stamp = new Date(event.timestamp).toLocaleString();
+    const stamp = formatFullDateTime(event.timestamp);
     if (stamp !== lastStamp) {
       items.push({ kind: "time", text: stamp });
       lastStamp = stamp;
@@ -116,14 +117,14 @@ export function replayTimeline(events: EventEnvelope[]): ReplayItem[] {
 export function failureMessage(code: ErrorCode): string {
   switch (code) {
     case "RATE_LIMITED":
-      return "请求过于频繁，请稍后重试。";
+      return t("chat.rateLimited");
     case "AUTH_FAILED":
-      return "认证失败，请检查 API 配置。";
+      return t("chat.authFailed");
     case "MODEL_UNAVAILABLE":
-      return "模型暂不可用，请稍后重试。";
+      return t("chat.modelUnavailable");
     case "CANCELLED":
-      return "已取消。";
+      return t("chat.cancelled");
     default:
-      return "请求失败，请检查模型配置。";
+      return t("chat.requestFailed");
   }
 }

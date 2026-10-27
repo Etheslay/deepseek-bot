@@ -6,7 +6,8 @@
  */
 import type { JSX } from "react";
 import type { RunView } from "../events/run-view.js";
-import { RUN_STATUS_LABELS } from "../run-list/run-list.js";
+import { runStatusLabel } from "../run-list/run-list.js";
+import { formatFullDateTime, t } from "../../../i18n.js";
 
 function formatBytes(size: number): string {
   return `${size} B`;
@@ -23,15 +24,15 @@ export function RunHistory(props: {
 
   return (
     <div className="rm-history">
-      <section className="rm-history-section" aria-label="版本快照">
-        <h4>版本快照（workflowSnapshot）</h4>
+      <section className="rm-history-section" aria-label={t("runs.versionSnapshot")}>
+        <h4>{t("runs.versionSnapshotHeading")}</h4>
         <dl className="rm-kv">
           <div className="rm-kv-row">
-            <dt>名称</dt>
+            <dt>{t("runs.name")}</dt>
             <dd>{snapshot.name}</dd>
           </div>
           <div className="rm-kv-row">
-            <dt>工作流 / 版本</dt>
+            <dt>{t("runs.workflowRevision")}</dt>
             <dd>
               {snapshot.id.slice(0, 8)} · {snapshot.revision.slice(0, 8)}
             </dd>
@@ -41,44 +42,47 @@ export function RunHistory(props: {
             <dd>{snapshot.schemaVersion}</dd>
           </div>
           <div className="rm-kv-row">
-            <dt>节点 / 边</dt>
+            <dt>{t("runs.nodesEdges")}</dt>
             <dd>
-              {snapshot.nodes.length} 节点 · {snapshot.edges.length} 边
+              {t("runs.nodeEdgeCount", [snapshot.nodes.length, snapshot.edges.length])}
             </dd>
           </div>
           <div className="rm-kv-row">
-            <dt>触发</dt>
+            <dt>{t("runs.trigger")}</dt>
             <dd>
-              {run.trigger.kind === "manual" ? "手动" : "定时"} ·{" "}
-              {new Date(run.createdAt).toLocaleString()}
+              {run.trigger.kind === "manual" ? t("runs.triggerManual") : t("runs.triggerScheduled")} ·{" "}
+              {formatFullDateTime(run.createdAt)}
             </dd>
           </div>
           <div className="rm-kv-row">
-            <dt>结束</dt>
+            <dt>{t("runs.ended")}</dt>
             <dd>
               {run.finishedAt !== null
-                ? `${new Date(run.finishedAt).toLocaleString()}（${RUN_STATUS_LABELS[run.status]}）`
-                : "未结束"}
+                ? t("d22.runFinishedAt", [
+                    formatFullDateTime(run.finishedAt),
+                    runStatusLabel(run.status),
+                  ])
+                : t("runs.notEnded")}
             </dd>
           </div>
         </dl>
         {run.botSnapshots.length > 0 && (
           <p className="rm-sub">
-            Bot 快照：{run.botSnapshots.map((bot) => bot.name).join("、")}
+            {t("runs.botSnapshots", [run.botSnapshots.map((bot) => bot.name).join(t("d22.listSeparator"))])}
           </p>
         )}
       </section>
 
-      <section className="rm-history-section" aria-label="产物">
-        <h4>产物（Artifact）</h4>
-        {view.artifacts.length === 0 && <p className="rm-sub">暂无产物</p>}
+      <section className="rm-history-section" aria-label={t("shell.artifacts")}>
+        <h4>{t("runs.artifactsHeading")}</h4>
+        {view.artifacts.length === 0 && <p className="rm-sub">{t("shell.noArtifacts")}</p>}
         {view.artifacts.length > 0 && (
           <table className="rm-artifact-table">
             <thead>
               <tr>
-                <th scope="col">路径</th>
-                <th scope="col">类型</th>
-                <th scope="col">大小</th>
+                <th scope="col">{t("runs.path")}</th>
+                <th scope="col">{t("runs.type")}</th>
+                <th scope="col">{t("runs.size")}</th>
                 <th scope="col">sha256</th>
               </tr>
             </thead>
@@ -98,37 +102,36 @@ export function RunHistory(props: {
         )}
       </section>
 
-      <section className="rm-history-section" aria-label="Harness 会话定位">
-        <h4>Harness 会话定位</h4>
+      <section className="rm-history-section" aria-label={t("runs.sessionLocator")}>
+        <h4>{t("runs.sessionLocator")}</h4>
         <ul className="rm-session-list">
           {view.nodes.flatMap((node) =>
             node.runs
               .filter((attempt) => attempt.sessionId !== null)
               .map((attempt) => (
                 <li key={attempt.nodeRunId}>
-                  节点 {node.nodeId}（第 {attempt.attempt} 次）：
+                  {t("runs.nodeAttemptLabel", [node.nodeId, attempt.attempt])}
                   <code className="rm-session-id">{attempt.sessionId}</code>
                 </li>
               )),
           )}
         </ul>
         <p className="rm-sub">
-          会话定位入口仅展示 ID；跳转到真实 Harness 会话在 D12 集成后提供。
+          {t("runs.sessionLocatorHint")}
         </p>
       </section>
 
       {(resumedFrom !== undefined || view.status === "interrupted") && (
-        <section className="rm-history-section" aria-label="中断与恢复">
-          <h4>中断与恢复</h4>
+        <section className="rm-history-section" aria-label={t("runs.interruptionRecovery")}>
+          <h4>{t("runs.interruptionRecovery")}</h4>
           {view.status === "interrupted" && (
             <p className="rm-sub">
-              中断原因：{view.interruptedReason ?? "Host 进程退出"}。恢复将以新 Run
-              关联 resumedFromRunId，原运行不会回到 running。
+              {t("runs.interruptReason")}{view.interruptedReason ?? t("runs.hostProcessExited")}{t("runs.resumeNote")}
             </p>
           )}
           {resumedFrom !== undefined && (
             <p className="rm-sub">
-              本运行恢复自{" "}
+              {t("runs.resumedFrom")}
               <button
                 type="button"
                 className="rm-link-btn"

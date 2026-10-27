@@ -11,6 +11,7 @@ import {
   type SkillLibrary,
 } from "./skills.js";
 import { exportLibrary, importLibrary } from "./library-io.js";
+import { t } from "../../i18n.js";
 
 type EditorState = {
   id: string | null;
@@ -71,18 +72,18 @@ export function SkillsPanel(props: {
     if (!result.ok) {
       setError(
         result.reason === "duplicate"
-          ? "同名技能已存在"
+          ? t("skills.duplicateName")
           : result.reason === "limit"
-            ? "技能数量已达上限"
+            ? t("skills.limitReached")
             : result.reason === "missing"
-              ? "这个技能已经不存在了"
-              : "名称和指令不能为空",
+              ? t("skills.skillMissing")
+              : t("skills.nameInstructionsRequired"),
       );
       return;
     }
     props.onChange(result.library);
     toast(
-      editor.id ? `已更新「${result.skill.name}」到 v${result.skill.version}` : `已新建「${result.skill.name}」`,
+      editor.id ? t("skills.skillUpdated", [result.skill.name, result.skill.version]) : t("skills.skillCreated", [result.skill.name]),
     );
     setEditor(null);
     setError(null);
@@ -90,7 +91,7 @@ export function SkillsPanel(props: {
 
   const remove = (skill: SkillDefinition): void => {
     props.onChange(deleteSkill(props.storage, props.library, skill.id));
-    toast(`已删除「${skill.name}」`);
+    toast(t("skills.skillDeleted", [skill.name]));
   };
 
   const download = (): void => {
@@ -102,7 +103,7 @@ export function SkillsPanel(props: {
     anchor.download = `deepseek-bot-library-${new Date().toISOString().slice(0, 10)}.json`;
     anchor.click();
     URL.revokeObjectURL(url);
-    toast("已导出技能与模板");
+    toast(t("skills.libraryExported"));
   };
 
   const readFile = (file: File): void => {
@@ -114,14 +115,14 @@ export function SkillsPanel(props: {
         String(reader.result ?? ""),
       );
       if (!result.ok) {
-        toast(`导入失败：${result.reason}`);
+        toast(t("skills.importFailed", [result.reason]));
         return;
       }
       props.onChange(result.library);
       const { addedSkills, skippedSkills, addedTemplates, skippedTemplates } =
         result.summary;
       toast(
-        `导入完成：技能 +${addedSkills}（跳过 ${skippedSkills}），模板 +${addedTemplates}（跳过 ${skippedTemplates}）`,
+        t("skills.importDone", [addedSkills, skippedSkills, addedTemplates, skippedTemplates]),
       );
     };
     reader.readAsText(file);
@@ -131,23 +132,23 @@ export function SkillsPanel(props: {
     <div className="skills-panel">
       <div className="skills-toolbar">
         <button type="button" className="ghost-btn" onClick={startCreate}>
-          新建技能
+          {t("skills.newSkill")}
         </button>
         <button type="button" className="ghost-btn" onClick={download}>
-          导出
+          {t("skills.export")}
         </button>
         <button
           type="button"
           className="ghost-btn"
           onClick={() => fileInput.current?.click()}
         >
-          导入
+          {t("skills.import")}
         </button>
         <input
           ref={fileInput}
           type="file"
           accept="application/json,.json"
-          aria-label="选择要导入的库文件"
+          aria-label={t("skills.chooseLibraryFile")}
           style={{ display: "none" }}
           onChange={(event) => {
             const file = event.target.files?.[0];
@@ -158,7 +159,7 @@ export function SkillsPanel(props: {
       </div>
 
       {props.library.skills.length === 0 ? (
-        <p className="form-hint">还没有技能。技能会按 bot 勾选的顺序拼进消息上下文。</p>
+        <p className="form-hint">{t("skills.emptyState")}</p>
       ) : (
         <ul className="skills-list" role="list">
           {props.library.skills.map((skill) => (
@@ -175,10 +176,10 @@ export function SkillsPanel(props: {
               </div>
               <div className="skills-row-actions">
                 <button type="button" className="ghost-btn" onClick={() => startEdit(skill)}>
-                  编辑
+                  {t("skills.edit")}
                 </button>
                 <button type="button" className="ghost-btn" onClick={() => remove(skill)}>
-                  删除
+                  {t("shell.delete")}
                 </button>
               </div>
             </li>
@@ -192,8 +193,8 @@ export function SkillsPanel(props: {
             className="form-name"
             value={editor.name}
             maxLength={200}
-            placeholder="技能名称"
-            aria-label="技能名称"
+            placeholder={t("skills.skillName")}
+            aria-label={t("skills.skillName")}
             onChange={(event) =>
               setEditor((prev) => (prev ? { ...prev, name: event.target.value } : prev))
             }
@@ -201,8 +202,8 @@ export function SkillsPanel(props: {
           <input
             value={editor.description}
             maxLength={2000}
-            placeholder="一句话说明（可选）"
-            aria-label="技能说明"
+            placeholder={t("skills.shortDescriptionPlaceholder")}
+            aria-label={t("skills.skillDescription")}
             onChange={(event) =>
               setEditor((prev) =>
                 prev ? { ...prev, description: event.target.value } : prev,
@@ -212,8 +213,8 @@ export function SkillsPanel(props: {
           <textarea
             value={editor.instructions}
             rows={5}
-            placeholder="技能指令：这段文字会作为参考上下文拼给模型"
-            aria-label="技能指令"
+            placeholder={t("skills.instructionsPlaceholder")}
+            aria-label={t("skills.skillInstructions")}
             onChange={(event) =>
               setEditor((prev) =>
                 prev ? { ...prev, instructions: event.target.value } : prev,
@@ -223,8 +224,8 @@ export function SkillsPanel(props: {
           <input
             value={editor.capabilities}
             maxLength={200}
-            placeholder="声明能力（逗号分隔，仅声明不强制）"
-            aria-label="声明能力"
+            placeholder={t("skills.declaredCapabilitiesPlaceholder")}
+            aria-label={t("skills.declaredCapabilities")}
             onChange={(event) =>
               setEditor((prev) =>
                 prev ? { ...prev, capabilities: event.target.value } : prev,
@@ -245,10 +246,10 @@ export function SkillsPanel(props: {
                 setError(null);
               }}
             >
-              取消
+              {t("shell.cancel")}
             </button>
             <button type="button" className="primary-btn" onClick={commit}>
-              保存
+              {t("shell.save")}
             </button>
           </div>
         </div>

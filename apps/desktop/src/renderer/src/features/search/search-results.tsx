@@ -4,6 +4,7 @@
  */
 import { useCallback, useEffect, useRef, useState, type JSX } from "react";
 import { METHOD_CONTRACTS } from "@deepseek-bot/contracts";
+import { type Notice, noticeText, t, useLanguage } from "../../i18n.js";
 
 type SearchResult = {
   title: string;
@@ -36,7 +37,8 @@ function linkable(value: string): string | null {
 
 function BotSearchCards({ botId }: { botId: string }): JSX.Element | null {
   const [searches, setSearches] = useState<SearchRecord[] | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  useLanguage();
+  const [notice, setNotice] = useState<Notice | null>(null);
   const active = useRef(true);
   const loadSequence = useRef(0);
 
@@ -46,7 +48,7 @@ function BotSearchCards({ botId }: { botId: string }): JSX.Element | null {
     const parsed = METHOD_CONTRACTS["search.results.list"].response.parse(response);
     if (!active.current || sequence !== loadSequence.current) return;
     setSearches(parsed.searches);
-    setNotice((current) => (current === "搜索结果读取失败" ? null : current));
+    setNotice((current) => (current?.key === "search.resultsReadFailed" ? null : current));
   }, [botId]);
 
   useEffect(() => {
@@ -54,7 +56,7 @@ function BotSearchCards({ botId }: { botId: string }): JSX.Element | null {
     let cancelled = false;
     const run = (): void => {
       void load().catch(() => {
-        if (!cancelled) setNotice("搜索结果读取失败");
+        if (!cancelled) setNotice({ key: "search.resultsReadFailed" });
       });
     };
     run();
@@ -70,9 +72,9 @@ function BotSearchCards({ botId }: { botId: string }): JSX.Element | null {
 
   return (
     <div className="search-result-cards">
-      {notice !== null ? <div role="status">{notice}</div> : null}
+      {notice !== null ? <div role="status">{noticeText(notice)}</div> : null}
       {(searches ?? []).map((search) => (
-        <section key={`${search.at}:${search.query}`} aria-label={`搜索 ${search.query}`}>
+        <section key={`${search.at}:${search.query}`} aria-label={t("search.queryLabel", [search.query])}>
           <div>{search.query}</div>
           {search.results.map((item) => {
             const href = linkable(item.url);

@@ -1,4 +1,6 @@
 /** Allowlisted IPC invoke channels for the desktop shell. */
+import type { LanguagePreference } from "./i18n/types.js";
+
 export const IPC_CHANNELS = {
   APP_GET_INFO: "app:getInfo",
   WINDOW_SHOW: "window:show",
@@ -17,18 +19,42 @@ export const IPC_CHANNELS = {
   UPDATES_CHECK: "updates:check",
   UPDATES_DOWNLOAD_INSTALL: "updates:downloadInstall",
   /**
-   * D24 leftover: list existing backup summaries from the data root's
+   * D24: list existing backup summaries from the data root's
    * backups/ directory. Desktop-process channel (like knowledge/updates) —
    * the Host contract has no backup-listing method, and the main process
    * already owns the data root path. Read-only over manifest.json files.
    */
   BACKUPS_LIST: "backups:list",
-  /** D24 leftover: query or toggle hardware acceleration (restart to apply). */
+  /** D24: query or toggle hardware acceleration (restart to apply). */
   APP_HARDWARE_ACCELERATION: "app:hardwareAcceleration",
+  /** D22: mirror the persisted UI language into the main process. */
+  I18N_SET_LANGUAGE: "i18n:setLanguage",
+  /** D22: renderer pushes the per-bot tray state (bots, active bot, avatars). */
+  TRAY_SYNC: "tray:sync",
+  /** D22: renderer asks main to raise a system notification. */
+  NOTIFICATION_SHOW: "notification:show",
+  /** D22: scan Chrome profiles / preview / import / clear its bookmarks. */
+  CHROME_SCAN: "chrome:scan",
+  CHROME_PREVIEW: "chrome:preview",
+  CHROME_IMPORT: "chrome:import",
+  CHROME_STATE: "chrome:state",
+  CHROME_CLEAR: "chrome:clear",
+  CHROME_EXPORT: "chrome:export",
 } as const;
 
 /** Main → renderer event channel for scheduler skip-and-notify notices (FR-08). */
 export const HOST_EVENT_MISSED = "host:event:missed";
+
+/** D22 main → renderer: a tray menu entry was clicked. */
+export const SYSTEM_EVENT_TRAY_ACTION = "system:event:tray-action";
+/** D22 main → renderer: a system notification was clicked. */
+export const SYSTEM_EVENT_NOTIFICATION_CLICK = "system:event:notification-click";
+/** D22 main → renderer: native window focus changed (notification gating). */
+export const SYSTEM_EVENT_WINDOW_FOCUS = "system:event:window-focus";
+
+export type TrayActionEvent = { kind: "bot"; botId: string } | { kind: "settings" };
+export type NotificationClickEvent = { botId: string | null };
+export type WindowFocusEvent = { focused: boolean };
 
 /**
  * Data root directory name, mirroring storage's layout constant. Duplicated
@@ -47,6 +73,8 @@ export type AppInfo = {
   name: string;
   version: string;
   platform: NodeJS.Platform;
+  /** Desktop locale reported by Electron, used for "跟随系统" (D22). */
+  locale: string;
 };
 
 /** D24: update check result surfaced to the renderer. */
@@ -106,6 +134,21 @@ export function assertValidTitleBarOverlayColors(
     throw new IpcDeniedError(
       "INVALID_PAYLOAD",
       "titlebar overlay colors must be #rrggbb strings: { color, symbolColor }",
+    );
+  }
+}
+
+/**
+ * D22: the language preference main will mirror for tray and notification
+ * strings. Anything else is rejected before it reaches the main process.
+ */
+export function assertValidLanguagePreference(
+  value: unknown,
+): asserts value is LanguagePreference {
+  if (value !== "system" && value !== "zh" && value !== "en") {
+    throw new IpcDeniedError(
+      "INVALID_PAYLOAD",
+      "language preference must be one of: system, zh, en",
     );
   }
 }

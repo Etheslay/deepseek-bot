@@ -10,6 +10,7 @@ import type { BotArtifact } from "@deepseek-bot/contracts";
 import type { ChatSessionView } from "../../services/desktop-service.js";
 import type { DesktopService } from "../../services/desktop-service.js";
 import { replayTimeline } from "./chat-reducer.js";
+import { t } from "../../i18n.js";
 
 export function SessionHistory(props: {
   service: DesktopService;
@@ -65,7 +66,7 @@ export function SessionHistory(props: {
   if (sessions === null) {
     return (
       <button type="button" className="ghost-btn history-toggle" onClick={() => void load()}>
-        历史会话
+        {t("chat.sessionHistory")}
       </button>
     );
   }
@@ -73,10 +74,10 @@ export function SessionHistory(props: {
   return (
     <div className="session-history">
       <button type="button" className="ghost-btn history-toggle" onClick={() => setOpenSessionId(null)}>
-        收起历史
+        {t("chat.collapseHistory")}
       </button>
       {error && <p className="form-error" role="alert">{error}</p>}
-      <div className="session-list" aria-label="历史会话列表">
+      <div className="session-list" aria-label={t("chat.sessionHistoryList")}>
         {sessions.map((s) => (
           <button
             key={s.sessionId}
@@ -86,15 +87,15 @@ export function SessionHistory(props: {
           >
             <span className="tab-title">{s.title}</span>
             <span className="session-meta">
-              {s.status === "ended" ? "已结束" : "进行中"} · {s.replayEventCount} 个事件
+              {s.status === "ended" ? t("shell.statusEnded") : t("shell.statusInProgress")} {t("chat.eventCountSuffix", [s.replayEventCount])}
             </span>
           </button>
         ))}
-        {sessions.length === 0 && <div className="sys-line">暂无历史会话。</div>}
+        {sessions.length === 0 && <div className="sys-line">{t("chat.noSessions")}</div>}
       </div>
       {openSessionId !== null && replay !== null && (
-        <div className="replay-panel" aria-label="会话回放">
-          <div className="replay-title">会话回放（持久事件）</div>
+        <div className="replay-panel" aria-label={t("chat.sessionReplay")}>
+          <div className="replay-title">{t("chat.sessionReplayTitle")}</div>
           {replay.items.map((item, i) =>
             item.kind === "time" ? (
               <div className="msg-time" key={`t-${i}`}>
@@ -106,9 +107,9 @@ export function SessionHistory(props: {
               </div>
             ),
           )}
-          {replay.items.length === 0 && <div className="sys-line">无持久事件。</div>}
-          <div className="replay-title">产物</div>
-          <div className="artifact-list" aria-label="产物列表">
+          {replay.items.length === 0 && <div className="sys-line">{t("chat.noPersistedEvents")}</div>}
+          <div className="replay-title">{t("shell.artifacts")}</div>
+          <div className="artifact-list" aria-label={t("chat.artifactList")}>
             {(artifacts ?? []).map((a) => (
               <div className="artifact-item" key={a.relativePath}>
                 <div className="artifact-meta">
@@ -122,15 +123,15 @@ export function SessionHistory(props: {
                   className="pill-btn"
                   onClick={() => void previewArtifact(a)}
                 >
-                  预览
+                  {t("shell.preview")}
                 </button>
               </div>
             ))}
-            {(artifacts ?? []).length === 0 && <div className="sys-line">无产物。</div>}
+            {(artifacts ?? []).length === 0 && <div className="sys-line">{t("chat.noArtifacts")}</div>}
           </div>
           {preview !== null && (
             preview.kind === "text" ? (
-              <pre className="artifact-preview" aria-label="产物预览">
+              <pre className="artifact-preview" aria-label={t("chat.artifactPreview")}>
                 {preview.content}
               </pre>
             ) : (
