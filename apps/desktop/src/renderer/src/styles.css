@@ -7876,6 +7876,7 @@ select:focus-visible {
 
 .task-cancel {
   margin-left: auto;
+}
 
 /* ---- 思考中状态行（任务相关文案） ---- */
 .thinking-line {
