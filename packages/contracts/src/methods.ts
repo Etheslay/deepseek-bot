@@ -14,6 +14,10 @@ import {
   BotArtifactSchema,
   BotGroupSchema,
   BotSchema,
+  ConnectorKindSchema,
+  McpAllowedToolsSchema,
+  McpServerGrantSchema,
+  McpToolSchema,
   ImportableWorkflowDraftSchema,
   NodeRunSchema,
   RunSchema,
@@ -43,6 +47,7 @@ import {
 } from "./events.js";
 import { WorkflowIssueSchema } from "./workflow.js";
 import { PERMISSION_METHODS } from "./permissions.js";
+import { SCREEN_METHODS } from "./screen.js";
 
 export const MAX_MESSAGE_BYTES = 1_048_576;
 
@@ -78,6 +83,7 @@ export const METHODS = [
   "group.create",
   "group.list",
   "creation.revoke",
+  "workflow.list",
   "workflow.validate",
   "workflow.save",
   "workflow.export",
@@ -111,12 +117,23 @@ export const METHODS = [
   "connector.register",
   "connector.enable",
   "connector.disable",
+  "connector.setEndpoint",
+  "connector.mcp.discover",
+  "connector.mcp.grants.get",
+  "connector.mcp.grants.set",
   "artifacts.list",
   "artifacts.read",
   "artifacts.save",
   "artifacts.versions",
   "artifacts.versionContent",
   "artifacts.revert",
+  "trigger.list",
+  "trigger.save",
+  "trigger.enable",
+  "trigger.disable",
+  "trigger.delete",
+  "trigger.firing.list",
+  "trigger.firing.decide",
   "grant.create",
   "grant.list",
   "grant.revoke",
@@ -138,6 +155,14 @@ export const METHODS = [
   "permission.approval.list",
   "permission.approval.decide",
   "permission.audit.list",
+  "screen.status",
+  "screen.windows.list",
+  "screen.target.set",
+  "screen.request",
+  "screen.cancel",
+  "screen.results.list",
+  "screen.result.read",
+  "screen.result.delete",
 ] as const;
 
 export type Method = (typeof METHODS)[number];
@@ -319,6 +344,23 @@ export const METHOD_CONTRACTS = {
     response: z.object({
       revokedBotIds: z.array(UuidSchema),
       revokedGroupId: UuidSchema.nullable(),
+    }),
+  },
+  /**
+   * Workflow summaries for pickers (D20 automation panel). Metadata only —
+   * full documents stay behind workflow.get-style editor flows; summaries
+   * keep any library size under the 1 MiB message cap.
+   */
+  "workflow.list": {
+    request: z.object({}).strict(),
+    response: z.object({
+      workflows: z.array(
+        z.object({
+          id: UuidSchema,
+          name: NonEmptyStringSchema(TEXT_LIMITS.name),
+          revision: UuidSchema,
+        }),
+      ),
     }),
   },
   "workflow.validate": {
@@ -696,7 +738,9 @@ export const METHOD_CONTRACTS = {
           id: UuidSchema,
           name: NonEmptyStringSchema(TEXT_LIMITS.name),
           enabled: z.boolean(),
+          kind: ConnectorKindSchema.optional(),
           credentialRef: z.string().nullable(),
+          endpoint: z.string().nullable(),
           at: IsoDateTimeUtcSchema,
           updatedAt: IsoDateTimeUtcSchema,
         }),
@@ -707,14 +751,20 @@ export const METHOD_CONTRACTS = {
     request: z
       .object({
         name: z.string().trim().min(1).max(TEXT_LIMITS.name),
+        kind: ConnectorKindSchema.default("sd-webui"),
         credentialRef: z.string().trim().min(1).max(TEXT_LIMITS.label).nullable().optional(),
+        // Loopback http(s) URL of the local service (D19); validated by the
+        // Host before storage, never contacted at registration time.
+        endpoint: z.string().trim().max(2048).nullable().optional(),
       })
       .strict(),
     response: z.object({
       id: UuidSchema,
       name: NonEmptyStringSchema(TEXT_LIMITS.name),
       enabled: z.literal(false),
+      kind: ConnectorKindSchema.optional(),
       credentialRef: z.string().nullable(),
+      endpoint: z.string().nullable(),
       at: IsoDateTimeUtcSchema,
       updatedAt: IsoDateTimeUtcSchema,
     }),
@@ -725,7 +775,9 @@ export const METHOD_CONTRACTS = {
       id: UuidSchema,
       name: NonEmptyStringSchema(TEXT_LIMITS.name),
       enabled: z.literal(true),
+      kind: ConnectorKindSchema.optional(),
       credentialRef: z.string().nullable(),
+      endpoint: z.string().nullable(),
       at: IsoDateTimeUtcSchema,
       updatedAt: IsoDateTimeUtcSchema,
     }),
@@ -736,10 +788,46 @@ export const METHOD_CONTRACTS = {
       id: UuidSchema,
       name: NonEmptyStringSchema(TEXT_LIMITS.name),
       enabled: z.literal(false),
+      kind: ConnectorKindSchema.optional(),
       credentialRef: z.string().nullable(),
+      endpoint: z.string().nullable(),
       at: IsoDateTimeUtcSchema,
       updatedAt: IsoDateTimeUtcSchema,
     }),
+  },
+  /**
+   * D19: set or clear the loopback http(s) endpoint of a local connector.
+   * The Host validates the URL shape (http/https, loopback host only)
+   * before storage and never contacts the endpoint here.
+   */
+  "connector.setEndpoint": {
+    request: z.object({
+      id: UuidSchema,
+      endpoint: z.string().trim().max(2048).nullable(),
+    }).strict(),
+    response: z.object({
+      id: UuidSchema,
+      name: NonEmptyStringSchema(TEXT_LIMITS.name),
+      enabled: z.boolean(),
+      kind: ConnectorKindSchema.optional(),
+      credentialRef: z.string().nullable(),
+      endpoint: z.string().nullable(),
+      at: IsoDateTimeUtcSchema,
+      updatedAt: IsoDateTimeUtcSchema,
+    }),
+  },
+  /** Trusted control plane only; Host implementation follows this contract. */
+  "connector.mcp.discover": {
+    request: z.object({ id: UuidSchema }).strict(),
+    response: z.object({ tools: z.array(McpToolSchema).max(200), at: IsoDateTimeUtcSchema }),
+  },
+  "connector.mcp.grants.get": {
+    request: z.object({ botId: UuidSchema }).strict(),
+    response: z.object({ servers: z.array(McpServerGrantSchema).max(50) }),
+  },
+  "connector.mcp.grants.set": {
+    request: z.object({ botId: UuidSchema, id: UuidSchema, allowedTools: McpAllowedToolsSchema }).strict(),
+    response: z.object({ servers: z.array(McpServerGrantSchema).max(50) }),
   },
   /**
    * D28 co-edit sidecar: artifacts are the editable files of one bot's
@@ -806,6 +894,121 @@ export const METHOD_CONTRACTS = {
       .object({ botId: UuidSchema, path: RelativeArtifactPathSchema, versionId: UuidSchema })
       .strict(),
     response: z.object({ artifact: BotArtifactSchema, version: ArtifactVersionSchema }),
+  },
+  /**
+   * D20 event automation (FR-17). A rule watches the persisted event stream
+   * for one event type (optionally scoped to a source workflow) and enqueues
+   * a FIRING for human review — nothing auto-starts. Protections: firings
+   * are unique per (rule, source event) so one event fires once; runs the
+   * review queue itself started never enqueue new firings (loop guard);
+   * events that accumulated before the host could evaluate them are
+   * enqueued with reason "missed" — visible, never silently replayed.
+   */
+  "trigger.list": {
+    request: z.object({}).strict(),
+    response: z.object({
+      rules: z.array(
+        z.object({
+          id: UuidSchema,
+          name: NonEmptyStringSchema(TEXT_LIMITS.name),
+          workflowId: UuidSchema,
+          eventType: z.enum(["run.failed", "run.completed"]),
+          filterWorkflowId: UuidSchema.nullable(),
+          enabled: z.boolean(),
+          at: IsoDateTimeUtcSchema,
+          updatedAt: IsoDateTimeUtcSchema,
+        }),
+      ),
+    }),
+  },
+  "trigger.save": {
+    request: z.object({
+      rule: z.object({
+        id: UuidSchema.optional(),
+        name: z.string().trim().min(1).max(TEXT_LIMITS.name),
+        workflowId: UuidSchema,
+        eventType: z.enum(["run.failed", "run.completed"]),
+        filterWorkflowId: UuidSchema.nullable().optional(),
+      }),
+    }),
+    response: z.object({
+      id: UuidSchema,
+      name: NonEmptyStringSchema(TEXT_LIMITS.name),
+      workflowId: UuidSchema,
+      eventType: z.enum(["run.failed", "run.completed"]),
+      filterWorkflowId: UuidSchema.nullable(),
+      enabled: z.boolean(),
+      at: IsoDateTimeUtcSchema,
+      updatedAt: IsoDateTimeUtcSchema,
+    }),
+  },
+  "trigger.enable": {
+    request: z.object({ id: UuidSchema }).strict(),
+    response: z.object({
+      id: UuidSchema,
+      name: NonEmptyStringSchema(TEXT_LIMITS.name),
+      workflowId: UuidSchema,
+      eventType: z.enum(["run.failed", "run.completed"]),
+      filterWorkflowId: UuidSchema.nullable(),
+      enabled: z.literal(true),
+      at: IsoDateTimeUtcSchema,
+      updatedAt: IsoDateTimeUtcSchema,
+    }),
+  },
+  "trigger.disable": {
+    request: z.object({ id: UuidSchema }).strict(),
+    response: z.object({
+      id: UuidSchema,
+      name: NonEmptyStringSchema(TEXT_LIMITS.name),
+      workflowId: UuidSchema,
+      eventType: z.enum(["run.failed", "run.completed"]),
+      filterWorkflowId: UuidSchema.nullable(),
+      enabled: z.literal(false),
+      at: IsoDateTimeUtcSchema,
+      updatedAt: IsoDateTimeUtcSchema,
+    }),
+  },
+  "trigger.delete": {
+    request: z.object({ id: UuidSchema }).strict(),
+    response: z.object({ deleted: z.literal(true) }),
+  },
+  "trigger.firing.list": {
+    request: z
+      .object({
+        status: z.enum(["pending", "approved", "dismissed"]).optional(),
+        limit: z.int().min(1).max(100).default(50),
+      })
+      .strict(),
+    response: z.object({
+      firings: z.array(
+        z.object({
+          id: UuidSchema,
+          ruleId: UuidSchema,
+          ruleName: NonEmptyStringSchema(TEXT_LIMITS.name),
+          workflowId: UuidSchema,
+          eventType: z.enum(["run.failed", "run.completed"]),
+          sourceRunId: UuidSchema.nullable(),
+          reason: z.enum(["event", "missed"]),
+          status: z.enum(["pending", "approved", "dismissed"]),
+          at: IsoDateTimeUtcSchema,
+          decidedAt: IsoDateTimeUtcSchema.nullable(),
+        }),
+      ),
+    }),
+  },
+  "trigger.firing.decide": {
+    request: z.object({
+      firingId: UuidSchema,
+      decision: z.enum(["start", "dismiss"]),
+    }).strict(),
+    response: z.object({
+      firing: z.object({
+        id: UuidSchema,
+        status: z.enum(["pending", "approved", "dismissed"]),
+        decidedAt: IsoDateTimeUtcSchema.nullable(),
+      }),
+      runId: UuidSchema.nullable(),
+    }),
   },
   "grant.create": {
     request: z.object({
@@ -888,6 +1091,7 @@ export const METHOD_CONTRACTS = {
     }),
   },
   ...PERMISSION_METHODS,
+  ...SCREEN_METHODS,
 } as const satisfies Record<
   Method,
   { request: z.ZodType; response: z.ZodType }

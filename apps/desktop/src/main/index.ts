@@ -140,6 +140,18 @@ function createMainWindow(): BrowserWindow {
     win.show();
   });
 
+  // Some Windows sessions never fire ready-to-show for a window that starts
+  // hidden (the first frame never gets composited), leaving the app invisible
+  // with a working renderer. Once the page has loaded, give ready-to-show a
+  // short grace period, then show the window anyway.
+  win.webContents.once("did-finish-load", () => {
+    setTimeout(() => {
+      if (!win.isDestroyed() && !win.isVisible()) {
+        win.show();
+      }
+    }, 1_000);
+  });
+
   win.on("close", (event) => {
     if (!isQuitting) {
       event.preventDefault();

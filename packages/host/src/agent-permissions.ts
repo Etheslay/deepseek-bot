@@ -41,6 +41,8 @@ const CAPABILITIES: Readonly<Record<string, readonly CapabilityId[]>> = {
   memory_search: ["memory.read"],
   memory_write: ["memory.write"],
   knowledge_search: ["memory.read"],
+  connector_invoke: ["connector.invoke"],
+  mcp_call: ["mcp.call"],
 };
 function digest(call: Omit<PermissionCall, "actionDigest">): string {
   return createHash("sha256").update(stableStringify(call)).digest("hex");
@@ -218,6 +220,17 @@ export class AgentPermissionService implements GrantCheckpoint {
           decision: "denied",
         });
       }
+    }
+  }
+
+  cancelMcp(filter: { connectorId?: string; botId?: string }): void {
+    for (const [id, waiter] of this.waiters) {
+      const approval = getPermissionApproval(this.db, id);
+      if (approval?.tool !== "mcp_call" ||
+          (filter.connectorId !== undefined && approval.params.connectorId !== filter.connectorId) ||
+          (filter.botId !== undefined && approval.botId !== filter.botId)) continue;
+      try { cancelPermissionApproval(this.db, id, "cancelled", this.generation); }
+      finally { waiter.finish({ allowed: false, code: "CANCELLED", reason: "MCP authorization changed", approvalId: id, decision: "denied" }); }
     }
   }
 
