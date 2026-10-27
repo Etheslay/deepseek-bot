@@ -39,6 +39,12 @@ export {
   type MemoryStore,
 } from "./memory.js";
 export {
+  bindConnectorTools,
+  ConnectorInvokeInputSchema,
+  type ConnectorInvokeResult,
+  type ConnectorStore,
+} from "./connectors.js";
+export {
   bindKnowledgeTools,
   KnowledgeSearchInputSchema,
   type KnowledgeSearchHit,

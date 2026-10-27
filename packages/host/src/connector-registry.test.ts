@@ -63,8 +63,9 @@ describe("connector registry", () => {
       });
       const names = host.agentTools.capabilities.list().map((tool) => tool.name);
       expect(names).not.toContain("connector.register");
-      expect(names).not.toContain("connector_invoke");
-      expect(names.filter((name) => name.startsWith("connector"))).toEqual([]);
+      expect(names).not.toContain("connector.list");
+      // D19 slice 2: invocation is a model tool; registry control stays desktop-only.
+      expect(names.filter((name) => name.startsWith("connector"))).toEqual(["connector_invoke"]);
       const policy = host.db.raw.prepare("SELECT policy_json FROM tool_policies LIMIT 1").get() as {
         policy_json: string;
       };
@@ -85,6 +86,51 @@ describe("connector registry", () => {
       expect(await reopened.handleMethod("connector.list", {})).toMatchObject({
         connectors: [{ id: registered.id, enabled: false, credentialRef: CREDENTIAL_REF }],
       });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});
+
+describe("connector endpoint and invoke wiring (D19)", () => {
+  it("stores a loopback endpoint, rejects remote targets and keeps fetch untouched", async () => {
+    const host = await setup();
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = () => {
+      throw new Error("endpoint management must not send a request");
+    };
+    try {
+      const registered = (await host.handleMethod("connector.register", {
+        name: "local-diffusion",
+        endpoint: "http://127.0.0.1:7860",
+      })) as { id: string; endpoint: string | null };
+      expect(registered.endpoint).toBe("http://127.0.0.1:7860");
+
+      await expect(
+        host.handleMethod("connector.register", {
+          name: "remote",
+          endpoint: "https://example.com",
+        }),
+      ).rejects.toMatchObject({ code: "INVALID_INPUT" });
+
+      const cleared = (await host.handleMethod("connector.setEndpoint", {
+        id: registered.id,
+        endpoint: null,
+      })) as { endpoint: string | null };
+      expect(cleared.endpoint).toBeNull();
+
+      const updated = (await host.handleMethod("connector.setEndpoint", {
+        id: registered.id,
+        endpoint: "http://localhost:7860",
+      })) as { endpoint: string | null };
+      expect(updated.endpoint).toBe("http://localhost:7860");
+
+      await expect(
+        host.handleMethod("connector.setEndpoint", {
+          id: registered.id,
+          endpoint: "http://10.0.0.1:7860",
+        }),
+      ).rejects.toMatchObject({ code: "INVALID_INPUT" });
     } finally {
       globalThis.fetch = originalFetch;
     }

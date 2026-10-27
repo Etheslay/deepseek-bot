@@ -65,6 +65,7 @@ import {
   listConnectors,
   registerConnector,
   setConnectorEnabled,
+  setConnectorEndpoint,
   updateBot,
   type BotPatch,
   type DataLayout,
@@ -725,6 +726,7 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
         name: row.name,
         enabled: row.enabled,
         credentialRef: row.credentialRef,
+        endpoint: row.endpoint,
         at: row.createdAt,
         updatedAt: row.updatedAt,
       })),
@@ -734,12 +736,14 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
       const row = registerConnector(db, {
         name: payload.name,
         ...(payload.credentialRef !== undefined ? { credentialRef: payload.credentialRef } : {}),
+        ...(payload.endpoint !== undefined ? { endpoint: payload.endpoint } : {}),
       });
       return {
         id: row.id,
         name: row.name,
         enabled: false as const,
         credentialRef: row.credentialRef,
+        endpoint: row.endpoint,
         at: row.createdAt,
         updatedAt: row.updatedAt,
       };
@@ -752,6 +756,7 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
         name: row.name,
         enabled: true as const,
         credentialRef: row.credentialRef,
+        endpoint: row.endpoint,
         at: row.createdAt,
         updatedAt: row.updatedAt,
       };
@@ -764,6 +769,20 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
         name: row.name,
         enabled: false as const,
         credentialRef: row.credentialRef,
+        endpoint: row.endpoint,
+        at: row.createdAt,
+        updatedAt: row.updatedAt,
+      };
+    },
+
+    "connector.setEndpoint": (payload) => {
+      const row = setConnectorEndpoint(db, { id: payload.id, endpoint: payload.endpoint });
+      return {
+        id: row.id,
+        name: row.name,
+        enabled: row.enabled,
+        credentialRef: row.credentialRef,
+        endpoint: row.endpoint,
         at: row.createdAt,
         updatedAt: row.updatedAt,
       };

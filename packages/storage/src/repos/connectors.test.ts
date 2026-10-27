@@ -3,7 +3,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { openDatabase, type OpenedDatabase } from "../database.js";
-import { listConnectors, registerConnector, setConnectorEnabled } from "./connectors.js";
+import {
+  connectorEndpoint,
+  listConnectors,
+  registerConnector,
+  setConnectorEnabled,
+  setConnectorEndpoint,
+} from "./connectors.js";
 
 const CREDENTIAL_REF = "cred:11111111-1111-4111-8111-111111111111";
 
@@ -69,6 +75,49 @@ describe("connector registry", () => {
         reopened.close();
       }
     } finally {
+      cleanup();
+    }
+  });
+});
+
+describe("connector endpoint (D19)", () => {
+  it("accepts loopback http(s) URLs and rejects everything else", () => {
+    expect(connectorEndpoint(" http://127.0.0.1:7860 ")).toBe("http://127.0.0.1:7860");
+    expect(connectorEndpoint("http://localhost:7860/")).toBe("http://localhost:7860/");
+    expect(connectorEndpoint(null)).toBeNull();
+    expect(connectorEndpoint(undefined)).toBeNull();
+    expect(connectorEndpoint("   ")).toBeNull();
+    expect(() => connectorEndpoint("ftp://127.0.0.1")).toThrowError(/http or https/);
+    expect(() => connectorEndpoint("http://192.168.1.5:7860")).toThrowError(/loopback/);
+    expect(() => connectorEndpoint("http://example.com")).toThrowError(/loopback/);
+    expect(() => connectorEndpoint("http://127.0.0.1/sdapi")).toThrowError(/must not carry a path/);
+    expect(() => connectorEndpoint("not-a-url")).toThrowError(/absolute/);
+  });
+
+  it("registers and updates the endpoint without contacting anything", () => {
+    const { db, cleanup } = tempDb();
+    try {
+      const saved = registerConnector(db, {
+        name: "local-diffusion",
+        endpoint: "http://127.0.0.1:7860",
+      });
+      expect(saved.endpoint).toBe("http://127.0.0.1:7860");
+      expect(() =>
+        registerConnector(db, { name: "bad", endpoint: "http://example.com" }),
+      ).toThrowError(/loopback/);
+
+      const cleared = setConnectorEndpoint(db, { id: saved.id, endpoint: null });
+      expect(cleared.endpoint).toBeNull();
+      const updated = setConnectorEndpoint(db, {
+        id: saved.id,
+        endpoint: "http://localhost:7860",
+      });
+      expect(updated.endpoint).toBe("http://localhost:7860");
+      expect(() =>
+        setConnectorEndpoint(db, { id: saved.id, endpoint: "https://remote.example.com" }),
+      ).toThrowError(/loopback/);
+    } finally {
+      db.close();
       cleanup();
     }
   });

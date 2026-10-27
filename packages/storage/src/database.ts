@@ -547,5 +547,15 @@ CREATE INDEX artifact_versions_lookup
   ON artifact_versions(bot_id, relative_path, revision DESC);
 `,
   },
+  {
+    // D19 (connector invoke): loopback http(s) endpoint of the local
+    // service behind a registered connector. Nullable — a connector without
+    // an endpoint stays catalog-only.
+    id: 12,
+    name: "0012-connectors-endpoint",
+    sql: /* sql */ `
+ALTER TABLE connectors ADD COLUMN endpoint TEXT;
+`,
+  },
 ];
 

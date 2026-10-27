@@ -57,6 +57,7 @@ import { AskUserCoordinator, JsonlAuditSink, ToolGateway, ToolRegistry, bindAskU
 import {
   ToolRejectionError,
   WebSearchService,
+  bindConnectorTools,
   bindKnowledgeTools,
   bindMemoryTools,
   bindWebSearchTool,
@@ -66,6 +67,7 @@ import {
   type WebSearchResult,
 } from "@deepseek-bot/agent-tools";
 import { startApplicationToolServer } from "./app-tool-channel.js";
+import { invokeConnector } from "./connectors.js";
 
 export interface HostOptions {
   /** Data root (storage layout: database, harness home, artifacts, backups). */
@@ -403,6 +405,11 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
           text: row.text,
           at: row.createdAt,
         }));
+      },
+    }),
+    ...bindConnectorTools({
+      invoke(connectorId, action, params) {
+        return invokeConnector(db, layout.connectorOutputs, { connectorId, action, params }, { now });
       },
     }),
     ...bindKnowledgeTools({

@@ -191,3 +191,12 @@
 - 全仓 lint/typecheck/test 全绿：shared 6、bridge 16、contracts 88、agent-tools 75、storage 159、desktop 226、runtime 128、adapter 58、host 88（+1 跳过冒烟）。
 - 未验证（docs/reports/D18-knowledge-search-report.md §4）：真实 Electron 手测、真实模型调用 knowledge_search、真实语料相关性人工评估、远程 CI；神经语义检索未评估。
 - 自审记录留空待负责人 Etheslay 填写；PR 合并由本人确认。
+
+## 2026-10-27：D19 连接器调用管道与本地 SD 生图（feature/connector-invoke）
+
+- D18 收尾经 PR #63 合入 develop 后继续 A4：连接器从"只登记"到"可调用"。
+- 迁移 0011-connectors-endpoint：回环端点列；connector.setEndpoint 受信方法；端点仅接受 127.0.0.1/localhost/[::1] 的 http(s) URL（存储层校验，不带路径），只存储不探测。
+- 模型工具 connector_invoke（能力 connector.invoke，默认 ask）：txt2img → 本机 SD WebUI /sdapi/v1/txt2img（120s 超时），图片落盘 connector-outputs/<connectorId>/（≤8 MiB，不进备份），返回绝对路径；字节不进契约信封。新 /connectors 通道路由 + 桥接目录名单。
+- 全仓 lint/typecheck/test 全绿：shared 6、bridge 16、contracts 89、agent-tools 78、storage 161、desktop 228、runtime 128、adapter 58、host 92（+1 跳过）。
+- 未验证（docs/reports/D19-connector-invoke-report.md §3）：真实 SD WebUI 联调（本机未装，假 HTTP 服务验证协议）、真实 Electron 手测、真实模型审批链路、远程 CI。聊天内图片预览归 B 线。
+- 自审记录留空待负责人 Etheslay 填写；PR 由本人确认合并。
