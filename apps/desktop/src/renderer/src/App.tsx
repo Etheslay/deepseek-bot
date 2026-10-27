@@ -3577,15 +3577,6 @@ function BotsPlaceholder({
       />
       <div className="composer">
         <div className="composer-menu-wrap">
-          <button
-            type="button"
-            className="composer-plus composer-skill"
-            aria-label={t("skills.menuLabel")}
-            title={t("skills.dialogTitle")}
-            onClick={() => setSkillMenuOpen((v) => !v)}
-          >
-            ⚡
-          </button>
           {skillMenuOpen && (
             <>
               <div className="menu-overlay" onClick={() => setSkillMenuOpen(false)} />
