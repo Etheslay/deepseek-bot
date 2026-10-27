@@ -198,6 +198,17 @@ function pairKeyOf(a: number, b: number): string {
   return a < b ? `${a}|${b}` : `${b}|${a}`;
 }
 
+/** 人类可读的备份体积（D24 保险库分区）。 */
+function formatBackupSize(bytes: number): string {
+  if (bytes < 1024) {
+    return `${bytes} B`;
+  }
+  if (bytes < 1024 * 1024) {
+    return `${(bytes / 1024).toFixed(1)} KB`;
+  }
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 function formatChatTime(value: number): string {
   const d = new Date(value);
   const time = formatTime(value);
@@ -413,6 +424,22 @@ export function App(): JSX.Element {
   }, [groupMenu]);
 
   const [settingsOpen, setSettingsOpen] = useState(false);
+  /** Which settings nav section is active (D24). */
+  const [settingsSection, setSettingsSection] = useState<
+    "general" | "permissions" | "computer" | "vault" | "usage" | "updates"
+  >("general");
+  const [backups, setBackups] = useState<
+    import("../../shared/ipc-channels.js").BackupSummary[] | null
+  >(null);
+  const [backupBusy, setBackupBusy] = useState(false);
+  const [describe, setDescribe] = useState<{
+    schemaVersion: string;
+    counts: Record<string, number>;
+  } | null>(null);
+  const [hwAccel, setHwAccel] = useState<{
+    enabled: boolean;
+    restartRequired: boolean;
+  } | null>(null);
   const [workflowOpen, setWorkflowOpen] = useState(false);
   const [monitorOpen, setMonitorOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -597,12 +624,16 @@ export function App(): JSX.Element {
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
-    // 窗口控制条由主进程 titleBarOverlay 绘制，随主题经白名单 IPC 同步颜色
+    // 窗口控制条由主进程 titleBarOverlay 绘制，随主题经白名单 IPC 同步颜色；
+    // 无 preload 桥的环境（组件级取证页）直接跳过。
     const overlay =
       theme === "light"
         ? { color: "#ffffff", symbolColor: "#1a1a1e" }
         : { color: "#0f0f10", symbolColor: "#ececf1" };
-    void window.deepseekBot.window.setTitleBarOverlay(overlay).catch(() => undefined);
+    const bridge = window.deepseekBot;
+    if (bridge !== undefined && bridge.window !== undefined) {
+      void bridge.window.setTitleBarOverlay(overlay).catch(() => undefined);
+    }
   }, [theme]);
 
   useEffect(() => {
@@ -654,6 +685,58 @@ export function App(): JSX.Element {
       cancelled = true;
     };
   }, [artifactsOpen, selectedBot, bots, desktop, canvas]);
+
+  // D24 leftover: vault/usage/computer sections load their data lazily on open.
+  useEffect(() => {
+    if (!settingsOpen || settingsSection !== "vault") {
+      return;
+    }
+    let cancelled = false;
+    void desktop.vault
+      .listBackups()
+      .then((list) => {
+        if (!cancelled) {
+          setBackups(list);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setBackups([]);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [settingsOpen, settingsSection, desktop]);
+
+  useEffect(() => {
+    if (!settingsOpen || settingsSection !== "usage") {
+      return;
+    }
+    let cancelled = false;
+    void desktop.vault
+      .describe()
+      .then((result) => {
+        if (!cancelled) {
+          setDescribe(result);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setDescribe(null);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [settingsOpen, settingsSection, desktop]);
+
+  useEffect(() => {
+    if (!settingsOpen || settingsSection !== "computer" || hwAccel !== null) {
+      return;
+    }
+    void desktop.hardwareAcceleration().then(setHwAccel).catch(() => undefined);
+  }, [settingsOpen, settingsSection, desktop, hwAccel]);
 
   useEffect(() => {
     let cancelled = false;
@@ -2172,17 +2255,22 @@ const logout = (): void => {
             onClick={(e) => e.stopPropagation()}
           >
             <aside className="settings-nav" aria-label={t("shell.settingsSections")}>
-              <button type="button" className="settings-nav-item active">
-                <MenuIcon d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1-1.55 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.55-1 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.09a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.09a1.7 1.7 0 0 0 1.55 1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.55 1Z" />
-                {t("shell.general")}
-              </button>
-              {[t("shell.computer"), t("shell.vault"), t("shell.usageAndBilling"), t("shell.updates")].map((label) => (
+              {(
+                [
+                  ["general", t("shell.general")],
+                  ["permissions", t("d24.permissionsSection")],
+                  ["computer", t("shell.computer")],
+                  ["vault", t("shell.vault")],
+                  ["usage", t("shell.usageAndBilling")],
+                  ["updates", t("shell.updates")],
+                ] as const
+              ).map(([key, label]) => (
                 <button
-                  key={label}
+                  key={key}
                   type="button"
-                  className="settings-nav-item disabled"
-                  disabled
-                  title={t("shell.comingSoon")}
+                  className={"settings-nav-item" + (settingsSection === key ? " active" : "")}
+                  aria-current={settingsSection === key ? "true" : undefined}
+                  onClick={() => setSettingsSection(key)}
                 >
                   {label}
                 </button>
@@ -2190,7 +2278,18 @@ const logout = (): void => {
             </aside>
             <div className="settings-main">
               <header className="settings-head">
-                <h3>{t("shell.general")}</h3>
+                <h3>
+                  {
+                    {
+                      general: t("shell.general"),
+                      permissions: t("d24.permissionsSection"),
+                      computer: t("shell.computer"),
+                      vault: t("shell.vault"),
+                      usage: t("shell.usageAndBilling"),
+                      updates: t("shell.updates"),
+                    }[settingsSection]
+                  }
+                </h3>
                 <button
                   type="button"
                   className="modal-close"
@@ -2201,7 +2300,9 @@ const logout = (): void => {
                 </button>
               </header>
               <div className="settings-body">
-                <div className="settings-section-title">{t("shell.account")}</div>
+                {settingsSection === "general" && (
+                  <>
+                    <div className="settings-section-title">{t("shell.account")}</div>
                 <div className="account-card">
                   <span className="account-avatar" aria-hidden="true">
                     {displayName.slice(0, 1).toUpperCase()}
@@ -2249,9 +2350,8 @@ const logout = (): void => {
                     </button>
                   </div>
                 </div>
-                <div className="settings-section-title">{t("shell.computerAndPermissions")}</div>
-                <PermissionsPanel />
-                <ScreenSettings />
+                {/* The permissions block and the screen-capture settings that
+                    develop attached to it both live in the 权限 section now. */}
                 <div className="settings-section-title">{t("shell.apiAccessSection")}</div>
                 <div className="settings-card">
                   <div className="settings-row">
@@ -2374,73 +2474,250 @@ const logout = (): void => {
                     />
                   </div>
                 </div>
-                <div className="settings-section-title">{t("shell.aboutAndUpdates")}</div>
-                <div className="settings-card">
-                  <div className="settings-row">
-                    <span>{t("shell.version")}</span>
-                    <span className="settings-soon">{version}</span>
-                  </div>
-                  <div className="settings-row">
-                    <span>{t("shell.checkForUpdates")}</span>
-                    <span className="key-input-wrap">
-                      <span className="update-state">
-                        {updateStatus === null
-                          ? "（GitHub Releases）"
-                          : updateStatus.available
-                            ? t("shell.newVersionFound", [updateStatus.version ?? ""])
-                            : updateStatus.error
-                              ? t("shell.noUpdatesReleased")
-                              : t("shell.upToDate")}
+                  </>
+                )}
+                {/* Authorisation is its own section: it is the part owners read
+                    most carefully, and burying it under 通用 made the policy
+                    rows compete with the account and appearance controls. */}
+                {settingsSection === "permissions" && (
+                  <>
+                    <div className="settings-section-title">
+                      {t("d24.permissionsHeading")}
+                    </div>
+                    <PermissionsPanel />
+                    {/* ScreenSettings brings its own section heading. */}
+                    <ScreenSettings />
+                  </>
+                )}
+                {settingsSection === "updates" && (
+                  <div className="settings-card">
+                    <div className="settings-row">
+                      <span>{t("shell.version")}</span>
+                      <span className="settings-soon">{version}</span>
+                    </div>
+                    <div className="settings-row">
+                      <span>{t("shell.checkForUpdates")}</span>
+                      <span className="key-input-wrap">
+                        <span className="update-state">
+                          {updateStatus === null
+                            ? t("d24.githubReleasesSource")
+                            : updateStatus.available
+                              ? t("shell.newVersionFound", [updateStatus.version ?? ""])
+                              : updateStatus.error
+                                ? t("shell.noUpdatesReleased")
+                                : t("shell.upToDate")}
+                        </span>
+                        <button
+                          type="button"
+                          className="pill-btn"
+                          onClick={() => {
+                            const bridge = window.deepseekBot;
+                            if (!bridge || !("updates" in bridge)) {
+                              setToast(t("shell.updateChannelNeedsMain"));
+                              return;
+                            }
+                            void bridge.updates.check().then(setUpdateStatus).catch(() => {
+                              setToast(t("shell.updateCheckFailed"));
+                            });
+                          }}
+                        >
+                          {t("shell.check")}
+                        </button>
                       </span>
-                      <button
-                        type="button"
-                        className="pill-btn"
-                        onClick={() => {
-                          const bridge = window.deepseekBot;
-                          if (!bridge || !("updates" in bridge)) {
-                            setToast(t("shell.updateChannelNeedsMain"));
-                            return;
-                          }
-                          void bridge.updates.check().then(setUpdateStatus).catch(() => {
-                            setToast(t("shell.updateCheckFailed"));
-                          });
-                        }}
-                      >
-                        {t("shell.check")}
-                      </button>
-                    </span>
+                    </div>
                   </div>
-                  <div className="settings-row">
-                    <span>{t("shell.localUsage")}</span>
-                    <span className="settings-soon">
-                      {t("shell.localUsageCounts", [bots.length, Object.keys(chats).length, Object.values(chats).reduce((sum, list) => sum + list.length, 0)])}
-                    </span>
+                )}
+                {settingsSection === "usage" && (
+                  <div className="settings-card">
+                    <div className="settings-row">
+                      <span>{t("d24.dbVersion")}</span>
+                      <span className="settings-soon">{describe?.schemaVersion ?? "…"}</span>
+                    </div>
+                    {(
+                      [
+                        ["bots", "Bot"],
+                        ["workflows", t("workflow.title")],
+                        ["runs", t("d24.runsTitle")],
+                        ["schedules", t("d24.schedulesTitle")],
+                      ] as const
+                    ).map(([key, label]) => (
+                      <div className="settings-row" key={key}>
+                        <span>{label}</span>
+                        <span className="settings-soon">{describe?.counts[key] ?? "…"}</span>
+                      </div>
+                    ))}
+                    <div className="settings-row">
+                      <span>{t("d24.sessionCountThisLaunch")}</span>
+                      <span className="settings-soon">
+                        {Object.keys(chats).length} {t("d24.sessionsUnit")} ·{" "}
+                        {Object.values(chats).reduce((sum, list) => sum + list.length, 0)}{" "}
+                        {t("d24.messagesUnit")}
+                      </span>
+                    </div>
                   </div>
-                </div>
-                <div className="settings-section-title">{t("shell.system")}</div>
-                <div className="settings-card">
-                  <div className="settings-row">
-                    <span>{t("shell.microphone")}</span>
-                    <span className="settings-soon">{t("shell.allDeniedByPolicy")}</span>
+                )}
+                {settingsSection === "vault" && (
+                  <>
+                    <div className="settings-section-title">{t("d24.apiKeyStatus")}</div>
+                    <div className="settings-card">
+                      <div className="settings-row">
+                        <span>{t("d24.accessState")}</span>
+                        <span className="settings-soon">
+                          {desktop.settings.keyConfigured()
+                            ? t("d24.keyConfiguredWriteOnly")
+                            : t("d24.keyNotConfigured")}
+                        </span>
+                      </div>
+                      <div className="settings-row">
+                        <span>{t("d24.saveAndTest")}</span>
+                        <span className="session-meta">{t("d24.doneInGeneralAccess")}</span>
+                      </div>
+                    </div>
+                    <div className="settings-section-title">{t("d24.vaultSection")}</div>
+                    <div className="settings-card">
+                      <p className="session-meta vault-note" role="note">
+                        {t("d24.vaultNote")}
+                      </p>
+                      <div className="settings-row">
+                        <span>{t("d24.createBackup")}</span>
+                        <span className="key-input-wrap">
+                          <button
+                            type="button"
+                            className="pill-btn"
+                            disabled={backupBusy}
+                            onClick={() => {
+                              setBackupBusy(true);
+                              void desktop.vault
+                                .createBackup()
+                                .then((created) => {
+                                  setToast(t("d24.backedUp", [created.backupId.slice(0, 8)]));
+                                  return desktop.vault.listBackups();
+                                })
+                                .then(setBackups)
+                                .catch((error: unknown) => {
+                                  setToast(
+                                    t("d24.backupFailed", [
+                                      error instanceof Error ? error.message : String(error),
+                                    ]),
+                                  );
+                                })
+                                .finally(() => setBackupBusy(false));
+                            }}
+                          >
+                            {backupBusy ? t("d24.working") : t("d24.backupNow")}
+                          </button>
+                        </span>
+                      </div>
+                      <div className="vault-backup-list" aria-label={t("d24.backupList")}>
+                        {backups === null && <div className="sys-line">{t("canvas.reading")}</div>}
+                        {backups !== null && backups.length === 0 && (
+                          <div className="sys-line">{t("d24.noBackupsYet")}</div>
+                        )}
+                        {(backups ?? []).map((backup) => (
+                          <div className="settings-row vault-backup-item" key={backup.backupId}>
+                            <span className="vault-backup-meta">
+                              <span className="tab-title">
+                                {new Date(backup.createdAt).toLocaleString()}
+                              </span>
+                              <span className="session-meta">
+                                schema {backup.schemaVersion} · {formatBackupSize(backup.sizeBytes)}
+                              </span>
+                            </span>
+                            <button
+                              type="button"
+                              className="pill-btn"
+                              disabled={backupBusy}
+                              onClick={() => {
+                                if (!window.confirm(t("d24.restoreConfirm"))) {
+                                  return;
+                                }
+                                setBackupBusy(true);
+                                void desktop.vault
+                                  .restore(backup.backupId)
+                                  .then(() => {
+                                    setToast(t("d24.restoreDoneReloading"));
+                                    window.setTimeout(() => window.location.reload(), 600);
+                                  })
+                                  .catch((error: unknown) => {
+                                    setToast(
+                                      t("d24.restoreFailed", [
+                                        error instanceof Error ? error.message : String(error),
+                                      ]),
+                                    );
+                                    setBackupBusy(false);
+                                  });
+                              }}
+                            >
+                              {t("d24.restore")}
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                )}
+                {settingsSection === "computer" && (
+                  <>
+                  <div className="settings-card">
+                    <div className="settings-row">
+                      <span>{t("shell.microphone")}</span>
+                      <span className="settings-soon">{t("shell.allDeniedByPolicy")}</span>
+                    </div>
+                    <div className="settings-row">
+                      <span>{t("shell.hardwareAcceleration")}</span>
+                      <span className="key-input-wrap">
+                        <span className="session-meta">
+                          {hwAccel === null
+                            ? "…"
+                            : hwAccel.enabled
+                              ? t("d24.hwAccelOnDefault")
+                              : t("d24.hwAccelOffRestart")}
+                        </span>
+                        <button
+                          type="button"
+                          className="pill-btn"
+                          disabled={hwAccel === null}
+                          onClick={() => {
+                            const target = !(hwAccel?.enabled ?? true);
+                            void desktop
+                              .hardwareAcceleration(target)
+                              .then((status) => {
+                                setHwAccel(status);
+                                setToast(
+                                  status.restartRequired
+                                    ? t("d24.savedRestartToApply")
+                                    : t("d24.settingUnchanged"),
+                                );
+                              })
+                              .catch((error: unknown) => {
+                                setToast(
+                                  t("d24.settingFailed", [
+                                    error instanceof Error ? error.message : String(error),
+                                  ]),
+                                );
+                              });
+                          }}
+                        >
+                          {t("d24.switchAction")}
+                        </button>
+                      </span>
+                    </div>
                   </div>
-                  <div className="settings-row">
-                    <span>{t("shell.hardwareAcceleration")}</span>
-                    <span className="settings-soon">{t("shell.comingSoon")}</span>
+                  <div className="settings-section-title">{t("d22.notifySection")}</div>
+                  <div className="settings-card">
+                    <NotificationSettingsPanel
+                      prefs={notifications}
+                      bots={bots.map((bot) => ({ id: bot.bot.id, name: bot.bot.name }))}
+                      onChange={setNotifications}
+                      onTest={testNotification}
+                    />
                   </div>
-                </div>
-                <div className="settings-section-title">{t("d22.notifySection")}</div>
-                <div className="settings-card">
-                  <NotificationSettingsPanel
-                    prefs={notifications}
-                    bots={bots.map((bot) => ({ id: bot.bot.id, name: bot.bot.name }))}
-                    onChange={setNotifications}
-                    onTest={testNotification}
-                  />
-                </div>
-                <div className="settings-section-title">{t("d22.chromeSection")}</div>
-                <div className="settings-card">
-                  <ChromeImportPanel onToast={setToast} />
-                </div>
+                  <div className="settings-section-title">{t("d22.chromeSection")}</div>
+                  <div className="settings-card">
+                    <ChromeImportPanel onToast={setToast} />
+                  </div>
+                  </>
+                )}
               </div>
             </div>
           </div>

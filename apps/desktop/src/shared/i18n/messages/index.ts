@@ -28,6 +28,7 @@ import { skillsMessages } from "./skills.js";
 import { tasksMessages } from "./tasks.js";
 import { workflowMessages } from "./workflow.js";
 import { d22Messages } from "./d22.js";
+import { d24Messages } from "./d24.js";
 
 export const MESSAGES = {
   ...automationMessages,
@@ -52,6 +53,7 @@ export const MESSAGES = {
   ...tasksMessages,
   ...workflowMessages,
   ...d22Messages,
+  ...d24Messages,
 } satisfies Record<string, Message>;
 
 export type MessageKey = keyof typeof MESSAGES;

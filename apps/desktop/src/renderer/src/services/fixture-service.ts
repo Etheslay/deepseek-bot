@@ -633,6 +633,64 @@ export function createFixtureService(): DesktopService {
       };
     })(),
 
+    vault: (() => {
+      // In-memory backup store shaped like the real one: created backups get
+      // an id/time/size and persist for the session; restore refuses unknown
+      // ids exactly like the storage layer refuses a missing directory.
+      let counter = 0;
+      const backups: Array<{
+        backupId: string;
+        createdAt: string;
+        schemaVersion: number;
+        sizeBytes: number;
+      }> = [
+        {
+          backupId: "fixture-backup-older",
+          createdAt: "2026-10-25T08:00:00.000Z",
+          schemaVersion: 11,
+          sizeBytes: 48_000,
+        },
+      ];
+
+      return {
+        async listBackups() {
+          return [...backups];
+        },
+        async createBackup() {
+          counter += 1;
+          const created = {
+            backupId: `fixture-backup-${counter}`,
+            createdAt: new Date().toISOString(),
+            schemaVersion: 11,
+            sizeBytes: 52_000 + counter,
+          };
+          backups.unshift(created);
+          return created;
+        },
+        async restore(backupId) {
+          if (!backups.some((backup) => backup.backupId === backupId)) {
+            throw new ServiceError("INVALID_INPUT", t("d24.backupMissing"));
+          }
+          return { restored: true as const, hostRestarted: true };
+        },
+        async describe() {
+          return {
+            schemaVersion: "11",
+            counts: { bots: bots.length, workflows: 0, runs: 0, schedules: 0 },
+          };
+        },
+      };
+    })(),
+
+    hardwareAcceleration(enabled?: boolean) {
+      // Fixture: the preference flips in memory; a real shell restart is a
+      // packaged-app concern and stays UNVERIFIED here.
+      if (enabled === undefined) {
+        return Promise.resolve({ enabled: true, restartRequired: false });
+      }
+      return Promise.resolve({ enabled, restartRequired: true });
+    },
+
     workflows: createFixtureWorkflowService(),
     runs: createFixtureRunService(),
     tasks: createFixtureTaskService(),

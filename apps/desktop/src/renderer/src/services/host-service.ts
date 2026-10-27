@@ -23,6 +23,12 @@ import { t } from "../i18n.js";
 type HostBridge = {
   host: { call: (method: string, payload: unknown) => Promise<unknown> };
   settings: { saveKey: (key: string) => Promise<{ configured: boolean }> };
+  backups?: { list: () => Promise<unknown[]> };
+  app?: {
+    hardwareAcceleration: (
+      enabled?: boolean,
+    ) => Promise<{ enabled: boolean; restartRequired: boolean }>;
+  };
 };
 
 export function createHostService(bridge: HostBridge): DesktopService {
@@ -238,6 +244,51 @@ export function createHostService(bridge: HostBridge): DesktopService {
         })) as { tasks: Task[] },
       cancel: async (taskId) =>
         (await bridge.host.call("task.cancel", { taskId })) as Task,
+    },
+
+    vault: {
+      listBackups: async () => {
+        if (bridge.backups === undefined) {
+          // Preview shims have no backups bridge; keep the vault visible but
+          // honest about the empty listing instead of throwing.
+          return [];
+        }
+        return (await bridge.backups.list()) as Awaited<
+          ReturnType<DesktopService["vault"]["listBackups"]>
+        >;
+      },
+      createBackup: async () => {
+        const response = (await artifactCall("data.backup", {})) as {
+          backupId: string;
+          createdAt: string;
+          sizeBytes: number;
+        };
+        return response;
+      },
+      restore: async (backupId) => {
+        const response = (await artifactCall("data.restore", { backupId })) as {
+          restored: true;
+          hostRestarted?: boolean;
+        };
+        return { restored: true, hostRestarted: response.hostRestarted === true };
+      },
+      describe: async () => {
+        const response = (await artifactCall("data.describe", {})) as {
+          schemaVersion: string;
+          counts: Record<string, number>;
+        };
+        return response;
+      },
+    },
+    hardwareAcceleration: (enabled?: boolean) => {
+      if (bridge.app !== undefined) {
+        return bridge.app.hardwareAcceleration(enabled);
+      }
+      // Preview shim fallback: report the default without persisting.
+      if (enabled === undefined) {
+        return Promise.resolve({ enabled: true, restartRequired: false });
+      }
+      return Promise.resolve({ enabled, restartRequired: true });
     },
   };
 }

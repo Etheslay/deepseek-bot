@@ -18,6 +18,15 @@ export const IPC_CHANNELS = {
   /** D24: app-update checks via electron-updater against GitHub Releases. */
   UPDATES_CHECK: "updates:check",
   UPDATES_DOWNLOAD_INSTALL: "updates:downloadInstall",
+  /**
+   * D24: list existing backup summaries from the data root's
+   * backups/ directory. Desktop-process channel (like knowledge/updates) —
+   * the Host contract has no backup-listing method, and the main process
+   * already owns the data root path. Read-only over manifest.json files.
+   */
+  BACKUPS_LIST: "backups:list",
+  /** D24: query or toggle hardware acceleration (restart to apply). */
+  APP_HARDWARE_ACCELERATION: "app:hardwareAcceleration",
   /** D22: mirror the persisted UI language into the main process. */
   I18N_SET_LANGUAGE: "i18n:setLanguage",
   /** D22: renderer pushes the per-bot tray state (bots, active bot, avatars). */
@@ -80,6 +89,27 @@ export type UpdateStatus = {
   readyToInstall: boolean;
   /** Failure reason (network, no releases yet, signature…), if any. */
   error: string | null;
+};
+
+/**
+ * D24 leftover: one existing backup, summarized from its manifest. Metadata
+ * database only — artifact/version-snapshot files are not part of a backup
+ * (documented boundary; SECURITY_DATA §5).
+ */
+export type BackupSummary = {
+  /** Directory name under backups/; doubles as the data.restore id. */
+  backupId: string;
+  createdAt: string;
+  schemaVersion: number;
+  sizeBytes: number;
+};
+
+/** D24 leftover: hardware-acceleration shell preference (userData-scoped). */
+export type HardwareAccelerationStatus = {
+  /** The preference that will apply on the next launch. */
+  enabled: boolean;
+  /** True when this call changed the preference (restart to apply). */
+  restartRequired: boolean;
 };
 
 export type IpcErrorCode = "UNKNOWN_CHANNEL" | "UNAUTHORIZED_SENDER" | "INVALID_PAYLOAD";
