@@ -853,6 +853,11 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
       };
     },
 
+    // D19 contract first: the implementation follows in the dependent MCP PR.
+    "connector.mcp.discover": () => { throw new ToolRejectionError("RUNTIME_UNAVAILABLE", "MCP implementation is not installed"); },
+    "connector.mcp.grants.get": () => { throw new ToolRejectionError("RUNTIME_UNAVAILABLE", "MCP implementation is not installed"); },
+    "connector.mcp.grants.set": () => { throw new ToolRejectionError("RUNTIME_UNAVAILABLE", "MCP implementation is not installed"); },
+
     "connector.list": () => ({
       connectors: listConnectors(db).map((row) => ({
         id: row.id,

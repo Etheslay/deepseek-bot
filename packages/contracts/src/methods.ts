@@ -14,6 +14,10 @@ import {
   BotArtifactSchema,
   BotGroupSchema,
   BotSchema,
+  ConnectorKindSchema,
+  McpAllowedToolsSchema,
+  McpServerGrantSchema,
+  McpToolSchema,
   ImportableWorkflowDraftSchema,
   NodeRunSchema,
   RunSchema,
@@ -113,6 +117,9 @@ export const METHODS = [
   "connector.enable",
   "connector.disable",
   "connector.setEndpoint",
+  "connector.mcp.discover",
+  "connector.mcp.grants.get",
+  "connector.mcp.grants.set",
   "artifacts.list",
   "artifacts.read",
   "artifacts.save",
@@ -722,6 +729,7 @@ export const METHOD_CONTRACTS = {
           id: UuidSchema,
           name: NonEmptyStringSchema(TEXT_LIMITS.name),
           enabled: z.boolean(),
+          kind: ConnectorKindSchema.optional(),
           credentialRef: z.string().nullable(),
           endpoint: z.string().nullable(),
           at: IsoDateTimeUtcSchema,
@@ -734,6 +742,7 @@ export const METHOD_CONTRACTS = {
     request: z
       .object({
         name: z.string().trim().min(1).max(TEXT_LIMITS.name),
+        kind: ConnectorKindSchema.default("sd-webui"),
         credentialRef: z.string().trim().min(1).max(TEXT_LIMITS.label).nullable().optional(),
         // Loopback http(s) URL of the local service (D19); validated by the
         // Host before storage, never contacted at registration time.
@@ -744,6 +753,7 @@ export const METHOD_CONTRACTS = {
       id: UuidSchema,
       name: NonEmptyStringSchema(TEXT_LIMITS.name),
       enabled: z.literal(false),
+      kind: ConnectorKindSchema.optional(),
       credentialRef: z.string().nullable(),
       endpoint: z.string().nullable(),
       at: IsoDateTimeUtcSchema,
@@ -756,6 +766,7 @@ export const METHOD_CONTRACTS = {
       id: UuidSchema,
       name: NonEmptyStringSchema(TEXT_LIMITS.name),
       enabled: z.literal(true),
+      kind: ConnectorKindSchema.optional(),
       credentialRef: z.string().nullable(),
       endpoint: z.string().nullable(),
       at: IsoDateTimeUtcSchema,
@@ -768,6 +779,7 @@ export const METHOD_CONTRACTS = {
       id: UuidSchema,
       name: NonEmptyStringSchema(TEXT_LIMITS.name),
       enabled: z.literal(false),
+      kind: ConnectorKindSchema.optional(),
       credentialRef: z.string().nullable(),
       endpoint: z.string().nullable(),
       at: IsoDateTimeUtcSchema,
@@ -788,11 +800,25 @@ export const METHOD_CONTRACTS = {
       id: UuidSchema,
       name: NonEmptyStringSchema(TEXT_LIMITS.name),
       enabled: z.boolean(),
+      kind: ConnectorKindSchema.optional(),
       credentialRef: z.string().nullable(),
       endpoint: z.string().nullable(),
       at: IsoDateTimeUtcSchema,
       updatedAt: IsoDateTimeUtcSchema,
     }),
+  },
+  /** Trusted control plane only; Host implementation follows this contract. */
+  "connector.mcp.discover": {
+    request: z.object({ id: UuidSchema }).strict(),
+    response: z.object({ tools: z.array(McpToolSchema).max(200), at: IsoDateTimeUtcSchema }),
+  },
+  "connector.mcp.grants.get": {
+    request: z.object({ botId: UuidSchema }).strict(),
+    response: z.object({ servers: z.array(McpServerGrantSchema).max(50) }),
+  },
+  "connector.mcp.grants.set": {
+    request: z.object({ botId: UuidSchema, id: UuidSchema, allowedTools: McpAllowedToolsSchema }).strict(),
+    response: z.object({ servers: z.array(McpServerGrantSchema).max(50) }),
   },
   /**
    * D28 co-edit sidecar: artifacts are the editable files of one bot's
