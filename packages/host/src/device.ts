@@ -2,12 +2,20 @@
  * Device-action approval gate (D21).
  *
  * A request stays rejected unless the device.action policy is ask. One request
- * waits for one exact once approval, then returns only an id and a timestamp.
- * This service does not move a pointer, send a key, or call the exec daemon.
+ * waits for one exact once approval, then stores one local record and returns
+ * its id and timestamp. A denial, a disabled policy, a reused approval, or an
+ * unknown action name writes nothing. Unknown names are rejected before an
+ * approval is created. This service does not move a pointer, send a key, or
+ * call the exec daemon.
  */
 import { randomUUID } from "node:crypto";
 import type { DeviceActionKind, DeviceActionResult } from "@deepseek-bot/contracts";
-import { getBot, listPermissionPolicies, type OpenedDatabase } from "@deepseek-bot/storage";
+import {
+  appendDeviceActionRecord,
+  getBot,
+  listPermissionPolicies,
+  type OpenedDatabase,
+} from "@deepseek-bot/storage";
 import {
   ToolRejectionError,
   type GrantCheckResult,
@@ -48,6 +56,11 @@ export function createDeviceActionService(options: {
 
   function reject(code: ToolRejectionError["code"], message: string): never {
     throw new ToolRejectionError(code, message);
+  }
+
+  function requireAction(kind: string): DeviceActionKind {
+    if (kind === "pointer" || kind === "key") return kind;
+    reject("INVALID_INPUT", "device action name is unknown");
   }
 
   function enabled(): boolean {
@@ -92,20 +105,21 @@ export function createDeviceActionService(options: {
     callOptions: ToolCallOptions,
   ): Promise<GrantCheckResult> {
     if (closed) reject("RUNTIME_UNAVAILABLE", "device action host is closed");
+    const action = requireAction(kind);
     if (caller.botId === undefined) {
       reject("UNAUTHORIZED_PATH", "device action requires a trusted bot");
     }
     const botId = caller.botId;
     liveBot(botId);
     if (!enabled()) {
-      return options.permissions.check("device_action", caller, { kind }, callOptions);
+      return options.permissions.check("device_action", caller, { kind: action }, callOptions);
     }
     const controller = begin(botId, callOptions.signal);
     try {
       const authorization = await options.permissions.check(
         "device_action",
         caller,
-        { kind },
+        { kind: action },
         { ...callOptions, signal: controller.signal },
       );
       if (!authorization.allowed) {
@@ -133,12 +147,13 @@ export function createDeviceActionService(options: {
 
   async function accept(
     caller: ToolCaller,
-    _kind: DeviceActionKind,
+    kind: DeviceActionKind,
     context: ToolContext,
   ): Promise<DeviceActionResult> {
     if (caller.botId === undefined) {
       reject("UNAUTHORIZED_PATH", "device action requires a trusted bot");
     }
+    const action = requireAction(kind);
     const botId = caller.botId;
     const operation = ops.get(botId);
     if (operation === undefined) reject("CANCELLED", "device action was cancelled");
@@ -147,7 +162,10 @@ export function createDeviceActionService(options: {
       if (controller.signal.aborted) reject("CANCELLED", "device action was cancelled");
       context.revalidateAuthorization?.();
       if (!enabled()) reject("UNAUTHORIZED_PATH", "device action policy is not ask");
-      return { id: randomUUID(), at: options.now().toISOString() };
+      const id = randomUUID();
+      const at = options.now().toISOString();
+      appendDeviceActionRecord(options.db, { id, botId, action, at });
+      return { id, at };
     } finally {
       finish(botId, controller);
     }

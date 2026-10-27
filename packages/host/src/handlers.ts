@@ -80,6 +80,7 @@ import {
   listEventRules,
   listEventRuleRecords,
   listEventRuleStates,
+  listDeviceActionRecords,
   listPendingEventRuleReviews,
   saveEventRule,
   setEventRuleEnabled,
@@ -1221,6 +1222,20 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
     "screen.result.read": (payload) => context.screen.readResult(payload.botId, payload.id),
     "screen.result.delete": (payload) => context.screen.deleteResult(payload.botId, payload.id),
     "device.action.request": (payload) => context.device.request(payload.botId, payload.kind),
+    "device.action.list": (payload) => {
+      requireLiveBot(db, payload.botId);
+      return {
+        records: listDeviceActionRecords(db, {
+          botId: payload.botId,
+          limit: payload.limit,
+        }).map((row) => ({
+          id: row.id,
+          botId: row.botId,
+          action: row.action,
+          at: row.createdAt,
+        })),
+      };
+    },
 
     "connector.list": () => ({
       connectors: listConnectors(db).map((row) => ({

@@ -105,7 +105,8 @@
 | D20 本地事件规则状态记录：启停与改为评审各记一条，可按 bot 列出 | 切片交付（无桌面界面、无聊天通知条） | `feature/event-rule-state-history-d3c8` | [D20-event-rule-state-report](reports/D20-event-rule-state-report.md) |
 | D28 产物画布共编侧车 | 已交付 | `feature/canvas-cowrite` → PR #64 `2d5a5e3` | [D28-report](reports/D28-report.md) |
 | D21 本地执行守护 | **切片进行中**：契约、Windows 后端与 Host 网关已在 develop；桌面设置页只做单窗口截图/OCR 的启用、选择、仅本次审批和本机预览。真实窗口、打包 Electron、GitHub Actions 未跑 | `feature/screen-desktop-settings-48af` | [D21-desktop-report](reports/D21-desktop-report.md) |
-| D21 设备动作批准闸门 | **切片进行中**：默认关闭。策略为每次询问时，一次请求需要一次精确的仅本次审批才接受，结果只有 id 和时间。不移动鼠标、不发送按键、不调用 exec daemon。无单独桌面界面，无网络。真实键鼠与 GitHub Actions 未跑 | `feature/device-action-approval-ffd6` | [D21-device-action-report](reports/D21-device-action-report.md) |
+| D21 设备动作批准闸门 | **已合入 develop（PR #88）**：默认关闭。策略为每次询问时，一次请求需要一次精确的仅本次审批才接受，结果只有 id 和时间。不移动鼠标、不发送按键、不调用 exec daemon。无单独桌面界面，无网络。真实键鼠与 GitHub Actions 未跑 | `feature/device-action-approval-ffd6` | [D21-device-action-report](reports/D21-device-action-report.md) |
+| D21 设备动作本地记录 | **切片进行中**：一次精确审批后写入一条本地记录（id、bot id、动作名、时间），按 bot 从新到旧列出。拒绝、未启用、复用或未知动作名不写入。未知动作名在审批前拒绝。不移动鼠标、不发送按键、不调用 exec daemon。无桌面界面，无网络。真实键鼠与 GitHub Actions 未跑 | `feature/device-action-record-07ab` | [D21-device-action-record-report](reports/D21-device-action-record-report.md) |
 | D22 系统集成与双语 | **已合入 develop（PR #75 `9db1ae9`）**：全量中英双语（20 域 853 条 key + AST 扫描防回归守卫；计数为本次同步在合流后的树上实测）、单托盘随活跃 bot + 逐 bot 图标菜单、系统通知与设置（总开关 / 仅非前台 / 按 bot 静音 / 测试通知）、Chrome **书签**只读导入（预览→导入→导出→删除）。托盘渲染与点击、Windows 通知弹出、真实 Chrome 配置、打包版 AppUserModelId 属实机未验证项；负责人自审记录仍待本人填写 | `feature/system-integration` → PR #75 | [D22-report](reports/D22-report.md) |
 | D23 平台验收 | 未开始（依赖 D13、D14–D22 全部完成） | — | — |
 
@@ -124,7 +125,7 @@
 | A3 | D18 记忆与知识 | 写入/检索/删除，默认不跨 bot；独立知识表 + 本地向量检索 + 保留策略（`feature/knowledge-base`），见 [知识导入报告](reports/D18-knowledge-import-report.md)、[知识检索报告](reports/D18-knowledge-search-report.md) |
 | A4 | D19 连接器与 MCP | 登记与本地 SD 调用已合入（PR #65）；本分支交付无凭据本机 HTTP MCP 的按 bot 白名单、聊天单次审批与审计，见 [MCP 报告](reports/D19-mcp-http-report.md)。stdio、凭据注入和视觉接入待后续 |
 | A5 | D20 事件自动化 | 评审队列已合入（PR #66）。本地自动启动切片：一个 bot 的规则可保存、列出、启停，默认关闭，命中一次启动一个运行（`feature/event-automation-rules-844b`）。本地评审切片：规则可设为评审，命中只入队，批准启动一次，拒绝记跳过（`feature/event-review-queue-0e27`）。状态记录切片：启用、停用或改为评审且状态变化时追加一条，按 bot 从新到旧列出（`feature/event-rule-state-history-d3c8`） |
-| A6 | D21 本地执行守护 | 契约、Windows OCR 与 Host 网关已在 develop。桌面设置页提供默认关闭、逐次授权的单窗口截图和本机预览。设备动作第一片只在策略为每次询问时接受一次精确审批，并返回 id 与时间，不执行输入；真实窗口与真实键鼠未做 |
+| A6 | D21 本地执行守护 | 契约、Windows OCR 与 Host 网关已在 develop。桌面设置页提供默认关闭、逐次授权的单窗口截图和本机预览。设备动作在每次询问下接受一次精确审批；通过后写入一条本地记录（id、bot id、动作名、时间），可按 bot 从新到旧列出。拒绝、未启用、复用或未知动作名不写入，也不执行输入；真实窗口与真实键鼠未做 |
 
 **B 线（Destinyian · 桌面与体验）**：
 
@@ -256,6 +257,6 @@
 - 工作区垃圾：主工作区根目录有一个 0 字节的 `$null` 文件（10-26 17:35 由误用的重定向产生），可直接删除；
 - 死工作区：`deepseek-bot-avatar-ball`、`deepseek-bot-reaction-pill`、已合入的 `deepseek-bot-d28` 三个工作区可清理（先确认其中没有未跟踪的截图或日志）；
 - 手测截图：D14 / D17 / D24 / D25 / D26 的 `reports/assets/…` 仍缺；
-- 未完成的计划项：**D21 本地执行守护**（Etheslay：桌面设置页在功能分支；设备动作批准闸门在 `feature/device-action-approval-ffd6`，真实窗口与真实键鼠未做）、**D23 平台验收**（你，依赖 D13 与 D14–D22 全部完成）。
+- 未完成的计划项：**D21 本地执行守护**（Etheslay：桌面设置页在功能分支；设备动作批准闸门已合入 develop（PR #88）。本片 `feature/device-action-record-07ab` 在一次精确审批后写入本地记录，真实窗口与真实键鼠未做）、**D23 平台验收**（你，依赖 D13 与 D14–D22 全部完成）。
 
 
