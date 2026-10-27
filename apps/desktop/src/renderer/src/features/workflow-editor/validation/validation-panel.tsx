@@ -7,6 +7,7 @@
 import type { JSX } from "react";
 import type { WorkflowIssue } from "@deepseek-bot/contracts";
 import { groupIssuesByNode } from "./issues.js";
+import { t } from "../../../i18n.js";
 
 export function ValidationPanel(props: {
   issues: readonly WorkflowIssue[];
@@ -16,32 +17,32 @@ export function ValidationPanel(props: {
 }): JSX.Element {
   const groups = groupIssuesByNode(props.issues);
   return (
-    <section className="wf-validation" aria-label="校验面板">
+    <section className="wf-validation" aria-label={t("workflow.validationPanel")}>
       <header className="wf-validation-head">
         <button type="button" className="ghost-btn" onClick={props.onValidate}>
-          校验
+          {t("workflow.validate")}
         </button>
         {props.issues.length > 0 ? (
           <span className="wf-validation-status err">
-            {props.issues.length} 个错误 · 保存已禁用
+            {t("workflow.errorsSaveBlocked", [props.issues.length])}
           </span>
         ) : (
-          <span className="wf-validation-status ok">校验通过 · 可保存</span>
+          <span className="wf-validation-status ok">{t("workflow.validationPassedReady")}</span>
         )}
         {props.remoteResult && (
           <span className="wf-validation-remote">
-            服务端校验：{props.remoteResult.valid ? "valid" : `${props.remoteResult.count} 个错误`}
+            {t("workflow.serverValidation")}{props.remoteResult.valid ? "valid" : t("workflow.errorCount", [props.remoteResult.count])}
           </span>
         )}
       </header>
       {groups.length === 0 ? (
-        <p className="wf-validation-empty">暂无错误。环 / 悬空边 / 缺失绑定 / 重复项都会在这里定位到节点与字段。</p>
+        <p className="wf-validation-empty">{t("workflow.noIssues")}</p>
       ) : (
         <ul className="wf-validation-list">
           {groups.map((group) => (
             <li key={group.nodeId || "-"} className="wf-validation-group">
               <span className="wf-validation-node">
-                {group.nodeId === "" ? "工作流" : `节点 ${group.nodeId}`}
+                {group.nodeId === "" ? t("workflow.title") : t("workflow.nodeRef", [group.nodeId])}
               </span>
               <ul>
                 {group.issues.map((issue, index) => (
@@ -50,7 +51,7 @@ export function ValidationPanel(props: {
                       type="button"
                       className="wf-issue"
                       onClick={() => props.onLocate(issue)}
-                      title="点击定位到节点与字段"
+                      title={t("workflow.locateIssue")}
                     >
                       <span className="wf-issue-code">{issue.code}</span>
                       <span className="wf-issue-message">{issue.message}</span>

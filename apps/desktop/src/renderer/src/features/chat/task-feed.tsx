@@ -10,18 +10,24 @@ import { useEffect, useState, type JSX } from "react";
 import type { ChatHistoryRow, DesktopService } from "../../services/desktop-service.js";
 import { useService } from "../../services/service-context.js";
 import type { UiBot } from "../bots/use-bots.js";
+import { t, useLanguage, type MessageKey } from "../../i18n.js";
 
 const FEED_REFRESH_MS = 4_000;
 
-const NOTICE_STATUS_LABELS: Record<string, string> = {
-  queued: "排队中",
-  running: "执行中",
-  done: "已完成",
-  failed: "已失败",
-  cancelled: "已取消",
-  skipped: "已跳过",
-  interrupted: "已中断",
+const NOTICE_STATUS_KEYS: Record<string, MessageKey> = {
+  queued: "runs.queued",
+  running: "shell.toolRunning",
+  done: "shell.toolCompleted",
+  failed: "runs.statusFailed",
+  cancelled: "runs.statusCancelled",
+  skipped: "runs.nodeSkipped",
+  interrupted: "runs.statusInterrupted",
 };
+
+function noticeStatusLabel(status: string): string {
+  const key = NOTICE_STATUS_KEYS[status];
+  return key === undefined ? status : t(key);
+}
 
 type FeedRow = ChatHistoryRow & {
   meta: NonNullable<ChatHistoryRow["meta"]>;
@@ -36,6 +42,7 @@ export function TaskFeedCards(props: {
   bots: UiBot[];
   onOpenBot: (botKey: number) => void;
 }): JSX.Element | null {
+  useLanguage();
   const desktop: DesktopService = useService();
   const [rows, setRows] = useState<FeedRow[]>([]);
   const [executorByTask, setExecutorByTask] = useState<Map<string, string>>(new Map());
@@ -76,28 +83,28 @@ export function TaskFeedCards(props: {
   const botNameById = new Map(props.bots.map((bot) => [bot.bot.id, bot.bot.name]));
 
   return (
-    <div className="task-feed" aria-label="派发与交付通知">
+    <div className="task-feed" aria-label={t("tasks.feedAria")}>
       {rows.map((row) => {
         if (row.meta.kind === "dispatch") {
           const senderKey = botKeyById.get(row.meta.fromBotId);
-          const senderName = botNameById.get(row.meta.fromBotId) ?? "其他 bot";
+          const senderName = botNameById.get(row.meta.fromBotId) ?? t("tasks.feedOtherBots");
           return (
             <div className="dispatch-msg" key={row.id} role="note">
               <button
                 type="button"
                 className="dispatch-tag"
-                title={`打开 ${senderName} 的会话`}
+                title={t("shell.openSessionWith", [senderName])}
                 onClick={() => {
                   if (senderKey !== undefined) props.onOpenBot(senderKey);
                 }}
               >
-                来自 {senderName} 的派发
+                {t("tasks.feedDispatchFrom", [senderName])}
               </button>
               <span className="dispatch-text">{row.text}</span>
             </div>
           );
         }
-        const statusLabel = NOTICE_STATUS_LABELS[row.meta.status] ?? row.meta.status;
+        const statusLabel = noticeStatusLabel(row.meta.status);
         const executorId = executorByTask.get(row.meta.taskId);
         const executorKey = executorId === undefined ? undefined : botKeyById.get(executorId);
         const body = (
@@ -106,7 +113,7 @@ export function TaskFeedCards(props: {
               {statusLabel}
             </span>
             <span className="task-notice-text">{row.text}</span>
-            {executorKey !== undefined && <span className="task-notice-go">查看执行者会话 →</span>}
+            {executorKey !== undefined && <span className="task-notice-go">{t("tasks.feedOpenExecutor")}</span>}
           </>
         );
         return executorKey === undefined ? (

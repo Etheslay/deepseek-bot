@@ -18,6 +18,7 @@ import {
 } from "./desktop-service.js";
 import { validateArtifactVersion, validateBotArtifact } from "./contract-validation.js";
 import { createFixtureService } from "./fixture-service.js";
+import { t } from "../i18n.js";
 
 type HostBridge = {
   host: { call: (method: string, payload: unknown) => Promise<unknown> };
@@ -68,10 +69,10 @@ export function createHostService(bridge: HostBridge): DesktopService {
         const bots = await listBots();
         const source = bots.find((bot) => bot.id === botId);
         if (!source) {
-          throw new ServiceError("INVALID_INPUT", "找不到要复制的 Bot", false);
+          throw new ServiceError("INVALID_INPUT", t("services.botNotFound"), false);
         }
         return (await bridge.host.call("bot.create", {
-          name: `${source.name} 副本`,
+          name: t("common.copyOf", [source.name]),
           instructions: source.instructions,
           modelProfileId: source.modelProfileId,
           workspaceId: source.workspaceId,

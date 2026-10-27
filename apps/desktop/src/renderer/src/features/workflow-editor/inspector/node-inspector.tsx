@@ -12,6 +12,7 @@ import type {
   WorkflowEditorState,
   WorkflowNodePatch,
 } from "../workflow-reducer.js";
+import { t } from "../../../i18n.js";
 
 export type InspectorCallbacks = {
   onUpdateNode: (nodeId: string, patch: WorkflowNodePatch) => void;
@@ -39,7 +40,7 @@ export function archivedBotOption(bots: readonly Bot[], botId: string | undefine
   if (!bot || bot.archivedAt === null) {
     return null;
   }
-  return { value: bot.id, label: `${bot.name}（已归档）` };
+  return { value: bot.id, label: t("workflow.botArchivedSuffix", [bot.name]) };
 }
 
 export function InspectorPanel(props: {
@@ -79,29 +80,29 @@ function WorkflowInspector(props: {
   const draft = props.state.draft;
   return (
     <div className="wf-insp">
-      {sectionTitle("工作流")}
-      <p className="wf-insp-hint">选中画布节点编辑参数；此处编辑工作流级字段。</p>
+      {sectionTitle(t("workflow.title"))}
+      <p className="wf-insp-hint">{t("workflow.workflowLevelHint")}</p>
       <label className="wf-field">
-        名称
+        {t("runs.name")}
         <input
           id="wf-insp-name"
           className="name-input"
           value={draft.name}
           maxLength={200}
-          aria-label="工作流名称"
+          aria-label={t("workflow.workflowName")}
           onChange={(event) => props.callbacks.onUpdateMeta({ name: event.target.value })}
         />
       </label>
       <label className="wf-field">
-        并发上限 maxConcurrentNodes（1–8）
+        {t("workflow.concurrencyLimitField")}
         <CustomSelect
           value={draft.limits.maxConcurrentNodes}
           options={[1, 2, 3, 4, 5, 6, 7, 8].map((value) => ({ value, label: String(value) }))}
           onChange={(value) => props.callbacks.onUpdateMeta({ maxConcurrentNodes: Number(value) })}
-          ariaLabel="并发上限"
+          ariaLabel={t("workflow.concurrencyLimit")}
         />
       </label>
-      <p className="wf-insp-hint">limits 仅编辑与展示，执行期强制由运行引擎负责（D06，不在本编辑器内）。</p>
+      <p className="wf-insp-hint">{t("workflow.limitsHint")}</p>
     </div>
   );
 }
@@ -117,8 +118,8 @@ function NodeInspector(props: {
   if (!node) {
     return (
       <div className="wf-insp">
-        {sectionTitle("节点")}
-        <p className="wf-insp-hint">节点不存在（可能已删除）。</p>
+        {sectionTitle(t("workflow.node"))}
+        <p className="wf-insp-hint">{t("workflow.nodeMissing")}</p>
       </div>
     );
   }
@@ -129,11 +130,11 @@ function NodeInspector(props: {
   const variableHint =
     node.inputBindings.length > 0
       ? node.inputBindings.map((binding) => `{{${binding.inputKey}}}`).join("  ")
-      : "（暂无输入绑定，可在下方添加）";
+      : t("workflow.noBindingsPlaceholder");
 
   return (
     <div className="wf-insp">
-      {sectionTitle(`节点 ${node.id}`)}
+      {sectionTitle(t("workflow.nodeRef", [node.id]))}
       {nodeIssues.length > 0 && (
         <ul className="wf-insp-issues">
           {nodeIssues.map((issue, index) => (
@@ -145,52 +146,52 @@ function NodeInspector(props: {
         </ul>
       )}
       <div className="wf-field-row">
-        <span className="wf-field-label">类型</span>
+        <span className="wf-field-label">{t("runs.type")}</span>
         <span className="wf-field-value">
-          {node.type === "bot" ? "Bot 节点" : "审批节点（approval）"}
+          {node.type === "bot" ? t("runs.botNode") : t("workflow.approvalNodeType")}
         </span>
       </div>
       {node.type === "bot" ? (
         <label className="wf-field">
-          机器人
+          {t("shell.bot")}
           <span className="wf-field-control">
             <CustomSelect
               value={node.botId ?? ""}
               options={botOptions}
               onChange={(value) => props.callbacks.onUpdateNode(node.id, { botId: value })}
-              ariaLabel="机器人"
+              ariaLabel={t("shell.bot")}
               disabled={botOptions.length === 0}
             />
           </span>
-          {archived && <span className="form-error">该机器人已归档：保存前需更换（归档机器人不可选）。</span>}
+          {archived && <span className="form-error">{t("workflow.archivedBotError")}</span>}
         </label>
       ) : (
-        <p className="wf-insp-hint">审批节点不能绑定机器人（契约禁止 approval 携带 botId）。</p>
+        <p className="wf-insp-hint">{t("workflow.approvalNoBot")}</p>
       )}
       <label className="wf-field">
-        指令模板 instructionTemplate
+        {t("workflow.instructionTemplateField")}
         <textarea
           id="wf-insp-instructionTemplate"
           className="wf-textarea"
           value={node.instructionTemplate}
           maxLength={100_000}
-          aria-label="指令模板"
-          placeholder="例：总结 {{input}} 并输出评审意见"
+          aria-label={t("workflow.instructionTemplate")}
+          placeholder={t("workflow.instructionExamplePlaceholder")}
           onChange={(event) =>
             props.callbacks.onUpdateNode(node.id, { instructionTemplate: event.target.value })
           }
         />
       </label>
-      <p className="wf-insp-hint">可用变量：{variableHint}（模板仅在执行时由引擎解析，编辑器不执行）。</p>
-      {sectionTitle("输入绑定 inputBindings")}
-      {node.inputBindings.length === 0 && <p className="wf-insp-hint">无输入绑定。</p>}
+      <p className="wf-insp-hint">{t("workflow.availableVariablesHint", [variableHint])}</p>
+      {sectionTitle(t("workflow.inputBindingsSection"))}
+      {node.inputBindings.length === 0 && <p className="wf-insp-hint">{t("workflow.noBindings")}</p>}
       {node.inputBindings.map((binding, index) => (
         <div key={index} className="wf-binding-row" id={`wf-insp-binding-${binding.inputKey}`}>
           <input
             className="name-input wf-binding-key"
             value={binding.inputKey}
             maxLength={100}
-            aria-label={`输入键 ${index + 1}`}
+            aria-label={t("workflow.inputKeyNumbered", [index + 1])}
             onChange={(event) =>
               props.callbacks.onUpdateBinding(node.id, index, { inputKey: event.target.value })
             }
@@ -199,20 +200,20 @@ function NodeInspector(props: {
             <input
               type="checkbox"
               checked={binding.required}
-              aria-label={`${binding.inputKey} 是否必填`}
+              aria-label={t("workflow.bindingRequiredToggle", [binding.inputKey])}
               onChange={(event) =>
                 props.callbacks.onUpdateBinding(node.id, index, { required: event.target.checked })
               }
             />
-            必填
+            {t("workflow.required")}
           </label>
           <button
             type="button"
             className="pill-btn"
-            aria-label={`删除输入绑定 ${binding.inputKey}`}
+            aria-label={t("workflow.deleteBinding", [binding.inputKey])}
             onClick={() => props.callbacks.onRemoveBinding(node.id, index)}
           >
-            删除
+            {t("shell.delete")}
           </button>
         </div>
       ))}
@@ -221,11 +222,11 @@ function NodeInspector(props: {
         className="ghost-btn wf-binding-add"
         onClick={() => props.callbacks.onAddBinding(node.id)}
       >
-        添加输入绑定
+        {t("workflow.addBinding")}
       </button>
-      {sectionTitle("执行参数")}
+      {sectionTitle(t("workflow.executionParams"))}
       <label className="wf-field">
-        超时 timeoutSeconds（可空，1–86400）
+        {t("workflow.timeoutField")}
         <input
           id="wf-insp-timeoutSeconds"
           className="name-input"
@@ -233,7 +234,7 @@ function NodeInspector(props: {
           min={1}
           max={86400}
           value={node.timeoutSeconds ?? ""}
-          aria-label="超时秒数"
+          aria-label={t("workflow.timeoutSecondsLabel")}
           onChange={(event) => {
             const raw = event.target.value.trim();
             if (raw === "") {
@@ -248,7 +249,7 @@ function NodeInspector(props: {
         />
       </label>
       <label className="wf-field">
-        重试 retryPolicy.maxRetries（0–2）
+        {t("workflow.retryField")}
         <span className="wf-field-control">
           <CustomSelect
             value={node.retryPolicy.maxRetries}
@@ -256,7 +257,7 @@ function NodeInspector(props: {
             onChange={(value) =>
               props.callbacks.onUpdateNode(node.id, { retryMaxRetries: Number(value) })
             }
-            ariaLabel="最大重试次数"
+            ariaLabel={t("workflow.maxRetries")}
           />
         </span>
       </label>
@@ -277,53 +278,53 @@ function EdgeInspector(props: {
   if (!edge) {
     return (
       <div className="wf-insp">
-        {sectionTitle("连线")}
-        <p className="wf-insp-hint">连线不存在（可能已删除）。</p>
+        {sectionTitle(t("workflow.edge"))}
+        <p className="wf-insp-hint">{t("workflow.edgeMissing")}</p>
       </div>
     );
   }
   return (
     <div className="wf-insp">
-      {sectionTitle("连线")}
+      {sectionTitle(t("workflow.edge"))}
       <div className="wf-field-row">
-        <span className="wf-field-label">连接</span>
+        <span className="wf-field-label">{t("workflow.connect")}</span>
         <span className="wf-field-value">
           {edge.fromNodeId} → {edge.toNodeId}
         </span>
       </div>
       <label className="wf-field">
-        输出键 outputKey（源节点端口）
+        {t("workflow.outputKeyField")}
         <input
           id="wf-insp-edge-output"
           className="name-input"
           value={edge.outputKey}
           maxLength={100}
-          aria-label="输出键"
+          aria-label={t("workflow.outputKey")}
           onChange={(event) =>
             props.callbacks.onUpdateEdge(props.edgeKey, { outputKey: event.target.value })
           }
         />
       </label>
       <label className="wf-field">
-        输入键 inputKey（目标节点端口）
+        {t("workflow.inputKeyField")}
         <input
           id="wf-insp-edge-input"
           className="name-input"
           value={edge.inputKey}
           maxLength={100}
-          aria-label="输入键"
+          aria-label={t("workflow.inputKey")}
           onChange={(event) =>
             props.callbacks.onUpdateEdge(props.edgeKey, { inputKey: event.target.value })
           }
         />
       </label>
-      <p className="wf-insp-hint">输入键应与目标节点声明的 inputBindings.inputKey 对应，required 输入缺连线会在校验中报 MISSING_BINDING。</p>
+      <p className="wf-insp-hint">{t("workflow.inputKeyHint")}</p>
       <button
         type="button"
         className="danger-btn wf-edge-delete"
         onClick={() => props.callbacks.onRemoveEdge(props.edgeKey)}
       >
-        删除连线
+        {t("workflow.deleteEdge")}
       </button>
     </div>
   );

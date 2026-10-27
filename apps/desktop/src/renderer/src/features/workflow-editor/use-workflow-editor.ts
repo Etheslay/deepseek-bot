@@ -19,6 +19,7 @@ import {
 } from "./workflow-reducer.js";
 import type { WorkflowImportResult, WorkflowSummary } from "./workflow-service.js";
 import { collectIssues, inspectorFieldId } from "./validation/issues.js";
+import { t } from "../../i18n.js";
 
 /** Drop id/revision so an imported/copied draft saves as a brand-new workflow. */
 export function stripRevision(draft: WorkflowDraft): WorkflowDraft {
@@ -197,7 +198,7 @@ export function useWorkflowEditor(): WorkflowEditorController {
         inputKey,
       });
       if (state.draft.edges.some((edge) => edgeKeyOf(edge) === key)) {
-        setToast("相同连线已存在");
+        setToast(t("workflow.edgeAlreadyExists"));
         setEdgeDialog(null);
         return;
       }
@@ -221,7 +222,7 @@ export function useWorkflowEditor(): WorkflowEditorController {
     (nodeId: string) => {
       if (pendingConnectFrom === null) {
         setPendingConnectFrom(nodeId);
-        setToast("连线模式：选中目标节点后按 C 连接，Esc 取消");
+        setToast(t("workflow.connectModeHint"));
         return;
       }
       if (pendingConnectFrom === nodeId) {
@@ -279,15 +280,15 @@ export function useWorkflowEditor(): WorkflowEditorController {
           from: { id: saved.id, revision: saved.revision },
           positions: state.positions,
         });
-        setToast("已保存（夹具内存态，非持久化）");
+        setToast(t("workflow.savedInMemoryFixture"));
         void refreshCatalog();
       } catch (error) {
         if (error instanceof ServiceError && error.code === "REVISION_CONFLICT") {
           setConflict(true);
         } else if (error instanceof ServiceError) {
-          setToast(`保存失败：${error.message}`);
+          setToast(t("shell.saveFailed", [error.message]));
         } else {
-          setToast("保存失败");
+          setToast(t("workflow.saveFailed"));
         }
       } finally {
         setBusy(false);
@@ -298,7 +299,7 @@ export function useWorkflowEditor(): WorkflowEditorController {
   const copyWorkflow = useCallback(() => {
     const loaded = state.loadedFrom;
     if (!loaded) {
-      setToast("请先保存，再复制");
+      setToast(t("workflow.saveBeforeCopy"));
       return;
     }
     setBusy(true);
@@ -310,10 +311,10 @@ export function useWorkflowEditor(): WorkflowEditorController {
           draft: workflowToDraft(copy),
           from: { id: copy.id, revision: copy.revision },
         });
-        setToast("已创建副本");
+        setToast(t("workflow.copyCreated"));
         void refreshCatalog();
       } catch (error) {
-        setToast(error instanceof ServiceError ? `复制失败：${error.message}` : "复制失败");
+        setToast(error instanceof ServiceError ? t("workflow.copyFailedWithReason", [error.message]) : t("shell.copyFailed"));
       } finally {
         setBusy(false);
       }
@@ -325,7 +326,7 @@ export function useWorkflowEditor(): WorkflowEditorController {
     dispatch({ type: "load", draft: newWorkflowDraft(firstActiveBot?.id), from: null });
     setConflict(false);
     setRemoteResult(null);
-    setToast("已新建草稿");
+    setToast(t("workflow.draftCreated"));
   }, [bots]);
 
   const runValidate = useCallback(() => {
@@ -336,7 +337,7 @@ export function useWorkflowEditor(): WorkflowEditorController {
         setRemoteResult({ valid: result.valid, count: result.errors.length });
       } catch {
         setRemoteResult(null);
-        setToast("校验请求失败");
+        setToast(t("workflow.validateRequestFailed"));
       } finally {
         setBusy(false);
       }
@@ -360,7 +361,7 @@ export function useWorkflowEditor(): WorkflowEditorController {
           setConflict(false);
           setRemoteResult(null);
         } catch (error) {
-          setToast(error instanceof ServiceError ? `打开失败：${error.message}` : "打开失败");
+          setToast(error instanceof ServiceError ? t("workflow.openFailedWithReason", [error.message]) : t("workflow.openFailed"));
         } finally {
           setBusy(false);
         }
@@ -385,7 +386,7 @@ export function useWorkflowEditor(): WorkflowEditorController {
           from: { id: workflow.id, revision: workflow.revision },
         });
         setConflict(false);
-        setToast("已刷新到最新版本，可重试保存");
+        setToast(t("workflow.refreshedAfterConflict"));
       } finally {
         setBusy(false);
       }
@@ -416,7 +417,7 @@ export function useWorkflowEditor(): WorkflowEditorController {
         } catch {
           setImportResult({
             accepted: false,
-            errors: [{ code: "INVALID_INPUT", message: "不是合法的 JSON 文本" }],
+            errors: [{ code: "INVALID_INPUT", message: t("workflow.invalidJsonText") }],
             errorCode: "INVALID_INPUT",
           });
           return;
@@ -436,13 +437,13 @@ export function useWorkflowEditor(): WorkflowEditorController {
     setImportOpen(false);
     setImportResult(null);
     setImportText("");
-    setToast("模板已载入画布（未保存，确认后请保存）");
+    setToast(t("workflow.templateLoaded"));
   }, [importResult]);
 
   const openExport = useCallback(() => {
     const loaded = state.loadedFrom;
     if (!loaded) {
-      setToast("请先保存，再导出");
+      setToast(t("workflow.saveBeforeExport"));
       return;
     }
     setBusy(true);
@@ -455,7 +456,7 @@ export function useWorkflowEditor(): WorkflowEditorController {
         };
         setExportJson(JSON.stringify(template, null, 2));
       } catch (error) {
-        setToast(error instanceof ServiceError ? `导出失败：${error.message}` : "导出失败");
+        setToast(error instanceof ServiceError ? t("workflow.exportFailedWithReason", [error.message]) : t("workflow.exportFailed"));
       } finally {
         setBusy(false);
       }

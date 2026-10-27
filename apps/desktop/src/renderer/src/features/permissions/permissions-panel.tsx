@@ -11,44 +11,25 @@ import {
   type PermissionGrant,
   type PermissionMode,
 } from "@deepseek-bot/contracts";
+import { t, useLanguage, type MessageKey } from "../../i18n.js";
+import { capabilityLabel } from "./capability-labels.js";
 
-const MODE_LABELS: Record<PermissionMode, string> = {
-  allow: "始终允许",
-  ask: "每次询问",
-  deny: "从不允许",
+/** Permission modes are contract data; only their labels are localized (D22). */
+const MODE_LABEL_KEYS: Record<PermissionMode, MessageKey> = {
+  allow: "permissions.modeAllow",
+  ask: "permissions.modeAsk",
+  deny: "permissions.modeDeny",
 };
 
-const CAPABILITY_LABELS: Record<CapabilityId, string> = {
-  "app.read": "读取应用数据",
-  "app.create_group": "创建分组",
-  "app.create_bot": "创建 bot",
-  "app.update_bot": "修改 bot",
-  "app.create_workflow": "修改工作流",
-  "app.start_run": "启动运行",
-  "app.cancel_run": "取消运行",
-  "app.dispatch_task": "派发任务给其他 bot",
-  "app.revoke_creation": "撤销创建批次",
-  "interaction.ask_user": "向用户提问",
-  "network.search": "联网搜索",
-  "memory.read": "检索记忆",
-  "memory.write": "写入记忆",
-  "fs.read": "读取工作目录文件",
-  "fs.write": "写入工作目录文件",
-  "exec.shell": "执行本地命令",
-  "screen.capture": "屏幕与窗口感知",
-  "connector.invoke": "调用连接器",
-  "mcp.call": "调用 MCP 工具",
-};
-
-const SCOPE_LABELS = {
-  once: "本次",
-  session: "本会话",
-  permanent: "永久",
-} as const;
+const SCOPE_LABEL_KEYS = {
+  once: "permissions.scopeOnce",
+  session: "shell.scopeSession",
+  permanent: "permissions.scopePermanent",
+} as const satisfies Record<string, MessageKey>;
 
 const MODES = ["allow", "ask", "deny"] as const satisfies readonly PermissionMode[];
 
-type IssuedGrant = PermissionGrant & { scope: keyof typeof SCOPE_LABELS };
+type IssuedGrant = PermissionGrant & { scope: keyof typeof SCOPE_LABEL_KEYS };
 
 function isIssuedGrant(grant: PermissionGrant): grant is IssuedGrant {
   return grant.scope === "once" || grant.scope === "session" || grant.scope === "permanent";
@@ -81,17 +62,24 @@ async function loadPermissionSettings(call: HostCall): Promise<{
 }
 
 function grantUsage(grant: IssuedGrant): string {
-  if (grant.revokedAt !== null) return "已撤销";
-  const limit = grant.maxUses === null ? "不限" : String(grant.maxUses);
-  return `已用 ${grant.uses}/${limit}`;
+  if (grant.revokedAt !== null) return t("permissions.revoked");
+  const limit = grant.maxUses === null ? t("permissions.noLimit") : String(grant.maxUses);
+  return t("permissions.grantUsage", [grant.uses, limit]);
 }
 
 export function PermissionsPanel() {
+  // Subscribes to the language store: the stored notice is a factory, so it only
+  // re-translates when this component re-renders (D22).
+  useLanguage();
   const [policies, setPolicies] = useState<
     { capability: CapabilityId; mode: PermissionMode }[] | null
   >(null);
   const [grants, setGrants] = useState<IssuedGrant[]>([]);
-  const [notice, setNotice] = useState<string | null>(null);
+  /**
+   * The notice is stored as a factory, not a rendered string: a translated string
+   * kept in state would still show the previous language after a switch (D22).
+   */
+  const [notice, setNotice] = useState<(() => string) | null>(null);
   const [noticeError, setNoticeError] = useState(false);
 
   const reload = useCallback(async (): Promise<void> => {
@@ -105,14 +93,16 @@ export function PermissionsPanel() {
   useEffect(() => {
     void reload().catch(() => {
       setNoticeError(true);
-      setNotice("权限数据读取失败");
+      setNotice(() => () => t("permissions.loadFailed"));
     });
   }, [reload]);
 
   if (policies === null) {
     return (
       <div className="settings-card">
-        <p className={noticeError ? "form-error" : "settings-soon"}>{notice ?? "正在读取权限…"}</p>
+        <p className={noticeError ? "form-error" : "settings-soon"}>
+          {notice !== null ? notice() : t("permissions.loading")}
+        </p>
       </div>
     );
   }
@@ -124,31 +114,33 @@ export function PermissionsPanel() {
       .then((response) => {
         PERMISSION_METHODS["permission.policy.set"].response.parse(response);
         setNoticeError(false);
-        setNotice(`已保存：${CAPABILITY_LABELS[capability]} → ${MODE_LABELS[mode]}`);
+        setNotice(
+          () => () => t("permissions.policySaved", [capabilityLabel(capability), t(MODE_LABEL_KEYS[mode])]),
+        );
         return reload();
       })
       .catch(() => {
         setNoticeError(true);
-        setNotice("策略保存失败");
+        setNotice(() => () => t("permissions.policySaveFailed"));
       });
   };
 
   return (
     <div className="settings-card">
       <div className="settings-row">
-        <span>模型能力策略</span>
-        <span className="settings-soon">调用工具前先过策略与授权</span>
+        <span>{t("permissions.capabilityPolicies")}</span>
+        <span className="settings-soon">{t("permissions.policyHint")}</span>
       </div>
       {policies.map((policy) => {
         const choices = allowedModes(policy.capability);
         return (
           <div className="settings-row" key={policy.capability}>
-            <span>{CAPABILITY_LABELS[policy.capability]}</span>
+            <span>{capabilityLabel(policy.capability)}</span>
             <select
               className="settings-select"
               value={policy.mode}
               disabled={choices.length < 2}
-              aria-label={`${policy.capability} 策略`}
+              aria-label={t("permissions.capabilityPolicy", [policy.capability])}
               onChange={(event) => {
                 const next = event.target.value;
                 if (isMode(next)) savePolicy(policy.capability, next);
@@ -156,7 +148,7 @@ export function PermissionsPanel() {
             >
               {choices.map((mode) => (
                 <option key={mode} value={mode}>
-                  {MODE_LABELS[mode]}
+                  {t(MODE_LABEL_KEYS[mode])}
                 </option>
               ))}
             </select>
@@ -164,15 +156,15 @@ export function PermissionsPanel() {
         );
       })}
       <div className="settings-row">
-        <span>已发放授权</span>
+        <span>{t("permissions.issuedGrants")}</span>
         <span className="settings-soon">
-          {grants.length === 0 ? "暂无" : `${grants.length} 条`}
+          {grants.length === 0 ? t("permissions.none") : t("permissions.grantCount", [grants.length])}
         </span>
       </div>
       {grants.map((grant) => (
         <div className="settings-row" key={grant.id}>
           <span>
-            {CAPABILITY_LABELS[grant.capability]} · {SCOPE_LABELS[grant.scope]} ·{" "}
+            {capabilityLabel(grant.capability)} · {t(SCOPE_LABEL_KEYS[grant.scope])} ·{" "}
             {grantUsage(grant)}
           </span>
           {grant.revokedAt === null ? (
@@ -185,22 +177,22 @@ export function PermissionsPanel() {
                   .then((response) => {
                     PERMISSION_METHODS["permission.grant.revoke"].response.parse(response);
                     setNoticeError(false);
-                    setNotice("授权已撤销");
+                    setNotice(() => () => t("permissions.grantRevoked"));
                     return reload();
                   })
                   .catch(() => {
                     setNoticeError(true);
-                    setNotice("撤销失败");
+                    setNotice(() => () => t("permissions.revokeFailed"));
                   });
               }}
             >
-              撤销
+              {t("permissions.revoke")}
             </button>
           ) : null}
         </div>
       ))}
       {notice !== null ? (
-        <p className={noticeError ? "form-error" : "settings-ok"}>{notice}</p>
+        <p className={noticeError ? "form-error" : "settings-ok"}>{notice()}</p>
       ) : null}
     </div>
   );

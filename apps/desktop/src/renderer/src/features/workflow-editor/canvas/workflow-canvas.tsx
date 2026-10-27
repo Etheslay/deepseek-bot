@@ -13,6 +13,7 @@ import {
   type NodePosition,
   type WorkflowEditorState,
 } from "../workflow-reducer.js";
+import { t } from "../../../i18n.js";
 
 export const NODE_W = 192;
 export const NODE_H = 72;
@@ -194,7 +195,7 @@ export function WorkflowCanvas(props: WorkflowCanvasProps): JSX.Element {
               style={{ left: pos.x, top: pos.y, width: NODE_W }}
               role="button"
               tabIndex={0}
-              aria-label={`节点 ${node.id}（${node.type === "bot" ? "Bot" : "审批"}${errorCount > 0 ? `，${errorCount} 个错误` : ""}）`}
+              aria-label={t("workflow.nodeAriaLabel", [node.id, node.type === "bot" ? "Bot" : t("runs.approval"), errorCount > 0 ? t("workflow.errorCountSuffix", [errorCount]) : ""])}
               onPointerDown={(event) => {
                 if (event.button !== 0) {
                   return;
@@ -224,22 +225,22 @@ export function WorkflowCanvas(props: WorkflowCanvasProps): JSX.Element {
                 }
               }}
             >
-              <span className="wf-node-type">{node.type === "bot" ? "Bot" : "审批"}</span>
+              <span className="wf-node-type">{node.type === "bot" ? "Bot" : t("runs.approval")}</span>
               <span className="wf-node-title">{node.id}</span>
               <span className="wf-node-sub">
-                {node.type === "bot" ? (botName ?? "未选择机器人") : "人工审批"}
+                {node.type === "bot" ? (botName ?? t("workflow.noBotSelected")) : t("workflow.manualApproval")}
               </span>
               <span
                 className={"wf-node-badge" + (errorCount > 0 ? " err" : " ok")}
-                title={errorCount > 0 ? `${errorCount} 个校验错误` : "校验通过"}
+                title={errorCount > 0 ? t("workflow.validationErrorCount", [errorCount]) : t("workflow.validationPassed")}
               >
                 {errorCount > 0 ? errorCount : "✓"}
               </span>
               <button
                 type="button"
                 className="wf-port in"
-                aria-label={`连接到节点 ${node.id} 的输入`}
-                title="输入端口"
+                aria-label={t("workflow.connectToNodeInput", [node.id])}
+                title={t("workflow.inputPort")}
                 onPointerUp={(event) => {
                   event.stopPropagation();
                   if (linking !== null && linking.fromNodeId !== node.id) {
@@ -251,8 +252,8 @@ export function WorkflowCanvas(props: WorkflowCanvasProps): JSX.Element {
               <button
                 type="button"
                 className="wf-port out"
-                aria-label={`从节点 ${node.id} 拉出连线`}
-                title="输出端口：按住拖到目标节点"
+                aria-label={t("workflow.dragEdgeFromNode", [node.id])}
+                title={t("workflow.outputPortHint")}
                 onPointerDown={(event) => {
                   event.stopPropagation();
                   event.preventDefault();
@@ -285,23 +286,23 @@ export function EdgeKeyDialog(props: {
         className="modal compact wf-edge-dialog"
         role="dialog"
         aria-modal="true"
-        aria-label="创建连线"
+        aria-label={t("workflow.createEdge")}
         onClick={(event) => event.stopPropagation()}
       >
         <header className="modal-head">
           <h3>
-            连接 {props.from} → {props.to}
+            {t("workflow.connectFromTo", [props.from, props.to])}
           </h3>
         </header>
         <div className="modal-body wf-dialog-form">
           <label>
-            输出键 outputKey
+            {t("workflow.outputKeyLabel")}
             <input
               className="name-input"
               value={outputKey}
               maxLength={100}
               autoFocus
-              aria-label="输出键 outputKey"
+              aria-label={t("workflow.outputKeyLabel")}
               onChange={(event) => setOutputKey(event.target.value)}
               onKeyDown={(event) => {
                 if (event.key === "Enter" && valid) {
@@ -311,12 +312,12 @@ export function EdgeKeyDialog(props: {
             />
           </label>
           <label>
-            输入键 inputKey
+            {t("workflow.inputKeyLabel")}
             <input
               className="name-input"
               value={inputKey}
               maxLength={100}
-              aria-label="输入键 inputKey"
+              aria-label={t("workflow.inputKeyLabel")}
               onChange={(event) => setInputKey(event.target.value)}
               onKeyDown={(event) => {
                 if (event.key === "Enter" && valid) {
@@ -326,12 +327,12 @@ export function EdgeKeyDialog(props: {
             />
           </label>
           <p className="wf-dialog-hint">
-            目标节点声明的输入绑定（required 的输入必须有连线供值，否则保存前报 MISSING_BINDING）。
+            {t("workflow.edgeDialogHint")}
           </p>
         </div>
         <footer className="modal-foot">
           <button type="button" className="ghost-btn" onClick={props.onCancel}>
-            取消
+            {t("shell.cancel")}
           </button>
           <button
             type="button"
@@ -339,7 +340,7 @@ export function EdgeKeyDialog(props: {
             disabled={!valid}
             onClick={() => props.onConfirm(outputKey.trim(), inputKey.trim())}
           >
-            连接
+            {t("workflow.connect")}
           </button>
         </footer>
       </div>

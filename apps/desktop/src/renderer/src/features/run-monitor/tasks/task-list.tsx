@@ -6,25 +6,31 @@
  */
 import { useMemo, useState, type JSX } from "react";
 import type { Bot, Task, TaskStatus } from "@deepseek-bot/contracts";
+import { t, useLanguage, type MessageKey } from "../../../i18n.js";
 
-export const TASK_STATUS_LABELS: Record<TaskStatus, string> = {
-  queued: "排队中",
-  running: "执行中",
-  done: "已完成",
-  failed: "已失败",
-  cancelled: "已取消",
-  skipped: "已跳过",
-  interrupted: "已中断",
+/* Status labels live in module tables, so they are read through accessors (D22). */
+const TASK_STATUS_KEYS: Record<TaskStatus, MessageKey> = {
+  queued: "runs.queued",
+  running: "shell.toolRunning",
+  done: "shell.toolCompleted",
+  failed: "runs.statusFailed",
+  cancelled: "runs.statusCancelled",
+  skipped: "runs.nodeSkipped",
+  interrupted: "runs.statusInterrupted",
 };
 
-const FILTERS: Array<{ value: TaskStatus | "all"; label: string }> = [
-  { value: "all", label: "全部" },
-  { value: "queued", label: "排队中" },
-  { value: "running", label: "执行中" },
-  { value: "done", label: "已完成" },
-  { value: "failed", label: "已失败" },
-  { value: "skipped", label: "已跳过" },
-  { value: "interrupted", label: "已中断" },
+export function taskStatusLabel(status: TaskStatus): string {
+  return t(TASK_STATUS_KEYS[status]);
+}
+
+const FILTERS: Array<{ value: TaskStatus | "all"; labelKey: MessageKey }> = [
+  { value: "all", labelKey: "tasks.filterAll" },
+  { value: "queued", labelKey: "runs.queued" },
+  { value: "running", labelKey: "shell.toolRunning" },
+  { value: "done", labelKey: "shell.toolCompleted" },
+  { value: "failed", labelKey: "runs.statusFailed" },
+  { value: "skipped", labelKey: "runs.nodeSkipped" },
+  { value: "interrupted", labelKey: "runs.statusInterrupted" },
 ];
 
 export function TaskList(props: {
@@ -33,6 +39,7 @@ export function TaskList(props: {
   onCancel: (taskId: string) => void;
   cancelBusyId?: string | null;
 }): JSX.Element {
+  useLanguage();
   const [filter, setFilter] = useState<TaskStatus | "all">("all");
   const nameOf = useMemo(() => {
     const byId = new Map(props.bots.map((bot) => [bot.id, bot.name]));
@@ -43,8 +50,8 @@ export function TaskList(props: {
   );
 
   return (
-    <div className="task-list" role="tabpanel" aria-label="派发任务列表">
-      <div className="task-filters" role="group" aria-label="按状态过滤">
+    <div className="task-list" role="tabpanel" aria-label={t("tasks.listAria")}>
+      <div className="task-filters" role="group" aria-label={t("tasks.filterAria")}>
         {FILTERS.map((entry) => (
           <button
             key={entry.value}
@@ -53,12 +60,12 @@ export function TaskList(props: {
             aria-pressed={filter === entry.value}
             onClick={() => setFilter(entry.value)}
           >
-            {entry.label}
+            {t(entry.labelKey)}
           </button>
         ))}
       </div>
       {visible.length === 0 ? (
-        <div className="task-empty">当前没有任务。</div>
+        <div className="task-empty">{t("tasks.empty")}</div>
       ) : (
         <ul className="task-rows">
           {visible.map((task) => {
@@ -67,14 +74,14 @@ export function TaskList(props: {
             return (
               <li className="task-row" key={task.id}>
                 <span className={`task-status task-status--${task.status}`}>
-                  {TASK_STATUS_LABELS[task.status]}
+                  {taskStatusLabel(task.status)}
                 </span>
                 {task.chainTotal > 1 && (
                   <span
                     className="task-hop"
-                    title={`接力链第 ${task.chainIndex + 1} 跳，共 ${task.chainTotal} 跳`}
+                    title={t("tasks.chainHopTitle", [task.chainIndex + 1, task.chainTotal])}
                   >
-                    跳 {task.chainIndex + 1}/{task.chainTotal}
+                    {t("tasks.chainHopShort", [task.chainIndex + 1, task.chainTotal])}
                   </span>
                 )}
                 <span className="task-route">
@@ -95,7 +102,7 @@ export function TaskList(props: {
                     disabled={busy}
                     onClick={() => props.onCancel(task.id)}
                   >
-                    {busy ? "取消中…" : task.status === "running" ? "中断回合" : "取消"}
+                    {busy ? t("tasks.cancelling") : task.status === "running" ? t("tasks.cancelAction") : t("shell.cancel")}
                   </button>
                 ) : (
                   <span className="task-done-note" aria-hidden="true" />

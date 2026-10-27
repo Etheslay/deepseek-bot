@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { formatFullDateTime } from "../../src/renderer/src/i18n.js";
 import {
   applyCancelled,
   applyDelta,
@@ -84,7 +85,7 @@ describe("replayTimeline", () => {
       }),
     ]);
     expect(items).toHaveLength(5);
-    expect(items[0]).toEqual({ kind: "time", text: new Date("2026-10-24T10:00:00Z").toLocaleString() });
+    expect(items[0]).toEqual({ kind: "time", text: formatFullDateTime("2026-10-24T10:00:00Z") });
     expect(items[1]).toEqual({ kind: "event", label: "任务已创建", detail: "#0" });
     expect(items[2]).toEqual({
       kind: "event",
@@ -93,7 +94,7 @@ describe("replayTimeline", () => {
     });
     expect(items[3]).toEqual({
       kind: "time",
-      text: new Date("2026-10-24T10:00:02Z").toLocaleString(),
+      text: formatFullDateTime("2026-10-24T10:00:02Z"),
     });
     expect(items[4]).toEqual({
       kind: "event",

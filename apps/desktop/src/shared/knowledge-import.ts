@@ -21,15 +21,23 @@ export type KnowledgeImportResult =
 
 const EXTENSIONS = new Set([".txt", ".md"]);
 
-function titleFrom(fileName: string): string {
+/**
+ * `unnamedTitle` is injected by the caller: this module is shared with the
+ * main process, so it cannot read the renderer's language store (D22).
+ */
+function titleFrom(fileName: string, unnamedTitle: string): string {
   const base = fileName.split(/[/\\]/).pop() ?? "";
   const dot = base.lastIndexOf(".");
   const stem = (dot > 0 ? base.slice(0, dot) : "").trim();
-  const title = stem.length === 0 ? "未命名知识" : stem;
+  const title = stem.length === 0 ? unnamedTitle : stem;
   return title.length > TITLE_MAX ? title.slice(0, TITLE_MAX) : title;
 }
 
-export function importKnowledgeText(fileName: string, bytes: Uint8Array): KnowledgeImportResult {
+export function importKnowledgeText(
+  fileName: string,
+  bytes: Uint8Array,
+  unnamedTitle: string,
+): KnowledgeImportResult {
   const base = fileName.split(/[/\\]/).pop() ?? "";
   const dot = base.lastIndexOf(".");
   const extension = dot >= 0 ? base.slice(dot).toLowerCase() : "";
@@ -45,5 +53,5 @@ export function importKnowledgeText(fileName: string, bytes: Uint8Array): Knowle
   const text = decoded.trim();
   if (text.length === 0) return { ok: false, code: "empty" };
   if (text.length > KNOWLEDGE_IMPORT_MAX_CHARS) return { ok: false, code: "size" };
-  return { ok: true, title: titleFrom(fileName), text };
+  return { ok: true, title: titleFrom(fileName, unnamedTitle), text };
 }

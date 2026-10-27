@@ -36,6 +36,7 @@ import {
 } from "@deepseek-bot/contracts";
 import { ServiceError } from "../../services/desktop-service.js";
 import type { ApprovalBaseline } from "./events/run-view.js";
+import { t } from "../../i18n.js";
 
 // ---------------------------------------------------------------------------
 // API
@@ -536,11 +537,11 @@ export function createFixtureRunService(): RunServiceApi {
             arguments: { path: "workspaces/demo/note.md" },
             resource: "workspaces/demo/note.md",
           });
-          queueTransient(scenario, "stream-active", ["正在读取工作区样例…", "整理要点…", "生成摘要…"]);
+          queueTransient(scenario, "stream-active", [t("runs.deltaReadingWorkspace"), t("runs.deltaOrganizingPoints"), t("runs.deltaGeneratingSummary")]);
         },
         // s2: more transient output only (no persistent sequence).
         () => {
-          queueTransient(scenario, "stream-active", ["补充结论…", "校对格式…", "收尾…"]);
+          queueTransient(scenario, "stream-active", [t("runs.deltaAddingConclusions"), t("runs.deltaProofreadingFormat"), t("runs.deltaWrappingUp")]);
         },
       ],
     });
@@ -854,7 +855,7 @@ export function createFixtureRunService(): RunServiceApi {
           if (!retried) {
             throw new ServiceError(
               "INVALID_INPUT",
-              "夹具回放顺序错误：请先在失败节点上执行 run.retryNode",
+              t("runs.replayOrderError"),
             );
           }
           moveNodeRun(scenario, retried.id, "r1", 2, "succeeded", "node completed");
@@ -889,7 +890,7 @@ export function createFixtureRunService(): RunServiceApi {
     scenario.cancelFinish = () => {
       const nodeRun = (nodeRunsByRun.get(RUN_ACTIVE) ?? [])[0]!;
       if (scenario.run.status !== "cancelling") {
-        throw new ServiceError("INVALID_INPUT", "该运行尚未进入 cancelling，无法完成取消");
+        throw new ServiceError("INVALID_INPUT", t("runs.cancelNotStarted"));
       }
       moveNodeRun(scenario, nodeRun.id, "n1", 1, "cancelled", "graph cancellation stopped the node");
       moveRun(scenario, "cancelled", "all child work stopped");
@@ -1076,12 +1077,12 @@ export function createFixtureRunService(): RunServiceApi {
         throw invalidInput("expectedActionDigest does not match the requested action");
       }
       if (record.approval.status !== "pending") {
-        throw invalidInput(`审批已解决（一次消费，当前 ${record.approval.status}），不能重复决定`);
+        throw invalidInput(t("runs.approvalDecidedOnce", [record.approval.status]));
       }
       if (record.generation < HOST_GENERATION) {
         throw new ServiceError(
           "APPROVAL_EXPIRED",
-          "审批绑定旧的启动代次：Host 重启后失效，不能重放",
+          t("runs.approvalStaleGeneration"),
         );
       }
       if (Date.now() > Date.parse(record.approval.expiresAt)) {
@@ -1155,7 +1156,7 @@ export function createFixtureRunService(): RunServiceApi {
     async advanceScenario(runId) {
       const scenario = requireScenario(runId);
       if (scenario.closed) {
-        throw invalidInput("运行已到终态，事件不再追加（夹具回放结束）");
+        throw invalidInput(t("runs.terminalNoMoreEvents"));
       }
       // A cancelling run always drains next (child work stops → cancelled).
       if (scenario.run.status === "cancelling" && scenario.cancelFinish) {
@@ -1164,7 +1165,7 @@ export function createFixtureRunService(): RunServiceApi {
       }
       const step = scenario.script[scenario.scriptIndex];
       if (!step) {
-        throw invalidInput("夹具回放已结束：没有更多脚本步骤");
+        throw invalidInput(t("runs.replayScriptEnded"));
       }
       scenario.scriptIndex += 1;
       step();

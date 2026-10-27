@@ -26,7 +26,8 @@ import { RunList } from "./run-list/run-list.js";
 import { RunDetail } from "./run-detail/run-detail.js";
 import { RunHistory } from "./history/run-history.js";
 import { ApprovalInboxItem } from "./approvals/approval-card.js";
-import { TaskList } from "./tasks/task-list.js";
+import { TaskList, taskStatusLabel } from "./tasks/task-list.js";
+import { t } from "../../i18n.js";
 
 type SnapshotData = Awaited<ReturnType<ReturnType<typeof useService>["runs"]["snapshot"]>>;
 
@@ -132,10 +133,14 @@ export function RunMonitor(props: { onClose: () => void }): JSX.Element {
       setCancelBusyId(taskId);
       try {
         const task = await desktop.tasks.cancel(taskId);
-        setNotice(`任务已${task.status === "cancelled" ? "取消" : `进入 ${task.status}`}`);
+        setNotice(
+          task.status === "cancelled"
+            ? t("tasks.cancelledNotice")
+            : t("tasks.movedToNotice", [taskStatusLabel(task.status)]),
+        );
         await refreshTasks();
       } catch (error) {
-        handleError(error, "取消任务失败");
+        handleError(error, t("tasks.cancelFailed"));
       } finally {
         setCancelBusyId(null);
       }
@@ -173,7 +178,7 @@ export function RunMonitor(props: { onClose: () => void }): JSX.Element {
       });
       await refreshRun();
     } catch (error) {
-      handleError(error, "审批操作失败");
+      handleError(error, t("runs.approvalActionFailed"));
       // Refresh anyway so consumed/expired state is reflected.
       try {
         await refreshRun();
@@ -192,12 +197,12 @@ export function RunMonitor(props: { onClose: () => void }): JSX.Element {
       const run = await runs.cancel(selectedRunId);
       setNotice(
         run.status === "cancelling"
-          ? "已请求取消（cancelling），待子任务全部停止后进入 cancelled"
-          : `运行已处于终态 ${run.status}（幂等，无新事件）`,
+          ? t("runs.cancelRequested")
+          : t("runs.alreadyTerminal", [run.status]),
       );
       await refreshRun();
     } catch (error) {
-      handleError(error, "取消失败");
+      handleError(error, t("runs.cancelFailed"));
     }
   };
 
@@ -205,11 +210,11 @@ export function RunMonitor(props: { onClose: () => void }): JSX.Element {
     try {
       const spawned = await runs.retryNode(nodeRunId);
       setNotice(
-        `run.retryNode：节点 ${spawned.nodeId} 新建第 ${spawned.attempt} 次 attempt`,
+        t("runs.retryNodeNotice", [spawned.nodeId, spawned.attempt]),
       );
       await refreshRun();
     } catch (error) {
-      handleError(error, "重试失败");
+      handleError(error, t("runs.retryFailed"));
     }
   };
 
@@ -221,7 +226,7 @@ export function RunMonitor(props: { onClose: () => void }): JSX.Element {
       await runs.advanceScenario(selectedRunId);
       await refreshRun();
     } catch (error) {
-      handleError(error, "夹具回放失败");
+      handleError(error, t("runs.fixtureReplayFailed"));
     }
   };
 
@@ -230,7 +235,7 @@ export function RunMonitor(props: { onClose: () => void }): JSX.Element {
       return;
     }
     if (stream.lastSequence === null) {
-      setNotice("当前没有可回放的事件（保留窗口外）：请先按快照重建，再等待新事件");
+      setNotice(t("runs.noReplayableEvents"));
       return;
     }
     try {
@@ -240,9 +245,9 @@ export function RunMonitor(props: { onClose: () => void }): JSX.Element {
       const resumeAt = stream.lastSequence - 1;
       const resumed = resumeFrom(stream, resumeAt);
       setStream(await subscribeInto(selectedRunId, resumed));
-      setNotice(`已按 afterSequence=${resumeAt} 重连并增量补齐（重复投递会被去重）`);
+      setNotice(t("runs.reconnectedAfterSequence", [resumeAt]));
     } catch (error) {
-      handleError(error, "重连失败");
+      handleError(error, t("runs.reconnectFailed"));
     }
   };
 
@@ -251,7 +256,7 @@ export function RunMonitor(props: { onClose: () => void }): JSX.Element {
       return;
     }
     setStream(rebuildFromSnapshot(stream));
-    setNotice("已按 run.get 快照重建视图（不假装补齐缺口事件）");
+    setNotice(t("runs.rebuiltFromRunGetSnapshot"));
   };
 
   const view: RunView | null =
@@ -270,12 +275,12 @@ export function RunMonitor(props: { onClose: () => void }): JSX.Element {
   return (
     <div className="rm-shell">
       <header className="rm-top">
-        <span className="rm-title">运行监控与审批</span>
-        <span className="rm-badge">夹具回放 · FR-06/07</span>
+        <span className="rm-title">{t("shell.runMonitorApprovals")}</span>
+        <span className="rm-badge">{t("runs.fixtureReplayBadge")}</span>
         <button
           type="button"
           className="ghost-btn rm-close-btn"
-          aria-label="关闭运行监控"
+          aria-label={t("runs.closeMonitor")}
           onClick={props.onClose}
         >
           ×
@@ -294,8 +299,8 @@ export function RunMonitor(props: { onClose: () => void }): JSX.Element {
             onSelect={(runId) => void openRun(runId)}
           />
           {otherApprovals.length > 0 && (
-            <div className="rm-inbox" aria-label="审批收件箱">
-              <div className="rm-list-head">其他运行的审批</div>
+            <div className="rm-inbox" aria-label={t("runs.approvalInbox")}>
+              <div className="rm-list-head">{t("runs.otherRunsApprovals")}</div>
               {otherApprovals.map((baseline) => (
                 <ApprovalInboxItem
                   key={baseline.approval.id}
@@ -307,49 +312,49 @@ export function RunMonitor(props: { onClose: () => void }): JSX.Element {
           )}
         </aside>
         <main className="rm-main" aria-live="polite">
-          {tab === "tasks" ? (
-            <>
-              <div className="rm-tabs" role="tablist" aria-label="运行监控视图">
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={false}
-                  className="rm-tab"
-                  onClick={() => setTab("monitor")}
-                >
-                  监控
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={false}
-                  className="rm-tab"
-                  onClick={() => setTab("history")}
-                >
-                  历史
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected
-                  className="rm-tab active"
-                  onClick={() => setTab("tasks")}
-                >
-                  任务
-                </button>
-              </div>
-              <TaskList
-                tasks={tasks}
-                bots={bots.bots.map((bot) => bot.bot)}
-                onCancel={(taskId) => void onCancelTask(taskId)}
-                cancelBusyId={cancelBusyId}
-              />
-            </>
-          ) : view === null ? (
-            <div className="rm-empty">正在加载运行…</div>
+        {tab === "tasks" ? (
+          <>
+            <div className="rm-tabs" role="tablist" aria-label={t("runs.monitorViewAria")}>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={false}
+                className="rm-tab"
+                onClick={() => setTab("monitor")}
+              >
+                {t("runs.tabMonitor")}
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={false}
+                className="rm-tab"
+                onClick={() => setTab("history")}
+              >
+                {t("runs.history")}
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected
+                className="rm-tab active"
+                onClick={() => setTab("tasks")}
+              >
+                {t("tasks.tabLabel")}
+              </button>
+            </div>
+            <TaskList
+              tasks={tasks}
+              bots={bots.bots.map((bot) => bot.bot)}
+              onCancel={(taskId) => void onCancelTask(taskId)}
+              cancelBusyId={cancelBusyId}
+            />
+          </>
+        ) : view === null ? (
+          <div className="rm-empty">{t("runs.loadingRun")}</div>
           ) : (
             <>
-              <div className="rm-tabs" role="tablist" aria-label="运行详情视图">
+              <div className="rm-tabs" role="tablist" aria-label={t("runs.detailsView")}>
                 <button
                   type="button"
                   role="tab"
@@ -357,7 +362,7 @@ export function RunMonitor(props: { onClose: () => void }): JSX.Element {
                   className={"rm-tab" + (tab === "monitor" ? " active" : "")}
                   onClick={() => setTab("monitor")}
                 >
-                  监控
+                  {t("runs.tabMonitor")}
                 </button>
                 <button
                   type="button"
@@ -366,7 +371,7 @@ export function RunMonitor(props: { onClose: () => void }): JSX.Element {
                   className={"rm-tab" + (tab === "history" ? " active" : "")}
                   onClick={() => setTab("history")}
                 >
-                  历史
+                  {t("runs.history")}
                 </button>
                 <button
                   type="button"
@@ -375,7 +380,7 @@ export function RunMonitor(props: { onClose: () => void }): JSX.Element {
                   className="rm-tab"
                   onClick={() => setTab("tasks")}
                 >
-                  任务
+                  {t("tasks.tabLabel")}
                 </button>
               </div>
               {tab === "monitor" ? (

@@ -13,13 +13,17 @@ import { BotForm } from "../../src/renderer/src/features/bots/bot-form.js";
 import { TaskList } from "../../src/renderer/src/features/run-monitor/tasks/task-list.js";
 import { TaskFeedCards } from "../../src/renderer/src/features/chat/task-feed.js";
 import { createFixtureTaskService } from "../../src/renderer/src/features/run-monitor/tasks/task-service.js";
-import { CAPABILITY_LABELS } from "../../src/renderer/src/features/permissions/permission-chat.js";
+import { capabilityLabel } from "../../src/renderer/src/features/permissions/capability-labels.js";
+import { setLanguagePreference } from "../../src/renderer/src/i18n.js";
 import type { BotDraft, ChatHistoryRow } from "../../src/renderer/src/services/desktop-service.js";
 
 const roots: Root[] = [];
 beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   document.body.textContent = "";
+  /* the assertions below quote Chinese copy, so pin the language rather than
+     inheriting the machine locale (D22 routes these labels through the catalogue) */
+  setLanguagePreference("zh");
 });
 afterEach(() => {
   for (const root of roots.splice(0)) {
@@ -116,7 +120,10 @@ describe("bot editor role switch (FR-1)", () => {
 
 describe("dispatch capability label (FR-5/E6)", () => {
   it("names app.dispatch_task in the human permission surfaces", () => {
-    expect(CAPABILITY_LABELS["app.dispatch_task"]).toBe("派发任务给其他 bot");
+    setLanguagePreference("zh");
+    expect(capabilityLabel("app.dispatch_task")).toBe("派发任务给其他 bot");
+    setLanguagePreference("en");
+    expect(capabilityLabel("app.dispatch_task")).toBe("Dispatch tasks to other bots");
   });
 });
 

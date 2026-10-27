@@ -10,6 +10,7 @@ import {
   type WorkflowEdge,
   type WorkflowNode,
 } from "@deepseek-bot/contracts";
+import { t } from "../../i18n.js";
 
 export type NodePosition = { x: number; y: number };
 
@@ -86,7 +87,7 @@ export function newWorkflowDraft(botId?: string): WorkflowDraft {
     node.botId = botId;
   }
   return {
-    name: "未命名工作流",
+    name: t("workflow.untitled"),
     schemaVersion: WORKFLOW_SCHEMA_VERSION,
     nodes: [node],
     edges: [],

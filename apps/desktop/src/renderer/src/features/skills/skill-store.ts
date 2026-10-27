@@ -15,6 +15,7 @@ export type Skill = {
 
 const STORAGE_KEY = "deepseek-bot.skills.v1";
 export const MAX_SKILLS = 20;
+// i18n-ignore: 占位符会写进用户保存的技能正文（localStorage），翻译会让既有技能对不上，属数据不是文案
 export const SKILL_INPUT_PLACEHOLDER = "{{输入}}";
 
 export function listSkills(storage: Storage): Skill[] {

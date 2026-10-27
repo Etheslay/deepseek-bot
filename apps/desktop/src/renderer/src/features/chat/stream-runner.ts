@@ -40,8 +40,14 @@ export function runChatStream(deps: {
   forKey: number;
   update: StreamUpdater;
   onAssistant: (text: string) => void;
+  /**
+   * Optional: reported once per stream with the raw result, after the state has
+   * settled. D22's tray status and system notifications need the outcome
+   * (success / cancelled / failed) that the reducer folds away.
+   */
+  onSettled?: (result: StreamResult) => void;
 }): StreamHandle {
-  const { stream, botId, text, forKey, update, onAssistant } = deps;
+  const { stream, botId, text, forKey, update, onAssistant, onSettled } = deps;
   let acc = "";
   const handle = stream(botId, text, {
     onDelta: (chunk) => {
@@ -70,6 +76,7 @@ export function runChatStream(deps: {
       onAssistant(acc);
       return null;
     });
+    onSettled?.(result);
   });
   return handle;
 }

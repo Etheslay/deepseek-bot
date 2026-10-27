@@ -13,6 +13,7 @@ import { useCallback, useEffect, useRef, useState, type JSX } from "react";
 import { isTextEditableMediaType, type ArtifactVersion } from "@deepseek-bot/contracts";
 import { ChatMarkdown } from "../chat/chat-markdown.js";
 import type { DesktopService, ServiceError } from "../../services/desktop-service.js";
+import { t } from "../../i18n.js";
 
 type ReadState =
   | { phase: "loading" }
@@ -116,12 +117,12 @@ export function CanvasSidecar(props: {
         checksum: response.artifact.checksum.value,
       });
       setStale(false);
-      setToast(`已保存 v${response.version.revision}`);
+      setToast(t("canvas.versionSaved", [response.version.revision]));
       void refreshVersions();
     } catch (e) {
       const serviceError = e as ServiceError;
       if (serviceError?.code === "REVISION_CONFLICT") {
-        setError("文件在编辑期间被修改（可能来自 bot）。点击「重新加载」获取最新内容后再保存。");
+        setError(t("canvas.revisionConflict"));
         setStale(true);
       } else {
         setError(serviceError instanceof Error ? serviceError.message : String(serviceError));
@@ -174,7 +175,7 @@ export function CanvasSidecar(props: {
   }, [toast]);
 
   const maybeClose = useCallback((): void => {
-    if (dirtyRef.current && !window.confirm("有未保存的修改，确定关闭画布？")) {
+    if (dirtyRef.current && !window.confirm(t("canvas.closeConfirm"))) {
       return;
     }
     onClose();
@@ -197,7 +198,7 @@ export function CanvasSidecar(props: {
   }, [save, maybeClose]);
 
   const discardDraft = (): void => {
-    if (readState.phase === "text" && !window.confirm("放弃未保存的修改？")) {
+    if (readState.phase === "text" && !window.confirm(t("canvas.discardConfirm"))) {
       return;
     }
     if (readState.phase === "text") {
@@ -221,13 +222,13 @@ export function CanvasSidecar(props: {
   };
 
   const revert = async (version: ArtifactVersion): Promise<void> => {
-    if (!window.confirm(`回退到 v${version.revision}？回退会以新版本形式保存，不会丢失历史。`)) {
+    if (!window.confirm(t("canvas.revertConfirm", [version.revision]))) {
       return;
     }
     setError(null);
     try {
       const response = await service.artifacts.revert(botId, relativePath, version.id);
-      setToast(`已回退到 v${version.revision}（生成 v${response.version.revision}）`);
+      setToast(t("canvas.versionReverted", [version.revision, response.version.revision]));
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -237,7 +238,7 @@ export function CanvasSidecar(props: {
   const editable = readState.phase === "text" && isTextEditableMediaType(readState.mediaType);
 
   return (
-    <aside className="canvas-sidecar" aria-label="产物画布">
+    <aside className="canvas-sidecar" aria-label={t("canvas.artifactCanvas")}>
       <header className="canvas-head">
         <div className="canvas-title-wrap">
           <span className="canvas-bot-chip">{props.botName}</span>
@@ -252,11 +253,11 @@ export function CanvasSidecar(props: {
               className="pill-btn"
               onClick={() => setViewMode((mode) => (mode === "edit" ? "preview" : "edit"))}
             >
-              {viewMode === "edit" ? "预览" : "编辑"}
+              {viewMode === "edit" ? t("shell.preview") : t("skills.edit")}
             </button>
           )}
           <button type="button" className="pill-btn" onClick={maybeClose}>
-            关闭
+            {t("shell.close")}
           </button>
         </div>
       </header>
@@ -269,27 +270,27 @@ export function CanvasSidecar(props: {
       )}
       {stale && (
         <div className="canvas-stale" role="status">
-          <span>工作区文件已被修改（可能来自 bot）。</span>
+          <span>{t("canvas.staleNotice")}</span>
           <button
             type="button"
             className="pill-btn"
             onClick={() => {
-              if (dirtyRef.current && !window.confirm("重新加载会丢弃未保存的修改，继续？")) {
+              if (dirtyRef.current && !window.confirm(t("canvas.reloadConfirm"))) {
                 return;
               }
               void load();
             }}
           >
-            重新加载
+            {t("canvas.reload")}
           </button>
         </div>
       )}
 
-      {readState.phase === "loading" && <div className="sys-line">正在读取…</div>}
+      {readState.phase === "loading" && <div className="sys-line">{t("canvas.reading")}</div>}
       {readState.phase === "blocked" && (
         <div className="canvas-blocked" role="alert">
           <p className="form-error">{readState.reason}</p>
-          <div className="session-meta">mediaType {readState.mediaType} · 仍可查看版本历史。</div>
+          <div className="session-meta">{t("canvas.blockedMediaNote", [readState.mediaType])}</div>
         </div>
       )}
 
@@ -297,18 +298,18 @@ export function CanvasSidecar(props: {
         <>
           <div className="canvas-meta session-meta">
             {readState.mediaType}
-            {dirty ? " · 未保存" : " · 已同步"}
+            {dirty ? t("canvas.unsavedMark") : t("canvas.syncedMark")}
           </div>
           {editable && viewMode === "edit" ? (
             <textarea
               className="canvas-editor"
-              aria-label="产物内容编辑器"
+              aria-label={t("canvas.contentEditor")}
               spellCheck={false}
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
             />
           ) : editable && viewMode === "preview" ? (
-            <div className="canvas-preview" aria-label="Markdown 预览">
+            <div className="canvas-preview" aria-label={t("canvas.markdownPreview")}>
               <ChatMarkdown text={draft} />
             </div>
           ) : (
@@ -321,11 +322,11 @@ export function CanvasSidecar(props: {
               disabled={!editable || !dirty || saving}
               onClick={() => void save()}
             >
-              {saving ? "保存中…" : "保存（Ctrl+S）"}
+              {saving ? t("canvas.saving") : t("canvas.saveShortcut")}
             </button>
             {dirty && (
               <button type="button" className="pill-btn" onClick={discardDraft}>
-                放弃修改
+                {t("canvas.discard")}
               </button>
             )}
           </div>
@@ -339,15 +340,17 @@ export function CanvasSidecar(props: {
           aria-expanded={versionsOpen}
           onClick={() => setVersionsOpen((open) => !open)}
         >
-          版本历史{versions !== null ? `（${versions.length}）` : ""}
+          {t("canvas.versionHistory", [
+            versions === null ? "" : t("canvas.versionHistoryCount", [versions.length]),
+          ])}
         </button>
         {versionsOpen && (
-          <div className="canvas-version-list" aria-label="版本历史列表">
+          <div className="canvas-version-list" aria-label={t("canvas.versionHistoryList")}>
             {(versions ?? []).map((version) => (
               <div className="canvas-version-item" key={version.id}>
                 <div className="artifact-meta">
                   <div className="tab-title">
-                    v{version.revision} · {version.author === "user" ? "用户" : "bot"}
+                    v{version.revision} · {version.author === "user" ? t("canvas.authorUser") : "bot"}
                   </div>
                   <div className="session-meta">
                     {new Date(version.createdAt).toLocaleString()} · {version.size} bytes ·{" "}
@@ -360,25 +363,25 @@ export function CanvasSidecar(props: {
                     className="pill-btn"
                     onClick={() => void previewVersion(version)}
                   >
-                    预览
+                    {t("shell.preview")}
                   </button>
                   <button type="button" className="pill-btn" onClick={() => void revert(version)}>
-                    回退
+                    {t("canvas.revert")}
                   </button>
                 </div>
               </div>
             ))}
-            {(versions ?? []).length === 0 && <div className="sys-line">暂无版本。</div>}
+            {(versions ?? []).length === 0 && <div className="sys-line">{t("canvas.noVersions")}</div>}
             {versionPreview !== null && (
               <div className="canvas-version-preview">
                 <div className="replay-title">
-                  v{versionPreview.version.revision} 内容
+                  {t("canvas.versionContent", [versionPreview.version.revision])}
                   <button
                     type="button"
                     className="pill-btn"
                     onClick={() => setVersionPreview(null)}
                   >
-                    收起
+                    {t("canvas.collapse")}
                   </button>
                 </div>
                 <pre className="artifact-preview">{versionPreview.content}</pre>

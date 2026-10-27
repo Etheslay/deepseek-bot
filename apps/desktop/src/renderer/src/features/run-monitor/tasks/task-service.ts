@@ -8,6 +8,7 @@
  */
 import { TaskSchema, type Task, type TaskStatus } from "@deepseek-bot/contracts";
 import { ServiceError, type ChatHistoryRow } from "../../../services/desktop-service.js";
+import { t } from "../../../i18n.js";
 
 export type TaskQuery = {
   status?: TaskStatus;
@@ -32,7 +33,8 @@ export function createFixtureTaskService(): TaskServiceApi {
       id: chainRoot,
       fromBotId: manager,
       toBotId: writer,
-      instruction: "出本周内容选题清单",
+      // i18n-ignore: 夹具种子任务的正文，属演示数据而非界面文案
+    instruction: "出本周内容选题清单",
       status: "running",
       resultSummary: null,
       rootTaskId: chainRoot,
@@ -47,7 +49,8 @@ export function createFixtureTaskService(): TaskServiceApi {
       id: "50000000-0000-4000-8000-000000000002",
       fromBotId: writer,
       toBotId: coder,
-      instruction: "按选题清单起草正文",
+      // i18n-ignore: 夹具种子任务的正文，属演示数据而非界面文案
+    instruction: "按选题清单起草正文",
       status: "queued",
       resultSummary: null,
       rootTaskId: chainRoot,
@@ -62,7 +65,8 @@ export function createFixtureTaskService(): TaskServiceApi {
       id: "50000000-0000-4000-8000-000000000003",
       fromBotId: manager,
       toBotId: coder,
-      instruction: "整理上季度回顾",
+      // i18n-ignore: 夹具种子任务的正文，属演示数据而非界面文案
+    instruction: "整理上季度回顾",
       status: "running",
       resultSummary: null,
       rootTaskId: "50000000-0000-4000-8000-000000000003",
@@ -88,10 +92,10 @@ export function createFixtureTaskService(): TaskServiceApi {
     cancel: async (taskId) => {
       const task = store.find((row) => row.id === taskId);
       if (task === undefined) {
-        throw new ServiceError("INVALID_INPUT", "任务不存在", false);
+        throw new ServiceError("INVALID_INPUT", t("tasks.notFound"), false);
       }
       if (task.status !== "queued" && task.status !== "running") {
-        throw new ServiceError("INVALID_INPUT", `任务已处于 ${task.status}，无法取消`, false);
+        throw new ServiceError("INVALID_INPUT", t("tasks.cancelBadState", [task.status]), false);
       }
       task.status = "cancelled";
       task.finishedAt = new Date().toISOString();
