@@ -105,6 +105,7 @@ export const shellMessages = {
   "shell.me": { zh: "我", en: "Me" },
   "shell.messageActions": { zh: "消息操作", en: "Message actions" },
   "shell.messageBot": { zh: "给 {0} 发消息", en: "Message {0}" },
+  "shell.messageFrom": { zh: "消息来自", en: "Message from" },
   "shell.microphone": { zh: "麦克风", en: "Microphone" },
   "shell.more": { zh: "更多", en: "More" },
   "shell.moreActions": { zh: "更多操作", en: "More actions" },

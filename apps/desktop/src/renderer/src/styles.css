@@ -6375,6 +6375,16 @@ select option {
   margin: 2px 0;
 }
 
+/* Exchange feed: the instruction preview rides inside the sent notice. */
+.exchange-preview {
+  min-width: 0;
+  max-width: 420px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0.8;
+}
+
 .deliver-label {
   white-space: nowrap;
 }
