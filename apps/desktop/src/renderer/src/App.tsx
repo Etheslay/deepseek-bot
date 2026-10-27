@@ -19,6 +19,7 @@ import { SearchSettings } from "./features/search/search-settings.js";
 import { ConnectorSettings } from "./features/connectors/connector-settings.js";
 import { AutomationPanel } from "./features/automation/automation-panel.js";
 import { PermissionsPanel } from "./features/permissions/permissions-panel.js";
+import { ScreenSettings } from "./features/screen/screen-settings.js";
 import { BotForm } from "./features/bots/bot-form.js";
 import { nextBotName } from "./features/bots/bot-names.js";
 import { CustomSelect } from "./components/custom-select.js";
@@ -2250,6 +2251,7 @@ const logout = (): void => {
                 </div>
                 <div className="settings-section-title">{t("shell.computerAndPermissions")}</div>
                 <PermissionsPanel />
+                <ScreenSettings />
                 <div className="settings-section-title">{t("shell.apiAccessSection")}</div>
                 <div className="settings-card">
                   <div className="settings-row">
