@@ -148,7 +148,7 @@ describe("ask_user desktop answer return", () => {
     });
     const listed = await vi.waitFor(async () => {
       const response = (await host.handleMethod("question.list", { botId: bot.id })) as {
-        questions: Array<{ options: Array<{ id: string; label: string }> }>;
+        questions: Array<{ requestId: string; options: Array<{ id: string; label: string }> }>;
       };
       expect(response.questions).toHaveLength(1);
       return response.questions[0]!;
