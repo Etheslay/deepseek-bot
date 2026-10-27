@@ -833,6 +833,10 @@ export function App(): JSX.Element {
   const openEditBotModal = (bot: UiBot) => {
     setEditingBot(bot);
     setAvatar(bot.avatar);
+    // The edit dialog carries the same group row as create, pre-set to the
+    // bot's current bucket, so moving a bot between groups is one visit here
+    // instead of a sidebar drag.
+    setModalGroup(bot.group);
     setModalOpen(true);
   };
 
@@ -842,6 +846,7 @@ export function App(): JSX.Element {
     if (editingBot) {
       const result = await updateBotEntity(editingBot.bot.id, draft);
       if (result.ok) {
+        setUi(editingBot.key, { group: modalGroup });
         setModalOpen(false);
         setToast(t("shell.saved"));
       }
@@ -2176,18 +2181,16 @@ const logout = (): void => {
                 }
                 avatarSlot={<AvatarPicker value={avatar} onChange={setAvatar} theme={theme} />}
                 groupSlot={
-                  !editingBot && (
-                    <div className="group-pick compact">
-                      <span>{t("shell.group")}</span>
-                      <CustomSelect
-                        value={modalGroup}
-                        options={groups.map((g) => ({ value: g.key, label: groupLabel(g) }))}
-                        onChange={(v) => setModalGroup(Number(v))}
-                        ariaLabel={t("shell.group")}
-                        disabled={groups.length === 0}
-                      />
-                    </div>
-                  )
+                  <div className="group-pick compact">
+                    <span>{t("shell.group")}</span>
+                    <CustomSelect
+                      value={modalGroup}
+                      options={groups.map((g) => ({ value: g.key, label: groupLabel(g) }))}
+                      onChange={(v) => setModalGroup(Number(v))}
+                      ariaLabel={t("shell.group")}
+                      disabled={groups.length === 0}
+                    />
+                  </div>
                 }
                 skillsSlot={
                   editingBot ? (
