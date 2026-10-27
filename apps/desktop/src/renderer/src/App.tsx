@@ -19,6 +19,7 @@ import { SearchSettings } from "./features/search/search-settings.js";
 import { ConnectorSettings } from "./features/connectors/connector-settings.js";
 import { AutomationPanel } from "./features/automation/automation-panel.js";
 import { PermissionsPanel } from "./features/permissions/permissions-panel.js";
+import { ScreenSettings } from "./features/screen/screen-settings.js";
 import { BotForm } from "./features/bots/bot-form.js";
 import { nextBotName } from "./features/bots/bot-names.js";
 import { CustomSelect } from "./components/custom-select.js";
@@ -2349,6 +2350,8 @@ const logout = (): void => {
                     </button>
                   </div>
                 </div>
+                {/* The permissions block and the screen-capture settings that
+                    develop attached to it both live in the 权限 section now. */}
                 <div className="settings-section-title">{t("shell.apiAccessSection")}</div>
                 <div className="settings-card">
                   <div className="settings-row">
@@ -2482,6 +2485,8 @@ const logout = (): void => {
                       {t("d24.permissionsHeading")}
                     </div>
                     <PermissionsPanel />
+                    {/* ScreenSettings brings its own section heading. */}
+                    <ScreenSettings />
                   </>
                 )}
                 {settingsSection === "updates" && (

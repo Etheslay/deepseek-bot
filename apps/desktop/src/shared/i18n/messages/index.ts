@@ -1,9 +1,9 @@
 /**
  * The merged message catalogue (D22).
  *
- * Domain files below are generated from the sweep mapping; `d22.ts` carries the
- * copy D22 introduces by hand. Keys are a closed union so a `t("…")` typo fails
- * the typecheck instead of surfacing as a raw key in the UI.
+ * Domain files below are generated from the sweep mapping; `d22.ts` and
+ * `screen.ts` are hand-authored. Keys are a closed union so a `t("…")` typo
+ * fails the typecheck instead of surfacing as a raw key in the UI.
  */
 import type { Message } from "../types.js";
 import { automationMessages } from "./automation.js";
@@ -20,6 +20,7 @@ import { permissionsMessages } from "./permissions.js";
 import { questionsMessages } from "./questions.js";
 import { reasonerMessages } from "./reasoner.js";
 import { runsMessages } from "./runs.js";
+import { screenMessages } from "./screen.js";
 import { searchMessages } from "./search.js";
 import { servicesMessages } from "./services.js";
 import { shellMessages } from "./shell.js";
@@ -44,6 +45,7 @@ export const MESSAGES = {
   ...questionsMessages,
   ...reasonerMessages,
   ...runsMessages,
+  ...screenMessages,
   ...searchMessages,
   ...servicesMessages,
   ...shellMessages,

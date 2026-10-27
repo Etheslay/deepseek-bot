@@ -101,7 +101,7 @@
 | D19 连接器调用与本地 SD 生图 | 已交付（视觉理解未做） | `feature/connector-invoke` → PR #65 `73ae475` | [D19-connector-invoke-report](reports/D19-connector-invoke-report.md) |
 | D20 事件自动化：触发规则与评审队列 | 已交付 | `feature/automation-triggers` → PR #66 `3afea90` | [D20-triggers-report](reports/D20-triggers-report.md) |
 | D28 产物画布共编侧车 | 已交付 | `feature/canvas-cowrite` → PR #64 `2d5a5e3` | [D28-report](reports/D28-report.md) |
-| D21 本地执行守护 | **未开始** | — | — |
+| D21 本地执行守护 | **切片进行中**：契约、Windows 后端与 Host 网关已在 develop；桌面设置页只做单窗口截图/OCR 的启用、选择、仅本次审批和本机预览。真实窗口、打包 Electron、GitHub Actions 未跑 | `feature/screen-desktop-settings-48af` | [D21-desktop-report](reports/D21-desktop-report.md) |
 | D22 系统集成与双语 | **已合入 develop（PR #75 `9db1ae9`）**：全量中英双语（20 域 853 条 key + AST 扫描防回归守卫；计数为本次同步在合流后的树上实测）、单托盘随活跃 bot + 逐 bot 图标菜单、系统通知与设置（总开关 / 仅非前台 / 按 bot 静音 / 测试通知）、Chrome **书签**只读导入（预览→导入→导出→删除）。托盘渲染与点击、Windows 通知弹出、真实 Chrome 配置、打包版 AppUserModelId 属实机未验证项；负责人自审记录仍待本人填写 | `feature/system-integration` → PR #75 | [D22-report](reports/D22-report.md) |
 | D23 平台验收 | 未开始（依赖 D13、D14–D22 全部完成） | — | — |
 
@@ -120,7 +120,7 @@
 | A3 | D18 记忆与知识 | 写入/检索/删除，默认不跨 bot；独立知识表 + 本地向量检索 + 保留策略（`feature/knowledge-base`），见 [知识导入报告](reports/D18-knowledge-import-report.md)、[知识检索报告](reports/D18-knowledge-search-report.md) |
 | A4 | D19 连接器与 MCP | 登记与本地 SD 调用已合入（PR #65）；本分支交付无凭据本机 HTTP MCP 的按 bot 白名单、聊天单次审批与审计，见 [MCP 报告](reports/D19-mcp-http-report.md)。stdio、凭据注入和视觉接入待后续 |
 | A5 | D20 事件自动化 | 规则、评审队列、重复防护（`feature/automation-triggers`：规则 + 评审队列 + 通知条后端） |
-| A6 | D21 本地执行守护 | 截图 OCR / 设备动作，默认关闭逐次授权 |
+| A6 | D21 本地执行守护 | 契约、Windows OCR 与 Host 网关已在 develop。桌面设置页提供默认关闭、逐次授权的单窗口截图和本机预览；设备动作与真实窗口验收未做 |
 
 **B 线（Destinyian · 桌面与体验）**：
 
@@ -252,6 +252,6 @@
 - 工作区垃圾：主工作区根目录有一个 0 字节的 `$null` 文件（10-26 17:35 由误用的重定向产生），可直接删除；
 - 死工作区：`deepseek-bot-avatar-ball`、`deepseek-bot-reaction-pill`、已合入的 `deepseek-bot-d28` 三个工作区可清理（先确认其中没有未跟踪的截图或日志）；
 - 手测截图：D14 / D17 / D24 / D25 / D26 的 `reports/assets/…` 仍缺；
-- 未开始的计划项：**D21 本地执行守护**（Etheslay）、**D23 平台验收**（你，依赖 D13 与 D14–D22 全部完成）。
+- 未完成的计划项：**D21 本地执行守护**（Etheslay：桌面设置页在功能分支，真实窗口与设备动作未做）、**D23 平台验收**（你，依赖 D13 与 D14–D22 全部完成）。
 
 
