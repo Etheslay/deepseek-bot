@@ -18,6 +18,7 @@ import { randomUUID } from "node:crypto";
 import {
   WORKFLOW_SCHEMA_VERSION,
   validateWorkflowDraft,
+  UuidSchema,
   type Method,
   type MethodRequest,
   type MethodResponse,
@@ -79,23 +80,29 @@ import {
   type BotPatch,
   type DataLayout,
   type OpenedDatabase,
-  listPermissionPolicies, setPermissionPolicy, listPermissionGrants,
-  revokePermissionGrant, listPermissionApprovals, listPermissionAudit,
-  countTasks, listTaskEvents,
+  listPermissionPolicies,
+  setPermissionPolicy,
+  listPermissionGrants,
+  revokePermissionGrant,
+  listPermissionApprovals,
+  listPermissionAudit,
+  countTasks,
+  listTaskEvents,
 } from "@deepseek-bot/storage";
 import type { AgentPermissionService } from "./agent-permissions.js";
 import type { McpService } from "./mcp.js";
+import type { ScreenService } from "./screen.js";
 import type { WorkspaceArtifacts } from "./artifacts.js";
-import { DEFAULT_MODEL_PROFILE_ID, SEARXNG_ENDPOINT_SETTING, backupDirFor, newBackupId } from "./host.js";
+import {
+  DEFAULT_MODEL_PROFILE_ID,
+  SEARXNG_ENDPOINT_SETTING,
+  backupDirFor,
+  newBackupId,
+} from "./host.js";
 import { chatSessionIdFor, type ChatManager } from "./chat.js";
 import { KNOWN_CAPABILITIES, policyKey, readPolicy, type PolicyLevel } from "./permissions.js";
 import { type TaskDispatcher } from "./task-dispatcher.js";
-import {
-  createGrant,
-  listGrants,
-  revokeGrant,
-  type GrantRow,
-} from "@deepseek-bot/storage";
+import { createGrant, listGrants, revokeGrant, type GrantRow } from "@deepseek-bot/storage";
 import {
   ToolRejectionError,
   type AskUserRequest,
@@ -113,6 +120,7 @@ export interface ChatSearchRecord {
 export interface HostContext {
   readonly permissions: AgentPermissionService;
   readonly mcp: McpService;
+  readonly screen: ScreenService;
   readonly db: OpenedDatabase;
   readonly engine: WorkflowEngine;
   readonly scheduler: LocalScheduler;
@@ -149,9 +157,7 @@ function displayAskUserOption(option: AskUserRequest["options"][number]): {
   id: AskUserRequest["options"][number]["id"];
   label: string;
 } {
-  return option.id === ASK_USER_OTHER_ID
-    ? { id: option.id, label: ASK_USER_OTHER_LABEL }
-    : option;
+  return option.id === ASK_USER_OTHER_ID ? { id: option.id, label: ASK_USER_OTHER_LABEL } : option;
 }
 
 /**
@@ -271,9 +277,17 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
       const policy = setPermissionPolicy(db, payload);
       if (policy.mode === "deny") context.permissions.denyCapability(policy.capability);
       if (policy.mode === "deny" && policy.capability === "mcp.call") context.mcp.invalidate({});
+      if (policy.capability === "screen.capture") context.screen.invalidate();
       return policy;
     },
-    "permission.grant.list": (payload) => ({ grants: listPermissionGrants(db, { ...(payload.botId !== undefined ? { botId: payload.botId } : {}), includeInactive: payload.includeInactive, limit: payload.limit, generation: context.permissions.generation }) }),
+    "permission.grant.list": (payload) => ({
+      grants: listPermissionGrants(db, {
+        ...(payload.botId !== undefined ? { botId: payload.botId } : {}),
+        includeInactive: payload.includeInactive,
+        limit: payload.limit,
+        generation: context.permissions.generation,
+      }),
+    }),
     "permission.grant.revoke": (payload) => {
       const grant = revokePermissionGrant(db, payload.grantId);
       if (grant.capability === "mcp.call" && grant.botId !== null) {
@@ -282,9 +296,21 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
       }
       return { grant };
     },
-    "permission.approval.list": (payload) => ({ approvals: listPermissionApprovals(db, { ...(payload.botId !== undefined ? { botId: payload.botId } : {}), status: payload.status, limit: payload.limit }) }),
+    "permission.approval.list": (payload) => ({
+      approvals: listPermissionApprovals(db, {
+        ...(payload.botId !== undefined ? { botId: payload.botId } : {}),
+        status: payload.status,
+        limit: payload.limit,
+      }),
+    }),
     "permission.approval.decide": (payload) => context.permissions.decide(payload),
-    "permission.audit.list": (payload) => ({ records: listPermissionAudit(db, { ...(payload.botId !== undefined ? { botId: payload.botId } : {}), afterSequence: payload.afterSequence, limit: payload.limit }) }),
+    "permission.audit.list": (payload) => ({
+      records: listPermissionAudit(db, {
+        ...(payload.botId !== undefined ? { botId: payload.botId } : {}),
+        afterSequence: payload.afterSequence,
+        limit: payload.limit,
+      }),
+    }),
     "bot.list": () => ({ bots: listBots(db) }),
 
     "bot.create": (payload, call) => {
@@ -330,7 +356,11 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
         ...(p.avatar !== undefined ? { avatar: p.avatar } : {}),
         ...(p.groupId !== undefined ? { groupId: p.groupId } : {}),
       };
-      const bot = updateBot(db, { id: payload.id, expectedRevision: payload.expectedRevision, patch });
+      const bot = updateBot(db, {
+        id: payload.id,
+        expectedRevision: payload.expectedRevision,
+        patch,
+      });
       if (p.toolPolicyId !== undefined) {
         context.mcp.invalidate({ botId: bot.id });
         context.permissions.cancelMcp({ botId: bot.id });
@@ -342,6 +372,7 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
       const bot = archiveBot(db, payload);
       context.mcp.invalidate({ botId: payload.id });
       context.permissions.cancelMcp({ botId: payload.id });
+      context.screen.release(payload.id);
       return bot;
     },
 
@@ -352,7 +383,11 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
      */
     "bot.batchCreate": (payload) => {
       const defaults = payload.defaults;
-      const resolve = (value: string | undefined, fallback: string | undefined, field: string): string => {
+      const resolve = (
+        value: string | undefined,
+        fallback: string | undefined,
+        field: string,
+      ): string => {
         const effective = value ?? fallback;
         if (effective === undefined) {
           throw invalid(`batch bot is missing ${field} (no explicit value and no batch default)`);
@@ -361,9 +396,7 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
       };
       const result = createBotBatch(db, {
         batchId: randomUUID(),
-        ...(payload.idempotencyKey !== undefined
-          ? { requestId: payload.idempotencyKey }
-          : {}),
+        ...(payload.idempotencyKey !== undefined ? { requestId: payload.idempotencyKey } : {}),
         ...(payload.newGroup !== undefined
           ? {
               newGroup: {
@@ -381,7 +414,11 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
             revision: randomUUID(),
             name: entry.name,
             instructions: entry.instructions,
-            modelProfileId: resolve(entry.modelProfileId, defaults?.modelProfileId, "modelProfileId"),
+            modelProfileId: resolve(
+              entry.modelProfileId,
+              defaults?.modelProfileId,
+              "modelProfileId",
+            ),
             workspaceId: resolve(entry.workspaceId, defaults?.workspaceId, "workspaceId"),
             toolPolicyId: resolve(entry.toolPolicyId, defaults?.toolPolicyId, "toolPolicyId"),
             // Batch creation (the model-facing path) never carries a role.
@@ -421,6 +458,7 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
         archiveBotUnchecked(db, { id: botId });
         context.mcp.invalidate({ botId });
         context.permissions.cancelMcp({ botId });
+        context.screen.release(botId);
         if (before.archivedAt === null) {
           revokedBotIds.push(botId);
         }
@@ -533,9 +571,7 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
     "run.resume": (payload) => {
       const { run } = engine.resumeRun({
         runId: payload.runId,
-        ...(payload.idempotencyKey !== undefined
-          ? { idempotencyKey: payload.idempotencyKey }
-          : {}),
+        ...(payload.idempotencyKey !== undefined ? { idempotencyKey: payload.idempotencyKey } : {}),
       });
       return run;
     },
@@ -592,9 +628,7 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
         workflowId: payload.schedule.workflowId,
         timezone: payload.schedule.timezone,
         recurrence: payload.schedule.recurrence,
-        ...(payload.schedule.enabled !== undefined
-          ? { enabled: payload.schedule.enabled }
-          : {}),
+        ...(payload.schedule.enabled !== undefined ? { enabled: payload.schedule.enabled } : {}),
       }),
 
     "schedule.enable": (payload) => scheduler.setEnabled({ id: payload.id, enabled: true }),
@@ -685,7 +719,14 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
       })),
     }),
 
-    "chat.cancel": (payload) => ({ cancelled: chat.cancel(payload.sessionId) }),
+    "chat.cancel": (payload) => {
+      const cancelled = chat.cancel(payload.sessionId);
+      const botId = payload.sessionId.startsWith("chat:")
+        ? payload.sessionId.slice("chat:".length)
+        : payload.sessionId;
+      if (UuidSchema.safeParse(botId).success) context.screen.cancel(botId);
+      return { cancelled };
+    },
 
     /**
      * v0.5 manager orchestration. task.dispatch is the gateway-internal
@@ -968,24 +1009,30 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
       };
     },
 
-    "connector.mcp.discover": async (payload) => ({ tools: await context.mcp.discover(payload.id), at: now().toISOString() }),
+    "connector.mcp.discover": async (payload) => ({
+      tools: await context.mcp.discover(payload.id),
+      at: now().toISOString(),
+    }),
     "connector.mcp.grants.get": (payload) => ({ servers: getBotMcpGrants(db, payload.botId) }),
     "connector.mcp.grants.set": (payload) => {
-      const servers = setBotMcpGrant(db, { botId: payload.botId, connectorId: payload.id, allowedTools: payload.allowedTools });
+      const servers = setBotMcpGrant(db, {
+        botId: payload.botId,
+        connectorId: payload.id,
+        allowedTools: payload.allowedTools,
+      });
       context.mcp.invalidate({ botId: payload.botId });
       context.permissions.cancelMcp({ botId: payload.botId });
       return { servers };
     },
 
-    // Contract-first D21 surface. The dependent implementation replaces these guards.
-    "screen.status": () => { throw new ToolRejectionError("RUNTIME_UNAVAILABLE", "screen sensing is not installed"); },
-    "screen.windows.list": () => { throw new ToolRejectionError("RUNTIME_UNAVAILABLE", "screen sensing is not installed"); },
-    "screen.target.set": () => { throw new ToolRejectionError("RUNTIME_UNAVAILABLE", "screen sensing is not installed"); },
-    "screen.request": () => { throw new ToolRejectionError("RUNTIME_UNAVAILABLE", "screen sensing is not installed"); },
-    "screen.cancel": () => { throw new ToolRejectionError("RUNTIME_UNAVAILABLE", "screen sensing is not installed"); },
-    "screen.results.list": () => { throw new ToolRejectionError("RUNTIME_UNAVAILABLE", "screen sensing is not installed"); },
-    "screen.result.read": () => { throw new ToolRejectionError("RUNTIME_UNAVAILABLE", "screen sensing is not installed"); },
-    "screen.result.delete": () => { throw new ToolRejectionError("RUNTIME_UNAVAILABLE", "screen sensing is not installed"); },
+    "screen.status": (payload) => context.screen.status(payload.botId),
+    "screen.windows.list": () => context.screen.listWindows(AbortSignal.timeout(10_000)),
+    "screen.target.set": (payload) => context.screen.select(payload.botId, payload.id),
+    "screen.request": (payload) => context.screen.request(payload.botId, payload.mode),
+    "screen.cancel": (payload) => context.screen.cancel(payload.botId),
+    "screen.results.list": (payload) => context.screen.listResults(payload.botId),
+    "screen.result.read": (payload) => context.screen.readResult(payload.botId, payload.id),
+    "screen.result.delete": (payload) => context.screen.deleteResult(payload.botId, payload.id),
 
     "connector.list": () => ({
       connectors: listConnectors(db).map((row) => ({
@@ -1177,8 +1224,3 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
     }),
   };
 }
-
-
-
-
-

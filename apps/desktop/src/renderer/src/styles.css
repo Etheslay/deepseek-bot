@@ -7901,6 +7901,20 @@ select:focus-visible {
   margin-left: auto;
 }
 
+/* ---- 思考中状态行（任务相关文案） ---- */
+.thinking-line {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  color: var(--muted);
+}
+
+.thinking-hint {
+  font-size: 0.8em;
+  opacity: 0.65;
+  font-variant-numeric: tabular-nums;
+}
+
 /*
  * 设置行里的下拉控件：.custom-select 基类是 flex:1（表单里要撑满），
  * 但设置行是 space-between 的一行标签 + 控件，必须保持原生 .settings-select

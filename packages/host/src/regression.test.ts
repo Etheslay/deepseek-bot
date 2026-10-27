@@ -4,7 +4,7 @@
  * and QA-09 (host crash → recovery → resume carrying succeeded work).
  * Real-API legs of these scenarios run in the key-dependent QA campaign.
  */
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readlinkSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -27,6 +27,28 @@ afterAll(async () => {
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+/** Process ids whose cwd is inside `root`. Linux only; Windows has no /proc. */
+function processesUnder(root: string): string[] {
+  if (process.platform !== "linux") return [];
+  const found: string[] = [];
+  let entries: string[];
+  try {
+    entries = readdirSync("/proc");
+  } catch {
+    return found;
+  }
+  for (const entry of entries) {
+    if (!/^\d+$/.test(entry)) continue;
+    try {
+      const cwd = readlinkSync(`/proc/${entry}/cwd`);
+      if (cwd === root || cwd.startsWith(`${root}/`)) found.push(entry);
+    } catch {
+      // The process exited, or its cwd is not readable.
+    }
+  }
+  return found;
+}
 
 function makeRoot(): string {
   const root = mkdtempSync(join(tmpdir(), "dsb-regression-"));
@@ -167,61 +189,73 @@ describe("D12 regression (fake harness, real orchestration)", () => {
     const workspace = join(root, "workspace");
     mkdirSync(workspace, { recursive: true });
     const first = await started(root, workspace, "first-ok-then-hang");
-    const bot = await makeBot(first.host, first.refs, "恢复机器人");
-    const workflow = (await first.host.handleMethod("workflow.save", {
-      workflow: {
-        id: randomUUID(),
-        revision: randomUUID(),
-        name: "两步工作流",
-        schemaVersion: "0.1",
-        nodes: [
-          { id: "n1", type: "bot", botId: bot.id, instructionTemplate: "先做。", inputBindings: [], retryPolicy: { maxRetries: 0 } },
-          { id: "n2", type: "bot", botId: bot.id, instructionTemplate: "后做。", inputBindings: [], retryPolicy: { maxRetries: 0 } },
-        ],
-        edges: [{ fromNodeId: "n1", outputKey: "response", toNodeId: "n2", inputKey: "draft" }],
-        limits: { maxConcurrentNodes: 1 },
-      },
-    })) as { id: string; revision: string };
-    const run = (await first.host.handleMethod("run.start", {
-      workflowId: workflow.id,
-      expectedRevision: workflow.revision,
-      idempotencyKey: randomUUID(),
-    })) as { id: string };
+    try {
+      const bot = await makeBot(first.host, first.refs, "恢复机器人");
+      const workflow = (await first.host.handleMethod("workflow.save", {
+        workflow: {
+          id: randomUUID(),
+          revision: randomUUID(),
+          name: "两步工作流",
+          schemaVersion: "0.1",
+          nodes: [
+            { id: "n1", type: "bot", botId: bot.id, instructionTemplate: "先做。", inputBindings: [], retryPolicy: { maxRetries: 0 } },
+            { id: "n2", type: "bot", botId: bot.id, instructionTemplate: "后做。", inputBindings: [], retryPolicy: { maxRetries: 0 } },
+          ],
+          edges: [{ fromNodeId: "n1", outputKey: "response", toNodeId: "n2", inputKey: "draft" }],
+          limits: { maxConcurrentNodes: 1 },
+        },
+      })) as { id: string; revision: string };
+      const run = (await first.host.handleMethod("run.start", {
+        workflowId: workflow.id,
+        expectedRevision: workflow.revision,
+        idempotencyKey: randomUUID(),
+      })) as { id: string };
 
-    // Wait for n1 to finish and n2 to hang, then crash the host (db handle
-    // closed under the live run — exactly the state a killed process leaves).
-    await waitFor(() => {
-      const nodeRuns = listNodeRuns(first.host.db, run.id);
-      const n1 = nodeRuns.find((nodeRun) => nodeRun.nodeId === "n1");
-      return n1?.status === "succeeded";
-    });
-    first.host.db.close();
-    hosts.pop();
+      // Wait for n1 to finish and n2 to hang, then crash the host (db handle
+      // closed under the live run — exactly the state a killed process leaves).
+      await waitFor(() => {
+        const nodeRuns = listNodeRuns(first.host.db, run.id);
+        const n1 = nodeRuns.find((nodeRun) => nodeRun.nodeId === "n1");
+        return n1?.status === "succeeded";
+      });
+      first.host.db.close();
+      hosts.pop();
 
-    // A fresh host on the same data root recovers the interrupted run.
-    const second = await started(root, workspace, "ok");
-    expect(second.host.recoveredRuns).toHaveLength(1);
-    expect(second.host.recoveredRuns[0]?.runId).toBe(run.id);
-    const recovered = (await second.host.handleMethod("run.get", { runId: run.id })) as {
-      status: string;
-    };
-    expect(recovered.status).toBe("interrupted");
-
-    // Resume through the method surface: succeeded n1 is carried, n2 runs.
-    const resumed = (await second.host.handleMethod("run.resume", {
-      runId: run.id,
-    })) as { id: string; status: string; resumedFromRunId: string | null };
-    expect(resumed.id).not.toBe(run.id);
-    expect(resumed.resumedFromRunId).toBe(run.id);
-    await waitFor(async () => {
-      const current = (await second.host.handleMethod("run.get", { runId: resumed.id })) as {
+      // A fresh host on the same data root recovers the interrupted run.
+      const second = await started(root, workspace, "ok");
+      expect(second.host.recoveredRuns).toHaveLength(1);
+      expect(second.host.recoveredRuns[0]?.runId).toBe(run.id);
+      const recovered = (await second.host.handleMethod("run.get", { runId: run.id })) as {
         status: string;
       };
-      return current.status === "succeeded";
-    });
-    const resumedNodeRuns = listNodeRuns(second.host.db, resumed.id);
-    const n1 = resumedNodeRuns.find((nodeRun) => nodeRun.nodeId === "n1");
-    expect(n1?.status).toBe("succeeded");
-    expect(n1?.attempt).toBe(1);
+      expect(recovered.status).toBe("interrupted");
+
+      // Resume through the method surface: succeeded n1 is carried, n2 runs.
+      const resumed = (await second.host.handleMethod("run.resume", {
+        runId: run.id,
+      })) as { id: string; status: string; resumedFromRunId: string | null };
+      expect(resumed.id).not.toBe(run.id);
+      expect(resumed.resumedFromRunId).toBe(run.id);
+      await waitFor(async () => {
+        const current = (await second.host.handleMethod("run.get", { runId: resumed.id })) as {
+          status: string;
+        };
+        return current.status === "succeeded";
+      });
+      const resumedNodeRuns = listNodeRuns(second.host.db, resumed.id);
+      const n1 = resumedNodeRuns.find((nodeRun) => nodeRun.nodeId === "n1");
+      expect(n1?.status).toBe("succeeded");
+      expect(n1?.attempt).toBe(1);
+      // The hung node keeps the workspace as its cwd. The database is already
+      // closed, so recovery still sees an interrupted run; abort the child
+      // without writing. Windows rejects deleting that directory while the
+      // process is alive.
+      await first.host.engine.abandonInflight();
+      if (process.platform === "linux") {
+        expect(processesUnder(root)).toEqual([]);
+      }
+    } finally {
+      await first.host.engine.abandonInflight();
+    }
   }, 90_000);
 });

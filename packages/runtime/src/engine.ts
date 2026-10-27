@@ -168,6 +168,17 @@ export class WorkflowEngine {
   }
 
   /**
+   * Stop in-flight harness subprocesses without persisting cancellation.
+   * Storage may already be closed; settlement then no-ops and the next
+   * host recovers the run from the last committed rows.
+   */
+  abandonInflight(): Promise<void> {
+    return Promise.all(
+      [...this.executions.values()].map((execution) => execution.releaseInflight()),
+    ).then(() => undefined);
+  }
+
+  /**
    * Cancel a run. Repeated calls return the existing terminal state
    * (CONTRACTS §3 run.cancel); cancelling runs drain asynchronously.
    */
