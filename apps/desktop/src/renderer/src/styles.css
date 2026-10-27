@@ -8130,3 +8130,35 @@ select:focus-visible {
   left: auto;
   min-width: 100%;
 }
+
+/* ============================================================
+   Chat layout polish (grok parity): conversation docks to the bottom,
+   frosted fade where messages scroll under the floating header.
+   ============================================================ */
+
+.chat > :first-child {
+  margin-top: auto;
+}
+
+.chat-page {
+  position: relative;
+}
+
+.chat-page::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 88px;
+  background: linear-gradient(
+    to bottom,
+    var(--bg) 0%,
+    color-mix(in srgb, var(--bg) 55%, transparent) 55%,
+    transparent 100%
+  );
+  backdrop-filter: blur(7px);
+  -webkit-backdrop-filter: blur(7px);
+  pointer-events: none;
+  z-index: 3;
+}

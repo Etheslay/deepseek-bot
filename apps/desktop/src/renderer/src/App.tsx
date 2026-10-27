@@ -3660,6 +3660,18 @@ function BotsPlaceholder({
                   className="menu-item"
                   onClick={() => {
                     setPlusOpen(false);
+                    setSkillMenuOpen(true);
+                  }}
+                >
+                  <MenuIcon d="M13 2 4.5 12.5 H11 L9.5 21 L19 9.5 H12 Z" />
+                  {t("skills.menuLabel")}
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="menu-item"
+                  onClick={() => {
+                    setPlusOpen(false);
                     setMemoryOpen(true);
                   }}
                 >
