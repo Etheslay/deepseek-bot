@@ -142,6 +142,11 @@ export const METHODS = [
   "trigger.delete",
   "trigger.firing.list",
   "trigger.firing.decide",
+  "eventRule.list",
+  "eventRule.save",
+  "eventRule.enable",
+  "eventRule.disable",
+  "eventRule.record.list",
   "grant.create",
   "grant.list",
   "grant.revoke",
@@ -1108,6 +1113,105 @@ export const METHOD_CONTRACTS = {
         decidedAt: IsoDateTimeUtcSchema.nullable(),
       }),
       runId: UuidSchema.nullable(),
+    }),
+  },
+  /**
+   * Local event rules for one bot (D20 slice). Trusted desktop methods, not
+   * model tools. A new rule is off. An enabled rule starts one run for one
+   * matching local event; the same event does not start another. A disabled
+   * rule records a skip that `eventRule.record.list` can return later.
+   * Nothing in this group opens a network connection or a remote relay.
+   * The review queue (`trigger.*`) is unchanged and still does not auto-start.
+   */
+  "eventRule.list": {
+    request: z.object({ botId: UuidSchema }).strict(),
+    response: z.object({
+      rules: z.array(
+        z.object({
+          id: UuidSchema,
+          botId: UuidSchema,
+          name: NonEmptyStringSchema(TEXT_LIMITS.name),
+          workflowId: UuidSchema,
+          eventType: z.enum(["run.failed", "run.completed"]),
+          enabled: z.boolean(),
+          at: IsoDateTimeUtcSchema,
+          updatedAt: IsoDateTimeUtcSchema,
+        }),
+      ),
+    }),
+  },
+  "eventRule.save": {
+    request: z
+      .object({
+        botId: UuidSchema,
+        rule: z
+          .object({
+            id: UuidSchema.optional(),
+            name: z.string().trim().min(1).max(TEXT_LIMITS.name),
+            workflowId: UuidSchema,
+            eventType: z.enum(["run.failed", "run.completed"]),
+          })
+          .strict(),
+      })
+      .strict(),
+    response: z.object({
+      id: UuidSchema,
+      botId: UuidSchema,
+      name: NonEmptyStringSchema(TEXT_LIMITS.name),
+      workflowId: UuidSchema,
+      eventType: z.enum(["run.failed", "run.completed"]),
+      enabled: z.boolean(),
+      at: IsoDateTimeUtcSchema,
+      updatedAt: IsoDateTimeUtcSchema,
+    }),
+  },
+  "eventRule.enable": {
+    request: z.object({ botId: UuidSchema, id: UuidSchema }).strict(),
+    response: z.object({
+      id: UuidSchema,
+      botId: UuidSchema,
+      name: NonEmptyStringSchema(TEXT_LIMITS.name),
+      workflowId: UuidSchema,
+      eventType: z.enum(["run.failed", "run.completed"]),
+      enabled: z.literal(true),
+      at: IsoDateTimeUtcSchema,
+      updatedAt: IsoDateTimeUtcSchema,
+    }),
+  },
+  "eventRule.disable": {
+    request: z.object({ botId: UuidSchema, id: UuidSchema }).strict(),
+    response: z.object({
+      id: UuidSchema,
+      botId: UuidSchema,
+      name: NonEmptyStringSchema(TEXT_LIMITS.name),
+      workflowId: UuidSchema,
+      eventType: z.enum(["run.failed", "run.completed"]),
+      enabled: z.literal(false),
+      at: IsoDateTimeUtcSchema,
+      updatedAt: IsoDateTimeUtcSchema,
+    }),
+  },
+  "eventRule.record.list": {
+    request: z
+      .object({
+        botId: UuidSchema,
+        ruleId: UuidSchema.optional(),
+        outcome: z.enum(["started", "duplicate", "skipped"]).optional(),
+        limit: z.int().min(1).max(100).default(50),
+      })
+      .strict(),
+    response: z.object({
+      records: z.array(
+        z.object({
+          id: UuidSchema,
+          ruleId: UuidSchema,
+          eventId: UuidSchema,
+          outcome: z.enum(["started", "duplicate", "skipped"]),
+          runId: UuidSchema.nullable(),
+          reason: z.string().min(1).max(500),
+          at: IsoDateTimeUtcSchema,
+        }),
+      ),
     }),
   },
   "grant.create": {
