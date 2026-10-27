@@ -15,6 +15,7 @@ import {
   type StreamResult,
   type TestConnectionResult,
 } from "./desktop-service.js";
+import { validateArtifactVersion, validateBotArtifact } from "./contract-validation.js";
 import { createFixtureService } from "./fixture-service.js";
 
 type HostBridge = {
@@ -29,6 +30,23 @@ export function createHostService(bridge: HostBridge): DesktopService {
   const listBots = async (): Promise<Bot[]> => {
     const response = (await bridge.host.call("bot.list", {})) as { bots: Bot[] };
     return response.bots;
+  };
+
+  /**
+   * Host errors arrive as plain objects with a stable `code`; map them to the
+   * ServiceError the UI already understands. REVISION_CONFLICT keeps its
+   * meaning: the file changed underneath an open editor.
+   */
+  const artifactCall = async (method: string, payload: unknown): Promise<unknown> => {
+    try {
+      return await bridge.host.call(method, payload);
+    } catch (error) {
+      const code = (error as { code?: ErrorCode }).code;
+      if (typeof code === "string") {
+        throw new ServiceError(code, error instanceof Error ? error.message : String(error), false);
+      }
+      throw error;
+    }
   };
 
   return {
@@ -58,6 +76,70 @@ export function createHostService(bridge: HostBridge): DesktopService {
           workspaceId: source.workspaceId,
           toolPolicyId: source.toolPolicyId,
         })) as Bot;
+      },
+    },
+    artifacts: {
+      list: async (botId) => {
+        const response = (await artifactCall("artifacts.list", { botId })) as {
+          artifacts: unknown[];
+        };
+        return response.artifacts.map((artifact) => {
+          const checked = validateBotArtifact(artifact);
+          if (!checked.ok) {
+            throw new ServiceError("INVALID_INPUT", "artifacts.list response failed schema");
+          }
+          return checked.value;
+        });
+      },
+      read: async (botId, relativePath) =>
+        (await artifactCall("artifacts.read", { botId, path: relativePath })) as Awaited<
+          ReturnType<DesktopService["artifacts"]["read"]>
+        >,
+      save: async (botId, relativePath, content, expectedChecksum) => {
+        const response = (await artifactCall("artifacts.save", {
+          botId,
+          path: relativePath,
+          content,
+          ...(expectedChecksum !== undefined ? { expectedChecksum } : {}),
+        })) as { artifact: unknown; version: unknown };
+        const artifact = validateBotArtifact(response.artifact);
+        const version = validateArtifactVersion(response.version);
+        if (!artifact.ok || !version.ok) {
+          throw new ServiceError("INVALID_INPUT", "artifacts.save response failed schema");
+        }
+        return { artifact: artifact.value, version: version.value };
+      },
+      versions: async (botId, relativePath) => {
+        const response = (await artifactCall("artifacts.versions", {
+          botId,
+          path: relativePath,
+        })) as { versions: unknown[] };
+        return response.versions.map((version) => {
+          const checked = validateArtifactVersion(version);
+          if (!checked.ok) {
+            throw new ServiceError("INVALID_INPUT", "artifacts.versions response failed schema");
+          }
+          return checked.value;
+        });
+      },
+      versionContent: async (botId, relativePath, versionId) =>
+        (await artifactCall("artifacts.versionContent", {
+          botId,
+          path: relativePath,
+          versionId,
+        })) as Awaited<ReturnType<DesktopService["artifacts"]["versionContent"]>>,
+      revert: async (botId, relativePath, versionId) => {
+        const response = (await artifactCall("artifacts.revert", {
+          botId,
+          path: relativePath,
+          versionId,
+        })) as { artifact: unknown; version: unknown };
+        const artifact = validateBotArtifact(response.artifact);
+        const version = validateArtifactVersion(response.version);
+        if (!artifact.ok || !version.ok) {
+          throw new ServiceError("INVALID_INPUT", "artifacts.revert response failed schema");
+        }
+        return { artifact: artifact.value, version: version.value };
       },
     },
     chat: {

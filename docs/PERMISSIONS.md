@@ -28,7 +28,8 @@
 | `fs.read` / `fs.write` | 工作目录文件读写 | 中 | D08 路径策略 + 审批 |
 | `exec.shell` | 执行本地命令 | 高 | 每次询问 |
 | `screen.capture` | 窗口截图 / OCR | 高 | 从不允许（需显式开启） |
-| `connector.invoke` | 调用连接器 / MCP 工具 | 中 | 每次询问 |
+| `connector.invoke` | 调用 Stable Diffusion 连接器 | 中 | 每次询问 |
+| `mcp.call` | 调用已授权的本机 MCP 工具 | 中 | 每次询问；只接受单次审批 |
 | `network.search` / D08 `network.request` | web_search 向受信配置的 SearXNG 端点提交搜索 | 中 | D16 每次询问，另需 D08 网络策略放行；缺少受信权限句柄拒绝 |
 | `memory.read` | 检索当前 bot 的记忆 | 低 | 始终允许，但仍必须绑定该 bot |
 | `memory.write` | 写入当前 bot 的记忆 | 中 | 每次询问；模型不能删除 |
@@ -39,7 +40,11 @@
 
 `memory_search` 绑定 `memory.read`，`memory_write` 绑定 `memory.write`。两者都只使用受信 `ToolCaller.botId`，模型参数不能指定 bot。默认不跨 bot 共享，也没有共享开关。用户经受信方法 `memory.list` / `memory.write` / `memory.delete` 查看、写入和删除当前 bot 的记忆；删除是物理删除，模型目录没有删除工具。网关 JSONL 仍只存摘要。知识导入是桌面文件对话框，不接收渲染进程传入的路径，也不是模型工具。通过后仍调用 `memory.write`，隔离规则不变。只接受 `.txt` / `.md`，文件不超过 16 KiB，正文仍须放进一条 1–4000 字的记忆。
 
-`connector.list` / `connector.register` / `connector.enable` / `connector.disable` 是受信桌面方法，不是模型工具，也不进入八个应用工具目录。新登记的连接器默认关闭。`credentialRef` 只能是 `cred:<uuid>` 引用；本片不解析该引用，也不调用连接器。`connector.invoke` 仍是每次询问。`ToolPolicy.mcp` 的判定不变。
+`connector.*` 管理方法只对受信桌面开放，新登记连接器默认关闭。Stable Diffusion 使用 `connector_invoke`；自定义 MCP 使用独立的 `mcp.call` 能力。MCP 首版只接受无凭据的本机 HTTP(S) Streamable HTTP 端点，可带路径；localhost 固定归一化为 127.0.0.1，拒绝远程主机、URL 用户信息、查询、片段及重定向。Host 不解析或注入 MCP 凭据。
+
+设置页通过 `connector.mcp.discover` 显式发现工具，并通过 `connector.mcp.grants.get/set` 为指定 bot 保存准确的服务 UUID 与工具名白名单。更新时复制该 bot 的 ToolPolicy 并重新绑定，不修改其他 bot 共用的默认策略；不提供通配符或自动全选。只有已启用、已授权的工具 schema 才进入本轮 Harness 目录。模型不能调用这些管理方法。
+
+每次 MCP 调用经过网关 `mcp_call`，审批预览包含服务名称、端点、工具名和实际参数。调用绑定本轮定义、连接器配置及发现时的输入 schema；批准后重新发现并比对 schema，在真正发送 `tools/call` 前再检查 bot 白名单和 D16 审批凭据。停用、修改端点、撤销工具或审批授权、切换工具策略、归档 bot、全局禁止能力会取消相关请求。取消是尽力中止；服务已经执行的副作用不能回滚，也不自动重试。JSONL 只记录摘要，精确参数仍只存于本地审批预览。输出图片落入本地 connector-outputs，资源链接仅作为数据返回，不自动获取。
 
 ## 3. 三档策略
 
@@ -51,7 +56,7 @@
 | 每次询问 | 网关弹出审批卡，用户允许后执行 |
 | 从不允许 | 网关拒绝，向模型返回可解释原因 |
 
-默认值：app.read / interaction.ask_user 允许，screen.capture 拒绝，其余询问。app.start_run 固定 ask；exec.shell / screen.capture 只能 ask 或 deny，且三者不接受会话/永久授权。策略由受信 permission.policy.set 修改并持久化。设置页按同一约束展示：启动运行只读为每次询问，本地命令和屏幕感知不提供始终允许。
+默认值：app.read / interaction.ask_user 允许，screen.capture 拒绝，其余询问。app.start_run 固定 ask；exec.shell / screen.capture / mcp.call 只能 ask 或 deny，这四项不接受会话/永久授权。策略由受信 permission.policy.set 修改并持久化。设置页按同一约束展示：启动运行只读为每次询问，本地命令、屏幕感知和 MCP 不提供始终允许。
 
 策略 deny 优先于已有授权。写操作和 network.search 即使策略 allow 也须绑定有效 bot；匿名只可使用策略 allow 的读/提问。网关没有检查器、未知能力或无效身份均拒绝。
 
@@ -79,7 +84,7 @@ sequenceDiagram
     B-->>U: 回执卡片（已创建）+ 撤销按钮
 ```
 
-授权卡字段固定：能力列表、作用域（本次/会话/永久）、次数上限、过期时间、申请理由。当前聊天卡片列出该 bot 的 pending 审批：申请理由用工具名，能力用中文名。本会话按契约默认 5 次、2 小时；永久不限次数。`app.start_run` / `exec.shell` / `screen.capture` 以及没有 sessionId 的审批不提供更长授权。决定调用 `permission.approval.decide`，并带回精确 `actionDigest`。
+授权卡字段固定：能力列表、作用域（本次/会话/永久）、次数上限、过期时间、申请理由。当前聊天卡片列出该 bot 的 pending 审批：申请理由用工具名，能力用中文名。本会话按契约默认 5 次、2 小时；永久不限次数。`app.start_run` / `exec.shell` / `screen.capture` / `mcp.call` 以及没有 sessionId 的审批不提供更长授权。决定调用 `permission.approval.decide`，并带回精确 `actionDigest`。
 
 ## 5. 设置页
 

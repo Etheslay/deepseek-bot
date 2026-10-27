@@ -36,6 +36,7 @@ const CAPABILITY_LABELS: Record<CapabilityId, string> = {
   "exec.shell": "执行本地命令",
   "screen.capture": "屏幕与窗口感知",
   "connector.invoke": "调用连接器",
+  "mcp.call": "调用 MCP 工具",
 };
 
 const SCOPE_LABELS = {

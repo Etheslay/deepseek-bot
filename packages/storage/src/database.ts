@@ -517,5 +517,89 @@ CREATE TABLE knowledge_docs (
 CREATE INDEX knowledge_docs_bot_created ON knowledge_docs(bot_id, created_at);
 `,
   },
+  {
+    // D28 co-edit sidecar: immutable version trail for bot workspace files.
+    // Rows are metadata only — version content lives as files under
+    // `<root>/artifacts/coedit-versions/` (content_path), so backups that
+    // include the artifacts tree carry the snapshots with it. Every save,
+    // revert and reconciled bot write appends a row; nothing is ever
+    // updated or deleted except the oldest rows beyond the per-file cap.
+    // Renumbered 0010→0011 at the D28 sync merge: develop's 0010-knowledge-docs
+    // landed first, and migration ids must stay globally unique.
+    id: 11,
+    name: "0011-artifact-versions",
+    sql: /* sql */ `
+CREATE TABLE artifact_versions (
+  id TEXT PRIMARY KEY,
+  bot_id TEXT NOT NULL REFERENCES bots(id),
+  relative_path TEXT NOT NULL,
+  revision INTEGER NOT NULL CHECK (revision >= 1),
+  author TEXT NOT NULL CHECK (author IN ('user', 'bot')),
+  media_type TEXT NOT NULL,
+  size INTEGER NOT NULL CHECK (size >= 0),
+  checksum_algorithm TEXT NOT NULL CHECK (checksum_algorithm = 'sha256'),
+  checksum_value TEXT NOT NULL,
+  content_path TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  UNIQUE (bot_id, relative_path, revision)
+);
+CREATE INDEX artifact_versions_lookup
+  ON artifact_versions(bot_id, relative_path, revision DESC);
+`,
+  },
+  {
+    // D19 (connector invoke): loopback http(s) endpoint of the local
+    // service behind a registered connector. Nullable — a connector without
+    // an endpoint stays catalog-only.
+    id: 12,
+    name: "0012-connectors-endpoint",
+    sql: /* sql */ `
+ALTER TABLE connectors ADD COLUMN endpoint TEXT;
+`,
+  },
+  {
+    // D20 (FR-17): event trigger rules and their review-queue firings. A
+    // firing is unique per (rule, source event) — one event fires a rule
+    // once; started_run_id carries the loop guard (runs the queue started
+    // never enqueue new firings).
+    id: 13,
+    name: "0013-automation-triggers",
+    sql: /* sql */ `
+CREATE TABLE trigger_rules (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  workflow_id TEXT NOT NULL REFERENCES workflows(id),
+  event_type TEXT NOT NULL CHECK (event_type IN ('run.failed', 'run.completed')),
+  filter_workflow_id TEXT,
+  enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)),
+  cursor_event_rowid INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE trigger_firings (
+  id TEXT PRIMARY KEY,
+  rule_id TEXT NOT NULL REFERENCES trigger_rules(id) ON DELETE CASCADE,
+  source_event_id TEXT NOT NULL,
+  source_run_id TEXT,
+  source_workflow_id TEXT,
+  reason TEXT NOT NULL CHECK (reason IN ('event', 'missed')),
+  status TEXT NOT NULL CHECK (status IN ('pending', 'approved', 'dismissed')),
+  started_run_id TEXT,
+  created_at TEXT NOT NULL,
+  decided_at TEXT,
+  UNIQUE (rule_id, source_event_id)
+);
+CREATE INDEX trigger_firings_status ON trigger_firings(status, created_at);
+`,
+  },
+  {
+    id: 14,
+    name: "0014-connectors-kind",
+    sql: /* sql */ `
+ALTER TABLE connectors ADD COLUMN kind TEXT NOT NULL DEFAULT 'sd-webui'
+  CHECK (kind IN ('sd-webui', 'mcp-http'));
+`,
+  },
 ];
 

@@ -1,6 +1,8 @@
-# 接口与数据契约 v0.3
+# 接口与数据契约 v0.5
 
-本文件定义本项目前后端契约，不是 DeepSeek Harness 官方 API。状态：v0.1 已冻结（2026-10-23，D00 验收记录见 D00 Issue）；v0.2 为 D15 写层扩展；v0.3（2026-10-26，D16 后端）新增人类权限控制方法，`protocolVersion` 升至 0.3，继续接受 0.1/0.2 发送方。工作流文档 `schemaVersion` 保持 0.1（存量数据可读）。后续变更按 §7 提升版本并由变更负责人自审同步使用方。可执行实现位于 `packages/contracts/`：schema、§7 夹具与双方共用契约测试见 [packages/contracts/README.md](../packages/contracts/README.md)。所有字段均需后端校验，TypeScript 类型不能替代运行时校验。
+本文件定义本项目前后端契约，不是 DeepSeek Harness 官方 API。状态：v0.1 已冻结（2026-10-23，D00 验收记录见 D00 Issue）；v0.2 为 D15 写层扩展；v0.3（2026-10-26，D16 后端）新增人类权限控制方法；v0.4（2026-10-26，D28 共编侧车）新增 `artifacts.*` 方法组，`protocolVersion` 升至 0.4，继续接受 0.1–0.3 发送方。工作流文档 `schemaVersion` 保持 0.1（存量数据可读）。后续变更按 §7 提升版本并由变更负责人自审同步使用方。可执行实现位于 `packages/contracts/`：schema、§7 夹具与双方共用契约测试见 [packages/contracts/README.md](../packages/contracts/README.md)。所有字段均需后端校验，TypeScript 类型不能替代运行时校验。
+
+v0.5（D19 MCP HTTP 契约片）新增连接器类型、MCP 工具发现与逐机器人精确工具授权方法，以及独立能力 `mcp.call`。当前 `protocolVersion` 为 0.5，继续接受 0.1–0.4 发送方；工作流 `schemaVersion` 仍为 0.1。本片仅交付可执行契约，不代表 MCP Host、存储迁移、桌面设置或真实服务联调已经完成。
 
 ## 1. 通用规则
 
@@ -29,12 +31,21 @@
 | NodeRun | id, runId, nodeId, attempt, status, inputRefs, outputRefs, sessionId | 一次节点尝试对应明确 Harness 会话/轮次映射 |
 | Approval | id, runId, nodeRunId, actionDigest, resource, expiresAt, status | 默认有效期 10 分钟；一次消费；启动代次绑定 |
 | Artifact | id, runId, nodeRunId, relativePath, mediaType, size, checksum | 限于授权产物目录；校验后打开；预览不执行主动内容 |
+| BotArtifact | relativePath, mediaType, size, updatedAt, checksum | v0.4：bot 工作区可编辑文件，按 (botId, relativePath) 寻址；mediaType 由扩展名映射，text/html 与二进制不进内联编辑（QA-14） |
+| ArtifactVersion | id, botId, relativePath, revision, author(user\|bot), mediaType, size, checksum, createdAt | v0.4：只追加版本链，同文件 revision 唯一；快照内容存于数据根 `artifacts/coedit-versions/<botId>/`（含产物备份即含版本）；回退以新版本落盘，不改写历史 |
 | CapabilityPolicy | capability, mode | v0.3；全局 allow/ask/deny 默认策略，受高风险能力限制 |
+| ConnectorKind | sd-webui / mcp-http | v0.5；register 省略 kind 时默认 sd-webui；现有连接器响应 kind 可选以兼容旧 Host，后续实现应始终输出类型；旧记录按 sd-webui 解释 |
+| McpTool | name, description?, inputSchema | v0.5；name 为 1–200 字符精确名称，description ≤4000 字符，inputSchema 为 JSON 对象（record unknown）；发现最多 200 项，不把远端描述当指令或授权 |
+| McpServerGrant | serverId, allowedTools | 单个服务器的精确工具白名单，最多 200 个唯一名称；名称 1–200 字符，禁止 `*`/`?` 通配符，不进行大小写或空白归一化；空数组表示不允许该服务器的工具 |
 | PermissionGrant | id, capability, botId, mode, scope, sessionId, generation, approvalId, maxUses, uses, expiresAt, createdAt, revokedAt | v0.3；scope=policy 为全局策略行，其余为 bot 专属 once/session/permanent 授权；计数在执行前原子扣减 |
 | AppApproval | id, invocationId, callerId, botId, sessionId, tool, capabilities, params, actionDigest, generation, status, createdAt, expiresAt, decidedAt | v0.3；精确参数预览与 10 分钟期限，独立于 D08 Approval；重启失效 |
 | PermissionAudit | id, sequence, at, actor, callerId, botId, tool, capabilities, actionDigest, grantIds, approvalId, decision | v0.3；只追加，保存摘要与决策元数据，不保存参数原文 |
 
 ## 3. 方法边界
+
+v0.5 的 MCP 控制方法只供受信桌面调用，不能注册为模型工具。`mcp-http` 后续传输仅使用本机 HTTP 回环端点，允许 `/mcp` 等路径；端点的 scheme、回环主机、凭据与重定向等检查由 Host 实现承担，当前契约仍只校验 endpoint 字符串长度与形状字段。`connector.register` 和 `connector.setEndpoint` 不因配置地址而自动调用服务。
+
+MCP 实际调用使用独立能力 `mcp.call`，默认 `ask`，禁止全局 `allow` 与 session/permanent 授权；只允许绑定精确动作、代次与一次消费的 once 审批。`deny` 可全面禁用。既有 `connector.invoke` 策略或授权不能替代该审批；`ToolPolicy.mcp` 的服务器/工具白名单也是独立门槛，不能代替人类逐次批准。此规则本片落实为能力和授权 schema，Host 执行检查与错误路径将在后续实现片完成。
 
 | 方法组 | 语义 | 幂等/错误重点 |
 | --- | --- | --- |
@@ -42,6 +53,7 @@
 | bot.batchCreate | v0.2 聊天驱动批量创建（FR-12） | 单事务：newGroup 与 groupId 互斥；逐字段回退 batch defaults；头像显式优先、自动分配组内不重复（组合用尽才允许重复）；以 idempotencyKey 去重；返回 batchId 供 creation.revoke |
 | creation.revoke | v0.2 整批撤销 | 归档该批全部 bot（无 revision 守卫，撤销必须生效），批次自建的组一并归档；重复撤销返回 INVALID_INPUT |
 | group.create / list | v0.2 分组管理 | list 仅返回未归档组 |
+| workflow.list | v0.3 工作流摘要（选择器用） | 只回 id/name/revision，不回节点图；全库摘要远低于 1 MiB 消息上限 |
 | workflow.validate / save / export / import | 编辑与模板交换 | validate 返回可定位节点/字段的错误；import 先校验 schemaVersion |
 | run.start / get / list / cancel | 运行控制 | start 以 idempotencyKey 去重；cancel 重复调用返回已有终态 |
 | run.retryNode | 显式重试失败/中断节点 | 新 attempt；校验下游状态与副作用；不静默恢复旧审批 |
@@ -54,12 +66,19 @@
 | permission.grant.list / revoke | v0.3 人类查询/撤销授权 | botId 可筛选；默认仅有效记录，最多 100；撤销已存在授权幂等 |
 | permission.approval.list / decide | v0.3 人类读取精确动作/批准或拒绝 | 列表默认 pending；决定必须匹配 approvalId、expectedActionDigest、代次、期限；scope 默认 once，session 可指定 maxUses/ttlMinutes；一次消费 |
 | permission.audit.list | v0.3 人类按 botId、afterSequence 查询追加式审计 | 默认最多 50，最高 100；模型不能写入/删除或调用控制方法 |
+| connector.mcp.discover | v0.5 受信桌面契约：`{id: UUID}` → `{tools: McpTool[], at: UTC ISO}` | 请求严格字段；最多 200 个工具。Host 后续负责启用状态、mcp-http 类型、端点与远端响应验证 |
+| connector.mcp.grants.get | v0.5 受信桌面契约：`{botId: UUID}` → `{servers: McpServerGrant[]}` | 请求严格字段；返回最多 50 个服务器，仅当前 bot 的授权 |
+| connector.mcp.grants.set | v0.5 受信桌面契约：`{botId: UUID, id: UUID, allowedTools: string[]}` → `{servers: McpServerGrant[]}` | 仅替换指定 bot 与连接器的工具白名单；最多 200 个唯一精确名称，空数组清空；不得扩大其他服务器权限。后续 Host 校验名称确实存在于该服务器的发现结果 |
 | memory.list / write / delete | v0.3 人类查看、写入和删除当前 bot 的记忆 | 只作用于 payload.botId；空查询返回最近记录，默认 20、最多 50；删除未命中返回 INVALID_INPUT，不暴露其他 bot 的记录 |
 | memory.retention.get / set | v0.3 保留策略（记忆 + 知识共用）：retentionDays / memoryMaxPerBot / knowledgeMaxPerBot | 0 = 不限制（默认）；损坏值按 0 读——损坏的设置只会让清理变保守；Host 启动与每次写入后执行清扫 |
 | knowledge.list / write / delete | v0.3 当前 bot 的独立知识文档（迁移 `0010-knowledge-docs`） | 正文上限 100000 字（独立于 4000 字记忆）；list 只回摘要（不回正文，1 MiB 消息上限安全）；删除 bot 域隔离同记忆 |
 | knowledge.search | v0.3 本地向量检索：CJK 双字 + 拉丁词 TF-IDF 余弦 + 精确短语加分 | 每次查询即时分窗计算（480 字窗、100 字重叠），不预存向量、不引模型；score≤0 不返回，默认 5 条最多 10 条；数百条满幅文档内为设计边界（用 knowledgeMaxPerBot 约束） |
+| artifacts.list / read / save / versions / versionContent / revert | v0.4 产物共编侧车：bot 工作区文件的列出、读取、保存、版本、版本内容与回退 | 路径必须相对且不穿越（`RelativeArtifactPathSchema` + realpath 夹紧）；内联内容 ≤ 768 KiB（1 MiB envelope 内留 JSON 转义余量），超限显式拒绝不截断；save 携带 expectedChecksum 时文件已变返回 REVISION_CONFLICT；save/revert 恒追加 author=user 版本，未入账的 bot 写入由 list/read/versions 先补记为 author=bot 版本；每文件保留最近 50 版 |
+| trigger.list / save / enable / disable / delete | v0.3 事件触发规则（迁移 `0013-automation-triggers`）：监听 run.failed / run.completed（可限定源工作流） | 目标/源工作流必须存在；新建默认关闭；删除级联清理其评审记录 |
+| trigger.firing.list / decide | v0.3 评审队列：命中事件入队，人工决定启动或忽略 | (rule, source event) 唯一——一个事件只触发一次；队列自己启动的运行不再入队（循环防护）；Host 宕机期间积累的事件以 reason=missed 补入队列——可见、绝不静默补跑；decide 仅对 pending 有效，start 复用 run.start 的策略钉扎与幂等语义 |
+| （模型工具 `list_automations`） | v0.3 只读自动化总览：规则清单/启停/待评审条目 | 能力 `app.read` 默认允许；走 `/triggers` 通道；无任何写入或决定参数 |
 
-`permission.*` 是受信 Host 控制面，绝不注册为模型工具。设置页调用 `permission.policy.list` / `permission.policy.set` 与 `permission.grant.list` / `permission.grant.revoke`。聊天授权卡调用 `permission.approval.list` / `permission.approval.decide`。本轮应用工具通过每轮令牌认证的 Host 内部 loopback 通道调用；物理 Harness 会话从登记表绑定稳定的 `ToolCaller.botId/sessionId`，不从不透明 caller.id 解析，也不接受模型参数中的身份。八个应用工具的通道不是桌面公开契约。本片另增受信桌面方法 `question.list` / `question.answer`，只读取并回答当前 bot 聊天回合里的 `ask_user`；模型目录不包含这两个方法。另增 `search.config.get` / `search.config.set` / `search.results.list`，只由桌面读写 SearXNG 地址和当前 bot 的搜索结果，模型目录不包含这三个方法。记忆切片另增受信桌面方法 `memory.list` / `memory.write` / `memory.delete`，以及迁移 `0008-memories`。模型工具是 `memory_write` / `memory_search`，不进入八个应用工具目录，也不能删除或指定其他 bot。知识切片（D18 收尾）另增受信桌面方法 `knowledge.list` / `knowledge.write` / `knowledge.delete` / `knowledge.search` 与 `memory.retention.get` / `memory.retention.set`，以及迁移 `0010-knowledge-docs`；导入从"写入记忆"改为写入独立知识文档（.txt/.md ≤256 KiB、UTF-8、≤100000 字），模型目录新增只读工具 `knowledge_search`（与记忆工具同路由，能力映射到 `memory.read`）。检索是本地 n-gram TF-IDF 向量 + 精确短语加分的混合排序，不引入嵌入模型或运行期网络。连接器登记另增受信桌面方法 `connector.list` / `connector.register` / `connector.enable` / `connector.disable` 和迁移 `0009-connectors`：新建默认关闭，凭据只接受引用，不解析也不调用，`ToolPolicy.mcp` 不变。协议仍为 0.3。公开 `tool.invoke.callerBotId` 不构成可信授权身份。D16 网关在 schema 校验后授权，未安装检查器时默认拒绝，执行前再次同步验证。详细作用域与迁移边界见 [PERMISSIONS.md](PERMISSIONS.md)。
+`permission.*` 是受信 Host 控制面，绝不注册为模型工具。设置页调用 `permission.policy.list` / `permission.policy.set` 与 `permission.grant.list` / `permission.grant.revoke`。聊天授权卡调用 `permission.approval.list` / `permission.approval.decide`。本轮应用工具通过每轮令牌认证的 Host 内部 loopback 通道调用；物理 Harness 会话从登记表绑定稳定的 `ToolCaller.botId/sessionId`，不从不透明 caller.id 解析，也不接受模型参数中的身份。八个应用工具的通道不是桌面公开契约。本片另增受信桌面方法 `question.list` / `question.answer`，只读取并回答当前 bot 聊天回合里的 `ask_user`；模型目录不包含这两个方法。另增 `search.config.get` / `search.config.set` / `search.results.list`，只由桌面读写 SearXNG 地址和当前 bot 的搜索结果，模型目录不包含这三个方法。记忆切片另增受信桌面方法 `memory.list` / `memory.write` / `memory.delete`，以及迁移 `0008-memories`。模型工具是 `memory_write` / `memory_search`，不进入八个应用工具目录，也不能删除或指定其他 bot。知识导入不新增契约方法，桌面读完一个 .txt 或 .md 文件后仍调用 `memory.write`。连接器登记另增受信桌面方法 `connector.list` / `connector.register` / `connector.enable` / `connector.disable` 和迁移 `0009-connectors`：新建默认关闭，凭据只接受引用，不解析也不调用，`ToolPolicy.mcp` 不变。知识切片（D18 收尾）另增受信桌面方法 `knowledge.list` / `knowledge.write` / `knowledge.delete` / `knowledge.search` 与 `memory.retention.get` / `memory.retention.set`，以及迁移 `0010-knowledge-docs`；导入从"写入记忆"改为写入独立知识文档（.txt/.md ≤256 KiB、UTF-8、≤100000 字），模型目录新增只读工具 `knowledge_search`（与记忆工具同路由，能力映射到 `memory.read`）。检索是本地 n-gram TF-IDF 向量 + 精确短语加分的混合排序，不引入嵌入模型或运行期网络。D28 共编侧车另增受信桌面方法 `artifacts.list` / `artifacts.read` / `artifacts.save` / `artifacts.versions` / `artifacts.versionContent` / `artifacts.revert` 和迁移 `0011-artifact-versions`（同步合入时自 0010 顺延，0010 已被知识文档占用）：产物即 bot 工作区真实文件，用户保存写回工作区（bot 下一轮经自身文件工具读到用户版本），Harness 直接写入的文件由读取路径补记版本；用户保存走 Host 直通道，不经工具网关，bot 写入仍走 Harness 工具与既有审批。协议升至 0.4。连接器调用切片（D19 第二片）另增受信方法 `connector.setEndpoint` 与迁移 `0012-connectors-endpoint`（回环端点列），模型目录新增 `connector_invoke` 工具（能力 `connector.invoke`，默认 ask，每次调用带精确参数审批）：首个官方动作 `txt2img` 调用本机 SD WebUI API（`/sdapi/v1/txt2img`，120 秒超时），生成图片写入数据根 `connector-outputs/<connectorId>/` 并以绝对路径返回——图片字节不进契约信封（1 MiB 上限），该目录不进备份。D20 事件自动化另增受信 `workflow.list`、`trigger.*` 方法与迁移 `0013-automation-triggers`；模型只读工具 `list_automations` 走 `app.read`，评审队列由人类决定启动或忽略。公开 `tool.invoke.callerBotId` 不构成可信授权身份。D16 网关在 schema 校验后授权，未安装检查器时默认拒绝，执行前再次同步验证。详细作用域与迁移边界见 [PERMISSIONS.md](PERMISSIONS.md)。
 
 ## 4. 事件
 

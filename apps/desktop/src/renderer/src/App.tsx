@@ -6,6 +6,7 @@ import { SearchResultCards } from "./features/search/search-results.js";
 import { MemoryPanel } from "./features/memory/memory-panel.js";
 import { SearchSettings } from "./features/search/search-settings.js";
 import { ConnectorSettings } from "./features/connectors/connector-settings.js";
+import { AutomationPanel } from "./features/automation/automation-panel.js";
 import { PermissionsPanel } from "./features/permissions/permissions-panel.js";
 import { BotForm } from "./features/bots/bot-form.js";
 import { nextBotName } from "./features/bots/bot-names.js";
@@ -37,6 +38,7 @@ import {
 } from "./features/questions/question-chat.js";
 import { WorkflowEditor } from "./features/workflow-editor/workflow-editor.js";
 import { RunMonitor } from "./features/run-monitor/run-monitor.js";
+import { CanvasSidecar } from "./features/canvas/canvas-sidecar.js";
 import { ChatMarkdown } from "./features/chat/chat-markdown.js";
 import type { MentionTable } from "./features/chat/mentions.js";
 import {
@@ -281,10 +283,11 @@ export function App(): JSX.Element {
     { sessionId: string; botId: string; title: string; startedAt: string; status: string }[] | null
   >(null);
   const [artifactList, setArtifactList] = useState<
-    import("@deepseek-bot/contracts").Artifact[] | null
+    import("@deepseek-bot/contracts").BotArtifact[] | null
   >(null);
-  const [artifactPreview, setArtifactPreview] = useState<
-    { id: string; kind: "text"; content: string } | { id: string; kind: "blocked"; reason: string } | null
+  /** D28: the open co-edit sidecar (one workspace file beside the chat). */
+  const [canvas, setCanvas] = useState<
+    { botKey: number; botId: string; botName: string; path: string } | null
   >(null);
   const [restoredSession, setRestoredSession] = useState<{
     sessionId: string;
@@ -467,19 +470,22 @@ export function App(): JSX.Element {
       return;
     }
     let cancelled = false;
-    void desktop.chat
-      .listSessions(bot.bot.id)
-      .then((sessions) => (sessions.length > 0 ? sessions[0]!.sessionId : null))
-      .then((sessionId) => (sessionId ? desktop.artifacts.listBySession(sessionId) : []))
+    void desktop.artifacts
+      .list(bot.bot.id)
       .then((list) => {
         if (!cancelled) {
           setArtifactList(list);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setArtifactList([]);
         }
       });
     return () => {
       cancelled = true;
     };
-  }, [artifactsOpen, selectedBot, bots, desktop]);
+  }, [artifactsOpen, selectedBot, bots, desktop, canvas]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1087,7 +1093,6 @@ const logout = (): void => {
           onClick={() => {
             setHistoryOpen(false);
             setArtifactsOpen((v) => !v);
-            setArtifactPreview(null);
           }}
         >
           <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -1132,39 +1137,35 @@ const logout = (): void => {
           <>
             <div className="menu-overlay" onClick={() => setArtifactsOpen(false)} />
             <div className="top-popover artifacts-popover" role="dialog" aria-label="产物">
-              <div className="popover-title">产物</div>
+              <div className="popover-title">产物（bot 工作区）</div>
               {(artifactList ?? []).map((artifact) => (
-                <div className="artifact-item" key={artifact.id}>
+                <div className="artifact-item" key={artifact.relativePath}>
                   <div className="artifact-meta">
                     <div className="tab-title">{artifact.relativePath}</div>
                     <div className="session-meta">
                       {artifact.mediaType} · {artifact.size} bytes
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    className="pill-btn"
-                    onClick={() => {
-                      void desktop.artifacts.preview(artifact).then((result: { kind: "text"; content: string } | { kind: "blocked"; reason: string }) => {
-                        setArtifactPreview(
-                          result.kind === "text"
-                            ? { id: artifact.id, kind: "text", content: result.content }
-                            : { id: artifact.id, kind: "blocked", reason: result.reason },
-                        );
-                      });
-                    }}
-                  >
-                    预览
-                  </button>
+                  {selectedBotEntry !== undefined && selectedBot !== null && (
+                    <button
+                      type="button"
+                      className="pill-btn"
+                      onClick={() => {
+                        setArtifactsOpen(false);
+                        setCanvas({
+                          botKey: selectedBot,
+                          botId: selectedBotEntry.bot.id,
+                          botName: selectedBotEntry.bot.name,
+                          path: artifact.relativePath,
+                        });
+                      }}
+                    >
+                      在画布中打开
+                    </button>
+                  )}
                 </div>
               ))}
-              {(artifactList ?? []).length === 0 && <div className="sys-line">暂无产物</div>}
-              {artifactPreview !== null &&
-                (artifactPreview.kind === "text" ? (
-                  <pre className="artifact-preview">{artifactPreview.content}</pre>
-                ) : (
-                  <p className="form-error">{artifactPreview.reason}</p>
-                ))}
+              {(artifactList ?? []).length === 0 && <div className="sys-line">工作区暂无产物</div>}
             </div>
           </>
         )}
@@ -1554,6 +1555,16 @@ const logout = (): void => {
           )}
         </main>
       </section>
+      {canvas !== null && (
+        <CanvasSidecar
+          key={`${canvas.botId}:${canvas.path}`}
+          service={desktop}
+          botId={canvas.botId}
+          botName={canvas.botName}
+          relativePath={canvas.path}
+          onClose={() => setCanvas(null)}
+        />
+      )}
       </div>
 
       {menu && menuBot && (
@@ -2061,6 +2072,7 @@ const logout = (): void => {
                 </div>
                 <SearchSettings />
                 <ConnectorSettings />
+                <AutomationPanel />
                 <div className="settings-section-title">技能（复用与导入导出）</div>
                 <div className="settings-card">
                   <SkillsPanel

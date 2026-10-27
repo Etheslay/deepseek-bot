@@ -170,6 +170,7 @@ export class ChatManager {
         { id: chatSessionIdFor(bot.id), botId: bot.id, sessionId: chatSessionIdFor(bot.id) },
         controller.signal,
       );
+      await whileActive(turn.prepare?.() ?? Promise.resolve(), controller.signal);
       const baseOptions = this.buildOptions(inputs);
       attempt = new HarnessAttempt({ ...baseOptions, env: { ...baseOptions.env, ...turn.env } });
       session.active = attempt;

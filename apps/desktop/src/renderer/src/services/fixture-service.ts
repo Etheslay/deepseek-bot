@@ -5,13 +5,15 @@
  * is in-memory session state and disappears on restart (persistence is D04).
  */
 import type {
-  Artifact,
+  ArtifactVersion,
   Bot,
+  BotArtifact,
   EventEnvelope,
 } from "@deepseek-bot/contracts";
 import {
-  validateArtifact,
+  validateArtifactVersion,
   validateBot,
+  validateBotArtifact,
   validateEventEnvelope,
 } from "./contract-validation.js";
 import {
@@ -86,28 +88,84 @@ const SESSION_FIXTURES: Record<string, { events: unknown[] }> = {
   "sess-cancel-run": cancelRunFixture,
 };
 
-const SEED_ARTIFACTS: Record<string, Artifact[]> = {
-  "sess-success-run": [
-    {
-      id: "dddddddd-dddd-4ddd-8ddd-dddddddddd01",
-      runId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
-      nodeRunId: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
-      relativePath: "summaries/note-summary.md",
-      mediaType: "text/markdown",
-      size: 2048,
-      checksum: { algorithm: "sha256", value: "a".repeat(64) },
-    },
-    {
-      id: "dddddddd-dddd-4ddd-8ddd-dddddddddd02",
-      runId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
-      nodeRunId: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
-      relativePath: "reports/index.html",
-      mediaType: "text/html",
-      size: 4096,
-      checksum: { algorithm: "sha256", value: "b".repeat(64) },
-    },
-  ],
-};
+/**
+ * D28 co-edit fixture seeds: an in-memory workspace for the seeded bot, one
+ * text/markdown file plus one HTML file (blocked, QA-14). Each file starts
+ * with a v1 version row so the version panel has history out of the box.
+ */
+const SEED_WORKSPACE_FILES: Array<{
+  botId: string;
+  relativePath: string;
+  content: string;
+}> = [
+  {
+    botId: SESSION_BOT_A,
+    relativePath: "summaries/note-summary.md",
+    content:
+      "# 会议纪要（示例产物）\n\n这是夹具工作区里的真实文本内容，可在画布中编辑并保存。\n\n- 第一版由 bot 写入\n- 用户每次保存都会追加一个新版本\n",
+  },
+  {
+    botId: SESSION_BOT_A,
+    relativePath: "reports/index.html",
+    content: "<!doctype html>\n<html><body><p>HTML 产物不进入画布编辑。</p></body></html>\n",
+  },
+];
+
+interface FixtureWorkspaceFile {
+  content: string;
+  mediaType: string;
+  updatedAt: string;
+  versions: ArtifactVersion[];
+  nextRevision: number;
+  /** In-memory snapshot per version id (contract rows stay metadata-only). */
+  versionContents: Map<string, string>;
+}
+
+function fixtureChecksum(content: string): Promise<string> {
+  const bytes = new TextEncoder().encode(content);
+  return crypto.subtle
+    .digest("SHA-256", bytes)
+    .then((digest) =>
+      Array.from(new Uint8Array(digest))
+        .map((byte) => byte.toString(16).padStart(2, "0"))
+        .join(""),
+    );
+}
+
+function fixtureMediaType(relativePath: string): string {
+  const lower = relativePath.toLowerCase();
+  if (lower.endsWith(".md") || lower.endsWith(".markdown")) return "text/markdown";
+  if (lower.endsWith(".txt")) return "text/plain";
+  if (lower.endsWith(".json")) return "application/json";
+  if (lower.endsWith(".csv")) return "text/csv";
+  if (lower.endsWith(".yaml") || lower.endsWith(".yml")) return "text/yaml";
+  if (lower.endsWith(".xml")) return "text/xml";
+  if (lower.endsWith(".html") || lower.endsWith(".htm")) return "text/html";
+  if (lower.endsWith(".png")) return "image/png";
+  if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg";
+  return "application/octet-stream";
+}
+
+function fixtureEditable(mediaType: string): boolean {
+  return (
+    mediaType === "text/markdown" ||
+    mediaType === "text/plain" ||
+    mediaType === "application/json" ||
+    mediaType === "text/csv" ||
+    mediaType === "text/yaml" ||
+    mediaType === "text/xml"
+  );
+}
+
+function fixtureArtifact(file: FixtureWorkspaceFile, checksum: string, relativePath: string): BotArtifact {
+  return {
+    relativePath,
+    mediaType: file.mediaType,
+    size: new TextEncoder().encode(file.content).byteLength,
+    updatedAt: file.updatedAt,
+    checksum: { algorithm: "sha256", value: checksum },
+  };
+}
 
 export function createFixtureService(): DesktopService {
   let bots: Bot[] = SEED_BOTS.map((bot) => ({ ...bot }));
@@ -355,31 +413,207 @@ export function createFixtureService(): DesktopService {
       },
     },
 
-    artifacts: {
-      async listBySession(sessionId) {
-        const list = SEED_ARTIFACTS[sessionId] ?? [];
-        return list.map((artifact) => {
-          const checked = validateArtifact(artifact);
-          if (!checked.ok) {
-            throw new ServiceError("INVALID_INPUT", "artifact fixture failed schema");
-          }
-          return checked.value as Artifact;
+    artifacts: (() => {
+      const workspaces = new Map<string, Map<string, FixtureWorkspaceFile>>();
+      for (const seed of SEED_WORKSPACE_FILES) {
+        let files = workspaces.get(seed.botId);
+        if (files === undefined) {
+          files = new Map<string, FixtureWorkspaceFile>();
+          workspaces.set(seed.botId, files);
+        }
+        files.set(seed.relativePath, {
+          content: seed.content,
+          mediaType: fixtureMediaType(seed.relativePath),
+          updatedAt: "2026-10-24T10:05:00Z",
+          versions: [],
+          nextRevision: 1,
+          versionContents: new Map<string, string>(),
         });
-      },
+      }
 
-      async preview(artifact) {
-        if (artifact.mediaType === "text/markdown" || artifact.mediaType === "text/plain") {
+      const requireFile = (botId: string, relativePath: string): FixtureWorkspaceFile => {
+        const file = workspaces.get(botId)?.get(relativePath);
+        if (file === undefined) {
+          throw new ServiceError("INVALID_INPUT", `artifact not found: ${relativePath}`);
+        }
+        return file;
+      };
+
+      const checkedArtifact = (
+        file: FixtureWorkspaceFile,
+        checksum: string,
+        relativePath: string,
+      ): BotArtifact => {
+        const checked = validateBotArtifact(fixtureArtifact(file, checksum, relativePath));
+        if (!checked.ok) {
+          throw new ServiceError("INVALID_INPUT", "artifact fixture failed schema");
+        }
+        return checked.value;
+      };
+
+      const appendVersion = async (
+        botId: string,
+        file: FixtureWorkspaceFile,
+        relativePath: string,
+        author: "user" | "bot",
+      ): Promise<ArtifactVersion> => {
+        const checksum = await fixtureChecksum(file.content);
+        const version = validateArtifactVersion({
+          id: crypto.randomUUID(),
+          botId,
+          relativePath,
+          revision: file.nextRevision,
+          author,
+          mediaType: file.mediaType,
+          size: new TextEncoder().encode(file.content).byteLength,
+          checksum: { algorithm: "sha256", value: checksum },
+          createdAt: isoNow(),
+        });
+        if (!version.ok) {
+          throw new ServiceError("INVALID_INPUT", "artifact version fixture failed schema");
+        }
+        file.nextRevision += 1;
+        file.versions = [version.value, ...file.versions];
+        file.versionContents.set(version.value.id, file.content);
+        return version.value;
+      };
+
+      // Seeded files get their v1 ("bot") version lazily, once per file, so
+      // the version panel has history out of the box without sync checksums.
+      const seededFiles = new Set<string>();
+      const ensureSeedVersion = async (
+        botId: string,
+        relativePath: string,
+        file: FixtureWorkspaceFile,
+      ): Promise<void> => {
+        const key = `${botId}:${relativePath}`;
+        if (seededFiles.has(key)) {
+          return;
+        }
+        seededFiles.add(key);
+        if (file.versions.length === 0) {
+          await appendVersion(botId, file, relativePath, "bot");
+        }
+      };
+
+      return {
+        async list(botId) {
+          const files = workspaces.get(botId);
+          if (files === undefined) {
+            return [];
+          }
+          const artifacts: BotArtifact[] = [];
+          for (const [relativePath, file] of files) {
+            artifacts.push(checkedArtifact(file, await fixtureChecksum(file.content), relativePath));
+          }
+          return artifacts.sort((a, b) => a.relativePath.localeCompare(b.relativePath));
+        },
+
+        async read(botId, relativePath) {
+          const file = requireFile(botId, relativePath);
+          if (!fixtureEditable(file.mediaType)) {
+            return {
+              kind: "blocked",
+              mediaType: file.mediaType,
+              reason:
+                file.mediaType === "text/html"
+                  ? "HTML 不做内联编辑/渲染（防脚本执行）。"
+                  : `mediaType ${file.mediaType} 不是可编辑文本。`,
+            };
+          }
+          await ensureSeedVersion(botId, relativePath, file);
           return {
             kind: "text",
-            content: `# ${artifact.relativePath}\n\n（占位预览）该文件在 D04 落地后来自真实产物目录；当前仅演示安全文本预览。`,
+            mediaType: file.mediaType,
+            checksum: { algorithm: "sha256", value: await fixtureChecksum(file.content) },
+            content: file.content,
           };
-        }
-        return {
-          kind: "blocked",
-          reason: `mediaType ${artifact.mediaType} 不做内联预览（防脚本执行，QA-14）。`,
-        };
-      },
-    },
+        },
+
+        async save(botId, relativePath, content, expectedChecksum) {
+          requireBot(botId);
+          let files = workspaces.get(botId);
+          if (files === undefined) {
+            files = new Map<string, FixtureWorkspaceFile>();
+            workspaces.set(botId, files);
+          }
+          const existing = files.get(relativePath);
+          if (existing !== undefined) {
+            await ensureSeedVersion(botId, relativePath, existing);
+            const current = await fixtureChecksum(existing.content);
+            if (expectedChecksum !== undefined && current !== expectedChecksum) {
+              throw new ServiceError(
+                "REVISION_CONFLICT",
+                "文件在编辑期间被修改（可能来自 bot），请刷新后再保存。",
+                false,
+              );
+            }
+            existing.content = content;
+            existing.updatedAt = isoNow();
+            const version = await appendVersion(botId, existing, relativePath, "user");
+            return {
+              artifact: checkedArtifact(existing, await fixtureChecksum(existing.content), relativePath),
+              version,
+            };
+          }
+          const mediaType = fixtureMediaType(relativePath);
+          if (!fixtureEditable(mediaType)) {
+            throw new ServiceError("INVALID_INPUT", `mediaType ${mediaType} 不支持画布编辑。`);
+          }
+          const created: FixtureWorkspaceFile = {
+            content,
+            mediaType,
+            updatedAt: isoNow(),
+            versions: [],
+            nextRevision: 1,
+            versionContents: new Map<string, string>(),
+          };
+          files.set(relativePath, created);
+          const version = await appendVersion(botId, created, relativePath, "user");
+          return {
+            artifact: checkedArtifact(created, await fixtureChecksum(created.content), relativePath),
+            version,
+          };
+        },
+
+        async versions(botId, relativePath) {
+          const file = requireFile(botId, relativePath);
+          await ensureSeedVersion(botId, relativePath, file);
+          return file.versions;
+        },
+
+        async versionContent(botId, relativePath, versionId) {
+          const file = requireFile(botId, relativePath);
+          const content = file.versionContents.get(versionId);
+          if (content === undefined) {
+            throw new ServiceError("INVALID_INPUT", "version not found for this file");
+          }
+          if (!fixtureEditable(file.mediaType)) {
+            return {
+              kind: "blocked",
+              mediaType: file.mediaType,
+              reason: `mediaType ${file.mediaType} 没有可预览的文本内容。`,
+            };
+          }
+          return { kind: "text", mediaType: file.mediaType, content };
+        },
+
+        async revert(botId, relativePath, versionId) {
+          const file = requireFile(botId, relativePath);
+          const content = file.versionContents.get(versionId);
+          if (content === undefined) {
+            throw new ServiceError("INVALID_INPUT", "version not found for this file");
+          }
+          file.content = content;
+          file.updatedAt = isoNow();
+          const revertVersion = await appendVersion(botId, file, relativePath, "user");
+          return {
+            artifact: checkedArtifact(file, await fixtureChecksum(file.content), relativePath),
+            version: revertVersion,
+          };
+        },
+      };
+    })(),
 
     workflows: createFixtureWorkflowService(),
     runs: createFixtureRunService(),

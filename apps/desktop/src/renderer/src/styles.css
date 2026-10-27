@@ -5971,14 +5971,21 @@ select option {
   font-weight: 500;
 }
 
-/* 3. user bubble: painted with the bot's exact colour, no transparency
-   (owner request 2026-10-26). `--bot-color` / `--bot-ink` are written per
-   conversation by the chat pane; the ink is the auto-contrast text colour
-   for that exact fill. */
+/* 3. user bubble: tinted with the current bot's colour (SPRINTS §6 #8),
+   Grok-style radius. `--bot-color` is written per conversation by the chat
+   pane; when it is absent the graphite default is kept untouched. The mix
+   stays low (22%) so text contrast survives both themes; the border carries
+   the hue more visibly without changing the fill's readability. */
 .msg-row.user .msg-bubble {
-  background: var(--bot-color, var(--grok-user-bubble)) !important;
-  border: 1px solid transparent;
-  color: var(--bot-ink, var(--text)) !important;
+  background: color-mix(
+      in srgb,
+      var(--bot-color, var(--grok-user-bubble)) 22%,
+      var(--grok-user-bubble)
+    )
+    !important;
+  border: 1px solid
+    color-mix(in srgb, var(--bot-color, var(--grok-user-bubble)) 38%, transparent);
+  color: var(--text) !important;
   border-radius: 22px;
   padding: 10px 16px;
   font-size: 0.95rem;
@@ -6269,7 +6276,6 @@ select option {
    ============================================================ */
 
 .mention-chip {
-  text-decoration: none;
   display: inline-flex;
   align-items: center;
   border: none;
@@ -6283,7 +6289,7 @@ select option {
 }
 
 .mention-chip:hover {
-  text-decoration: none;
+  text-decoration: underline;
   opacity: 0.85;
 }
 
@@ -6294,33 +6300,72 @@ select option {
 
 /* --- choice card (A/B/C/D) --- */
 
-/* Choice card: minimal list look (owner reference 2026-10-26) — plain rows
-   that only gain a soft rounded highlight on hover/selection, neutral letter
-   chips, no borders, no arrows, no lift. Adapts to both themes. */
+/* Choice card: elevated surface, letter badges, hover lift + arrow. */
+@keyframes choiceIn {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 .choice-card {
   margin-top: 10px;
-  max-width: 460px;
-  padding: 14px 12px 12px;
-  border-radius: 16px;
-  border: 1px solid rgba(127, 127, 127, 0.12);
-  background: var(--panel);
+  max-width: 440px;
+  padding: 14px;
+  border-radius: 18px;
+  border: 1px solid rgba(127, 127, 127, 0.18);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0) 48%),
+    var(--panel);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.24);
+  animation: choiceIn 0.22s ease-out both;
 }
 
 [data-theme="light"] .choice-card {
-  border-color: rgba(15, 23, 42, 0.06);
-  background: #ffffff;
+  border-color: rgba(15, 23, 42, 0.08);
+  background: linear-gradient(180deg, #ffffff, rgba(255, 255, 255, 0.72)), var(--panel);
+  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.1);
 }
 
 .choice-question {
-  margin: 2px 6px 10px;
-  font-size: 0.9rem;
-  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 2px 2px 12px;
+  font-size: 0.88rem;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
+
+.choice-question::before {
+  content: "";
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--mention-color, #6ea8ff);
+  box-shadow: 0 0 0 4px rgba(110, 168, 255, 0.16);
+}
+
+.permission-params {
+  max-height: 240px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 12px;
 }
 
 .choice-options {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 8px;
 }
 
 .choice-option {
@@ -6328,49 +6373,90 @@ select option {
   align-items: center;
   gap: 12px;
   width: 100%;
-  padding: 10px 12px;
+  padding: 11px 12px;
   text-align: left;
-  border-radius: 12px;
-  border: 1px solid transparent;
-  background: transparent;
+  border-radius: 14px;
+  border: 1px solid rgba(127, 127, 127, 0.2);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0));
   color: inherit;
   font: inherit;
-  font-size: 0.88rem;
+  font-size: 0.86rem;
   cursor: pointer;
-  transition: background 0.14s ease;
+  transition:
+    transform 0.16s ease,
+    border-color 0.16s ease,
+    background 0.16s ease,
+    box-shadow 0.16s ease;
 }
 
-.choice-option:hover,
-.choice-option:focus-visible {
-  background: rgba(127, 127, 127, 0.14);
-  outline: none;
+[data-theme="light"] .choice-option {
+  border-color: rgba(15, 23, 42, 0.09);
+  background: #ffffff;
 }
 
-[data-theme="light"] .choice-option:hover,
-[data-theme="light"] .choice-option:focus-visible {
-  background: rgba(15, 23, 42, 0.06);
+.choice-option:hover {
+  transform: translateY(-1px);
+  border-color: var(--mention-color, #6ea8ff);
+  background: linear-gradient(180deg, rgba(110, 168, 255, 0.16), rgba(110, 168, 255, 0.05));
+  box-shadow:
+    0 10px 22px rgba(0, 0, 0, 0.18),
+    inset 0 0 0 1px rgba(110, 168, 255, 0.22);
+}
+
+[data-theme="light"] .choice-option:hover {
+  background: linear-gradient(180deg, rgba(37, 99, 235, 0.1), rgba(37, 99, 235, 0.03));
+  box-shadow:
+    0 10px 20px rgba(15, 23, 42, 0.1),
+    inset 0 0 0 1px rgba(37, 99, 235, 0.2);
 }
 
 .choice-option:active {
-  background: rgba(127, 127, 127, 0.2);
+  transform: translateY(0) scale(0.995);
+}
+
+.choice-option:focus-visible {
+  outline: 2px solid var(--mention-color, #6ea8ff);
+  outline-offset: 2px;
+}
+
+.choice-option::after {
+  content: "→";
+  margin-left: auto;
+  font-size: 0.95rem;
+  color: var(--mention-color, #6ea8ff);
+  opacity: 0;
+  transform: translateX(-5px);
+  transition:
+    opacity 0.16s ease,
+    transform 0.16s ease;
+}
+
+.choice-option:hover::after,
+.choice-option:focus-visible::after {
+  opacity: 1;
+  transform: translateX(0);
 }
 
 .choice-key {
   flex: none;
-  width: 24px;
-  height: 24px;
+  width: 26px;
+  height: 26px;
   display: grid;
   place-items: center;
-  border-radius: 8px;
-  background: rgba(127, 127, 127, 0.18);
-  color: var(--muted);
+  border-radius: 9px;
+  border: 1px solid rgba(110, 168, 255, 0.3);
+  background: rgba(110, 168, 255, 0.14);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  color: var(--mention-color, #6ea8ff);
   font-size: 0.74rem;
   font-weight: 700;
+  letter-spacing: 0.02em;
 }
 
 [data-theme="light"] .choice-key {
-  background: rgba(15, 23, 42, 0.07);
-  color: #475569;
+  border-color: rgba(37, 99, 235, 0.22);
+  background: rgba(37, 99, 235, 0.08);
+  color: #2563eb;
 }
 
 .choice-other .choice-key {
@@ -6383,197 +6469,16 @@ select option {
   gap: 8px;
   padding: 8px 12px;
   border-radius: 12px;
-  background: rgba(127, 127, 127, 0.12);
-  font-size: 0.84rem;
+  border: 1px dashed rgba(127, 127, 127, 0.3);
+  background: rgba(127, 127, 127, 0.1);
+  font-size: 0.82rem;
   color: var(--muted);
-}
-
-[data-theme="light"] .choice-answered {
-  background: rgba(15, 23, 42, 0.05);
 }
 
 .choice-answered::before {
   content: "✓";
   color: #22c55e;
   font-weight: 700;
-}
-
-/* Answered row: long answers ellipsize, the full text sits in the title. */
-.choice-answered-text {
-  max-width: 360px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* Locked (answering / awaiting composer text) and closed (expired/cancelled)
-   cards keep their rows visible but inert. The minimal card has no border,
-   lift, arrow or gradient to neutralise, so a disabled row only has to stop
-   taking the hover wash. */
-.choice-option:disabled {
-  cursor: default;
-  opacity: 0.55;
-}
-
-.choice-option:disabled:hover,
-.choice-option:disabled:focus-visible {
-  background: transparent;
-}
-
-.choice-note {
-  margin: 10px 2px 0;
-  font-size: 0.78rem;
-  color: var(--muted);
-}
-
-/* --- memory & knowledge modal (composer + menu; never inline in chat) --- */
-
-.memory-modal {
-  width: 620px;
-}
-
-.memory-body {
-  padding: 0 1.25rem 1.1rem;
-}
-
-.memory-section {
-  padding: 0.7rem 0;
-}
-
-.memory-section + .memory-section {
-  border-top: 1px solid var(--border);
-}
-
-.memory-section-title {
-  font-size: 0.9rem;
-  font-weight: 600;
-  margin-bottom: 0.55rem;
-}
-
-.memory-row {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.memory-row + .memory-row {
-  margin-top: 0.5rem;
-}
-
-.memory-input {
-  flex: 1;
-  min-width: 0;
-  font: inherit;
-  font-size: 0.88rem;
-  color: var(--text);
-  background: var(--input-bg);
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 0.42rem 0.7rem;
-}
-
-.memory-input::placeholder {
-  color: var(--muted);
-}
-
-.memory-input:focus-visible {
-  outline: 2px solid #8ab4ff;
-  outline-offset: 1px;
-}
-
-.memory-btn {
-  flex: none;
-  font: inherit;
-  font-size: 0.82rem;
-  color: var(--text);
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 0.34rem 0.9rem;
-  cursor: pointer;
-}
-
-.memory-btn:hover {
-  background: var(--item-hover);
-}
-
-.memory-btn:focus-visible {
-  outline: 2px solid #8ab4ff;
-  outline-offset: 1px;
-}
-
-.memory-item {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin-top: 0.5rem;
-  padding: 0.45rem 0.7rem;
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-}
-
-.memory-item-text {
-  flex: 1;
-  min-width: 0;
-  display: grid;
-  gap: 2px;
-  overflow-wrap: anywhere;
-}
-
-.memory-item-sub {
-  color: var(--muted);
-  font-size: 0.78rem;
-}
-
-.memory-notice {
-  color: var(--muted);
-  font-size: 0.8rem;
-  margin-top: 0.5rem;
-}
-
-.memory-policy-hint {
-  color: var(--muted);
-  font-size: 0.8rem;
-  margin-bottom: 0.55rem;
-}
-
-/* --- web_search result cards in the chat (titles/urls/snippets are untrusted text) --- */
-
-.search-result-cards {
-  margin: 10px auto 4px;
-  max-width: 440px;
-  display: grid;
-  gap: 8px;
-}
-
-.search-result-cards > section {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  padding: 10px 12px;
-  font-size: 0.85rem;
-}
-
-.search-result-cards section > div:first-child {
-  font-weight: 600;
-  margin-bottom: 6px;
-}
-
-.search-result-cards section > div + div {
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px solid var(--border);
-}
-
-.search-result-cards a {
-  color: var(--mention-color, #6ea8ff);
-  overflow-wrap: anywhere;
-}
-
-.search-result-cards [role="status"] {
-  color: var(--muted);
-  font-size: 0.8rem;
 }
 
 /* --- delivery notice (avatar stack) --- */
@@ -6887,6 +6792,10 @@ select option {
   background: var(--accent, #ffffff);
 }
 
+.choice-option:hover {
+  border-color: var(--accent, #6ea8ff);
+}
+
 .gs-item.active,
 .gs-item:focus-visible {
   background: color-mix(in srgb, var(--accent, #6ea8ff) 18%, transparent);
@@ -6954,14 +6863,6 @@ select option {
 }
 
 /* ---- Skills panel (D17) ---- */
-/* 工具栏里的按钮回到文档流：.ghost-btn 基类是 D02 头部的绝对定位胶囊 */
-.skills-toolbar .ghost-btn {
-  position: static;
-  right: auto;
-  top: auto;
-  transform: none;
-}
-
 .skills-panel {
   display: flex;
   flex-direction: column;
@@ -7147,9 +7048,362 @@ select:focus-visible {
   background: rgba(15, 23, 42, 0.06);
 }
 
-/* ============================================================
-   Skills (D17) — ⚡ composer menu: apply / delete / save draft.
-   ============================================================ */
+/* ---------- D28 产物画布共编侧车 ---------- */
+.canvas-sidecar {
+  width: min(420px, 38vw);
+  min-width: 300px;
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border-left: 1px solid var(--border);
+  background: var(--panel);
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.canvas-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.canvas-title-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.canvas-bot-chip {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.canvas-path {
+  font-family: Consolas, monospace;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.canvas-head-actions {
+  display: flex;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.canvas-meta {
+  color: var(--muted);
+}
+
+.canvas-editor {
+  flex: 1 1 auto;
+  min-height: 220px;
+  resize: none;
+  font-family: Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text);
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.canvas-editor:focus-visible {
+  outline: 2px solid var(--accent, #3b82f6);
+  outline-offset: 1px;
+}
+
+.canvas-preview {
+  flex: 1 1 auto;
+  min-height: 220px;
+  overflow-y: auto;
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 14px;
+}
+
+.canvas-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.canvas-toast {
+  font-size: 12px;
+  color: var(--text);
+  background: var(--item-active);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 10px;
+}
+
+.canvas-error {
+  margin: 0;
+}
+
+.canvas-stale {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text);
+  background: var(--item-hover);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 10px;
+}
+
+.canvas-blocked {
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  padding: 12px;
+}
+
+.canvas-versions {
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+}
+
+.canvas-versions-toggle {
+  /* .ghost-btn 基类是标题栏场景的绝对定位；侧车内的切换按钮必须回到普通流。 */
+  position: static;
+  transform: none;
+  width: 100%;
+  text-align: left;
+}
+
+.canvas-version-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.canvas-version-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: var(--raised);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 10px;
+}
+
+.canvas-version-actions {
+  display: flex;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+
+.canvas-version-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.canvas-version-preview .replay-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+/* 窄窗口：侧车收窄，编辑器仍可用 */
+@media (max-width: 1100px) {
+  .canvas-sidecar {
+    width: min(340px, 42vw);
+  }
+}
+
+/* ------------------------------------------------------------
+   Carried over from feature/choice-card-answer during the merge with
+   develop: memory modal, skills composer menu, choice-card answer
+   states and the search-result cards.
+   ------------------------------------------------------------ */
+
+.choice-answered-text {
+  max-width: 360px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.choice-option:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.choice-option:disabled:focus-visible {
+  background: transparent;
+}
+
+.choice-note {
+  margin: 10px 2px 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.memory-modal {
+  width: 620px;
+}
+
+.memory-body {
+  padding: 0 1.25rem 1.1rem;
+}
+
+.memory-section {
+  padding: 0.7rem 0;
+}
+
+.memory-section + .memory-section {
+  border-top: 1px solid var(--border);
+}
+
+.memory-section-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin-bottom: 0.55rem;
+}
+
+.memory-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.memory-row + .memory-row {
+  margin-top: 0.5rem;
+}
+
+.memory-input {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-size: 0.88rem;
+  color: var(--text);
+  background: var(--input-bg);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0.42rem 0.7rem;
+}
+
+.memory-input::placeholder {
+  color: var(--muted);
+}
+
+.memory-input:focus-visible {
+  outline: 2px solid #8ab4ff;
+  outline-offset: 1px;
+}
+
+.memory-btn {
+  flex: none;
+  font: inherit;
+  font-size: 0.82rem;
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.34rem 0.9rem;
+  cursor: pointer;
+}
+
+.memory-btn:hover {
+  background: var(--item-hover);
+}
+
+.memory-btn:focus-visible {
+  outline: 2px solid #8ab4ff;
+  outline-offset: 1px;
+}
+
+.memory-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  padding: 0.45rem 0.7rem;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.memory-item-text {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+  overflow-wrap: anywhere;
+}
+
+.memory-item-sub {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.memory-notice {
+  color: var(--muted);
+  font-size: 0.8rem;
+  margin-top: 0.5rem;
+}
+
+.memory-policy-hint {
+  color: var(--muted);
+  font-size: 0.8rem;
+  margin-bottom: 0.55rem;
+}
+
+.search-result-cards {
+  margin: 10px auto 4px;
+  max-width: 440px;
+  display: grid;
+  gap: 8px;
+}
+
+.search-result-cards > section {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 10px 12px;
+  font-size: 0.85rem;
+}
+
+.search-result-cards section > div:first-child {
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.search-result-cards section > div + div {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.search-result-cards a {
+  color: var(--mention-color, #6ea8ff);
+  overflow-wrap: anywhere;
+}
+
+.search-result-cards [role="status"] {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.skills-toolbar .ghost-btn {
+  position: static;
+  right: auto;
+  top: auto;
+  transform: none;
+}
 
 .composer-skill {
   font-size: 0.9rem;
@@ -7213,3 +7467,4 @@ select:focus-visible {
   opacity: 0.45;
   cursor: default;
 }
+
