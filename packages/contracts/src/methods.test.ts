@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  MAX_ARTIFACT_CONTENT_BYTES,
   MAX_MESSAGE_BYTES,
   METHODS,
   METHOD_CONTRACTS,
@@ -26,13 +27,14 @@ describe("method whitelist", () => {
   it("defines a contract for every whitelisted method and nothing else", () => {
     const contractMethods = Object.keys(METHOD_CONTRACTS).sort();
     expect(contractMethods).toEqual([...METHODS].sort());
-    expect(METHODS).toHaveLength(63);
+    expect(METHODS).toHaveLength(69);
   });
 
   it("covers every method group from CONTRACTS §3", () => {
     const groups = new Set(METHODS.map((method) => method.split(".")[0]));
     expect([...groups].sort()).toEqual([
       "approval",
+      "artifacts",
       "bot",
       "chat",
       "connector",
@@ -57,17 +59,18 @@ describe("method whitelist", () => {
 });
 
 describe("protocol version", () => {
-  it("accepts v0.3 and previous v0.1/v0.2 senders", () => {
+  it("accepts v0.4 and previous v0.1–v0.3 senders", () => {
     expect(isProtocolVersionSupported("0.2")).toBe(true);
     expect(isProtocolVersionSupported("0.1")).toBe(true);
     expect(isProtocolVersionSupported("0.3")).toBe(true);
-    expect(isProtocolVersionSupported("0.4")).toBe(false);
+    expect(isProtocolVersionSupported("0.4")).toBe(true);
+    expect(isProtocolVersionSupported("0.5")).toBe(false);
     expect(isProtocolVersionSupported("1.0")).toBe(false);
   });
 
   it("rejects unknown or higher protocol versions outright", () => {
     const result = RequestEnvelopeSchema.safeParse({
-      protocolVersion: "0.4",
+      protocolVersion: "0.5",
       requestId: REQUEST_ID,
       method: "bot.list",
       payload: {},
@@ -269,6 +272,53 @@ describe("parseRequest", () => {
       parseRequest(envelope("creation.revoke", { batchId: "nope" }), "creation.revoke")
         .success,
     ).toBe(false);
+  });
+
+  it("validates artifacts.save payloads and rejects traversal paths (D28)", () => {
+    const botId = "11111111-1111-4111-8111-111111111111";
+    expect(
+      parseRequest(
+        envelope("artifacts.save", {
+          botId,
+          path: "notes/todo.md",
+          content: "# hello",
+        }),
+        "artifacts.save",
+      ).success,
+    ).toBe(true);
+    expect(
+      parseRequest(
+        envelope("artifacts.save", {
+          botId,
+          path: "notes/todo.md",
+          content: "# hello",
+          expectedChecksum: "a".repeat(64),
+        }),
+        "artifacts.save",
+      ).success,
+    ).toBe(true);
+    for (const traversal of ["../escape.md", "a/../../b.md", "C:\\abs.md", "/abs.md", "a//b.md"]) {
+      expect(
+        parseRequest(
+          envelope("artifacts.read", { botId, path: traversal }),
+          "artifacts.read",
+        ).success,
+        `expected traversal rejection for ${traversal}`,
+      ).toBe(false);
+    }
+  });
+
+  it("rejects artifact content above the co-edit budget (D28)", () => {
+    expect(MAX_ARTIFACT_CONTENT_BYTES).toBeLessThan(MAX_MESSAGE_BYTES);
+    const result = parseRequest(
+      envelope("artifacts.save", {
+        botId: "11111111-1111-4111-8111-111111111111",
+        path: "notes/todo.md",
+        content: "x".repeat(MAX_ARTIFACT_CONTENT_BYTES + 1),
+      }),
+      "artifacts.save",
+    );
+    expect(result.success).toBe(false);
   });
 
   it("validates knowledge payloads (D18 independent knowledge table)", () => {

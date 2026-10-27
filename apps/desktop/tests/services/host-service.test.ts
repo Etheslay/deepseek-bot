@@ -177,3 +177,77 @@ describe("host-backed chat", () => {
   });
 });
 
+describe("host-backed artifacts (D28 co-edit)", () => {
+  const artifact = {
+    relativePath: "notes/todo.md",
+    mediaType: "text/markdown",
+    size: 9,
+    updatedAt: "2026-10-26T00:00:00.000Z",
+    checksum: { algorithm: "sha256" as const, value: "a".repeat(64) },
+  };
+  const version = {
+    id: "33333333-3333-4333-8333-333333333333",
+    botId: bot.id,
+    relativePath: "notes/todo.md",
+    revision: 1,
+    author: "user" as const,
+    mediaType: "text/markdown",
+    size: 9,
+    checksum: { algorithm: "sha256" as const, value: "a".repeat(64) },
+    createdAt: "2026-10-26T00:00:00.000Z",
+  };
+
+  it("routes the six artifacts methods to the host contract names", async () => {
+    const { bridge, calls } = makeBridge({
+      "artifacts.list": () => ({ artifacts: [artifact] }),
+      "artifacts.read": () => ({ kind: "text", mediaType: "text/markdown", checksum: artifact.checksum, content: "# t\n" }),
+      "artifacts.save": () => ({ artifact, version }),
+      "artifacts.versions": () => ({ versions: [version] }),
+      "artifacts.versionContent": () => ({ kind: "text", mediaType: "text/markdown", content: "old" }),
+      "artifacts.revert": () => ({ artifact, version }),
+    });
+    const service = createHostService(bridge);
+    await service.artifacts.list(bot.id);
+    await service.artifacts.read(bot.id, "notes/todo.md");
+    await service.artifacts.save(bot.id, "notes/todo.md", "# t\n", "a".repeat(64));
+    await service.artifacts.versions(bot.id, "notes/todo.md");
+    await service.artifacts.versionContent(bot.id, "notes/todo.md", version.id);
+    await service.artifacts.revert(bot.id, "notes/todo.md", version.id);
+    expect(calls.map((call) => call.method)).toEqual([
+      "artifacts.list",
+      "artifacts.read",
+      "artifacts.save",
+      "artifacts.versions",
+      "artifacts.versionContent",
+      "artifacts.revert",
+    ]);
+    expect(calls[2]!.payload).toEqual({
+      botId: bot.id,
+      path: "notes/todo.md",
+      content: "# t\n",
+      expectedChecksum: "a".repeat(64),
+    });
+  });
+
+  it("omits expectedChecksum for blind saves", async () => {
+    const { bridge, calls } = makeBridge({
+      "artifacts.save": () => ({ artifact, version }),
+    });
+    const service = createHostService(bridge);
+    await service.artifacts.save(bot.id, "notes/todo.md", "# t\n");
+    expect(calls[0]!.payload).toEqual({ botId: bot.id, path: "notes/todo.md", content: "# t\n" });
+  });
+
+  it("maps host error codes onto ServiceError (REVISION_CONFLICT)", async () => {
+    const { bridge } = makeBridge({
+      "artifacts.save": () => {
+        throw Object.assign(new Error("文件被修改"), { code: "REVISION_CONFLICT" });
+      },
+    });
+    const service = createHostService(bridge);
+    await expect(service.artifacts.save(bot.id, "notes/todo.md", "# t\n", "a".repeat(64))).rejects.toMatchObject({
+      code: "REVISION_CONFLICT",
+    });
+  });
+});
+

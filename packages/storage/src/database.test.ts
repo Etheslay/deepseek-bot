@@ -28,13 +28,19 @@ describe("openDatabase migrations", () => {
     raw.exec("INSERT INTO settings VALUES ('preserved', '{\"value\":42}', '2026-10-24T00:00:00.000Z')");
     raw.close();
     const upgraded = openDatabase(layout.dbFile);
-    expect(upgraded.schemaVersion).toBe(11);
+    expect(upgraded.schemaVersion).toBe(MIGRATIONS.length);
     expect(
       upgraded.raw.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'memories'").get(),
     ).toMatchObject({ name: "memories" });
     expect(
       upgraded.raw.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'connectors'").get(),
     ).toMatchObject({ name: "connectors" });
+    expect(
+      upgraded.raw.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'knowledge_docs'").get(),
+    ).toMatchObject({ name: "knowledge_docs" });
+    expect(
+      upgraded.raw.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'artifact_versions'").get(),
+    ).toMatchObject({ name: "artifact_versions" });
     expect(upgraded.raw.prepare("SELECT value_json FROM settings WHERE key = 'preserved'").get()).toMatchObject({ value_json: '{"value":42}' });
     expect(upgraded.raw.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('permission_grants','permission_audit','app_approvals','permission_authorizations')").all()).toHaveLength(4);
     expect(upgraded.raw.prepare("SELECT checksum FROM schema_migrations WHERE id <= 4 ORDER BY id").all().map(row => row.checksum)).toEqual(checksums);

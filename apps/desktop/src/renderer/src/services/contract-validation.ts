@@ -7,12 +7,16 @@
  */
 import {
   ArtifactSchema,
+  ArtifactVersionSchema,
+  BotArtifactSchema,
   BotSchema,
   EventEnvelopeSchema,
   ModelProfileSchema,
   isWithinMessageSizeLimit,
   type Artifact,
+  type ArtifactVersion,
   type Bot,
+  type BotArtifact,
   type EventEnvelope,
   type ModelProfile,
 } from "@deepseek-bot/contracts";
@@ -51,6 +55,12 @@ export const validateModelProfile = (value: unknown): ContractResult<ModelProfil
 
 export const validateArtifact = (value: unknown): ContractResult<Artifact> =>
   parse<Artifact>(ArtifactSchema.safeParse.bind(ArtifactSchema), value);
+
+export const validateBotArtifact = (value: unknown): ContractResult<BotArtifact> =>
+  parse<BotArtifact>(BotArtifactSchema.safeParse.bind(BotArtifactSchema), value);
+
+export const validateArtifactVersion = (value: unknown): ContractResult<ArtifactVersion> =>
+  parse<ArtifactVersion>(ArtifactVersionSchema.safeParse.bind(ArtifactVersionSchema), value);
 
 export const validateEventEnvelope = (value: unknown): ContractResult<EventEnvelope> =>
   parse<EventEnvelope>(EventEnvelopeSchema.safeParse.bind(EventEnvelopeSchema), value);

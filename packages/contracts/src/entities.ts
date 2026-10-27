@@ -524,3 +524,107 @@ export const ArtifactSchema = z.object({
 });
 
 export type Artifact = z.infer<typeof ArtifactSchema>;
+
+// ---------------------------------------------------------------------------
+// Bot workspace artifact (D28 co-edit sidecar)
+// ---------------------------------------------------------------------------
+
+/**
+ * One editable file in a bot's workspace directory. Unlike the run-scoped
+ * {@link ArtifactSchema}, a workspace artifact has no run identity: it is
+ * addressed by (botId, relativePath) and co-edited by the user and the bot.
+ */
+export const BotArtifactSchema = z.object({
+  relativePath: RelativeArtifactPathSchema,
+  mediaType: MediaTypeSchema,
+  size: z.int().nonnegative(),
+  updatedAt: IsoDateTimeUtcSchema,
+  checksum: z.object({
+    algorithm: z.literal("sha256"),
+    value: Sha256HexSchema,
+  }),
+});
+
+export type BotArtifact = z.infer<typeof BotArtifactSchema>;
+
+/**
+ * One immutable version of a workspace artifact. `author` records who produced
+ * the content: "user" for sidecar saves and reverts, "bot" for content the
+ * Host observed in the workspace that no version recorded yet (lazy capture —
+ * the Harness writes workspace files directly, outside any method call).
+ */
+export const ArtifactVersionSchema = z.object({
+  id: UuidSchema,
+  botId: UuidSchema,
+  relativePath: RelativeArtifactPathSchema,
+  revision: z.int().min(1),
+  author: z.enum(["user", "bot"]),
+  mediaType: MediaTypeSchema,
+  size: z.int().nonnegative(),
+  checksum: z.object({
+    algorithm: z.literal("sha256"),
+    value: Sha256HexSchema,
+  }),
+  createdAt: IsoDateTimeUtcSchema,
+});
+
+export type ArtifactVersion = z.infer<typeof ArtifactVersionSchema>;
+
+/** Extensions the Host maps to inline-editable text media types (D28). */
+const TEXT_MEDIA_EXTENSIONS: Readonly<Record<string, string>> = {
+  ".md": "text/markdown",
+  ".markdown": "text/markdown",
+  ".txt": "text/plain",
+  ".json": "application/json",
+  ".csv": "text/csv",
+  ".yaml": "text/yaml",
+  ".yml": "text/yaml",
+  ".xml": "text/xml",
+};
+
+const IMAGE_MEDIA_EXTENSIONS: Readonly<Record<string, string>> = {
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".gif": "image/gif",
+  ".webp": "image/webp",
+  ".svg": "image/svg+xml",
+};
+
+/**
+ * Media type for a workspace file path. Unknown extensions are binary
+ * (application/octet-stream); HTML keeps its type but is never editable
+ * (QA-14: no inline script execution).
+ */
+export function artifactMediaTypeForPath(relativePath: string): string {
+  const lower = relativePath.toLowerCase();
+  if (lower.endsWith(".html") || lower.endsWith(".htm")) {
+    return "text/html";
+  }
+  const dot = lower.lastIndexOf(".");
+  if (dot < 0) {
+    return "application/octet-stream";
+  }
+  const extension = lower.slice(dot);
+  return (
+    TEXT_MEDIA_EXTENSIONS[extension] ??
+    IMAGE_MEDIA_EXTENSIONS[extension] ??
+    "application/octet-stream"
+  );
+}
+
+/**
+ * Whether a media type can be opened in the co-edit editor. text/html is
+ * deliberately excluded: rendering user-editable HTML would let a document
+ * execute scripts inside the renderer (QA-14).
+ */
+export function isTextEditableMediaType(mediaType: string): boolean {
+  return (
+    mediaType === "text/markdown" ||
+    mediaType === "text/plain" ||
+    mediaType === "application/json" ||
+    mediaType === "text/csv" ||
+    mediaType === "text/yaml" ||
+    mediaType === "text/xml"
+  );
+}

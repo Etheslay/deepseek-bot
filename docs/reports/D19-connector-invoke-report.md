@@ -8,7 +8,7 @@ D19 登记片（[D19-connector-registry-report](D19-connector-registry-report.md
 
 | 块 | 实现 |
 | --- | --- |
-| 端点配置 | 迁移 `0011-connectors-endpoint`：`connectors.endpoint` 列；受信方法 `connector.setEndpoint`（清除传 null）。**只接受回环 http(s) URL**（127.0.0.1 / localhost / [::1]、不带路径），存储层校验——存量数据无论怎么写都不可能把 Host 指向远程目标；登记时可带端点，管理从不探测、从不出站 |
+| 端点配置 | 迁移 `0012-connectors-endpoint`：`connectors.endpoint` 列；受信方法 `connector.setEndpoint`（清除传 null）。**只接受回环 http(s) URL**（127.0.0.1 / localhost / [::1]、不带路径），存储层校验——存量数据无论怎么写都不可能把 Host 指向远程目标；登记时可带端点，管理从不探测、从不出站 |
 | 模型工具 | `connector_invoke`（能力 `connector.invoke`，默认 ask）：严格 schema `{ connectorId, action: "txt2img", params }`；每次调用经 D16 检查点带精确参数审批；模型不能登记连接器、不能改端点、不能读目录（`connector.*` 控制面仍只对桌面开放）。走新的 `/connectors` 通道路由，桥接插件目录名单同步 |
 | 官方动作 | `txt2img` → 本机 SD WebUI API `POST {endpoint}/sdapi/v1/txt2img`（prompt/negativePrompt/width/height/steps，batch_size 固定 1，120 秒超时）。响应取首张 base64 图片，解码后 ≤8 MiB，落盘 `<dataRoot>/connector-outputs/<connectorId>/<日期>-<uuid>.png`，返回绝对路径 + 字节数——**图片字节不进契约信封**（1 MiB 上限），错误信息脱敏（不带响应体/堆栈） |
 | 产物边界 | `connector-outputs/` 是数据根新目录（layout 保障创建）；**不进备份**（可再生成，备份清单语义不变）；与 run 产物系统（runId 域）完全分离。聊天内图片预览的展示通道归 B 线（D26/D28），本片只交付落盘与路径 |
