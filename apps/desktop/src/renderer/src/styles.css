@@ -6522,6 +6522,156 @@ select option {
   color: var(--muted);
 }
 
+/* --- memory & knowledge modal (composer + menu; never inline in chat) --- */
+
+.memory-modal {
+  width: 620px;
+}
+
+.memory-body {
+  padding: 0 1.25rem 1.1rem;
+}
+
+.memory-section {
+  padding: 0.7rem 0;
+}
+
+.memory-section + .memory-section {
+  border-top: 1px solid var(--border);
+}
+
+.memory-section-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin-bottom: 0.55rem;
+}
+
+.memory-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.memory-row + .memory-row {
+  margin-top: 0.5rem;
+}
+
+.memory-input {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-size: 0.88rem;
+  color: var(--text);
+  background: var(--input-bg);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0.42rem 0.7rem;
+}
+
+.memory-input::placeholder {
+  color: var(--muted);
+}
+
+.memory-input:focus-visible {
+  outline: 2px solid #8ab4ff;
+  outline-offset: 1px;
+}
+
+.memory-btn {
+  flex: none;
+  font: inherit;
+  font-size: 0.82rem;
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.34rem 0.9rem;
+  cursor: pointer;
+}
+
+.memory-btn:hover {
+  background: var(--item-hover);
+}
+
+.memory-btn:focus-visible {
+  outline: 2px solid #8ab4ff;
+  outline-offset: 1px;
+}
+
+.memory-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  padding: 0.45rem 0.7rem;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.memory-item-text {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+  overflow-wrap: anywhere;
+}
+
+.memory-item-sub {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.memory-notice {
+  color: var(--muted);
+  font-size: 0.8rem;
+  margin-top: 0.5rem;
+}
+
+.memory-policy-hint {
+  color: var(--muted);
+  font-size: 0.8rem;
+  margin-bottom: 0.55rem;
+}
+
+/* --- web_search result cards in the chat (titles/urls/snippets are untrusted text) --- */
+
+.search-result-cards {
+  margin: 10px auto 4px;
+  max-width: 440px;
+  display: grid;
+  gap: 8px;
+}
+
+.search-result-cards > section {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 10px 12px;
+  font-size: 0.85rem;
+}
+
+.search-result-cards section > div:first-child {
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.search-result-cards section > div + div {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.search-result-cards a {
+  color: var(--mention-color, #6ea8ff);
+  overflow-wrap: anywhere;
+}
+
+.search-result-cards [role="status"] {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
 /* --- delivery notice (avatar stack) --- */
 
 .deliver-notice {

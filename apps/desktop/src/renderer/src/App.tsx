@@ -2454,6 +2454,7 @@ function BotsPlaceholder({
   const [answeredChoices, setAnsweredChoices] = useState<Record<number, string>>({});
   const [answeredQuestions, setAnsweredQuestions] = useState<AnsweredQuestionMap>({});
   const [clarify, setClarify] = useState<ClarifyTarget | null>(null);
+  const [memoryOpen, setMemoryOpen] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<AttachmentDraft[]>([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const streamRef = useRef<StreamHandle | null>(null);
@@ -2883,7 +2884,6 @@ function BotsPlaceholder({
           }
         />
         <SearchResultCards botId={me.bot.id} />
-        <MemoryPanel botId={me.bot.id} />
         <PermissionChatCards botId={me.bot.id} />
       </div>
       {pendingFiles.length > 0 && (
@@ -2968,6 +2968,18 @@ function BotsPlaceholder({
                   <MenuIcon d="M21 12.5 12.5 21a5 5 0 0 1-7-7l8-8a3.5 3.5 0 0 1 5 5l-8 8a1.8 1.8 0 0 1-2.5-2.5L15 4.5" />
                   添加附件
                 </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="menu-item"
+                  onClick={() => {
+                    setPlusOpen(false);
+                    setMemoryOpen(true);
+                  }}
+                >
+                  <MenuIcon d="M7 3.5h10a1 1 0 0 1 1 1V20l-6-3.8-6 3.8V4.5a1 1 0 0 1 1-1Z" />
+                  记忆与知识
+                </button>
                 <div className="menu-sep" />
                 <div className="menu-sub-wrap">
                   <button
@@ -3038,7 +3050,9 @@ function BotsPlaceholder({
           ↑
         </button>
       </div>
-
+      {memoryOpen && (
+        <MemoryPanel botId={me.bot.id} onClose={() => setMemoryOpen(false)} />
+      )}
     </div>
   );
 }

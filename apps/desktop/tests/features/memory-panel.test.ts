@@ -68,7 +68,7 @@ describe("memory panel", () => {
     const root = createRoot(container);
     roots.push(root);
     await act(async () => {
-      root.render(createElement(MemoryPanel, { botId: BOT }));
+      root.render(createElement(MemoryPanel, { botId: BOT, onClose: () => undefined }));
     });
     await act(async () => {
       await Promise.resolve();
@@ -156,7 +156,7 @@ describe("memory panel", () => {
     const root = createRoot(container);
     roots.push(root);
     await act(async () => {
-      root.render(createElement(MemoryPanel, { botId: BOT }));
+      root.render(createElement(MemoryPanel, { botId: BOT, onClose: () => undefined }));
     });
     await act(async () => {
       click(container, "导入知识");
@@ -205,7 +205,7 @@ describe("memory panel", () => {
     const root = createRoot(container);
     roots.push(root);
     await act(async () => {
-      root.render(createElement(MemoryPanel, { botId: BOT }));
+      root.render(createElement(MemoryPanel, { botId: BOT, onClose: () => undefined }));
     });
     const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
     const search = container.querySelector('input[aria-label="检索知识"]');
@@ -248,7 +248,7 @@ describe("memory panel", () => {
     const root = createRoot(container);
     roots.push(root);
     await act(async () => {
-      root.render(createElement(MemoryPanel, { botId: BOT }));
+      root.render(createElement(MemoryPanel, { botId: BOT, onClose: () => undefined }));
     });
     await act(async () => {
       await Promise.resolve();
