@@ -104,9 +104,9 @@ export function ConnectorSettings(): JSX.Element {
     <>
       <div className="settings-section-title">{t("connectors.sectionTitle")}</div>
       <div className="settings-card">
-        <div className="settings-row">
-          <span>{t("runs.name")}</span>
-          <span className="key-input-wrap">
+        <div className="settings-row connector-register">
+          <span className="connector-register-label">{t("connectors.registerLabel")}</span>
+          <span className="connector-fields">
             <select
               aria-label={t("connectors.kindLabel")}
               className="settings-select"
@@ -119,6 +119,7 @@ export function ConnectorSettings(): JSX.Element {
             <input
               aria-label={t("connectors.name")}
               className="settings-select key-input"
+              placeholder={t("connectors.namePlaceholder")}
               value={name}
               onChange={(event) => setName(event.target.value)}
             />
@@ -188,7 +189,7 @@ function ConnectorRow({
     <div className="settings-row">
       <span>{connector.name}</span>
       <span>{connector.enabled ? t("automation.statusEnabled") : t("automation.statusDisabled")}</span>
-      <span className="key-input-wrap">
+      <span className="connector-fields">
         <input
           aria-label={t("connectors.endpointAria", [connector.name])}
           className="settings-select key-input"
