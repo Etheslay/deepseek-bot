@@ -32,7 +32,7 @@ await result; // { requestId, optionId: "A", text: "整理资料" }
 
 `userQuestions.cancel(requestId, callerId)` 与调用的 `AbortSignal` 以 `CANCELLED` 结束等待。等待 30 分钟后以 `TOOL_TIMEOUT` 结束；回答入口也会检查期限，迟到答案不能抢在延迟的定时器前生效。Host 关闭以 `RUNTIME_UNAVAILABLE` 结束全部等待，同时清除定时器与监听器；重启不恢复问题。此时上层需要重新发起提问。
 
-问题与答案只存在 Host 内存，重启不恢复。JSONL 审计沿用网关的参数/结果 SHA-256 摘要，错误消息使用固定文本。桌面用受信方法 `question.list` / `question.answer` 读取当前 bot 的等待并提交选项或自由文本；成功答案写入该 bot 的用户聊天记录，同时作为工具结果返回。模型目录不包含这两个方法。`/app-tools` 仍只登记八个应用工具，`ask_user` 走单独的 `/ask-user` 路由。
+问题与答案的等待仍只存在 Host 内存，重启不恢复。JSONL 审计沿用网关的参数/结果 SHA-256 摘要，错误消息使用固定文本。桌面用受信方法 `question.list` / `question.answer` 读取当前 bot 的等待并提交选项或自由文本；成功答案写入该 bot 的用户聊天记录，同时作为工具结果返回，提问文本也会在成功回答时以助手记录落库（选项 A–C 用模型原文，D 一律以 `以上都不是` 展示与落库，不信任模型给的 D 标签）。模型目录不包含这两个方法。`/app-tools` 仍只登记八个应用工具，`ask_user` 走单独的 `/ask-user` 路由。
 
 ## `web_search` 后端切片
 

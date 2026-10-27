@@ -4,6 +4,9 @@
  * list/import/search/delete through trusted knowledge methods; the
  * retention policy (保留策略) edits the shared memory.retention settings
  * key. All text is rendered as text, never HTML.
+ *
+ * Management lives behind the composer "+" menu as a modal — the chat flow
+ * itself stays clean; the bot reads and writes memory through its tools.
  */
 import { useCallback, useEffect, useRef, useState, type JSX } from "react";
 import { METHOD_CONTRACTS } from "@deepseek-bot/contracts";
@@ -45,13 +48,27 @@ function importNotice(code: "format" | "size" | "empty" | "encoding" | "read"): 
   return "无法读取该文件";
 }
 
-export function MemoryPanel({ botId }: { botId: string }): JSX.Element {
+export function MemoryPanel({ botId, onClose }: { botId: string; onClose: () => void }): JSX.Element {
   return (
-    <section className="memory-panel" aria-label="记忆">
-      <BotMemory key={botId} botId={botId} />
-      <KnowledgeSection key={`k-${botId}`} botId={botId} />
-      <RetentionControls />
-    </section>
+    <div className="modal-backdrop" onClick={onClose}>
+      <section
+        className="modal memory-modal"
+        aria-label="记忆与知识"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <header className="modal-head">
+          <h3>记忆与知识</h3>
+          <button type="button" className="modal-close" aria-label="关闭" onClick={onClose}>
+            ×
+          </button>
+        </header>
+        <div className="memory-body">
+          <BotMemory key={botId} botId={botId} />
+          <KnowledgeSection key={`k-${botId}`} botId={botId} />
+          <RetentionControls />
+        </div>
+      </section>
+    </div>
   );
 }
 
@@ -127,27 +144,38 @@ function BotMemory({ botId }: { botId: string }): JSX.Element {
   }
 
   return (
-    <div>
-      <div>
+    <div className="memory-section">
+      <div className="memory-section-title">记忆</div>
+      <div className="memory-row">
         <input
+          className="memory-input"
           aria-label="记忆内容"
+          placeholder="给这个 bot 记一条笔记"
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
         />
-        <button type="button" onClick={() => void save()}>
+        <button type="button" className="memory-btn" onClick={() => void save()}>
           保存记忆
         </button>
       </div>
-      <input
-        aria-label="检索记忆"
-        value={query}
-        onChange={(event) => setQuery(event.target.value)}
-      />
-      {notice !== null ? <div role="status">{notice}</div> : null}
+      <div className="memory-row">
+        <input
+          className="memory-input"
+          aria-label="检索记忆"
+          placeholder="检索记忆"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+        />
+      </div>
+      {notice !== null ? (
+        <div className="memory-notice" role="status">
+          {notice}
+        </div>
+      ) : null}
       {(memories ?? []).map((memory) => (
-        <div key={memory.id}>
-          <div>{memory.text}</div>
-          <button type="button" onClick={() => void remove(memory.id)}>
+        <div className="memory-item" key={memory.id}>
+          <span className="memory-item-text">{memory.text}</span>
+          <button type="button" className="memory-btn" onClick={() => void remove(memory.id)}>
             删除
           </button>
         </div>
@@ -245,34 +273,48 @@ function KnowledgeSection({ botId }: { botId: string }): JSX.Element {
   }
 
   return (
-    <div>
-      <div>
-        <button type="button" onClick={() => void importFile()}>
+    <div className="memory-section">
+      <div className="memory-section-title">知识库</div>
+      <div className="memory-row">
+        <button type="button" className="memory-btn" onClick={() => void importFile()}>
           导入知识
         </button>
         <input
+          className="memory-input"
           aria-label="检索知识"
+          placeholder="检索知识"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
         />
-        <button type="button" onClick={() => void search()}>
+        <button type="button" className="memory-btn" onClick={() => void search()}>
           搜索知识
         </button>
       </div>
-      {notice !== null ? <div role="status">{notice}</div> : null}
+      {notice !== null ? (
+        <div className="memory-notice" role="status">
+          {notice}
+        </div>
+      ) : null}
       {(hits ?? []).map((hit) => (
-        <div key={`${hit.docId}:${hit.at}:${hit.snippet}`}>
-          <div>{hit.title}</div>
-          <div>{hit.snippet}</div>
+        <div className="memory-item" key={`${hit.docId}:${hit.at}:${hit.snippet}`}>
+          <span className="memory-item-text">
+            {hit.title}
+            <span className="memory-item-sub">{hit.snippet}</span>
+          </span>
         </div>
       ))}
-      {hits !== null && hits.length === 0 ? <div role="status">没有匹配的知识</div> : null}
+      {hits !== null && hits.length === 0 ? (
+        <div className="memory-notice" role="status">
+          没有匹配的知识
+        </div>
+      ) : null}
       {(docs ?? []).map((doc) => (
-        <div key={doc.id}>
-          <div>
-            {doc.title}（{doc.size} 字）
-          </div>
-          <button type="button" onClick={() => void remove(doc.id)}>
+        <div className="memory-item" key={doc.id}>
+          <span className="memory-item-text">
+            {doc.title}
+            <span className="memory-item-sub">{doc.size} 字</span>
+          </span>
+          <button type="button" className="memory-btn" onClick={() => void remove(doc.id)}>
             删除
           </button>
         </div>
@@ -327,27 +369,37 @@ function RetentionControls(): JSX.Element {
   }
 
   return (
-    <div>
-      <div>保留策略（0 表示不限制；超限或过期会在保存后清理）</div>
-      <input
-        aria-label="记忆保留天数"
-        value={policy.retentionDays}
-        onChange={(event) => update("retentionDays", event.target.value)}
-      />
-      <input
-        aria-label="每bot记忆上限"
-        value={policy.memoryMaxPerBot}
-        onChange={(event) => update("memoryMaxPerBot", event.target.value)}
-      />
-      <input
-        aria-label="每bot知识上限"
-        value={policy.knowledgeMaxPerBot}
-        onChange={(event) => update("knowledgeMaxPerBot", event.target.value)}
-      />
-      <button type="button" onClick={() => void save()}>
-        保存策略
-      </button>
-      {notice !== null ? <div role="status">{notice}</div> : null}
+    <div className="memory-section">
+      <div className="memory-section-title">保留策略</div>
+      <div className="memory-policy-hint">0 表示不限制；超限或过期会在保存后清理。</div>
+      <div className="memory-row">
+        <input
+          className="memory-input"
+          aria-label="记忆保留天数"
+          value={policy.retentionDays}
+          onChange={(event) => update("retentionDays", event.target.value)}
+        />
+        <input
+          className="memory-input"
+          aria-label="每bot记忆上限"
+          value={policy.memoryMaxPerBot}
+          onChange={(event) => update("memoryMaxPerBot", event.target.value)}
+        />
+        <input
+          className="memory-input"
+          aria-label="每bot知识上限"
+          value={policy.knowledgeMaxPerBot}
+          onChange={(event) => update("knowledgeMaxPerBot", event.target.value)}
+        />
+        <button type="button" className="memory-btn" onClick={() => void save()}>
+          保存策略
+        </button>
+      </div>
+      {notice !== null ? (
+        <div className="memory-notice" role="status">
+          {notice}
+        </div>
+      ) : null}
     </div>
   );
 }

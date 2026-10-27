@@ -24,6 +24,8 @@ export interface DataLayout {
   readonly logs: string;
   readonly cache: string;
   readonly credentials: string;
+  /** Generated connector outputs (D19, e.g. SD images); not backed up. */
+  readonly connectorOutputs: string;
 }
 
 /**
@@ -92,6 +94,7 @@ export function ensureDataLayout(root: string): DataLayout {
     logs: path.join(root, "logs"),
     cache: path.join(root, "cache"),
     credentials: path.join(root, "credentials"),
+    connectorOutputs: path.join(root, "connector-outputs"),
   };
   try {
     const stat = fs.statSync(layout.root);
@@ -113,6 +116,7 @@ export function ensureDataLayout(root: string): DataLayout {
     layout.logs,
     layout.cache,
     layout.credentials,
+    layout.connectorOutputs,
   ]) {
     try {
       fs.mkdirSync(dir, { recursive: true });

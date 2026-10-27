@@ -29,6 +29,8 @@ export interface ToolContext {
   readonly caller: ToolCaller;
   readonly signal?: AbortSignal;
   readonly networkPermissions?: ToolNetworkPermissions;
+  /** Trusted lease recheck before a side effect after asynchronous preparation. */
+  readonly revalidateAuthorization?: () => void;
 }
 
 export interface ToolCallOptions {
@@ -75,6 +77,8 @@ export interface ToolCapability<S extends z.ZodType = z.ZodType> {
   readonly description: string;
   readonly inputSchema: S;
   readonly handler: (params: z.output<S>, context: ToolContext) => Promise<unknown> | unknown;
+  /** Protocol-level failures may return useful content while still needing an error audit. */
+  readonly resultFailed?: (result: unknown) => boolean;
 }
 
 export interface GrantCheckResult {

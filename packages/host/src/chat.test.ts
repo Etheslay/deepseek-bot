@@ -1,4 +1,5 @@
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -26,6 +27,7 @@ afterAll(async () => {
 async function hostWithBot(
   scenario = "ok",
   resolveApiKey: () => Promise<string> = async () => "sk-test-only",
+  extraEnv: Record<string, string> = {},
 ): Promise<{ host: DeepSeekBotHost; botId: string }> {
   const root = mkdtempSync(join(tmpdir(), "dsb-chat-runtime-"));
   roots.push(root);
@@ -33,7 +35,7 @@ async function hostWithBot(
     dataRoot: root,
     resolveApiKey,
     dshBin: fakeHarness,
-    childEnv: (parent) => ({ ...parent, FAKE_SCENARIO: scenario }),
+    childEnv: (parent) => ({ ...parent, ...extraEnv, FAKE_SCENARIO: scenario }),
   });
   hosts.push(host);
   const now = host.db.now().toISOString();
@@ -88,6 +90,78 @@ async function hostWithBot(
 }
 
 describe("chat runtime", () => {
+  it("prepares MCP discovery before starting Harness and cancels preparation with the turn", async () => {
+    const records = mkdtempSync(join(tmpdir(), "dsb-mcp-preparation-"));
+    roots.push(records);
+    let listing = false;
+    const server = createServer(async (request, response) => {
+      if (request.method !== "POST") {
+        response.writeHead(405).end();
+        return;
+      }
+      let body = "";
+      for await (const chunk of request) body += String(chunk);
+      const rpc = JSON.parse(body) as { id?: number; method: string };
+      if (rpc.method === "tools/list") {
+        listing = true;
+        return;
+      }
+      if (rpc.id === undefined) {
+        response.writeHead(202).end();
+        return;
+      }
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: rpc.id,
+          result: {
+            protocolVersion: "2025-11-25",
+            capabilities: { tools: {} },
+            serverInfo: { name: "slow", version: "1" },
+          },
+        }),
+      );
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    try {
+      const address = server.address();
+      if (!address || typeof address === "string") throw new Error("not listening");
+      const { host, botId } = await hostWithBot("ok", async () => "unused", {
+        FAKE_RECORD_DIR: records,
+      });
+      const connector = (await host.handleMethod("connector.register", {
+        name: "slow",
+        kind: "mcp-http",
+        endpoint: `http://127.0.0.1:${address.port}/mcp`,
+      })) as { id: string };
+      await host.handleMethod("connector.enable", { id: connector.id });
+      await host.handleMethod("connector.mcp.grants.set", {
+        botId,
+        id: connector.id,
+        allowedTools: ["echo"],
+      });
+      const sent = host.handleMethod("chat.send", { botId, text: "prepare" });
+      let settled = false;
+      void sent.then(
+        () => {
+          settled = true;
+        },
+        () => {
+          settled = true;
+        },
+      );
+      await vi.waitFor(() => expect(listing || settled).toBe(true));
+      expect(listing).toBe(true);
+      expect(existsSync(join(records, "fake-harness.jsonl"))).toBe(false);
+      const cancelled = expect(sent).rejects.toMatchObject({ code: "CANCELLED" });
+      await host.handleMethod("chat.cancel", { sessionId: `chat:${botId}` });
+      await cancelled;
+    } finally {
+      server.closeAllConnections();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
   it("keeps an application tool call waiting for approval and returns its actual result to Harness", async () => {
     const { host, botId } = await hostWithBot("app-tool");
     const sent = host.handleMethod("chat.send", { botId, text: "create group" });
