@@ -189,6 +189,12 @@ importers:
       '@deepseek-bot/storage':
         specifier: workspace:*
         version: link:../storage
+      '@modelcontextprotocol/client':
+        specifier: 2.2.0
+        version: 2.2.0
+      ajv:
+        specifier: 8.20.0
+        version: 8.20.0
     devDependencies:
       '@types/node':
         specifier: 24.19.2
