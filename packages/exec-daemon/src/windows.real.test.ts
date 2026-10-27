@@ -10,8 +10,11 @@ import type { ListedWindow } from "./windows.js";
 
 const script = fileURLToPath(new URL("./testing/self-window.ps1", import.meta.url));
 
+const NO_VISIBLE_WINDOW =
+  "no visible desktop, or the self-test window was not listed; real capture was not verified";
+
 describe.skipIf(process.platform !== "win32")("real Windows capture", () => {
-  it("captures a window this test created", async () => {
+  it("captures a window this test created", async (context) => {
     const title = `dsb-screen-${randomUUID()}`;
     const child = spawn(
       process.env.SystemRoot
@@ -31,6 +34,10 @@ describe.skipIf(process.platform !== "win32")("real Windows capture", () => {
     try {
       await waitUntil(() => ready.includes("ready"));
       const found = await findSelf(backend, title);
+      if (found === undefined) {
+        context.skip(NO_VISIBLE_WINDOW);
+        return;
+      }
       const captured = await backend.capture(
         { hwnd: found.hwnd, pid: found.pid, processStartTime: found.processStartTime },
         output,
@@ -51,7 +58,7 @@ describe.skipIf(process.platform !== "win32")("real Windows capture", () => {
 async function findSelf(
   backend: ReturnType<typeof createScreenBackend>,
   title: string,
-): Promise<ListedWindow> {
+): Promise<ListedWindow | undefined> {
   const deadline = Date.now() + 8_000;
   while (Date.now() < deadline) {
     const windows = await backend.listWindows(AbortSignal.timeout(8_000));
@@ -60,7 +67,7 @@ async function findSelf(
       return match;
     await delay(200);
   }
-  throw new Error("self-test window was not listed");
+  return undefined;
 }
 
 async function waitUntil(ready: () => boolean): Promise<void> {

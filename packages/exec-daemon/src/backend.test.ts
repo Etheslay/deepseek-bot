@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -82,7 +82,8 @@ describe("screen backend", () => {
     });
     const captured = await backend.capture(identity, output, new AbortController().signal);
     expect(captured).toMatchObject({ width: 1, height: 1, byteLength: ONE_PIXEL.length });
-    expect(captured.pngPath).toBe(path.join(output, "capture.png"));
+    // realpath folds a Windows 8.3 temp alias and its long name onto one path.
+    expect(await realpath(captured.pngPath)).toBe(await realpath(path.join(output, "capture.png")));
     expect(await readFile(captured.pngPath)).toEqual(ONE_PIXEL);
 
     const notPng = backendWith(resources, {
