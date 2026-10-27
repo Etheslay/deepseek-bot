@@ -78,6 +78,17 @@ async function decryptCredential(credentialRef: string): Promise<string> {
   return safeStorage.decryptString(blob);
 }
 
+/**
+ * Dev-only profile redirect: this machine intermittently denies Chromium's
+ * ProcessSingleton lock inside the real %APPDATA% profile (error 5), which
+ * kills every unpacked launch before the window opens. A dev run can point
+ * the profile at a writable location via DSB_DEV_USER_DATA; packaged builds
+ * never read this.
+ */
+if (!app.isPackaged && process.env.DSB_DEV_USER_DATA !== undefined) {
+  app.setPath("userData", process.env.DSB_DEV_USER_DATA);
+}
+
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
   app.quit();
