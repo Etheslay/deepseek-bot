@@ -654,8 +654,11 @@ async function readInside(directory: string, name: string, maxBytes: number): Pr
   if (info.size > maxBytes) {
     throw new ToolRejectionError("INVALID_INPUT", "screen result exceeds the size limit");
   }
+  // realpath both sides. A Windows 8.3 temp alias (RUNNER~1) and the long
+  // path are different strings until both have been resolved.
+  const resolvedDirectory = await realpath(directory);
   const resolved = await realpath(target);
-  if (!isInside(directory, resolved)) {
+  if (!isInside(resolvedDirectory, resolved)) {
     throw new ToolRejectionError("UNAUTHORIZED_PATH", "screen result escaped its directory");
   }
   return readFile(resolved);

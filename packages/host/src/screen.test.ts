@@ -152,8 +152,8 @@ function createFake() {
   };
 }
 
-async function setup(fake = createFake()) {
-  const root = mkdtempSync(join(tmpdir(), "dsb-screen-"));
+async function setup(fake = createFake(), dataRoot?: string) {
+  const root = dataRoot ?? mkdtempSync(join(tmpdir(), "dsb-screen-"));
   roots.push(root);
   const host = await createHost({
     dataRoot: root,
@@ -569,6 +569,34 @@ describe("screen host gateway", () => {
       target: null,
     });
     expect(reopened.screen.visible(bot.id)).toBe(false);
+  });
+
+  it("captures when the data root path is a directory link", async (context) => {
+    const real = mkdtempSync(join(tmpdir(), "dsb-screen-real-"));
+    const linkParent = mkdtempSync(join(tmpdir(), "dsb-screen-link-"));
+    roots.push(real, linkParent);
+    const link = join(linkParent, "data");
+    try {
+      symlinkSync(real, link, "dir");
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "EPERM") {
+        context.skip();
+        return;
+      }
+      throw error;
+    }
+    const fake = createFake();
+    const { host, bot } = await setup(fake, link);
+    await prepare(host, bot.id);
+    const call = host.handleMethod("screen.request", { botId: bot.id, mode: "image" });
+    await approve(host, await pending(host, bot.id));
+    const result = (await call) as ScreenResult;
+    const read = (await host.handleMethod("screen.result.read", {
+      botId: bot.id,
+      id: result.id,
+    })) as { imageBase64: string };
+    expect(read.imageBase64.length).toBeGreaterThan(0);
+    expect(host.layout.screenOutputs.startsWith(link)).toBe(true);
   });
 
   it("refuses another capture at fifty results and removes a rejected attempt", async () => {
