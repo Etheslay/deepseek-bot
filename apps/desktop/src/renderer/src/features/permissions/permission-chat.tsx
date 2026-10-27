@@ -32,6 +32,7 @@ const CAPABILITY_LABELS: Record<CapabilityId, string> = {
   "exec.shell": "执行本地命令",
   "screen.capture": "屏幕与窗口感知",
   "connector.invoke": "调用连接器",
+  "mcp.call": "调用 MCP 工具",
 };
 export { CAPABILITY_LABELS };
 
@@ -159,6 +160,9 @@ function BotPermissionChatCards({ botId }: { botId: string }): JSX.Element | nul
     <div className="permission-chat-cards">
       {approvals?.map((approval) => {
         const choices = approvalChoices(approval);
+        const preview = approval.tool === "mcp_call"
+          ? { connectorName: approval.params.connectorName, endpoint: approval.params.endpoint, toolName: approval.params.toolName, arguments: approval.params.arguments }
+          : approval.params;
         return (
           <div
             key={approval.id}
@@ -171,7 +175,7 @@ function BotPermissionChatCards({ botId }: { botId: string }): JSX.Element | nul
             <p className="choice-answered">能力：{capabilityLine(approval.capabilities)}</p>
             <p className="choice-answered">待执行参数：</p>
             <pre className="permission-params" aria-label="待执行参数">
-              {JSON.stringify(approval.params, null, 2)}
+              {JSON.stringify(preview, null, 2)}
             </pre>
             <p className="choice-answered">仅本次 1 次，到期 {approval.expiresAt}</p>
             {choices.includes("session") ? (

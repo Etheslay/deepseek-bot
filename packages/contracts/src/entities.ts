@@ -551,9 +551,28 @@ export type ToolNetworkMode = (typeof TOOL_NETWORK_MODES)[number];
  * not representable: project files or model output cannot enlarge the grant
  * (SECURITY_DATA §3), only a policy record change can.
  */
+export const ConnectorKindSchema = z.enum(["sd-webui", "mcp-http"]);
+export type ConnectorKind = z.infer<typeof ConnectorKindSchema>;
+
+/** Exact remote tool names; no glob expansion or normalization. */
+export const McpToolNameSchema = z.string().min(1).max(200).refine(
+  (name) => !/[?*]/u.test(name),
+  "MCP tool names must be exact names without wildcards",
+);
+export const McpAllowedToolsSchema = z.array(McpToolNameSchema).max(200).refine(
+  (names) => new Set(names).size === names.length,
+  "MCP tool names must be unique",
+);
+export const McpToolSchema = z.object({
+  name: McpToolNameSchema,
+  description: z.string().max(4000).optional(),
+  inputSchema: z.record(z.string(), z.unknown()),
+});
+export type McpTool = z.infer<typeof McpToolSchema>;
+
 export const McpServerGrantSchema = z.object({
   serverId: NonEmptyStringSchema(TEXT_LIMITS.label),
-  allowedTools: z.array(NonEmptyStringSchema(TEXT_LIMITS.label)).max(200),
+  allowedTools: McpAllowedToolsSchema,
 });
 export type McpServerGrant = z.infer<typeof McpServerGrantSchema>;
 

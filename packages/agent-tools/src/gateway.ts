@@ -127,17 +127,39 @@ export class ToolGateway {
       grant.revalidate?.();
       executing = true;
       const contextWithGrant: ToolContext =
-        grant.approvalId !== undefined || grant.grantIds !== undefined
+        grant.approvalId !== undefined ||
+        grant.grantIds !== undefined ||
+        grant.revalidate !== undefined
           ? {
               ...context,
-              authorization: {
-                ...(grant.approvalId !== undefined ? { approvalId: grant.approvalId } : {}),
-                ...(grant.grantIds !== undefined ? { grantIds: grant.grantIds } : {}),
-              },
+              ...(grant.approvalId !== undefined || grant.grantIds !== undefined
+                ? {
+                    authorization: {
+                      ...(grant.approvalId !== undefined ? { approvalId: grant.approvalId } : {}),
+                      ...(grant.grantIds !== undefined ? { grantIds: grant.grantIds } : {}),
+                    },
+                  }
+                : {}),
+              ...(grant.revalidate === undefined
+                ? {}
+                : { revalidateAuthorization: grant.revalidate }),
             }
           : context;
       const result = await capability.handler(parsed.data, contextWithGrant);
-      await this.audit(caller.id, tool, parsed.data, result, "ok", undefined, undefined, now, undefined, caller, grant);
+      const failed = capability.resultFailed?.(result) === true;
+      await this.audit(
+        caller.id,
+        tool,
+        parsed.data,
+        result,
+        failed ? "error" : "ok",
+        failed ? "RUNTIME_ERROR" : undefined,
+        failed ? "tool reported failure" : undefined,
+        now,
+        undefined,
+        caller,
+        grant,
+      );
       return result;
     } catch (error) {
       const code: GatewayRejectionCode | "RUNTIME_ERROR" =

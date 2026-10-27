@@ -2,14 +2,34 @@
  * Inline @mentions (D14 interaction slice): after the markdown pipeline has
  * produced sanitized HTML, known bot names mentioned as `@Name` become
  * clickable chips. Only names present in the mention table are linked —
- * arbitrary text starting with @ stays plain. The chip itself is
- * constructed here from the (already-escaped) name, so no untrusted HTML
- * is introduced; longest names match first so prefixes cannot shadow.
+ * arbitrary text starting with @ stays plain. The chip renders as the bot's
+ * mini avatar + name (owner request 2026-10-26: no `@` glyph), built here
+ * from already-escaped data so no untrusted HTML is introduced; longest
+ * names match first so prefixes cannot shadow.
  */
+import {
+  GROK_BALL_SHAPES,
+  contourPath,
+  sampleContour,
+  type GrokBallShapeId,
+} from "../avatars/grok-ball-model.js";
+import { bubbleInk } from "../avatars/avatar-meta.js";
 export type MentionTarget = {
   botKey: number;
   color: string;
+  shape: GrokBallShapeId;
 };
+
+const ballCache = new Map<GrokBallShapeId, string>();
+
+function ballPath(shape: GrokBallShapeId): string {
+  let path = ballCache.get(shape);
+  if (path === undefined) {
+    path = contourPath(sampleContour(GROK_BALL_SHAPES[shape].points, 48));
+    ballCache.set(shape, path);
+  }
+  return path;
+}
 
 export type MentionTable = Map<string, MentionTarget>;
 
@@ -58,11 +78,15 @@ export function linkMentions(html: string, mentions: MentionTable): string {
         const name = match[1]!;
         const target = mentions.get(name)!;
         out += html.slice(cursor, i);
-        out += `<button type="button" class="mention-chip" data-mention="${escapeHtml(
-          name,
-        )}" data-bot-key="${target.botKey}" style="--mention-color:${target.color}">@${escapeHtml(
-          name,
-        )}</button>`;
+        const eye = bubbleInk(target.color);
+        out +=
+          `<button type="button" class="mention-chip" data-mention="${escapeHtml(name)}" ` +
+          `data-bot-key="${target.botKey}" style="--mention-color:${target.color}">` +
+          `<svg class="mention-ball" viewBox="0 0 100 100" aria-hidden="true">` +
+          `<path d="${ballPath(target.shape)}" style="fill:${target.color}"/>` +
+          `<circle cx="40" cy="48" r="6.5" style="fill:${eye}"/>` +
+          `<circle cx="60" cy="48" r="6.5" style="fill:${eye}"/>` +
+          `</svg>${escapeHtml(name)}</button>`;
         i += match[0].length - 1;
         cursor = i + 1;
       }

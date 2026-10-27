@@ -28,7 +28,7 @@ describe("openDatabase migrations", () => {
     raw.exec("INSERT INTO settings VALUES ('preserved', '{\"value\":42}', '2026-10-24T00:00:00.000Z')");
     raw.close();
     const upgraded = openDatabase(layout.dbFile);
-    expect(upgraded.schemaVersion).toBe(12);
+    expect(upgraded.schemaVersion).toBe(MIGRATIONS.length);
     expect(
       upgraded.raw.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'memories'").get(),
     ).toMatchObject({ name: "memories" });
@@ -200,4 +200,21 @@ describe("openDatabase error paths", () => {
       expect((error as StorageError).message).toMatch(/integrity/);
     }
   });
+});
+
+it("upgrades v13 connector rows as SD WebUI without losing endpoints", () => {
+  const layout = ensureDataLayout(makeTempRoot());
+  const raw = new DatabaseSync(layout.dbFile);
+  raw.exec("CREATE TABLE schema_migrations (id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE, checksum TEXT NOT NULL, applied_at TEXT NOT NULL)");
+  for (const migration of MIGRATIONS.filter((item) => item.id <= 13)) {
+    raw.exec(migration.sql);
+    raw.prepare("INSERT INTO schema_migrations VALUES (?, ?, ?, ?)").run(migration.id, migration.name, checksumMigration(migration), new Date().toISOString());
+  }
+  raw.exec("INSERT INTO connectors (id,name,enabled,endpoint,created_at,updated_at) VALUES ('legacy','SD',1,'http://127.0.0.1:7860','now','now')");
+  raw.close();
+  const db = openDatabase(layout.dbFile);
+  try {
+    expect(db.appliedMigrations).toContainEqual({ id: 14, name: "0014-connectors-kind" });
+    expect(db.raw.prepare("SELECT kind,endpoint,enabled FROM connectors WHERE id='legacy'").get()).toMatchObject({ kind: "sd-webui", endpoint: "http://127.0.0.1:7860", enabled: 1 });
+  } finally { db.close(); }
 });

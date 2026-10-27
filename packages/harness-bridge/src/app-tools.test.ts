@@ -35,7 +35,16 @@ afterEach(async () => {
 });
 
 async function fixture(
-  options: { badCatalog?: boolean; status?: number; failure?: boolean; slow?: boolean } = {},
+  options: {
+    badCatalog?: boolean;
+    status?: number;
+    failure?: boolean;
+    slow?: boolean;
+    mcp?: unknown;
+    mcpStatus?: number;
+    mcpSlow?: boolean;
+    result?: unknown;
+  } = {},
 ) {
   const calls: unknown[] = [];
   const requests: string[] = [];
@@ -46,7 +55,11 @@ async function fixture(
     for await (const chunk of request) chunks.push(chunk);
     const body = Buffer.concat(chunks as Buffer[]).toString();
     response.setHeader("content-type", "application/json");
-    if (request.url === "/web-search") {
+    if (request.url === "/mcp") {
+      if (options.mcpSlow) return;
+      response.statusCode = options.mcpStatus ?? 200;
+      response.end(JSON.stringify(options.mcp ?? { tools: [], warnings: [] }));
+    } else if (request.url === "/web-search") {
       response.end(
         JSON.stringify({
           tool: {
@@ -73,6 +86,18 @@ async function fixture(
             {
               name: "knowledge_search",
               description: "knowledge_search",
+              parameters: { type: "object", additionalProperties: false, properties: {} },
+            },
+          ],
+        }),
+      );
+    } else if (request.url === "/connectors") {
+      response.end(
+        JSON.stringify({
+          tools: [
+            {
+              name: "connector_invoke",
+              description: "connector_invoke",
               parameters: { type: "object", additionalProperties: false, properties: {} },
             },
           ],
@@ -112,7 +137,7 @@ async function fixture(
                 ok: false,
                 error: { code: "UNAUTHORIZED_PATH", message: "private original question" },
               }
-            : { ok: true, result: { group: { id: "g1" } } },
+            : { ok: true, result: options.result ?? { group: { id: "g1" } } },
         ),
       );
     }
@@ -137,6 +162,110 @@ async function fixture(
 }
 
 describe("application tool plugin", () => {
+  const mcpName = `mcp__${"a".repeat(32)}__${"b".repeat(12)}`;
+  const mcpSchema = {
+    name: mcpName,
+    description: "Read authorized MCP data",
+    parameters: { type: "object", properties: { query: { type: "string" } }, required: ["query"] },
+  };
+
+  it("binds authorized MCP schemas over the authenticated Host channel", async () => {
+    const result = {
+      content: [
+        { type: "text", text: "answer" },
+        { type: "image", savedPath: "C:/data/image.png" },
+      ],
+    };
+    const { ctx, tools, calls, requests } = await fixture({
+      mcp: { tools: [mcpSchema], warnings: ["unavailable server"] },
+      result,
+    });
+    await apply(ctx);
+    const tool = tools.find((item) => item.name === mcpName)!;
+    expect(tool).toBeDefined();
+    expect(tool.parameters).toEqual(mcpSchema.parameters);
+    expect(tool.timeoutMs).toBeGreaterThanOrEqual(720_000);
+    expect(calls[0]).toEqual({ tools: names });
+    const params = { query: "local" };
+    expect(
+      await tool.execute(params, { agent: { session: { id: "mcp-session" } }, callId: "mcp-call" }),
+    ).toEqual(result);
+    expect(requests.at(-1)).toBe("/mcp/call");
+    expect(calls.at(-1)).toEqual({
+      sessionId: "mcp-session",
+      callId: "mcp-call",
+      tool: mcpName,
+      params,
+    });
+    expect(JSON.stringify(tool.output.render(params, result))).toContain("savedPath");
+  });
+
+  it.each([
+    { tools: [{ ...mcpSchema, name: "permission.policy.set" }], warnings: [] },
+    { tools: [{ ...mcpSchema, name: "list_bots" }], warnings: [] },
+    { tools: [{ ...mcpSchema, name: "connector_invoke" }], warnings: [] },
+    { tools: [{ ...mcpSchema, name: `${mcpName}suffix` }], warnings: [] },
+    { tools: [mcpSchema, mcpSchema], warnings: [] },
+    { tools: [{ ...mcpSchema, parameters: { type: "array" } }], warnings: [] },
+    { tools: [mcpSchema], warnings: "invalid" },
+    { tools: Array.from({ length: 201 }, () => mcpSchema), warnings: [] },
+    { tools: [{ ...mcpSchema, description: "x".repeat(256 * 1024) }], warnings: [] },
+  ])("fails closed on an invalid optional MCP directory and preserves readiness", async (mcp) => {
+    const { ctx, tools, calls } = await fixture({ mcp });
+    await apply(ctx);
+    expect(tools).toHaveLength(17); // v0.7 adds save_workflow, dispatch_task and list_tasks
+    expect(tools.some((tool) => tool.name.startsWith("mcp__"))).toBe(false);
+    expect(calls).toEqual([{ tools: names }]);
+  });
+
+  it("keeps regular tools ready when the MCP endpoint is unavailable", async () => {
+    const { ctx, tools, calls } = await fixture({ mcpStatus: 503 });
+    await apply(ctx);
+    expect(tools).toHaveLength(17); // v0.7 adds save_workflow, dispatch_task and list_tasks
+    expect(calls).toEqual([{ tools: names }]);
+  });
+
+  it("keeps regular tools ready after MCP discovery times out", async () => {
+    const originalTimeout = AbortSignal.timeout.bind(AbortSignal);
+    const timeout = vi
+      .spyOn(AbortSignal, "timeout")
+      .mockImplementation((milliseconds) =>
+        originalTimeout(milliseconds === 30_000 ? 200 : milliseconds),
+      );
+    try {
+      const { ctx, tools, calls } = await fixture({ mcpSlow: true });
+      await apply(ctx);
+      expect(tools).toHaveLength(17); // v0.7 adds save_workflow, dispatch_task and list_tasks
+      expect(calls).toEqual([{ tools: names }]);
+    } finally {
+      timeout.mockRestore();
+    }
+  });
+
+  it("preserves stable MCP error and cancellation semantics", async () => {
+    const { ctx, tools } = await fixture({
+      mcp: { tools: [mcpSchema], warnings: [] },
+      failure: true,
+    });
+    await apply(ctx);
+    const tool = tools.find((item) => item.name === mcpName)!;
+    expect(tool).toBeDefined();
+    await expect(
+      tool.execute({}, { agent: { session: { id: "s" } }, callId: "c" }),
+    ).rejects.toMatchObject({
+      code: "UNAUTHORIZED_PATH",
+      message: "application tool call failed (UNAUTHORIZED_PATH)",
+    });
+    const controller = new AbortController();
+    controller.abort();
+    await expect(
+      tool.execute(
+        {},
+        { agent: { session: { id: "s" } }, callId: "cancel", signal: controller.signal },
+      ),
+    ).rejects.toMatchObject({ code: "CANCELLED" });
+  });
+
   it("registers the eight Host schemas before readiness and forwards exact runtime identity", async () => {
     const { ctx, tools, calls, requests } = await fixture();
     await apply(ctx);
@@ -146,6 +275,7 @@ describe("application tool plugin", () => {
       "memory_write",
       "memory_search",
       "knowledge_search",
+      "connector_invoke",
       "web_search",
     ]);
     expect(calls).toEqual([{ tools: names }]);
@@ -196,7 +326,9 @@ describe("application tool plugin", () => {
       "/app-tools",
       "/ask-user",
       "/memory",
+      "/connectors",
       "/web-search",
+      "/mcp",
       "/app-tools/ready",
       "/app-tools/call",
       "/ask-user/call",
@@ -247,7 +379,10 @@ describe("application tool plugin", () => {
   it("shadows a built-in web_search on the agent instead of failing startup", async () => {
     const { ctx, tools, calls, requests } = await fixture();
     const listeners = new Map<string, (payload: unknown) => void>();
-    (ctx as { on: (event: string, handler: (payload: unknown) => void) => void }).on = (event, handler) => {
+    (ctx as { on: (event: string, handler: (payload: unknown) => void) => void }).on = (
+      event,
+      handler,
+    ) => {
       listeners.set(event, handler);
     };
     const register = ctx.tools.register;
@@ -262,6 +397,7 @@ describe("application tool plugin", () => {
       "memory_write",
       "memory_search",
       "knowledge_search",
+      "connector_invoke",
     ]);
     expect(calls[0]).toEqual({ tools: names });
     const agentTools: Definition[] = [];

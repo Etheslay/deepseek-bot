@@ -21,6 +21,7 @@ export const CAPABILITY_IDS = [
   "exec.shell",
   "screen.capture",
   "connector.invoke",
+  "mcp.call",
 ] as const;
 export const CapabilityIdSchema = z.enum(CAPABILITY_IDS);
 export type CapabilityId = z.infer<typeof CapabilityIdSchema>;
@@ -48,7 +49,7 @@ export function defaultPermissionMode(capability: CapabilityId): PermissionMode 
  */
 export function requiresPerActionApproval(capability: CapabilityId): boolean {
   return (
-    capability === "app.start_run" || capability === "exec.shell" || capability === "screen.capture"
+    capability === "app.start_run" || capability === "exec.shell" || capability === "screen.capture" || capability === "mcp.call"
   );
 }
 

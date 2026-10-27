@@ -31,7 +31,7 @@ export interface ToolContext {
   readonly networkPermissions?: ToolNetworkPermissions;
   /**
    * Authorization references the checkpoint accepted for THIS call (D16),
-   * when it minted or consumed an approval/grant. The v0.5 relay chain
+   * when it minted or consumed an approval/grant. The v0.7 relay chain
    * stores them on the root task so later hops can revalidate without
    * re-prompting (TASK_MANAGER_ORCHESTRATION.md R-13.6).
    */
@@ -39,6 +39,8 @@ export interface ToolContext {
     readonly approvalId?: string;
     readonly grantIds?: readonly string[];
   };
+  /** Trusted lease recheck before a side effect after asynchronous preparation. */
+  readonly revalidateAuthorization?: () => void;
 }
 
 export interface ToolCallOptions {
@@ -85,6 +87,8 @@ export interface ToolCapability<S extends z.ZodType = z.ZodType> {
   readonly description: string;
   readonly inputSchema: S;
   readonly handler: (params: z.output<S>, context: ToolContext) => Promise<unknown> | unknown;
+  /** Protocol-level failures may return useful content while still needing an error audit. */
+  readonly resultFailed?: (result: unknown) => boolean;
 }
 
 export interface GrantCheckResult {

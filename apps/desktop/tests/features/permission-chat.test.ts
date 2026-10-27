@@ -88,6 +88,30 @@ function labels(container: ParentNode): string[] {
 }
 
 describe("chat permission cards", () => {
+  it("previews the MCP service, tool and exact arguments with only single-use approval", async () => {
+    const params = {
+      definitionId: "internal-definition",
+      connectorId: "internal-connector",
+      connectorName: "Local Echo",
+      endpoint: "http://127.0.0.1:8080/mcp",
+      toolName: "echo",
+      arguments: { text: "<private>" },
+    };
+    installHost([{ ...APPROVAL, tool: "mcp_call", capabilities: ["mcp.call"], params }]);
+    const container = await renderCards();
+    const preview = JSON.parse(container.querySelector("pre")!.textContent!) as Record<
+      string,
+      unknown
+    >;
+    expect(preview).toEqual({
+      connectorName: params.connectorName,
+      endpoint: params.endpoint,
+      toolName: params.toolName,
+      arguments: params.arguments,
+    });
+    expect(labels(container)).toEqual(["仅本次", "拒绝"]);
+    expect(container.querySelector("private")).toBeNull();
+  });
   it("shows the exact validated parameters as escaped text before a decision", async () => {
     installHost([
       {

@@ -6,14 +6,15 @@
 
 | 模块 | 对应契约 | 说明 |
 | --- | --- | --- |
-| `version.ts` | §1、§7 | `PROTOCOL_VERSION`（`"0.3"`，SUPPORTED 含 0.1/0.2）与 `WORKFLOW_SCHEMA_VERSION`（保持 `"0.1"`，工作流文档未变）；`isProtocolVersionSupported` 拒绝未知更高版本 |
+| `version.ts` | §1、§7 | `PROTOCOL_VERSION`（`"0.6"`，SUPPORTED 含 0.1–0.5）与 `WORKFLOW_SCHEMA_VERSION`（保持 `"0.1"`，工作流文档未变）；`isProtocolVersionSupported` 拒绝未知更高版本 |
+| `screen.ts` | §3、D21 屏幕感知边界 | D21 受信桌面 `screen.*` 严格请求/响应、窗口 token、结果元数据及读取限额；契约不代表采集/OCR 实现 |
 | `primitives.ts` | §1 | UUID、UTC ISO 8601 时间戳、IANA 时区、绝对/相对路径、media type、sha-256 |
 | `errors.ts` | §6 | 16 个稳定错误码与错误对象（code/message/retryable/requestId/details） |
 | `status.ts` | §5 | Run / NodeRun 状态机：迁移表、终态判断、`assert*Transition` |
 | `entities.ts` | §2 | Bot（v0.2 增 nullish avatar/groupId）、BotGroup、Avatar（规范池 + `assignBatchAvatars` 纯函数）、BotCreationDraft、ModelProfile、Workspace、Workflow/Node/Edge、Schedule、Run、NodeRun、Approval、Artifact |
 | `events.ts` | §4 | 持久事件 envelope、10 类事件 payload schema、瞬态 `assistant.delta`、`isSequenceMonotonic` |
 | `workflow.ts` | §2、§3、§6 | DAG 校验器：环（WORKFLOW_CYCLE）、悬空边与缺失绑定（MISSING_BINDING）、重复节点/边（INVALID_INPUT），错误定位到节点与字段 |
-| `methods.ts` | §1、§3 | 62 个白名单方法的 envelope 与 per-method 请求/响应 schema（`METHOD_CONTRACTS`）、1 MiB 消息上限、`parseRequest` |
+| `methods.ts` | §1、§3 | 80 个白名单方法的 envelope 与 per-method 请求/响应 schema（`METHOD_CONTRACTS`）、1 MiB 消息上限、`parseRequest` |
 | `permissions.ts` | §2、§3 | 能力、全局策略、once/session/permanent grant、精确应用审批、追加式审计及 7 个受信人类 permission.* 方法；严格参数校验与高风险能力限制 |
 | `fixtures/` | §7 | 12 个场景夹具（成功、限流、取消、审批拒绝、重复消息、并发编辑、崩溃重连、循环图、路径越界、过期审批 + 版本拒绝、缺失绑定），见 [fixtures/README.md](fixtures/README.md) |
 
@@ -47,4 +48,4 @@ pnpm --filter @deepseek-bot/contracts test
 
 ## 变更规则
 
-CONTRACTS §7：新增可选字段可兼容扩展；删除/更名必需字段、状态语义或事件顺序变化必须提升版本并提供迁移说明，由变更负责人自审并同步使用方。私有 workspace 包版本当前为 `0.1.0`；通信协议版本由 `PROTOCOL_VERSION` 独立标识（当前 `0.3`）。
+CONTRACTS §7：新增可选字段可兼容扩展；删除/更名必需字段、状态语义或事件顺序变化必须提升版本并提供迁移说明，由变更负责人自审并同步使用方。私有 workspace 包版本当前为 `0.1.0`；通信协议版本由 `PROTOCOL_VERSION` 独立标识（当前 `0.6`）。

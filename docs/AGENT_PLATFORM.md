@@ -25,7 +25,7 @@
 | `apps/desktop/src/renderer/` | 聊天内卡片、授权弹层、设置页、渲染器 | 直接读写密钥 | Destinyian |
 | `packages/contracts/` | 新方法、实体、事件与版本迁移 | 业务状态 | Etheslay 主责并自审 |
 
-现有模块边界不变：桌面主进程只经白名单 IPC 与渲染层通信，Host 持有数据库与子进程，Harness 适配层不向 UI 暴露上游对象。记忆的写入、检索和删除目前放在 `packages/storage` 与 `packages/agent-tools`，本片不新建 `packages/memory/`。`.txt` / `.md` 知识导入写进现有记忆行，不新建 `packages/memory/` 或知识表。向量检索和保留策略仍留在后续。连接器的登记、列出和启停放在 `packages/storage` 与桌面设置，本片不新建 `packages/connectors/`。自定义 MCP、本地生图和视觉理解仍留在后续。
+现有模块边界不变：桌面主进程只经白名单 IPC 与渲染层通信，Host 持有数据库与子进程，Harness 适配层不向 UI 暴露上游对象。连接器的登记、类型和按 bot 授权持久化放在 `packages/storage`，HTTP MCP 客户端与输出校验由 Host 持有，`packages/agent-tools` 网关执行单次审批与审计。Harness 只接收本轮授权工具的 schema，管理方法只对桌面设置开放。现阶段沿用这些模块，不新建 `packages/connectors/`。本地 SD 调用已由 PR #65 交付，本分支增加无凭据本机 HTTP MCP；stdio、凭据注入和视觉理解仍待后续。详见 [MCP 报告](reports/D19-mcp-http-report.md)。
 
 ## 3. 数据流
 
