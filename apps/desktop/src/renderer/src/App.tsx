@@ -3465,21 +3465,36 @@ function BotsPlaceholder({
             ))}
             {(stream.text || (!stream.failure && !stream.cancelled)) && (
               <div className="msg-row bot streaming">
-                <div className="hover-wrap">
-                  <div className="msg-bubble">
-                    {stream.text || <ThinkingLine request={streamRequest} />}
-                    {!stream.failure && !stream.cancelled && (
-                      <button
-                        type="button"
-                        className="stream-cancel"
-                        title={t("shell.cancel")}
-                        onClick={() => streamRef.current?.cancel()}
-                      >
-                        {t("shell.cancel")}
-                      </button>
-                    )}
+                {stream.text ? (
+                  <div className="hover-wrap">
+                    <div className="msg-bubble">
+                      {stream.text}
+                      {!stream.failure && !stream.cancelled && (
+                        <button
+                          type="button"
+                          className="stream-cancel"
+                          title={t("shell.cancel")}
+                          onClick={() => streamRef.current?.cancel()}
+                        >
+                          {t("shell.cancel")}
+                        </button>
+                      )}
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  <div className="stream-pending">
+                    <AvatarView avatar={me.avatar} state="thinking" size={28} />
+                    <ThinkingLine request={streamRequest} />
+                    <button
+                      type="button"
+                      className="stream-cancel"
+                      title={t("shell.cancel")}
+                      onClick={() => streamRef.current?.cancel()}
+                    >
+                      {t("shell.cancel")}
+                    </button>
+                  </div>
+                )}
               </div>
             )}
             {stream.failure && (

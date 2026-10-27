@@ -34,5 +34,8 @@ export const chatMessages = {
   "chat.sessionReplayTitle": { zh: "会话回放（持久事件）", en: "Session replay (persisted events)" },
   "chat.thinkingBusy": { zh: "正在处理…", en: "Working…" },
   "chat.thinkingBusyWith": { zh: "正在处理「{0}」", en: "Working on “{0}”…" },
+  "chat.thinkingPhaseDocs": { zh: "正在查阅文档", en: "Checking the docs" },
+  "chat.thinkingPhaseFinishing": { zh: "正在完成", en: "Finishing up" },
+  "chat.thinkingPhaseReasoning": { zh: "正在深度思考", en: "Thinking it through" },
   "chat.toolRequest": { zh: "工具请求", en: "Tool request" },
 } satisfies Record<string, Message>;

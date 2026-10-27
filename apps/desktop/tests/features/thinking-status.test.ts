@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   ELAPSED_HINT_AFTER_MS,
   MAX_SUMMARY_CHARS,
+  PHASE_ADVANCE_MS,
   formatElapsed,
   summarizeRequest,
   thinkingStatus,
@@ -84,14 +85,51 @@ describe("thinkingStatus", () => {
     expect(later?.hint).toBe("12s");
   });
 
-  it("keeps the sentence free of the ticking seconds", () => {
+  it("keeps the announced sentence stable and free of the ticking seconds", () => {
     const status = thinkingStatus({
       request: "帮我起草工作流",
       elapsedMs: 65_000,
       hasText: false,
     });
-    expect(status?.text).toBe("正在起草工作流");
-    expect(status?.text).not.toContain("65");
+    expect(status?.announce).toBe("正在起草工作流");
+    expect(status?.announce).not.toContain("65");
+    // Long waits sit on the held final phase, not on the opening sentence.
+    expect(status?.text).toBe("正在完成");
+  });
+});
+
+describe("phase ladder", () => {
+  const at = (request: string, elapsedMs: number) =>
+    thinkingStatus({ request, elapsedMs, hasText: false });
+
+  it("opens with the task-aware copy, then advances one phase per step", () => {
+    expect(at("你好", 0)?.text).toBe("正在处理「你好」");
+    expect(at("你好", PHASE_ADVANCE_MS - 1)?.text).toBe("正在处理「你好」");
+    expect(at("你好", PHASE_ADVANCE_MS)?.text).toBe("正在深度思考");
+    expect(at("你好", PHASE_ADVANCE_MS * 2)?.text).toBe("正在查阅文档");
+    expect(at("你好", PHASE_ADVANCE_MS * 3)?.text).toBe("正在完成");
+  });
+
+  it("holds the final phase instead of looping", () => {
+    expect(at("你好", PHASE_ADVANCE_MS * 9)?.text).toBe("正在完成");
+  });
+
+  it("keeps the announcement stable across phases", () => {
+    const first = at("你好", 0);
+    const last = at("你好", PHASE_ADVANCE_MS * 9);
+    expect(first?.announce).toBe(last?.announce);
+    expect(first?.text).not.toBe(last?.text);
+  });
+
+  it("advances phases for intent copies too", () => {
+    expect(at("帮我起草工作流", 0)?.text).toBe("正在起草工作流");
+    expect(at("帮我起草工作流", PHASE_ADVANCE_MS)?.text).toBe("正在深度思考");
+  });
+
+  it("keeps the elapsed hint while the phases run", () => {
+    const status = at("你好", ELAPSED_HINT_AFTER_MS + 500);
+    expect(status?.text).toBe("正在完成");
+    expect(status?.hint).toBe("10s");
   });
 });
 

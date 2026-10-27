@@ -1,10 +1,15 @@
 /**
  * Renders the task-aware "thinking" line while a reply is pending.
  *
- * Owns its own one-second ticker so the elapsed hint advances without stream
- * events; it takes over the mount time rather than extending `StreamState`,
- * which keeps the chat reducer's model untouched. The component unmounts as
- * soon as the first reply chunk arrives (the caller renders the text instead).
+ * Owns its own one-second ticker so the elapsed hint and the phase copy advance
+ * without stream events; it takes over the mount time rather than extending
+ * `StreamState`, which keeps the chat reducer's model untouched. The component
+ * unmounts as soon as the first reply chunk arrives (the caller renders the
+ * text instead).
+ *
+ * The visible copy advances through the wait phases every second or so, so it
+ * stays aria-hidden; the stable task-aware sentence is what the `aria-live`
+ * region announces, once.
  */
 import { useEffect, useRef, useState, type JSX } from "react";
 import { thinkingStatus } from "./thinking-status.js";
@@ -30,7 +35,10 @@ export function ThinkingLine(props: { request: string }): JSX.Element {
 
   return (
     <span className="thinking-line">
-      <span role="status" aria-live="polite">
+      <span className="thinking-announce" role="status" aria-live="polite">
+        {status?.announce ?? t("chat.thinkingBusy")}
+      </span>
+      <span className="thinking-text" aria-hidden="true">
         {status?.text ?? t("chat.thinkingBusy")}
       </span>
       {status?.hint ? (
