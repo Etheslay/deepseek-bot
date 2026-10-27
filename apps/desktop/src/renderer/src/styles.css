@@ -7915,6 +7915,150 @@ select:focus-visible {
   font-variant-numeric: tabular-nums;
 }
 
+/* ============================================================
+   Settings: connector and automation forms
+   The connector register row packs a kind select, a name, an
+   optional credential reference, an endpoint and the action into
+   one line; `.key-input` is a fixed 180px and flex children do not
+   shrink below their content by default, so the row overflowed the
+   card. The automation form arrived with no class at all and was
+   rendering with browser defaults. Both are laid out here on the
+   existing `.settings-select` / `.pill-btn` vocabulary.
+   ============================================================ */
+
+.connector-register-label {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.connector-fields {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+/* allow every control to give up width instead of pushing the row out */
+.connector-fields > * {
+  min-width: 0;
+}
+
+/* The kind picker is a CustomSelect now, so the layout has to reach the wrapper
+   as well as the native class it replaced. */
+.connector-fields .settings-select,
+.connector-fields .custom-select,
+.connector-fields .key-input {
+  width: auto;
+  flex: 1 1 10rem;
+}
+
+.connector-fields .settings-select:first-child,
+.connector-fields .custom-select:first-child {
+  flex: 0 1 auto;
+}
+
+.connector-fields .pill-btn {
+  flex: 0 0 auto;
+}
+
+.automation-form {
+  display: grid;
+  grid-template-columns: minmax(7rem, 1fr) minmax(9rem, 1.5fr) minmax(7rem, 1fr) auto;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.55rem 0 0.75rem;
+}
+
+.automation-field {
+  width: 100%;
+}
+
+.automation-save {
+  justify-self: end;
+  white-space: nowrap;
+}
+
+.automation-rule-list,
+.automation-queue-list {
+  display: grid;
+  gap: 0.1rem;
+}
+
+.automation-rule-row,
+.automation-queue-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 0.6rem;
+  align-items: center;
+  padding: 0.45rem 0;
+  border-top: 1px solid var(--border);
+  font-size: 0.9rem;
+}
+
+.automation-rule-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.automation-rule-state {
+  color: var(--muted);
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.automation-rule-actions {
+  display: inline-flex;
+  gap: 0.4rem;
+  flex: 0 0 auto;
+}
+
+.automation-notice {
+  color: var(--muted);
+  font-size: 0.85rem;
+  padding-bottom: 0.3rem;
+}
+
+.automation-queue {
+  padding-top: 0.75rem;
+}
+
+.automation-queue-title {
+  font-weight: 600;
+}
+
+.automation-queue-empty {
+  color: var(--muted);
+  font-size: 0.85rem;
+  padding-top: 0.4rem;
+}
+
+/* narrow settings modal: two columns, action on its own line */
+@media (max-width: 1180px) {
+  .automation-form {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .automation-save {
+    grid-column: 1 / -1;
+    justify-self: stretch;
+  }
+
+  .connector-fields .settings-select,
+  .connector-fields .custom-select,
+  .connector-fields .key-input {
+    flex: 1 1 100%;
+  }
+
+  .connector-fields .pill-btn {
+    align-self: flex-end;
+  }
+}
+
 /* ---------- D21: local screen capture settings ---------- */
 
 .screen-actions {
