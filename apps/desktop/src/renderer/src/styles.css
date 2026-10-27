@@ -7856,11 +7856,11 @@ select:focus-visible {
   margin-left: auto;
 }
 
-/* ---- 思考中状态行（任务相关文案 + 阶段推进 + 流光） ---- */
+/* ---- 思考中状态行（真实阶段文案 + 流光 + 状态头像球） ---- */
 .thinking-line {
   display: inline-flex;
-  align-items: baseline;
-  gap: 6px;
+  align-items: center;
+  gap: 10px;
   color: var(--muted);
 }
 

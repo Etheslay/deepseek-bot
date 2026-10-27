@@ -3019,12 +3019,6 @@ function BotsPlaceholder({
   const [plusOpen, setPlusOpen] = useState(false);
   const [detailOther, setDetailOther] = useState<number | null>(null);
   const [stream, setStream] = useState<StreamStateForBot | null>(null);
-  /**
-   * The user's own request for the running turn: the thinking line derives its
-   * copy from it. Kept beside `stream` because `StreamState` is a pure model the
-   * reducer tests pin.
-   */
-  const [streamRequest, setStreamRequest] = useState<string>("");
   const [failedText, setFailedText] = useState("");
   const [answeredQuestions, setAnsweredQuestions] = useState<AnsweredQuestionMap>({});
   const [clarify, setClarify] = useState<ClarifyTarget | null>(null);
@@ -3221,7 +3215,6 @@ function BotsPlaceholder({
       streamRef.current.cancel();
     }
     const forKey = me.key;
-    setStreamRequest(text);
     setStream({ ...emptyStream(), forKey });
     onBotStatus(me.bot.id, "running");
     const started = runChatStream({
@@ -3468,8 +3461,7 @@ function BotsPlaceholder({
                   </div>
                 ) : (
                   <div className="stream-pending">
-                    <AvatarView avatar={me.avatar} state="thinking" size={28} />
-                    <ThinkingLine request={streamRequest} />
+                    <ThinkingLine botId={me.bot.id} avatar={me.avatar} />
                     <button
                       type="button"
                       className="stream-cancel"

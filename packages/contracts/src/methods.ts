@@ -104,6 +104,7 @@ export const METHODS = [
   "chat.send",
   "chat.history",
   "chat.cancel",
+  "chat.status",
   "task.dispatch",
   "task.list",
   "task.cancel",
@@ -550,6 +551,21 @@ export const METHOD_CONTRACTS = {
   "chat.cancel": {
     request: z.object({ sessionId: z.string().min(1).max(128) }),
     response: z.object({ cancelled: z.boolean() }),
+  },
+  /**
+   * Live progress of a bot's chat turn, polled by the renderer while a reply
+   * is pending. Stages come from real harness session events only — the
+   * receipt means the model is generating ("thinking"), a tool/call names the
+   * tool now executing — so the UI never invents activity it did not see.
+   */
+  "chat.status": {
+    request: z.object({ botId: UuidSchema }),
+    response: z.object({
+      active: z.boolean(),
+      stage: z.enum(["idle", "preparing", "thinking", "tool"]),
+      toolName: z.string().min(1).max(64).optional(),
+      startedAt: IsoDateTimeUtcSchema.optional(),
+    }),
   },
   /**
    * v0.5 manager orchestration (TASK_MANAGER_ORCHESTRATION.md §3.3).
