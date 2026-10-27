@@ -3382,9 +3382,9 @@ function BotsPlaceholder({
                             key={key}
                             type="button"
                             className="stack-avatar"
-                            title={t("shell.openSessionWith", [target?.bot.name ?? "?"])}
-                            aria-label={t("shell.openSessionWith", [target?.bot.name ?? "?"])}
-                            onClick={() => onOpenBot(key)}
+                            title={t("shell.viewExchangesWith", [target?.bot.name ?? "?"])}
+                            aria-label={t("shell.viewExchangesWith", [target?.bot.name ?? "?"])}
+                            onClick={() => setDetailOther(key)}
                           >
                             <AvatarView
                               avatar={target?.avatar ?? me.avatar}
