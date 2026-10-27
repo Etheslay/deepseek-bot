@@ -13,7 +13,7 @@
 
 | 验收项（FR-19） | 实现 | 落点 |
 | --- | --- | --- |
-| 中英双语可切换 | 零依赖类型化字典：`shared/i18n`（`locale` 解析、`translate` 位置参数 + 英文单复数、18 个 domain 文件 **764 条 key**）；渲染层模块级 store（`useSyncExternalStore`）+ 主进程语言镜像；`system`/`zh`/`en` 三档偏好，`system` 取 `app.getLocale()` | [shared/i18n](../../apps/desktop/src/shared/i18n/)、[renderer/src/i18n.ts](../../apps/desktop/src/renderer/src/i18n.ts)、[main/i18n.ts](../../apps/desktop/src/main/i18n.ts) |
+| 中英双语可切换 | 零依赖类型化字典：`shared/i18n`（`locale` 解析、`translate` 位置参数 + 英文单复数、19 个 domain 文件 **827 条 key**（映射生成 18 域 764 条 + 手工维护的 `d22` 域 63 条，零重复 key））；渲染层模块级 store（`useSyncExternalStore`）+ 主进程语言镜像；`system`/`zh`/`en` 三档偏好，`system` 取 `app.getLocale()` | [shared/i18n](../../apps/desktop/src/shared/i18n/)、[renderer/src/i18n.ts](../../apps/desktop/src/renderer/src/i18n.ts)、[main/i18n.ts](../../apps/desktop/src/main/i18n.ts) |
 | 每 bot 托盘图标 | 单托盘：图标 = 活跃 bot 的 Grok Ball（渲染层 SVG→canvas 32px PNG，经校验的 `tray:sync` 推送）；菜单逐 bot 一项、带各自图标、活跃标记、按"活跃→等待审批→运行中→未读→其余"排序；菜单/tooltip 随界面语言 | [main/tray.ts](../../apps/desktop/src/main/tray.ts)、[main/tray-menu.ts](../../apps/desktop/src/main/tray-menu.ts)、[features/system/tray-avatar.ts](../../apps/desktop/src/renderer/src/features/system/tray-avatar.ts)、[tray-sync.ts](../../apps/desktop/src/renderer/src/features/system/tray-sync.ts) |
 | 通知设置 | 主进程 `Notification`（4 秒同文去重、点击回主窗口并通知渲染层定位 bot）；策略在渲染层：总开关、**仅窗口不在前台时提醒**（默认开）、按 Bot 静音、测试通知按钮（如实回报"系统无通知通道"）；触发点＝回复完成 / 待审批 / 错过定时（FR-08） | [main/notifications.ts](../../apps/desktop/src/main/notifications.ts)、[features/system/notify.ts](../../apps/desktop/src/renderer/src/features/system/notify.ts)、[notifications-panel.tsx](../../apps/desktop/src/renderer/src/features/system/notifications-panel.tsx) |
 | Chrome 数据导入 | **只读书签**（口径见 §2）：扫描 `<User Data>/*/Bookmarks` + `Local State` 取显示名 → 预览条数与样例 → 导入到 `<数据根>/imports/chrome/bookmarks.json` → 查看/导出 Markdown/一键删除；仅 `http(s)`、URL 去重、单文件 >8 MiB 拒绝、上限 5000 条、token 拒绝分隔符与 `..` | [main/chrome-bookmarks.ts](../../apps/desktop/src/main/chrome-bookmarks.ts)、[chrome-panel.tsx](../../apps/desktop/src/renderer/src/features/system/chrome-panel.tsx) |
@@ -42,7 +42,7 @@
 | 去重后唯一文案 | 608 |
 | 自动替换 | 644 处 / 31 个文件 |
 | 需人工改造（模块级常量表 / 数据比较值） | 114 处 / 8 个文件 |
-| 迁移后字典 | **764 key / 18 domain**：首轮 662/14，合入 develop 后随对方新增界面继续补（#52 待执行参数 +2、`3afea90` 批（记忆/知识库、事件自动化、连接器、搜索、提问卡、D28 画布侧车、知识导入）+141、`e6a54b1` 批（MCP 工具授权）+26） |
+| 迁移后字典 | **827 key / 19 domain**（其中映射生成 18 域 764 条，`d22` 域 63 条手写保留）。首轮 662/14；合入 develop 后随对方新增界面继续补：#52 待执行参数 +2、`3afea90` 批（记忆/知识库、事件自动化、连接器、搜索、提问卡、D28 画布侧车、知识导入）+141、`e6a54b1` 批（MCP 工具授权）+26。计数脚本 `count-keys.cjs` 同时断言跨域无重复 key |
 | 残留未翻译界面文案 | **0**（`i18n` 扫描器：字符串字面量、模板串、`+` 拼接链、JSX 文本段） |
 
 两轮补漏的规模（对 develop 新增界面重跑同一流程）：第二轮 140 处 / 11 文件 + 手工 22 处，第三轮 24 处 / 1 文件 + 手工 3 处；扫描器对新文案零漏判（守卫测试 `tests/i18n-scan.test.ts` 会在 CI 直接失败）。develop 的六个新面板（memory / automation / connectors / search-settings / search-results / questions）与 MCP 白名单组件同样把已渲染字符串存进 notice state，已统一改为 `{ key, params }` + `noticeText()`，切语言即时重译（见 §6 顺带修复）。`src/shared/knowledge-import.ts` 因主进程也会 import，不能读渲染层语言 store，兜底文档标题改由调用方注入（develop 的测试同步更新并断言注入）。
