@@ -83,12 +83,26 @@
 | D15 `ask_user` 后端 | 已交付 | `feature/agent-tools` → `0350e40` | [D15-report](reports/D15-report.md) |
 | D15 `web_search` 后端 | 后端已合入；聊天接线见 [web_search 聊天报告](reports/D16-web-search-chat-report.md) | `feature/agent-tools`（`573421e`）→ PR #42 `b693c5b` | [D15-report](reports/D15-report.md) |
 | D16 授权后端与设置/聊天卡 | 已合入 | PR #47 `a0af1f5`、#49 `8a8e01c`、#51 `9ebab3a` | [D16-report](reports/D16-report.md) |
-| D16 真实聊天应用工具 | 本功能分支已实现；受控模型与真实桌面验证通过，待真人自审/PR 合入 | `feature/harness-tool-gateway`，基线 `2ecb2f9` | [D16-harness-tools-report](reports/D16-harness-tools-report.md) |
+| D16 真实聊天应用工具 | 已交付 | `feature/harness-tool-gateway` → PR #52 `bb8dfc3` | [D16-harness-tools-report](reports/D16-harness-tools-report.md) |
+| D16 `ask_user` 聊天回传 | 已交付 | `feature/ask-user-chat` → PR #54 `134306a` | [D16-ask-user-chat-report](reports/D16-ask-user-chat-report.md) |
+| D16 `web_search` 聊天接线 | 已交付 | `feature/web-search-chat` → PR #56 `b57c29e` | [D16-web-search-chat-report](reports/D16-web-search-chat-report.md) |
+| D30 聊天运行时 | 已交付 | `feature/chat-runtime` → PR #44 `19057e6` | [D30-report](reports/D30-report.md) |
 | D14 渲染片 + 交互片 | 已交付（mermaid 砍除，验收部分达成） | `feature/chat-experience` → `feature/settings-updates` → `0f20970` | [D14-report](reports/D14-report.md) |
+| 头像打磨（Grok Ball 视线与节奏） | 已交付 | `feature/gaze-avatar` → PR #61 `cc4a379`、#62 `5533ea6` | [B-AVATAR-02-report](reports/B-AVATAR-02-report.md) |
 | D25 全局搜索 | 已交付（host 检索按计划后接） | 同上 → `0f20970` | [D25-report](reports/D25-report.md) |
 | D26 聊天附件 | **切片交付，任务未完成** | 同上 → `0f20970` | [D26-report](reports/D26-report.md) |
-| D24 设置与更新 | **切片交付，任务未完成** | 同上 → `0f20970` | [D24-report](reports/D24-report.md) |
+| D24 设置与更新 | **切片交付，任务未完成**（备份保险库在途，见 §10） | 同上 → `0f20970` | [D24-report](reports/D24-report.md) |
 | D17 技能与模板 | **已交付（渲染层闭环）**：模板库 + 技能定义/复用/版本化 + 统一文件导入导出（契约校验）。工作流模板、Host 注入与能力强制留后续 | `feature/skills-templates` → `292c3b8`、PR #48 `2ecb2f9` | [D17-report](reports/D17-report.md) |
+| D18 记忆写入 / 检索 / 删除 | 已交付 | `feature/memory-knowledge` → PR #57 `7de305b` | [D18-memory-report](reports/D18-memory-report.md) |
+| D18 知识导入（.txt/.md，16 KiB 上限） | 已交付 | `feature/knowledge-import` → PR #59 `9805b6a` | [D18-knowledge-import-report](reports/D18-knowledge-import-report.md) |
+| D18 独立知识表 + 本地向量检索 + 保留策略 | 已交付 | `feature/knowledge-base` → PR #63 `ae0c6be` | [D18-knowledge-search-report](reports/D18-knowledge-search-report.md) |
+| D19 连接器登记与启停 | 已交付（自定义 MCP、凭据启用未做） | `feature/connector-registry` → PR #60 `20d3ab2` | [D19-connector-registry-report](reports/D19-connector-registry-report.md) |
+| D19 连接器调用与本地 SD 生图 | 已交付（视觉理解未做） | `feature/connector-invoke` → PR #65 `73ae475` | [D19-connector-invoke-report](reports/D19-connector-invoke-report.md) |
+| D20 事件自动化：触发规则与评审队列 | 已交付 | `feature/automation-triggers` → PR #66 `3afea90` | [D20-triggers-report](reports/D20-triggers-report.md) |
+| D28 产物画布共编侧车 | 已交付 | `feature/canvas-cowrite` → PR #64 `2d5a5e3` | [D28-report](reports/D28-report.md) |
+| D21 本地执行守护 | **未开始** | — | — |
+| D22 系统集成与双语 | **已实现但未合入**（9 提交、104 文件、从未推送），见 §10 | 本地 `feature/system-integration` | 分支内 `D22-report`（未入库） |
+| D23 平台验收 | 未开始（依赖 D13、D14–D22 全部完成） | — | — |
 
 补记说明：B 线四项与 D17 模板库切片在合入时**未写交付报告、PR 自审记录未填**（两份 PR 清单各仅勾选 2/5）；相应报告于 2026-10-25 事后补记，**不追认事前完成自审**，自审结论仍留空待负责人签署。B 线四项挤在一条串行分支经单个 PR 合入，偏离"一任务一分支"，lockfile 与 CI 配置改动亦未拆独立小 PR；D17 技能库部分已改从最新 develop 单独切分支。后续任务（含 D24、D26 的剩余部分）同样单独切分支，不再堆叠。各任务的手测截图（`reports/assets/d14|d17|d24|d25|d26/`）仍缺，列为待补。
 
@@ -203,5 +217,32 @@
 ### 9.3 永不做（定位红线）
 
 自有云服务、云存储、账户体系、计费系统、订阅制依赖、遥测上报、远程中继、模型托管。发现任何"必须付 Token 以外的钱才能用"的能力，一律不立项或必须先给出零成本本地等价路径。
+
+## 10. 在途分支台账（2026-10-27 清点）
+
+清点基线：`origin/develop` = `3afea90`（PR #66 合入后）。冲突结论来自 `git merge-tree --write-tree origin/develop <分支>` 的**试算**，不代表已解决；每次合并后本节需更新。
+
+| 分支 | 归属 | 未合入提交 | 推送状态 | 与 develop 试算 | 处置 |
+| --- | --- | --- | --- | --- | --- |
+| `feature/reasoner-toggle` | §9.1 快赢「深度思考开关」 | 1（6 文件） | 已推送 | **零冲突** | 可直接开 PR，最小最先 |
+| `feature/settings-vault` | D24 备份保险库 + 真实设置分区 | 3（23 文件） | 已推送 | **零冲突** | 可开 PR；合入后 D24 由"切片交付"升级为更接近完成 |
+| `feature/choice-card-answer` | 选项卡片回传 + 记忆弹窗移出聊天流 + 主窗口显示修复 | 5（17 文件） | **仅本地**（跟踪 origin/develop） | 零冲突 | 先推送留痕，再开 PR |
+| `backup/pre-ui-merge` | 与上一行**完全相同的 5 个提交** | 5 | 仅本地 | — | 纯备份；`feature/choice-card-answer` 合入后删除 |
+| `feature/gaze-avatar`（本地多出的 1 个提交） | 技能选择器菜单与版本化提示词复用（D17 后续，**与分支名无关**） | 1（4 文件） | 远端同名分支已合入并删除 | `styles.css` 冲突 | 摘出来另开 `feature/skills-composer-menu`，sync 后解冲突再开 PR |
+| `feature/system-integration` | **D22 系统集成与双语**（zh/en 词典、每 bot 托盘、系统通知、Chrome 导入） | 9（104 文件） | **从未推送** | 冲突 7 文件：`main/index.ts`、`App.tsx`、`avatar-picker.tsx`、`permission-chat.tsx`、`permissions-panel.tsx`、`fixture-service.ts`、`styles.css` | 最高优先：**先推送留痕**（当前只存在于这台机器，磁盘一坏就没了），再 sync develop 解冲突、开 PR |
+| `feature/manager-orchestration` | v0.5 协调者编排（契约 + agent-tools + storage + host + desktop + 文档） | 6（63 文件） | 已推送 | 冲突 7 文件，含 `docs/CONTRACTS.md`、`contracts/methods.test.ts`、`host.ts`、`storage/database.ts` | 契约面变更：按 DEVELOPMENT_PLAN §1 先出契约小 PR 与 ADR 对齐 v0.5 范围，再解冲突；排在上述之后 |
+| `feature/mono-shape` | 头像支线遗留 | 远端 1 / 本地 2 | 本地 `cf661c0` 未推送 | 冲突 4 文件（头像组件） | 仍等 §8 待拍板 #2；决定后要么推送并解冲突重开 PR，要么丢弃 |
+
+建议合入顺序（每条都要按规范填自审结论再合，不代签）：
+
+1. `feature/reasoner-toggle` —— 最小、零冲突；
+2. `feature/settings-vault` —— 零冲突，补 D24 欠账；
+3. `feature/choice-card-answer` —— 零冲突，含记忆弹窗移出；合入后删 `backup/pre-ui-merge`；
+4. `feature/skills-composer-menu`（从 gaze 分支摘出）—— 解 `styles.css` 冲突；
+5. `feature/system-integration` —— **先推送**，再解 7 文件冲突，这是 D22 主体；
+6. `feature/manager-orchestration` —— 先定 v0.5 契约范围与 ADR；
+7. `feature/mono-shape` —— 等 §8 待拍板 #2。
+
+另记两笔欠账：`docs/GAP_AUDIT.md` 与 `docs/TASK_MANAGER_ORCHESTRATION.md` 目前只存在于未提交的工作区，需要随相应分支入库；D14/D17/D24/D25/D26 的手测截图（`reports/assets/…`）仍未补。
 
 
