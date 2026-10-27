@@ -52,6 +52,7 @@ import { WorkflowEditor } from "./features/workflow-editor/workflow-editor.js";
 import { RunMonitor } from "./features/run-monitor/run-monitor.js";
 import { CanvasSidecar } from "./features/canvas/canvas-sidecar.js";
 import { ChatMarkdown } from "./features/chat/chat-markdown.js";
+import { ThinkingLine } from "./features/chat/thinking-line.js";
 import type { MentionTable } from "./features/chat/mentions.js";
 import {
   attachmentAccept,
@@ -2751,6 +2752,12 @@ function BotsPlaceholder({
   const [plusOpen, setPlusOpen] = useState(false);
   const [detailOther, setDetailOther] = useState<number | null>(null);
   const [stream, setStream] = useState<StreamStateForBot | null>(null);
+  /**
+   * The user's own request for the running turn: the thinking line derives its
+   * copy from it. Kept beside `stream` because `StreamState` is a pure model the
+   * reducer tests pin.
+   */
+  const [streamRequest, setStreamRequest] = useState<string>("");
   const [failedText, setFailedText] = useState("");
   const [answeredQuestions, setAnsweredQuestions] = useState<AnsweredQuestionMap>({});
   const [clarify, setClarify] = useState<ClarifyTarget | null>(null);
@@ -2947,6 +2954,7 @@ function BotsPlaceholder({
       streamRef.current.cancel();
     }
     const forKey = me.key;
+    setStreamRequest(text);
     setStream({ ...emptyStream(), forKey });
     onBotStatus(me.bot.id, "running");
     const started = runChatStream({
@@ -3180,7 +3188,7 @@ function BotsPlaceholder({
               <div className="msg-row bot streaming">
                 <div className="hover-wrap">
                   <div className="msg-bubble">
-                    {stream.text || "…"}
+                    {stream.text || <ThinkingLine request={streamRequest} />}
                     {!stream.failure && !stream.cancelled && (
                       <button
                         type="button"

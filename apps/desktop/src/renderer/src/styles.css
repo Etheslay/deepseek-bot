@@ -7877,3 +7877,17 @@ select:focus-visible {
 .task-cancel {
   margin-left: auto;
 }
+
+/* ---- 思考中状态行（任务相关文案） ---- */
+.thinking-line {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  color: var(--muted);
+}
+
+.thinking-hint {
+  font-size: 0.8em;
+  opacity: 0.65;
+  font-variant-numeric: tabular-nums;
+}
