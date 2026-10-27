@@ -32,7 +32,7 @@
 
 ## 4. 桌面与交付
 
-- [ ] 设置组件提供 bot、启用、窗口刷新/选择、截图/OCR、取消和仅本次审批；结果列表和本机缩略图/OCR 文本预览，确认后删除。迟到响应不能污染新 bot/目标。
-- [ ] 新增独立真实 Electron 验收脚本，自建测试窗口，本地受控模型；截图/OCR 不发送模型正文，验证结果元数据回传及实际 UI 预览。
-- [ ] 运行 `pnpm lint`、`pnpm typecheck`、`pnpm test`、Host/desktop build、真实窗口与离线 OCR/Electron 验收，逐条记录真实结果。
-- [ ] 更新 D21 报告、权限/开发计划、许可与恢复说明。功能 PR 目标 develop；在依赖未合入时明确记录顺序，不使用“已完成真人自审”的表述。
+- [x] 设置组件提供 bot、启用、窗口刷新/选择、截图/OCR、取消和仅本次审批；结果列表和本机缩略图/OCR 文本预览，确认后删除。迟到响应不能污染新 bot/目标。桌面设置页见 `apps/desktop/src/renderer/src/features/screen/`。
+- [ ] 新增独立真实 Electron 验收脚本，自建测试窗口，本地受控模型；截图/OCR 不发送模型正文，验证结果元数据回传及实际 UI 预览。本分支未开始这一项。
+- [ ] 运行 `pnpm lint`、`pnpm typecheck`、`pnpm test`、Host/desktop build、真实窗口与离线 OCR/Electron 验收，逐条记录真实结果。已跑项与未跑项写在 [D21 桌面报告](../../reports/D21-desktop-report.md)，不把未跑项记为通过。
+- [x] 更新 D21 报告、权限/开发计划、许可与恢复说明。功能 PR 目标 develop；依赖的契约、Windows 后端和 Host 网关已在 develop。不使用“已完成真人自审”的表述。

@@ -105,6 +105,8 @@ sequenceDiagram
 
 设置页只改变默认策略；聊天内授权是临时叠加，过期回到默认。两者共用同一张 grant 表，差异在 `scope`。页面列出 `permission.policy.list` 返回的全部能力。授权记录来自 `permission.grant.list`，不把 `scope=policy` 的全局策略行当成可撤销授权；撤销调用 `permission.grant.revoke`。上面草图里的「本地数据：位置 / 打开目录」仍未接在这一页。
 
+同一节下面的「屏幕与窗口感知」使用同一条 `screen.capture` 策略。开关只写成每次询问或从不允许，不提供始终允许。用户先选 bot，再刷新窗口并选定一个；截图和截图并识别各自调用 `screen.request`。等待审批时，这张卡只有「仅本次」和「拒绝」。缩略图是 `screen.result.read` 返回的 JPEG data URL，识别文本按转义文本显示，两者都不写入聊天。删除要再确认一次。换 bot 或换目标窗口之后，上一次请求的响应不会写进新的面板。
+
 ## 6. 审计与撤销
 
 - 每次工具调用写一条审计：`at`、`botId`、`capability`、`argsDigest`、`grantId`、`decision`、`result`、`runId?`；

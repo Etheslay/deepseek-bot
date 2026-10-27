@@ -6,7 +6,7 @@
 - 固定语言数据：`@tesseract.js-data/eng@1.0.0` 与 `@tesseract.js-data/chi_sim@1.0.0`，上游为 [Tesseract 语言数据](https://github.com/tesseract-ocr/tessdata)，分发说明见 [naptha/tessdata](https://github.com/naptha/tessdata)。
 - Worker、WASM 和模型仅作为本地资源使用，不从 CDN 下载，也不向远程 OCR 服务提交图像。构建复制上游 LICENSE/NOTICE 与所使用的数据许可；完整依赖许可证仍以锁文件和发行资源为准。
 - `packages/exec-daemon` 的构建把 worker、core/WASM、`4.0.0_best_int` 的 eng/chi_sim 和上述许可复制到构建目录。运行时只读该目录的绝对路径。语言包 1.0.0 的 package.json 声明 MIT，发布包本身没有 LICENSE 文件，构建目录里的 `licenses/tesseract-data.json` 记录了这一点。
-- 本片没有发行安装包验收。桌面预览和真实 Windows 窗口验收仍由后续片交付。
+- 本片没有发行安装包验收。桌面设置页只显示 Host 已经生成的 JPEG data URL，不新增第三方库，也不把图像或 OCR 正文送出本机。真实 Windows 窗口和打包 Electron 验收仍未在设置页分支执行。
 
 ## D21 预览图
 
