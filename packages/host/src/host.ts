@@ -386,8 +386,9 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
   sweepRetention(db, readRetentionPolicy(db), now());
   // D20 review queue: catch up on events that accumulated while the host
   // was down (enqueued as reason "missed", never silently replayed). The
-  // same tick evaluates local event rules, which start one run or record a
-  // disabled skip. Neither path opens a network connection.
+  // same tick evaluates local event rules, which start one run, hold one
+  // pending review, or record a disabled skip. Neither path opens a network
+  // connection.
   const bootAt = now();
   const scanLocalEvents = (): void => {
     try {

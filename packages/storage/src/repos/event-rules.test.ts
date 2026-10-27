@@ -6,10 +6,15 @@ import { describe, expect, it } from "vitest";
 import {
   appendEventRuleRecord,
   createBot,
+  decideEventRuleReview,
+  enqueueEventRuleReview,
+  findEventRuleReview,
   listEventRules,
+  listPendingEventRuleReviews,
   saveEventRule,
   saveWorkflow,
   setEventRuleEnabled,
+  setEventRuleReview,
   type OpenedDatabase,
 } from "../index.js";
 import {
@@ -54,6 +59,7 @@ describe("event rules", () => {
       eventType: "run.failed",
     });
     expect(rule.enabled).toBe(false);
+    expect(rule.review).toBe(false);
     expect(rule.botId).toBe(botId);
     expect(rule.name).toBe("失败后修一次");
     expect(listEventRules(db, botId).map((item) => item.id)).toEqual([rule.id]);
@@ -115,6 +121,44 @@ describe("event rules", () => {
       reason: "duplicate event",
     });
     expect(duplicate.outcome).toBe("duplicate");
+    db.close();
+  });
+
+  it("holds one pending review for an event and rejects a second", () => {
+    const { db, botId, otherBotId, workflowId } = setup();
+    const rule = saveEventRule(db, {
+      botId,
+      name: "先看一眼",
+      workflowId,
+      eventType: "run.failed",
+    });
+    expect(() => setEventRuleReview(db, { id: rule.id, botId: otherBotId })).toThrow(/not found/);
+    const reviewing = setEventRuleReview(db, { id: rule.id, botId });
+    expect(reviewing.review).toBe(true);
+    expect(reviewing.enabled).toBe(false);
+
+    const eventId = randomUUID();
+    const pending = enqueueEventRuleReview(db, { ruleId: rule.id, eventId });
+    expect(pending.status).toBe("pending");
+    expect(findEventRuleReview(db, rule.id, eventId)?.id).toBe(pending.id);
+    expect(findEventRuleReview(db, rule.id, randomUUID())).toBeUndefined();
+    expect(() => enqueueEventRuleReview(db, { ruleId: rule.id, eventId })).toThrow(/duplicate/);
+    expect(listPendingEventRuleReviews(db, { botId, limit: 0 })).toHaveLength(1);
+    expect(listPendingEventRuleReviews(db, { botId, ruleId: rule.id, limit: 500 })).toEqual([
+      expect.objectContaining({ id: pending.id, eventId, status: "pending" }),
+    ]);
+    expect(listPendingEventRuleReviews(db, { botId: otherBotId, limit: 20 })).toEqual([]);
+
+    const denied = decideEventRuleReview(db, { id: pending.id, status: "denied", runId: null });
+    expect(denied).toMatchObject({ status: "denied", runId: null });
+    expect(denied.decidedAt).toEqual(expect.any(String));
+    expect(() => decideEventRuleReview(db, { id: pending.id, status: "approved", runId: randomUUID() })).toThrow(
+      /not pending/,
+    );
+    expect(listPendingEventRuleReviews(db, { botId, limit: 20 })).toEqual([]);
+    expect(() => decideEventRuleReview(db, { id: randomUUID(), status: "denied", runId: null })).toThrow(
+      /not found/,
+    );
     db.close();
   });
 });

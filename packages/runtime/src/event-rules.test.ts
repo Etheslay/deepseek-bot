@@ -5,8 +5,15 @@
  */
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { listEventRuleRecords, saveEventRule, saveWorkflow, setEventRuleEnabled } from "@deepseek-bot/storage";
-import { evaluateEventRules } from "./event-rules.js";
+import {
+  listEventRuleRecords,
+  listPendingEventRuleReviews,
+  saveEventRule,
+  saveWorkflow,
+  setEventRuleEnabled,
+  setEventRuleReview,
+} from "@deepseek-bot/storage";
+import { approveEventRuleReview, denyEventRuleReview, evaluateEventRules } from "./event-rules.js";
 import { WorkflowEngine } from "./engine.js";
 import {
   botNode,
@@ -165,13 +172,17 @@ describe("local event rules", () => {
     seedEvent(db, botId, randomUUID(), "run.failed");
     expect(evaluateEventRules(db, engine).started).toBe(1);
     const started = listEventRuleRecords(db, { botId, outcome: "started", limit: 5 });
+    const sourceRunId = started[0]?.runId;
+    if (sourceRunId == null) {
+      throw new Error("expected the event rule to start a run");
+    }
     const runsAfterFirst = runCount(db);
     const followUp = randomUUID();
     db.raw
       .prepare(
         "INSERT INTO events (event_id, run_id, sequence, timestamp, type, payload_json) VALUES (?, ?, 50, ?, 'run.failed', ?);",
       )
-      .run(followUp, started[0]?.runId, "2026-10-27T05:00:00.000Z", JSON.stringify({ reason: "again" }));
+      .run(followUp, sourceRunId, "2026-10-27T05:00:00.000Z", JSON.stringify({ reason: "again" }));
     const second = evaluateEventRules(db, engine);
     expect(second.started).toBe(0);
     expect(second.skipped).toBe(1);
@@ -182,6 +193,131 @@ describe("local event rules", () => {
       reason: "source run was started by an event rule",
       runId: null,
     });
+    db.close();
+  });
+
+  it("holds a matching event for review and does not start a run", () => {
+    const { db, engine, botId, workflowId } = setup();
+    const rule = saveEventRule(db, {
+      botId,
+      name: "先评审",
+      workflowId,
+      eventType: "run.failed",
+    });
+    setEventRuleEnabled(db, { id: rule.id, botId, enabled: true });
+    setEventRuleReview(db, { id: rule.id, botId });
+    const eventId = randomUUID();
+    seedEvent(db, botId, eventId, "run.failed");
+    const held = evaluateEventRules(db, engine);
+    expect(held).toMatchObject({ started: 0, pending: 1, skipped: 0 });
+    expect(runCount(db)).toBe(1);
+    const pending = listPendingEventRuleReviews(db, { botId, limit: 20 });
+    expect(pending).toHaveLength(1);
+    expect(pending[0]).toMatchObject({ eventId, status: "pending", runId: null });
+    db.close();
+  });
+
+  it("starts exactly one run when a pending review is approved", () => {
+    const { db, engine, botId, workflowId } = setup();
+    const rule = saveEventRule(db, {
+      botId,
+      name: "批准一次",
+      workflowId,
+      eventType: "run.completed",
+    });
+    setEventRuleEnabled(db, { id: rule.id, botId, enabled: true });
+    setEventRuleReview(db, { id: rule.id, botId });
+    const eventId = randomUUID();
+    seedEvent(db, botId, eventId, "run.completed");
+    expect(evaluateEventRules(db, engine).pending).toBe(1);
+    const pending = listPendingEventRuleReviews(db, { botId, limit: 5 });
+    const reviewId = pending[0]!.id;
+    const runsBefore = runCount(db);
+
+    const approved = approveEventRuleReview(db, engine, { botId, reviewId });
+    expect(approved).toMatchObject({ status: "approved", eventId });
+    expect(approved.runId).toEqual(expect.any(String));
+    expect(runCount(db)).toBe(runsBefore + 1);
+    expect(() => approveEventRuleReview(db, engine, { botId, reviewId })).toThrow(/not pending/);
+    expect(runCount(db)).toBe(runsBefore + 1);
+    const started = listEventRuleRecords(db, { botId, outcome: "started", limit: 5 });
+    expect(started).toHaveLength(1);
+    expect(started[0]).toMatchObject({ eventId, runId: approved.runId, reason: "review approved" });
+    expect(listPendingEventRuleReviews(db, { botId, limit: 5 })).toEqual([]);
+    db.close();
+  });
+
+  it("records a skip and starts nothing when a pending review is denied", () => {
+    const { db, engine, botId, workflowId } = setup();
+    const rule = saveEventRule(db, {
+      botId,
+      name: "拒绝",
+      workflowId,
+      eventType: "run.failed",
+    });
+    setEventRuleEnabled(db, { id: rule.id, botId, enabled: true });
+    setEventRuleReview(db, { id: rule.id, botId });
+    const eventId = randomUUID();
+    seedEvent(db, botId, eventId, "run.failed");
+    expect(evaluateEventRules(db, engine).pending).toBe(1);
+    const reviewId = listPendingEventRuleReviews(db, { botId, limit: 5 })[0]!.id;
+    const runsBefore = runCount(db);
+
+    const denied = denyEventRuleReview(db, { botId, reviewId });
+    expect(denied).toMatchObject({ status: "denied", eventId, runId: null });
+    expect(runCount(db)).toBe(runsBefore);
+    expect(() => denyEventRuleReview(db, { botId, reviewId })).toThrow(/not pending/);
+    expect(runCount(db)).toBe(runsBefore);
+    const skips = listEventRuleRecords(db, { botId, outcome: "skipped", limit: 5 });
+    expect(skips).toEqual([
+      expect.objectContaining({ eventId, outcome: "skipped", reason: "review denied", runId: null }),
+    ]);
+    expect(listPendingEventRuleReviews(db, { botId, limit: 5 })).toEqual([]);
+    db.close();
+  });
+
+  it("does not enqueue a second pending item for the same event", () => {
+    const { db, engine, botId, workflowId } = setup();
+    const rule = saveEventRule(db, {
+      botId,
+      name: "不重复入队",
+      workflowId,
+      eventType: "run.failed",
+    });
+    setEventRuleEnabled(db, { id: rule.id, botId, enabled: true });
+    setEventRuleReview(db, { id: rule.id, botId });
+    const eventId = randomUUID();
+    seedEvent(db, botId, eventId, "run.failed");
+    expect(evaluateEventRules(db, engine)).toMatchObject({ pending: 1, started: 0, duplicates: 0 });
+    const runsAfter = runCount(db);
+
+    db.raw.prepare("UPDATE event_rules SET cursor_event_rowid = 0 WHERE id = ?;").run(rule.id);
+    const again = evaluateEventRules(db, engine);
+    expect(again).toMatchObject({ pending: 0, started: 0, duplicates: 1 });
+    expect(runCount(db)).toBe(runsAfter);
+    const pending = listPendingEventRuleReviews(db, { botId, ruleId: rule.id, limit: 20 });
+    expect(pending).toHaveLength(1);
+    expect(pending[0]).toMatchObject({ eventId, status: "pending" });
+    db.close();
+  });
+
+  it("records a skip and does not enqueue when a review rule is disabled", () => {
+    const { db, engine, botId, workflowId } = setup();
+    const rule = saveEventRule(db, {
+      botId,
+      name: "关着的评审",
+      workflowId,
+      eventType: "run.completed",
+    });
+    setEventRuleReview(db, { id: rule.id, botId });
+    const eventId = randomUUID();
+    seedEvent(db, botId, eventId, "run.completed");
+    const skipped = evaluateEventRules(db, engine);
+    expect(skipped).toMatchObject({ started: 0, pending: 0, skipped: 1 });
+    expect(runCount(db)).toBe(1);
+    expect(listPendingEventRuleReviews(db, { botId, limit: 20 })).toEqual([]);
+    const records = listEventRuleRecords(db, { botId, outcome: "skipped", limit: 5 });
+    expect(records[0]).toMatchObject({ eventId, reason: "rule disabled", runId: null });
     db.close();
   });
 });
