@@ -1435,22 +1435,9 @@ body {
   flex: 0 0 auto;
 }
 
-/* ---------- chat stamps and sender labels ---------- */
+/* ---------- chat stamps ---------- */
 
-/* bot-to-bot dialogue renders group-chat style: avatar beside the bubble,
-   sender name in the bot's color above it */
-.sender-line {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-}
-
-.sender-line .sender-name {
-  font-size: 0.8rem;
-  line-height: 1.2;
-  margin: 0 0 3px 4px;
-}
-
+/* bot-to-bot dialogue renders group-chat style: avatar beside the bubble */
 .msg-row.bot > .avatar-img {
   flex: 0 0 auto;
   margin-top: auto;
@@ -3542,11 +3529,6 @@ select option {
   gap: 12px;
 }
 
-[data-theme="light"] .sender-line {
-  margin-bottom: 3px;
-  font-size: 0.78rem;
-}
-
 [data-theme="light"] .chat-time {
   margin: 10px 0 0;
   font-size: 0.75rem;
@@ -3865,11 +3847,6 @@ select option {
   background: #202024;
   color: var(--text);
   border-radius: 20px 20px 5px 20px;
-}
-
-[data-theme="dark"] .sender-line {
-  margin-bottom: 3px;
-  font-size: 0.78rem;
 }
 
 [data-theme="dark"] .chat-time {
@@ -4497,11 +4474,6 @@ select option {
 .msg-row.user .msg-actions {
   order: -1;
   margin: 0 6px 0 0;
-}
-
-.sender-line {
-  margin-bottom: 3px;
-  font-size: 0.78rem;
 }
 
 .composer {
@@ -5959,16 +5931,6 @@ select option {
 
 .msg-row.bot.streaming .msg-bubble {
   padding-bottom: 6px;
-}
-
-.sender-line {
-  font-size: 0.74rem;
-  color: var(--muted);
-}
-
-.sender-name {
-  color: var(--muted) !important;
-  font-weight: 500;
 }
 
 /* 3. user bubble: painted with the bot's exact colour, no transparency

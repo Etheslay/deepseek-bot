@@ -2808,13 +2808,6 @@ function MessageBubble({
         <AvatarView avatar={speaker.avatar} variant="inline" size={34} />
       )}
       <div className="hover-wrap">
-        {!isUser && speaker ? (
-          <div className="sender-line">
-            <span className="sender-name" style={{ color: avatarColor(speaker.avatar) }}>
-              {speaker.bot.name}
-            </span>
-          </div>
-        ) : null}
         <div
           className={"msg-bubble" + (isUser ? " user" : "")}
           style={isUser ? { background: accent, color: readableTextColor(accent) } : undefined}
