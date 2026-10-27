@@ -99,13 +99,6 @@ import {
   saveTemplate,
   type BotTemplate,
 } from "./features/templates/bot-templates.js";
-import {
-  applySkill,
-  deleteSkill,
-  listSkills,
-  upsertSkill,
-  type Skill,
-} from "./features/skills/skill-store.js";
 import { BotSkillsPicker } from "./features/skills/bot-skills-picker.js";
 import { SkillsPanel } from "./features/skills/skills-panel.js";
 import {
@@ -3024,8 +3017,6 @@ function BotsPlaceholder({
   const [clarify, setClarify] = useState<ClarifyTarget | null>(null);
   const [memoryOpen, setMemoryOpen] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<AttachmentDraft[]>([]);
-  const [skills, setSkills] = useState<Skill[]>(() => listSkills(window.localStorage));
-  const [skillMenuOpen, setSkillMenuOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const streamRef = useRef<StreamHandle | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
@@ -3040,32 +3031,6 @@ function BotsPlaceholder({
     }
     return table;
   }, [bots]);
-
-  const applySkillToDraft = (skill: Skill): void => {
-    setDraft((prev) => applySkill(skill, prev));
-    setSkillMenuOpen(false);
-  };
-
-  const saveDraftAsSkill = (): void => {
-    const prompt = draft.trim();
-    if (prompt.length === 0) {
-      onNotify(t("skills.saveNeedsContent"));
-      return;
-    }
-    const name = t("skills.appliedLabel", [skills.length + 1]);
-    const result = upsertSkill(window.localStorage, { name, prompt });
-    if (result.ok) {
-      setSkills(listSkills(window.localStorage));
-      onNotify(t("skills.savedVersioned", [result.skill.name, result.skill.version]));
-    } else {
-      onNotify(result.reason === "limit" ? t("skills.limitReachedShort") : t("skills.emptyContent"));
-    }
-    setSkillMenuOpen(false);
-  };
-
-  const removeSkill = (id: string): void => {
-    setSkills(deleteSkill(window.localStorage, id));
-  };
 
   /* The old local-only handleChoice from the skills branch is deliberately not
      taken: this branch answers choice cards through the shared chat stream
@@ -3569,58 +3534,6 @@ function BotsPlaceholder({
       />
       <div className="composer">
         <div className="composer-menu-wrap">
-          <button
-            type="button"
-            className="composer-plus composer-skill"
-            aria-label={t("skills.menuLabel")}
-            title={t("skills.dialogTitle")}
-            onClick={() => setSkillMenuOpen((v) => !v)}
-          >
-            ⚡
-          </button>
-          {skillMenuOpen && (
-            <>
-              <div className="menu-overlay" onClick={() => setSkillMenuOpen(false)} />
-              <div className="composer-menu skills-menu" role="menu" aria-label={t("skills.menuLabel")}>
-                {skills.length === 0 && (
-                  <div className="menu-item skills-empty">{t("skills.emptyHint")}</div>
-                )}
-                {skills.map((skill) => (
-                  <div className="skill-row" key={skill.id}>
-                    <button
-                      type="button"
-                      role="menuitem"
-                      className="menu-item skill-apply"
-                      title={t("skills.applyAria", [skill.name, skill.version])}
-                      onClick={() => applySkillToDraft(skill)}
-                    >
-                      <span className="skill-name">{skill.name}</span>
-                      <span className="skill-version">v{skill.version}</span>
-                    </button>
-                    <button
-                      type="button"
-                      className="skill-remove"
-                      aria-label={t("skills.removeAria", [skill.name])}
-                      onClick={() => removeSkill(skill.id)}
-                    >
-                      ×
-                    </button>
-                  </div>
-                ))}
-                <div className="menu-sep" />
-                <button
-                  type="button"
-                  role="menuitem"
-                  className="menu-item"
-                  disabled={draft.trim().length === 0}
-                  onClick={saveDraftAsSkill}
-                >
-                  <MenuIcon d="M5 4h9l5 5v11H5zM14 4v5h5" />
-                  {t("skills.saveCurrentAria")}
-                </button>
-              </div>
-            </>
-          )}
           <button
             type="button"
             className="composer-plus"

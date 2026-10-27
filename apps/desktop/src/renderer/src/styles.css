@@ -7283,64 +7283,6 @@ select:focus-visible {
   transform: none;
 }
 
-.composer-skill {
-  font-size: 0.9rem;
-}
-
-.skills-menu {
-  min-width: 240px;
-  max-height: 300px;
-  overflow-y: auto;
-}
-
-.skills-empty {
-  color: var(--muted);
-  font-size: 0.78rem;
-  cursor: default;
-}
-
-.skill-row {
-  display: flex;
-  align-items: stretch;
-}
-
-.skill-apply {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-
-.skill-name {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.skill-version {
-  font-size: 0.66rem;
-  color: var(--muted);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 1px 5px;
-}
-
-.skill-remove {
-  border: none;
-  background: transparent;
-  color: var(--muted);
-  cursor: pointer;
-  font-size: 0.95rem;
-  padding: 0 8px;
-}
-
-.skill-remove:hover {
-  color: var(--text);
-}
-
 .menu-item:disabled {
   opacity: 0.45;
   cursor: default;

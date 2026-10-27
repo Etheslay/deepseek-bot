@@ -143,7 +143,10 @@ export class TaskDispatcher {
     if (input.toBotId === me.id) {
       throw invalid("a coordinator cannot dispatch a task to itself");
     }
-    if (me.groupId === null || target.groupId !== me.groupId) {
+    // Ungrouped bots share the implicit "未分组" group: null === null passes,
+    // a grouped/ungrouped mix or a real group mismatch stays rejected. This
+    // mirrors the gateway-layer guard in agent-tools/task-tools.ts.
+    if (target.groupId !== me.groupId) {
       throw unauthorized("task dispatch targets must stay inside the coordinator's group");
     }
     for (const hop of input.chain ?? []) {
@@ -153,7 +156,7 @@ export class TaskDispatcher {
           botId: hop.botId,
         });
       }
-      if (me.groupId === null || hopBot.groupId !== me.groupId) {
+      if (hopBot.groupId !== me.groupId) {
         throw unauthorized("relay chain hops must stay inside the coordinator's group", {
           botId: hop.botId,
         });
