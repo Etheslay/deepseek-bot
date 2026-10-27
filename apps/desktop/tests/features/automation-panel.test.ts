@@ -127,17 +127,22 @@ describe("automation panel", () => {
       setValue?.call(nameInput, "完成即通知");
       nameInput.dispatchEvent(new Event("input", { bubbles: true }));
     });
-    const select = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")?.set;
-    const workflowSelect = container.querySelector('select[aria-label="目标工作流"]');
-    if (!(workflowSelect instanceof HTMLSelectElement)) throw new Error("missing workflow select");
+    // The workflow picker is the app's own dropdown now; open it and pick by value.
+    const workflowSelect = container.querySelector('button[aria-label="目标工作流"]');
+    if (!(workflowSelect instanceof HTMLButtonElement)) throw new Error("missing workflow select");
     await act(async () => {
-      select?.call(workflowSelect, WORKFLOW);
-      workflowSelect.dispatchEvent(new Event("input", { bubbles: true }));
-      workflowSelect.dispatchEvent(new Event("change", { bubbles: true }));
+      workflowSelect.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    const workflowOption = workflowSelect
+      .closest(".custom-select")
+      ?.querySelector<HTMLButtonElement>(`.custom-select-item[data-value="${WORKFLOW}"]`);
+    if (!(workflowOption instanceof HTMLButtonElement)) throw new Error("missing workflow option");
+    await act(async () => {
+      workflowOption.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     expect(nameInput.value).toBe("完成即通知");
     expect(container.textContent).toContain("修复流程");
-    expect(workflowSelect.value).toBe(WORKFLOW);
+    expect(workflowSelect.dataset.value).toBe(WORKFLOW);
     await act(async () => {
       click(container, "保存规则");
     });

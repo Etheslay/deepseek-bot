@@ -7586,3 +7586,26 @@ select:focus-visible {
   top: auto;
   transform: none;
 }
+
+/*
+ * 设置行里的下拉控件：.custom-select 基类是 flex:1（表单里要撑满），
+ * 但设置行是 space-between 的一行标签 + 控件，必须保持原生 .settings-select
+ * 那样的紧凑尺寸，否则控件会吃掉整行宽度。
+ */
+.settings-row .custom-select {
+  flex: 0 0 auto;
+  min-width: 132px;
+}
+
+.settings-row .custom-select-trigger {
+  width: auto;
+  height: auto;
+  padding: 0.35rem 0.6rem;
+  font-size: 0.9rem;
+}
+
+.settings-row .custom-select-menu {
+  right: 0;
+  left: auto;
+  min-width: 100%;
+}

@@ -29,6 +29,7 @@ export function CustomSelect({ value, options, onChange, ariaLabel, disabled = f
         disabled={disabled}
         aria-label={ariaLabel}
         aria-expanded={open}
+        data-value={value}
         onClick={() => setOpen((v) => !v)}
       >
         {current ? current.label : ""}
@@ -44,6 +45,7 @@ export function CustomSelect({ value, options, onChange, ariaLabel, disabled = f
                 type="button"
                 role="option"
                 aria-selected={o.value === value}
+                data-value={o.value}
                 className={"custom-select-item" + (o.value === value ? " current" : "")}
                 onClick={() => {
                   onChange(String(o.value));
