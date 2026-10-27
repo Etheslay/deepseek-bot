@@ -43,6 +43,7 @@ async function fixture(
     mcp?: unknown;
     mcpStatus?: number;
     mcpSlow?: boolean;
+    screen?: unknown;
     result?: unknown;
   } = {},
 ) {
@@ -59,6 +60,8 @@ async function fixture(
       if (options.mcpSlow) return;
       response.statusCode = options.mcpStatus ?? 200;
       response.end(JSON.stringify(options.mcp ?? { tools: [], warnings: [] }));
+    } else if (request.url === "/screen") {
+      response.end(JSON.stringify(options.screen ?? { tools: [] }));
     } else if (request.url === "/web-search") {
       response.end(
         JSON.stringify({
@@ -328,6 +331,7 @@ describe("application tool plugin", () => {
       "/memory",
       "/connectors",
       "/web-search",
+      "/screen",
       "/mcp",
       "/app-tools/ready",
       "/app-tools/call",
@@ -421,5 +425,37 @@ describe("application tool plugin", () => {
       ),
     ).toEqual({ group: { id: "g1" } });
     expect(requests).toContain("/web-search/call");
+  });
+
+  it("registers screen_capture only when the host catalog publishes it", async () => {
+    const hidden = await fixture();
+    await apply(hidden.ctx);
+    expect(hidden.tools.map((tool) => tool.name)).not.toContain("screen_capture");
+    const { ctx, tools, requests } = await fixture({
+      screen: {
+        tools: [
+          {
+            name: "screen_capture",
+            description: "screen_capture",
+            parameters: {
+              type: "object",
+              additionalProperties: false,
+              properties: { mode: { type: "string" } },
+            },
+          },
+        ],
+      },
+    });
+    await apply(ctx);
+    const tool = tools.find((item) => item.name === "screen_capture");
+    expect(tool?.timeoutMs).toBeGreaterThan(600_000);
+    expect(
+      await tool!.execute(
+        { mode: "image" },
+        { agent: { session: { id: "physical-session" } }, callId: "sc1" },
+      ),
+    ).toEqual({ group: { id: "g1" } });
+    expect(requests).toContain("/screen");
+    expect(requests).toContain("/screen/call");
   });
 });

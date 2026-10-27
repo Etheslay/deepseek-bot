@@ -61,6 +61,7 @@ describe("ensureDataLayout", () => {
     expect(fs.statSync(layout.logs).isDirectory()).toBe(true);
     expect(fs.statSync(layout.cache).isDirectory()).toBe(true);
     expect(fs.statSync(layout.credentials).isDirectory()).toBe(true);
+    expect(fs.statSync(layout.screenOutputs).isDirectory()).toBe(true);
   });
 
   it("is idempotent and never deletes content", () => {

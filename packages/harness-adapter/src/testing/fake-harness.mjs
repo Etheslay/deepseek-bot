@@ -16,12 +16,11 @@
  * so tests can assert what the adapter actually sent.
  */
 import { createInterface } from "node:readline";
-import { appendFileSync, mkdirSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const scenario = process.env["FAKE_SCENARIO"] ?? "ok";
 const recordDir = process.env["FAKE_RECORD_DIR"];
-const fakeState = { turns: 0 };
 let sessionId = null;
 let lastPrompt = null;
 let initializeParams = null;
@@ -62,9 +61,15 @@ function status(value) {
 }
 
 function emitTurnCompletion(messageId, text) {
-  sessionEvent({ type: "agent/inbox/spliced", data: { target: "next-turn", inserted: [{ id: messageId }] } });
+  sessionEvent({
+    type: "agent/inbox/spliced",
+    data: { target: "next-turn", inserted: [{ id: messageId }] },
+  });
   sessionEvent({ type: "turn/start", data: { turn: 1 } });
-  sessionEvent({ type: "assistant/message", data: { message: { role: "assistant", content: [{ type: "text", text }] } } });
+  sessionEvent({
+    type: "assistant/message",
+    data: { message: { role: "assistant", content: [{ type: "text", text }] } },
+  });
   sessionEvent({ type: "turn/end", data: { reason: { kind: "completed" } } });
   status("running");
   status("idle");
@@ -73,7 +78,9 @@ function emitTurnCompletion(messageId, text) {
 const lines = createInterface({ input: process.stdin, terminal: false });
 lines.on("line", (line) => {
   void handleLine(line).catch((error) => {
-    process.stderr.write(`fake harness request failed: ${error instanceof Error ? error.message : String(error)}\n`);
+    process.stderr.write(
+      `fake harness request failed: ${error instanceof Error ? error.message : String(error)}\n`,
+    );
     process.exitCode = 1;
     lines.close();
   });
@@ -97,9 +104,18 @@ async function handleLine(line) {
       }
       initializeParams = params;
       if (process.env.DSB_APP_TOOLS_URL !== undefined) {
-        const headers = { authorization: `Bearer ${process.env.DSB_APP_TOOLS_TOKEN}`, "content-type": "application/json" };
-        const { tools } = await (await globalThis.fetch(`${process.env.DSB_APP_TOOLS_URL}/app-tools`, { headers })).json();
-        await globalThis.fetch(`${process.env.DSB_APP_TOOLS_URL}/app-tools/ready`, { method: "POST", headers, body: JSON.stringify({ tools: tools.map(tool => tool.name) }) });
+        const headers = {
+          authorization: `Bearer ${process.env.DSB_APP_TOOLS_TOKEN}`,
+          "content-type": "application/json",
+        };
+        const { tools } = await (
+          await globalThis.fetch(`${process.env.DSB_APP_TOOLS_URL}/app-tools`, { headers })
+        ).json();
+        await globalThis.fetch(`${process.env.DSB_APP_TOOLS_URL}/app-tools/ready`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ tools: tools.map((tool) => tool.name) }),
+        });
       }
       record({
         env: {
@@ -125,16 +141,31 @@ async function handleLine(line) {
       if (scenario === "app-tool") {
         status("running");
         const response = await globalThis.fetch(`${process.env.DSB_APP_TOOLS_URL}/app-tools/call`, {
-          method: "POST", headers: { authorization: `Bearer ${process.env.DSB_APP_TOOLS_TOKEN}`, "content-type": "application/json" },
-          body: JSON.stringify({ sessionId, callId: "app-call-1", tool: "create_group", params: { name: "from Harness" } }),
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${process.env.DSB_APP_TOOLS_TOKEN}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            sessionId,
+            callId: "app-call-1",
+            tool: "create_group",
+            params: { name: "from Harness" },
+          }),
         });
-        emitTurnCompletion(messageId, JSON.stringify(await response.json())); return;
+        emitTurnCompletion(messageId, JSON.stringify(await response.json()));
+        return;
       }
       if (scenario === "crash") {
         serial += 1;
         notify("session.event", {
           sessionId,
-          event: { type: "agent/inbox/spliced", seq: serial, time: Date.now(), data: { inserted: [{ id: messageId }] } },
+          event: {
+            type: "agent/inbox/spliced",
+            seq: serial,
+            time: Date.now(),
+            data: { inserted: [{ id: messageId }] },
+          },
         });
         setTimeout(() => process.exit(1), 20);
         return;
@@ -167,9 +198,13 @@ async function handleLine(line) {
         return;
       }
       if (scenario === "first-ok-then-hang") {
-        // First turn completes (resume seed material); later turns hang.
-        if (fakeState.turns === 0) {
-          fakeState.turns += 1;
+        // Each bot node is a new process, so the turn count lives in this host's
+        // DSH_HOME. The first prompt completes; every later prompt hangs.
+        const home = process.env.DSH_HOME ?? ".";
+        const marker = join(home, "fake-first-ok");
+        if (!existsSync(marker)) {
+          mkdirSync(home, { recursive: true });
+          writeFileSync(marker, "1");
           emitTurnCompletion(messageId, "first turn ok");
           return;
         }
@@ -183,8 +218,18 @@ async function handleLine(line) {
           : "fake final response";
       if (scenario === "tool") {
         sessionEvent({ type: "agent/inbox/spliced", data: { inserted: [{ id: messageId }] } });
-        sessionEvent({ type: "tool/call", data: { callId: "call-1", name: "write", arguments: { path: "hello.txt" } } });
-        sessionEvent({ type: "tool/result", data: { callId: "call-1", isError: false, meta: { operation: "write", path: "hello.txt" } } });
+        sessionEvent({
+          type: "tool/call",
+          data: { callId: "call-1", name: "write", arguments: { path: "hello.txt" } },
+        });
+        sessionEvent({
+          type: "tool/result",
+          data: {
+            callId: "call-1",
+            isError: false,
+            meta: { operation: "write", path: "hello.txt" },
+          },
+        });
         emitTurnCompletion(messageId, text);
         return;
       }

@@ -107,6 +107,8 @@ interface InflightAttempt {
   readonly controller: AbortController;
   readonly timer: NodeJS.Timeout | undefined;
   settled: boolean;
+  /** Settles after the executor finishes, including subprocess teardown. */
+  completion?: Promise<void>;
 }
 
 type AttemptOutcome =
@@ -419,7 +421,7 @@ export class RunExecution {
       });
       return;
     }
-    promise.then(
+    entry.completion = promise.then(
       (result) => {
         this.settleAttempt(running.id, { kind: "success", result });
       },
@@ -429,6 +431,22 @@ export class RunExecution {
           error: nodeExecutionErrorFromUnknown(error),
         });
       },
+    );
+  }
+
+  /**
+   * Abort in-flight executors and wait until their subprocesses have been
+   * disposed. Does not write run state. Crash-simulation cleanup calls this
+   * after storage is already closed, so a hung harness child releases the
+   * workspace directory it was started in.
+   */
+  releaseInflight(): Promise<void> {
+    const pending = [...this.inflight.values()];
+    for (const entry of pending) {
+      entry.controller.abort();
+    }
+    return Promise.all(pending.map((entry) => entry.completion ?? Promise.resolve())).then(
+      () => undefined,
     );
   }
 

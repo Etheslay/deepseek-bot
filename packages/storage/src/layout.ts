@@ -26,6 +26,8 @@ export interface DataLayout {
   readonly credentials: string;
   /** Generated connector outputs (D19, e.g. SD images); not backed up. */
   readonly connectorOutputs: string;
+  /** Selected-window captures and OCR (D21); not part of the metadata backup. */
+  readonly screenOutputs: string;
 }
 
 /**
@@ -95,6 +97,7 @@ export function ensureDataLayout(root: string): DataLayout {
     cache: path.join(root, "cache"),
     credentials: path.join(root, "credentials"),
     connectorOutputs: path.join(root, "connector-outputs"),
+    screenOutputs: path.join(root, "screen-outputs"),
   };
   try {
     const stat = fs.statSync(layout.root);
@@ -117,6 +120,7 @@ export function ensureDataLayout(root: string): DataLayout {
     layout.cache,
     layout.credentials,
     layout.connectorOutputs,
+    layout.screenOutputs,
   ]) {
     try {
       fs.mkdirSync(dir, { recursive: true });

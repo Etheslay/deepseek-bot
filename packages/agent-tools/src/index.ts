@@ -51,6 +51,12 @@ export {
   type KnowledgeStore,
 } from "./knowledge.js";
 export {
+  bindScreenCaptureTool,
+  ScreenCaptureInputSchema,
+  type ScreenCaptureResult,
+  type ScreenCaptureStore,
+} from "./screen.js";
+export {
   bindTaskTools,
   DispatchTaskInputSchema,
   ListTasksInputSchema,
