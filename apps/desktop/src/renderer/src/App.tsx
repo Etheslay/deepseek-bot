@@ -59,6 +59,13 @@ import {
   saveTemplate,
   type BotTemplate,
 } from "./features/templates/bot-templates.js";
+import {
+  applySkill,
+  deleteSkill,
+  listSkills,
+  upsertSkill,
+  type Skill,
+} from "./features/skills/skill-store.js";
 import { BotSkillsPicker } from "./features/skills/bot-skills-picker.js";
 import { SkillsPanel } from "./features/skills/skills-panel.js";
 import {
@@ -2456,6 +2463,8 @@ function BotsPlaceholder({
   const [clarify, setClarify] = useState<ClarifyTarget | null>(null);
   const [memoryOpen, setMemoryOpen] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<AttachmentDraft[]>([]);
+  const [skills, setSkills] = useState<Skill[]>(() => listSkills(window.localStorage));
+  const [skillMenuOpen, setSkillMenuOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const streamRef = useRef<StreamHandle | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
@@ -2466,11 +2475,40 @@ function BotsPlaceholder({
   const mentionTable = useMemo<MentionTable>(() => {
     const table: MentionTable = new Map();
     for (const bot of bots) {
-      table.set(bot.bot.name, { botKey: bot.key, color: avatarColor(bot.avatar) });
+      table.set(bot.bot.name, { botKey: bot.key, color: avatarColor(bot.avatar), shape: bot.avatar.kind === "grok" ? bot.avatar.shape : "circle" });
     }
     return table;
   }, [bots]);
 
+  const applySkillToDraft = (skill: Skill): void => {
+    setDraft((prev) => applySkill(skill, prev));
+    setSkillMenuOpen(false);
+  };
+
+  const saveDraftAsSkill = (): void => {
+    const prompt = draft.trim();
+    if (prompt.length === 0) {
+      onNotify("先输入内容，再存为技能");
+      return;
+    }
+    const name = `技能 ${skills.length + 1}`;
+    const result = upsertSkill(window.localStorage, { name, prompt });
+    if (result.ok) {
+      setSkills(listSkills(window.localStorage));
+      onNotify(`已保存「${result.skill.name}」v${result.skill.version}`);
+    } else {
+      onNotify(result.reason === "limit" ? "技能已达上限" : "内容为空");
+    }
+    setSkillMenuOpen(false);
+  };
+
+  const removeSkill = (id: string): void => {
+    setSkills(deleteSkill(window.localStorage, id));
+  };
+
+  /* The old local-only handleChoice from the skills branch is deliberately not
+     taken: this branch answers choice cards through the shared chat stream
+     (see the handleChoice below), so keeping both would shadow it. */
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
   }, [msgs.length]);
@@ -2943,6 +2981,58 @@ function BotsPlaceholder({
       />
       <div className="composer">
         <div className="composer-menu-wrap">
+          <button
+            type="button"
+            className="composer-plus composer-skill"
+            aria-label="技能"
+            title="技能：复用常用指令"
+            onClick={() => setSkillMenuOpen((v) => !v)}
+          >
+            ⚡
+          </button>
+          {skillMenuOpen && (
+            <>
+              <div className="menu-overlay" onClick={() => setSkillMenuOpen(false)} />
+              <div className="composer-menu skills-menu" role="menu" aria-label="技能">
+                {skills.length === 0 && (
+                  <div className="menu-item skills-empty">还没有技能：输入内容后可存为技能</div>
+                )}
+                {skills.map((skill) => (
+                  <div className="skill-row" key={skill.id}>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="menu-item skill-apply"
+                      title={`应用「${skill.name}」v${skill.version}`}
+                      onClick={() => applySkillToDraft(skill)}
+                    >
+                      <span className="skill-name">{skill.name}</span>
+                      <span className="skill-version">v{skill.version}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="skill-remove"
+                      aria-label={`删除技能 ${skill.name}`}
+                      onClick={() => removeSkill(skill.id)}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+                <div className="menu-sep" />
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="menu-item"
+                  disabled={draft.trim().length === 0}
+                  onClick={saveDraftAsSkill}
+                >
+                  <MenuIcon d="M5 4h9l5 5v11H5zM14 4v5h5" />
+                  把当前输入存为技能
+                </button>
+              </div>
+            </>
+          )}
           <button
             type="button"
             className="composer-plus"

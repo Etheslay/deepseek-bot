@@ -5971,21 +5971,14 @@ select option {
   font-weight: 500;
 }
 
-/* 3. user bubble: tinted with the current bot's colour (SPRINTS §6 #8),
-   Grok-style radius. `--bot-color` is written per conversation by the chat
-   pane; when it is absent the graphite default is kept untouched. The mix
-   stays low (22%) so text contrast survives both themes; the border carries
-   the hue more visibly without changing the fill's readability. */
+/* 3. user bubble: painted with the bot's exact colour, no transparency
+   (owner request 2026-10-26). `--bot-color` / `--bot-ink` are written per
+   conversation by the chat pane; the ink is the auto-contrast text colour
+   for that exact fill. */
 .msg-row.user .msg-bubble {
-  background: color-mix(
-      in srgb,
-      var(--bot-color, var(--grok-user-bubble)) 22%,
-      var(--grok-user-bubble)
-    )
-    !important;
-  border: 1px solid
-    color-mix(in srgb, var(--bot-color, var(--grok-user-bubble)) 38%, transparent);
-  color: var(--text) !important;
+  background: var(--bot-color, var(--grok-user-bubble)) !important;
+  border: 1px solid transparent;
+  color: var(--bot-ink, var(--text)) !important;
   border-radius: 22px;
   padding: 10px 16px;
   font-size: 0.95rem;
@@ -6276,6 +6269,7 @@ select option {
    ============================================================ */
 
 .mention-chip {
+  text-decoration: none;
   display: inline-flex;
   align-items: center;
   border: none;
@@ -6289,7 +6283,7 @@ select option {
 }
 
 .mention-chip:hover {
-  text-decoration: underline;
+  text-decoration: none;
   opacity: 0.85;
 }
 
@@ -6300,72 +6294,33 @@ select option {
 
 /* --- choice card (A/B/C/D) --- */
 
-/* Choice card: elevated surface, letter badges, hover lift + arrow. */
-@keyframes choiceIn {
-  from {
-    opacity: 0;
-    transform: translateY(5px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
+/* Choice card: minimal list look (owner reference 2026-10-26) — plain rows
+   that only gain a soft rounded highlight on hover/selection, neutral letter
+   chips, no borders, no arrows, no lift. Adapts to both themes. */
 .choice-card {
   margin-top: 10px;
-  max-width: 440px;
-  padding: 14px;
-  border-radius: 18px;
-  border: 1px solid rgba(127, 127, 127, 0.18);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0) 48%),
-    var(--panel);
-  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.24);
-  animation: choiceIn 0.22s ease-out both;
+  max-width: 460px;
+  padding: 14px 12px 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(127, 127, 127, 0.12);
+  background: var(--panel);
 }
 
 [data-theme="light"] .choice-card {
-  border-color: rgba(15, 23, 42, 0.08);
-  background: linear-gradient(180deg, #ffffff, rgba(255, 255, 255, 0.72)), var(--panel);
-  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.1);
+  border-color: rgba(15, 23, 42, 0.06);
+  background: #ffffff;
 }
 
 .choice-question {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 2px 2px 12px;
-  font-size: 0.88rem;
-  font-weight: 650;
-  letter-spacing: 0.01em;
-}
-
-.choice-question::before {
-  content: "";
-  flex: none;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--mention-color, #6ea8ff);
-  box-shadow: 0 0 0 4px rgba(110, 168, 255, 0.16);
-}
-
-.permission-params {
-  max-height: 240px;
-  overflow: auto;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  padding: 10px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  font-size: 12px;
+  margin: 2px 6px 10px;
+  font-size: 0.9rem;
+  font-weight: 700;
 }
 
 .choice-options {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
 }
 
 .choice-option {
@@ -6373,90 +6328,49 @@ select option {
   align-items: center;
   gap: 12px;
   width: 100%;
-  padding: 11px 12px;
+  padding: 10px 12px;
   text-align: left;
-  border-radius: 14px;
-  border: 1px solid rgba(127, 127, 127, 0.2);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0));
+  border-radius: 12px;
+  border: 1px solid transparent;
+  background: transparent;
   color: inherit;
   font: inherit;
-  font-size: 0.86rem;
+  font-size: 0.88rem;
   cursor: pointer;
-  transition:
-    transform 0.16s ease,
-    border-color 0.16s ease,
-    background 0.16s ease,
-    box-shadow 0.16s ease;
+  transition: background 0.14s ease;
 }
 
-[data-theme="light"] .choice-option {
-  border-color: rgba(15, 23, 42, 0.09);
-  background: #ffffff;
+.choice-option:hover,
+.choice-option:focus-visible {
+  background: rgba(127, 127, 127, 0.14);
+  outline: none;
 }
 
-.choice-option:hover {
-  transform: translateY(-1px);
-  border-color: var(--mention-color, #6ea8ff);
-  background: linear-gradient(180deg, rgba(110, 168, 255, 0.16), rgba(110, 168, 255, 0.05));
-  box-shadow:
-    0 10px 22px rgba(0, 0, 0, 0.18),
-    inset 0 0 0 1px rgba(110, 168, 255, 0.22);
-}
-
-[data-theme="light"] .choice-option:hover {
-  background: linear-gradient(180deg, rgba(37, 99, 235, 0.1), rgba(37, 99, 235, 0.03));
-  box-shadow:
-    0 10px 20px rgba(15, 23, 42, 0.1),
-    inset 0 0 0 1px rgba(37, 99, 235, 0.2);
+[data-theme="light"] .choice-option:hover,
+[data-theme="light"] .choice-option:focus-visible {
+  background: rgba(15, 23, 42, 0.06);
 }
 
 .choice-option:active {
-  transform: translateY(0) scale(0.995);
-}
-
-.choice-option:focus-visible {
-  outline: 2px solid var(--mention-color, #6ea8ff);
-  outline-offset: 2px;
-}
-
-.choice-option::after {
-  content: "→";
-  margin-left: auto;
-  font-size: 0.95rem;
-  color: var(--mention-color, #6ea8ff);
-  opacity: 0;
-  transform: translateX(-5px);
-  transition:
-    opacity 0.16s ease,
-    transform 0.16s ease;
-}
-
-.choice-option:hover::after,
-.choice-option:focus-visible::after {
-  opacity: 1;
-  transform: translateX(0);
+  background: rgba(127, 127, 127, 0.2);
 }
 
 .choice-key {
   flex: none;
-  width: 26px;
-  height: 26px;
+  width: 24px;
+  height: 24px;
   display: grid;
   place-items: center;
-  border-radius: 9px;
-  border: 1px solid rgba(110, 168, 255, 0.3);
-  background: rgba(110, 168, 255, 0.14);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
-  color: var(--mention-color, #6ea8ff);
+  border-radius: 8px;
+  background: rgba(127, 127, 127, 0.18);
+  color: var(--muted);
   font-size: 0.74rem;
   font-weight: 700;
-  letter-spacing: 0.02em;
 }
 
 [data-theme="light"] .choice-key {
-  border-color: rgba(37, 99, 235, 0.22);
-  background: rgba(37, 99, 235, 0.08);
-  color: #2563eb;
+  background: rgba(15, 23, 42, 0.07);
+  color: #475569;
 }
 
 .choice-other .choice-key {
@@ -6469,10 +6383,13 @@ select option {
   gap: 8px;
   padding: 8px 12px;
   border-radius: 12px;
-  border: 1px dashed rgba(127, 127, 127, 0.3);
-  background: rgba(127, 127, 127, 0.1);
-  font-size: 0.82rem;
+  background: rgba(127, 127, 127, 0.12);
+  font-size: 0.84rem;
   color: var(--muted);
+}
+
+[data-theme="light"] .choice-answered {
+  background: rgba(15, 23, 42, 0.05);
 }
 
 .choice-answered::before {
@@ -6490,30 +6407,17 @@ select option {
 }
 
 /* Locked (answering / awaiting composer text) and closed (expired/cancelled)
-   cards keep their rows visible but inert; theme variables only. */
+   cards keep their rows visible but inert. The minimal card has no border,
+   lift, arrow or gradient to neutralise, so a disabled row only has to stop
+   taking the hover wash. */
 .choice-option:disabled {
   cursor: default;
   opacity: 0.55;
 }
 
-.choice-option:disabled:hover {
-  transform: none;
-  border-color: rgba(127, 127, 127, 0.2);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0));
-  box-shadow: none;
-}
-
-.choice-option:disabled::after,
-.choice-option:disabled:hover::after,
-.choice-option:disabled:focus-visible::after {
-  opacity: 0;
-  transform: translateX(-5px);
-}
-
-[data-theme="light"] .choice-option:disabled:hover {
-  border-color: rgba(15, 23, 42, 0.09);
-  background: #ffffff;
-  box-shadow: none;
+.choice-option:disabled:hover,
+.choice-option:disabled:focus-visible {
+  background: transparent;
 }
 
 .choice-note {
@@ -6983,10 +6887,6 @@ select option {
   background: var(--accent, #ffffff);
 }
 
-.choice-option:hover {
-  border-color: var(--accent, #6ea8ff);
-}
-
 .gs-item.active,
 .gs-item:focus-visible {
   background: color-mix(in srgb, var(--accent, #6ea8ff) 18%, transparent);
@@ -7054,6 +6954,14 @@ select option {
 }
 
 /* ---- Skills panel (D17) ---- */
+/* 工具栏里的按钮回到文档流：.ghost-btn 基类是 D02 头部的绝对定位胶囊 */
+.skills-toolbar .ghost-btn {
+  position: static;
+  right: auto;
+  top: auto;
+  transform: none;
+}
+
 .skills-panel {
   display: flex;
   flex-direction: column;
@@ -7237,4 +7145,71 @@ select:focus-visible {
 
 [data-theme="light"] .custom-select-item:focus-visible {
   background: rgba(15, 23, 42, 0.06);
+}
+
+/* ============================================================
+   Skills (D17) — ⚡ composer menu: apply / delete / save draft.
+   ============================================================ */
+
+.composer-skill {
+  font-size: 0.9rem;
+}
+
+.skills-menu {
+  min-width: 240px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.skills-empty {
+  color: var(--muted);
+  font-size: 0.78rem;
+  cursor: default;
+}
+
+.skill-row {
+  display: flex;
+  align-items: stretch;
+}
+
+.skill-apply {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.skill-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skill-version {
+  font-size: 0.66rem;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 1px 5px;
+}
+
+.skill-remove {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.95rem;
+  padding: 0 8px;
+}
+
+.skill-remove:hover {
+  color: var(--text);
+}
+
+.menu-item:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
