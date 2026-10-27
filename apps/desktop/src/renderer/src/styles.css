@@ -1437,13 +1437,6 @@ body {
 
 /* ---------- chat stamps ---------- */
 
-/* bot-to-bot dialogue renders group-chat style: avatar beside the bubble */
-.msg-row.bot > .avatar-img {
-  flex: 0 0 auto;
-  margin-top: auto;
-  margin-bottom: 2px;
-}
-
 .msg-stamp {
   font-size: 0.72rem;
   color: var(--muted);

@@ -2742,7 +2742,6 @@ const logout = (): void => {
 
 function MessageBubble({
   msg,
-  speaker,
   accent,
   mentions,
   onMentionClick,
@@ -2753,7 +2752,6 @@ function MessageBubble({
   onCopy,
 }: {
   msg: Msg;
-  speaker: UiBot | null;
   accent: string;
   mentions?: MentionTable;
   onMentionClick?: (botKey: number) => void;
@@ -2804,9 +2802,6 @@ function MessageBubble({
 
   return (
     <div className={"msg-row" + (isUser ? " user" : " bot")}>
-      {!isUser && speaker && (
-        <AvatarView avatar={speaker.avatar} variant="inline" size={34} />
-      )}
       <div className="hover-wrap">
         <div
           className={"msg-bubble" + (isUser ? " user" : "")}
@@ -3358,8 +3353,6 @@ function BotsPlaceholder({
             !m.system &&
             !m.notice &&
             (!prev || prev.system || m.time - prev.time > 5 * 60 * 1000);
-          const speaker =
-            m.from === "bot" ? bots.find((b) => b.key === (m.speakerKey ?? me.key)) ?? me : null;
           return (
             <Fragment key={m.id}>
               {showTime && <div className="chat-time">{formatChatTime(m.time)}</div>}
@@ -3422,7 +3415,6 @@ function BotsPlaceholder({
                     ...m,
                     choices: m.choices,
                   }}
-                  speaker={speaker}
                   accent={avatarColor(me.avatar)}
                   mentions={mentionTable}
                   onMentionClick={onOpenBot}
