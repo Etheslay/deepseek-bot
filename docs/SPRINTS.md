@@ -222,13 +222,15 @@
 
 清点基线：`origin/develop` = `3afea90`（PR #66 合入后）。冲突结论来自 `git merge-tree --write-tree origin/develop <分支>` 的**试算**，不代表已解决；每次合并后本节需更新。
 
+各任务使用独立工作区（`git worktree list`）：`deepseek-bot-d22` → D22 系统集成、`deepseek-bot-d24` → 备份保险库、`deepseek-bot-d28` → 画布共编（**已合入，工作区待清理**）、`deepseek-bot-g5` → 深度思考开关、`deepseek-bot-manager-orchestration` → v0.5 编排；另有 `deepseek-bot-avatar-ball`、`deepseek-bot-reaction-pill` 两个 10-25 的**死工作区**（分支早已合入，可直接 `git worktree remove`）。
+
 | 分支 | 归属 | 未合入提交 | 推送状态 | 与 develop 试算 | 处置 |
 | --- | --- | --- | --- | --- | --- |
 | `feature/reasoner-toggle` | §9.1 快赢「深度思考开关」 | 1（6 文件） | 已推送 | **零冲突** | 可直接开 PR，最小最先 |
 | `feature/settings-vault` | D24 备份保险库 + 真实设置分区 | 3（23 文件） | 已推送 | **零冲突** | 可开 PR；合入后 D24 由"切片交付"升级为更接近完成 |
-| `feature/choice-card-answer` | 选项卡片回传 + 记忆弹窗移出聊天流 + 主窗口显示修复 | 5（17 文件） | **仅本地**（跟踪 origin/develop） | 零冲突 | 先推送留痕，再开 PR |
+| `feature/choice-card-answer` | 选项卡片回传 + 记忆弹窗移出聊天流 + 主窗口显示修复；**正在合入技能选择器菜单** | 5（17 文件）+ 合并中 | **仅本地**（跟踪 origin/develop） | 主工作区当前处于**未完成的合并**：`App.tsx`、`styles.css` 为 UU，`skill-store.ts` 与其测试已暂存 | 先完成或 `git merge --abort`，再推送开 PR |
 | `backup/pre-ui-merge` | 与上一行**完全相同的 5 个提交** | 5 | 仅本地 | — | 纯备份；`feature/choice-card-answer` 合入后删除 |
-| `feature/gaze-avatar`（本地多出的 1 个提交） | 技能选择器菜单与版本化提示词复用（D17 后续，**与分支名无关**） | 1（4 文件） | 远端同名分支已合入并删除 | `styles.css` 冲突 | 摘出来另开 `feature/skills-composer-menu`，sync 后解冲突再开 PR |
+| `feature/gaze-avatar`（本地多出的 1 个提交 `e7b83f3`） | 技能选择器菜单与版本化提示词复用（D17 后续，**与分支名无关**） | 1（4 文件） | 远端同名分支已合入并删除 | 与 `feature/choice-card-answer` 相撞（`styles.css`） | 正被合进 `feature/choice-card-answer`（见上一行）；若放弃该合并，则摘出另开 `feature/skills-composer-menu` |
 | `feature/system-integration` | **D22 系统集成与双语**（zh/en 词典、每 bot 托盘、系统通知、Chrome 导入） | 9（104 文件） | **从未推送** | 冲突 7 文件：`main/index.ts`、`App.tsx`、`avatar-picker.tsx`、`permission-chat.tsx`、`permissions-panel.tsx`、`fixture-service.ts`、`styles.css` | 最高优先：**先推送留痕**（当前只存在于这台机器，磁盘一坏就没了），再 sync develop 解冲突、开 PR |
 | `feature/manager-orchestration` | v0.5 协调者编排（契约 + agent-tools + storage + host + desktop + 文档） | 6（63 文件） | 已推送 | 冲突 7 文件，含 `docs/CONTRACTS.md`、`contracts/methods.test.ts`、`host.ts`、`storage/database.ts` | 契约面变更：按 DEVELOPMENT_PLAN §1 先出契约小 PR 与 ADR 对齐 v0.5 范围，再解冲突；排在上述之后 |
 | `feature/mono-shape` | 头像支线遗留 | 远端 1 / 本地 2 | 本地 `cf661c0` 未推送 | 冲突 4 文件（头像组件） | 仍等 §8 待拍板 #2；决定后要么推送并解冲突重开 PR，要么丢弃 |
@@ -243,6 +245,12 @@
 6. `feature/manager-orchestration` —— 先定 v0.5 契约范围与 ADR；
 7. `feature/mono-shape` —— 等 §8 待拍板 #2。
 
-另记两笔欠账：`docs/GAP_AUDIT.md` 与 `docs/TASK_MANAGER_ORCHESTRATION.md` 目前只存在于未提交的工作区，需要随相应分支入库；D14/D17/D24/D25/D26 的手测截图（`reports/assets/…`）仍未补。
+另记的欠账：
+
+- 未入库文档：`docs/GAP_AUDIT.md`、`docs/TASK_MANAGER_ORCHESTRATION.md` 目前只是主工作区的未跟踪文件，需随相应分支入库；
+- 工作区垃圾：主工作区根目录有一个 0 字节的 `$null` 文件（10-26 17:35 由误用的重定向产生），可直接删除；
+- 死工作区：`deepseek-bot-avatar-ball`、`deepseek-bot-reaction-pill`、已合入的 `deepseek-bot-d28` 三个工作区可清理（先确认其中没有未跟踪的截图或日志）；
+- 手测截图：D14 / D17 / D24 / D25 / D26 的 `reports/assets/…` 仍缺；
+- 未开始的计划项：**D21 本地执行守护**（Etheslay）、**D23 平台验收**（你，依赖 D13 与 D14–D22 全部完成）。
 
 
