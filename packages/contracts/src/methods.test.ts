@@ -27,7 +27,7 @@ describe("method whitelist", () => {
   it("defines a contract for every whitelisted method and nothing else", () => {
     const contractMethods = Object.keys(METHOD_CONTRACTS).sort();
     expect(contractMethods).toEqual([...METHODS].sort());
-    expect(METHODS).toHaveLength(100);
+    expect(METHODS).toHaveLength(101);
   });
 
   it("covers every method group from CONTRACTS §3", () => {
@@ -499,6 +499,20 @@ describe("eventRule methods", () => {
       parseRequest(
         envelope("eventRule.review", { botId, id: workflowId, relay: "https://example.invalid/hook" }),
         "eventRule.review",
+      ).success,
+    ).toBe(false);
+  });
+
+  it("lists state history for one bot and rejects a remote field", () => {
+    const listed = parseRequest(envelope("eventRule.state.list", { botId }), "eventRule.state.list");
+    expect(listed.success).toBe(true);
+    if (listed.success) {
+      expect(listed.payload.limit).toBe(50);
+    }
+    expect(
+      parseRequest(
+        envelope("eventRule.state.list", { botId, relay: "https://example.invalid/hook" }),
+        "eventRule.state.list",
       ).success,
     ).toBe(false);
   });

@@ -79,6 +79,7 @@ import {
   getEventRule,
   listEventRules,
   listEventRuleRecords,
+  listEventRuleStates,
   listPendingEventRuleReviews,
   saveEventRule,
   setEventRuleEnabled,
@@ -1002,8 +1003,9 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
     },
 
     // Local event rules for one bot. The timer calls evaluateEventRules.
-    // These methods save, list, switch, and decide a local review. Default
-    // is off, and review is off until eventRule.review. No network.
+    // These methods save, list, switch, and decide a local review. Enabling,
+    // disabling, or switching review on records that change. Default is off,
+    // and review is off until eventRule.review. No network.
     "eventRule.list": (payload) => {
       requireLiveBot(db, payload.botId);
       return { rules: listEventRules(db, payload.botId).map(toEventRuleResponse) };
@@ -1117,6 +1119,22 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
         runId: null,
         at: review.createdAt,
         decidedAt: review.decidedAt,
+      };
+    },
+
+    "eventRule.state.list": (payload) => {
+      requireLiveBot(db, payload.botId);
+      return {
+        states: listEventRuleStates(db, {
+          botId: payload.botId,
+          limit: payload.limit,
+        }).map((row) => ({
+          id: row.id,
+          ruleId: row.ruleId,
+          botId: row.botId,
+          state: row.state,
+          at: row.createdAt,
+        })),
       };
     },
 

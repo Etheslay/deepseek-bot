@@ -9,6 +9,7 @@ import {
   decideEventRuleReview,
   enqueueEventRuleReview,
   findEventRuleReview,
+  listEventRuleStates,
   listEventRules,
   listPendingEventRuleReviews,
   saveEventRule,
@@ -21,13 +22,15 @@ import {
   makeBot,
   makeLayout,
   makeTempRoot,
+  makeTestClock,
   makeWorkflow,
   openTestDatabase,
   seedProfileAndWorkspace,
+  type TestClock,
 } from "../test-support.js";
 
-function setup(): { db: OpenedDatabase; botId: string; otherBotId: string; workflowId: string } {
-  const db = openTestDatabase(makeLayout(makeTempRoot()));
+function setup(clock?: TestClock): { db: OpenedDatabase; botId: string; otherBotId: string; workflowId: string } {
+  const db = openTestDatabase(makeLayout(makeTempRoot()), clock);
   const { profile, workspaceId } = seedProfileAndWorkspace(db);
   const now = db.now().toISOString();
   const policyId = randomUUID();
@@ -159,6 +162,102 @@ describe("event rules", () => {
     expect(() => decideEventRuleReview(db, { id: randomUUID(), status: "denied", runId: null })).toThrow(
       /not found/,
     );
+    db.close();
+  });
+
+  it("records one state row when a rule is enabled, disabled, or set to review", () => {
+    const { db, botId, workflowId } = setup();
+    const rule = saveEventRule(db, {
+      botId,
+      name: "记下开关",
+      workflowId,
+      eventType: "run.failed",
+    });
+    expect(listEventRuleStates(db, { botId, limit: 20 })).toEqual([]);
+
+    const enabled = setEventRuleEnabled(db, { id: rule.id, botId, enabled: true });
+    expect(enabled.enabled).toBe(true);
+    const afterEnable = listEventRuleStates(db, { botId, limit: 20 });
+    expect(afterEnable).toEqual([
+      expect.objectContaining({
+        ruleId: rule.id,
+        botId,
+        state: "enabled",
+        createdAt: expect.any(String),
+      }),
+    ]);
+
+    const disabled = setEventRuleEnabled(db, { id: rule.id, botId, enabled: false });
+    expect(disabled.enabled).toBe(false);
+    const reviewing = setEventRuleReview(db, { id: rule.id, botId });
+    expect(reviewing.review).toBe(true);
+    expect(listEventRuleStates(db, { botId, limit: 20 }).map((row) => row.state)).toEqual([
+      "review",
+      "disabled",
+      "enabled",
+    ]);
+    db.close();
+  });
+
+  it("does not record a repeat call that leaves the state unchanged", () => {
+    const { db, botId, workflowId } = setup();
+    const rule = saveEventRule(db, {
+      botId,
+      name: "重复不算",
+      workflowId,
+      eventType: "run.completed",
+    });
+    setEventRuleEnabled(db, { id: rule.id, botId, enabled: false });
+    expect(listEventRuleStates(db, { botId, limit: 20 })).toEqual([]);
+
+    setEventRuleEnabled(db, { id: rule.id, botId, enabled: true });
+    setEventRuleEnabled(db, { id: rule.id, botId, enabled: true });
+    expect(listEventRuleStates(db, { botId, limit: 20 })).toHaveLength(1);
+
+    setEventRuleEnabled(db, { id: rule.id, botId, enabled: false });
+    setEventRuleEnabled(db, { id: rule.id, botId, enabled: false });
+    setEventRuleReview(db, { id: rule.id, botId });
+    setEventRuleReview(db, { id: rule.id, botId });
+    expect(listEventRuleStates(db, { botId, limit: 20 }).map((row) => row.state)).toEqual([
+      "review",
+      "disabled",
+      "enabled",
+    ]);
+    db.close();
+  });
+
+  it("lists state rows for one bot newest first", () => {
+    const clock = makeTestClock("2026-10-27T08:00:00.000Z");
+    const { db, botId, otherBotId, workflowId } = setup(clock);
+    const rule = saveEventRule(db, {
+      botId,
+      name: "按时间",
+      workflowId,
+      eventType: "run.failed",
+    });
+    setEventRuleEnabled(db, { id: rule.id, botId, enabled: true });
+    clock.advanceMs(1000);
+    setEventRuleEnabled(db, { id: rule.id, botId, enabled: false });
+    clock.advanceMs(1000);
+    setEventRuleReview(db, { id: rule.id, botId });
+
+    const listed = listEventRuleStates(db, { botId, limit: 20 });
+    expect(
+      listed.map((row) => ({
+        state: row.state,
+        at: row.createdAt,
+        ruleId: row.ruleId,
+        botId: row.botId,
+      })),
+    ).toEqual([
+      { state: "review", at: "2026-10-27T08:00:02.000Z", ruleId: rule.id, botId },
+      { state: "disabled", at: "2026-10-27T08:00:01.000Z", ruleId: rule.id, botId },
+      { state: "enabled", at: "2026-10-27T08:00:00.000Z", ruleId: rule.id, botId },
+    ]);
+    expect(listEventRuleStates(db, { botId: otherBotId, limit: 20 })).toEqual([]);
+    expect(listEventRuleStates(db, { botId, limit: 1 })).toEqual([
+      expect.objectContaining({ state: "review" }),
+    ]);
     db.close();
   });
 });

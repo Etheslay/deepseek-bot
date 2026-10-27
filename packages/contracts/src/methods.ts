@@ -151,6 +151,7 @@ export const METHODS = [
   "eventRule.review.list",
   "eventRule.review.approve",
   "eventRule.review.deny",
+  "eventRule.state.list",
   "grant.create",
   "grant.list",
   "grant.revoke",
@@ -1126,8 +1127,12 @@ export const METHOD_CONTRACTS = {
    * was called: then the event becomes one pending item and no run starts
    * until `eventRule.review.approve`. Deny records a skip and starts
    * nothing. The same event cannot enqueue or start twice. A disabled rule
-   * records a skip and does not enter the queue. Nothing in this group
-   * opens a network connection or a remote relay. `trigger.*` is unchanged.
+   * records a skip and does not enter the queue. Enabling, disabling, or
+   * switching a rule to review appends one local state row when that flag
+   * changes; a repeat call that leaves the flag as it is appends nothing.
+   * `eventRule.state.list` returns those rows for one bot, newest first.
+   * Nothing in this group opens a network connection or a remote relay.
+   * `trigger.*` is unchanged.
    */
   "eventRule.list": {
     request: z.object({ botId: UuidSchema }).strict(),
@@ -1280,6 +1285,25 @@ export const METHOD_CONTRACTS = {
       runId: z.null(),
       at: IsoDateTimeUtcSchema,
       decidedAt: IsoDateTimeUtcSchema,
+    }),
+  },
+  "eventRule.state.list": {
+    request: z
+      .object({
+        botId: UuidSchema,
+        limit: z.int().min(1).max(100).default(50),
+      })
+      .strict(),
+    response: z.object({
+      states: z.array(
+        z.object({
+          id: UuidSchema,
+          ruleId: UuidSchema,
+          botId: UuidSchema,
+          state: z.enum(["enabled", "disabled", "review"]),
+          at: IsoDateTimeUtcSchema,
+        }),
+      ),
     }),
   },
   "grant.create": {
