@@ -21,14 +21,14 @@
           "status": "idle",
           "unread": false,
           "iconKind": "data:image/png;base64,",
-          "iconBytes": 935
+          "iconBytes": 959
         },
         {
           "name": "research-bot",
           "status": "idle",
           "unread": false,
           "iconKind": "data:image/png;base64,",
-          "iconBytes": 797
+          "iconBytes": 668
         }
       ]
     }
@@ -76,7 +76,22 @@
       }
     },
     "englishNow": true,
-    "chineseLeft": false
+    "chineseLeft": false,
+    "developSections": [
+      "Account",
+      "Computer & permissions (policy / grants ",
+      "Access (API key kept encrypted in the sy",
+      "Web search (SearXNG, only the address is",
+      "Connectors (registered only, off by defa",
+      "Event Automation (Rules and Review Queue",
+      "Skills (reuse, import & export)",
+      "Appearance",
+      "About & Updates",
+      "System",
+      "Notifications",
+      "Chrome data import"
+    ],
+    "developChineseLeak": false
   },
   {
     "step": "06-notify-panel",
@@ -212,7 +227,7 @@
       "state"
     ],
     "toast": "Imported 128 bookmarks",
-    "importedRow": "ImportedImported Work desktop · Oct 26, 2026, 03:54:21",
+    "importedRow": "ImportedImported Work desktop · Oct 26, 2026, 22:19:57",
     "actions": [
       "Scan Chrome profiles",
       "Preview",

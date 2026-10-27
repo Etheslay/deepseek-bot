@@ -84,6 +84,19 @@ export function currentLanguage(): Language {
   return language;
 }
 
+/**
+ * A stored notice is a message key, never rendered text: a translated string kept
+ * in state would still show the previous language after a switch (D22).
+ */
+export type Notice = {
+  readonly key: MessageKey;
+  readonly params?: TranslateParams;
+};
+
+export function noticeText(notice: Notice): string {
+  return t(notice.key, notice.params ?? []);
+}
+
 export function t(key: MessageKey, params: TranslateParams = []): string {
   return translate(language, key, params);
 }

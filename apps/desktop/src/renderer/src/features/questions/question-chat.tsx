@@ -5,6 +5,7 @@
  */
 import { useCallback, useEffect, useRef, useState, type JSX } from "react";
 import { METHOD_CONTRACTS } from "@deepseek-bot/contracts";
+import { type Notice, noticeText, t, useLanguage } from "../../i18n.js";
 
 type Question = {
   requestId: string;
@@ -24,7 +25,8 @@ function BotQuestionCards({ botId }: { botId: string }): JSX.Element | null {
   const [questions, setQuestions] = useState<Question[] | null>(null);
   const [answered, setAnswered] = useState<Answered[]>([]);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
-  const [notice, setNotice] = useState<string | null>(null);
+  useLanguage();
+  const [notice, setNotice] = useState<Notice | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const active = useRef(true);
   const loadSequence = useRef(0);
@@ -35,7 +37,7 @@ function BotQuestionCards({ botId }: { botId: string }): JSX.Element | null {
     const parsed = METHOD_CONTRACTS["question.list"].response.parse(response);
     if (!active.current || sequence !== loadSequence.current) return;
     setQuestions(parsed.questions);
-    setNotice((current) => (current === "提问读取失败" ? null : current));
+    setNotice((current) => (current?.key === "questions.readFailed" ? null : current));
   }, [botId]);
 
   useEffect(() => {
@@ -43,7 +45,7 @@ function BotQuestionCards({ botId }: { botId: string }): JSX.Element | null {
     let cancelled = false;
     const run = (): void => {
       void load().catch(() => {
-        if (!cancelled) setNotice("提问读取失败");
+        if (!cancelled) setNotice({ key: "questions.readFailed" });
       });
     };
     run();
@@ -73,11 +75,11 @@ function BotQuestionCards({ botId }: { botId: string }): JSX.Element | null {
                 { requestId: question.requestId, question: question.question, text: parsed.text },
               ],
         );
-        setNotice(`已选择：${parsed.text}`);
+        setNotice({ key: "shell.choiceSelected", params: [parsed.text] });
         return load();
       })
       .catch(() => {
-        if (active.current) setNotice("回答发送失败");
+        if (active.current) setNotice({ key: "questions.answerFailed" });
       })
       .finally(() => {
         if (active.current) setBusyId(null);
@@ -115,10 +117,10 @@ function BotQuestionCards({ botId }: { botId: string }): JSX.Element | null {
           </div>
           {question.allowOther ? (
             <div className="choice-options">
-              <span>其他，我说明</span>
+              <span>{t("shell.choiceOther")}</span>
               <input
                 value={drafts[question.requestId] ?? ""}
-                aria-label="其他，我说明"
+                aria-label={t("shell.choiceOther")}
                 onChange={(event) =>
                   setDrafts((current) => ({ ...current, [question.requestId]: event.target.value }))
                 }
@@ -133,7 +135,7 @@ function BotQuestionCards({ botId }: { botId: string }): JSX.Element | null {
                   submit(question, { text });
                 }}
               >
-                发送其他回答
+                {t("questions.sendCustomAnswer")}
               </button>
             </div>
           ) : null}
@@ -142,10 +144,10 @@ function BotQuestionCards({ botId }: { botId: string }): JSX.Element | null {
       {answered.map((item) => (
         <div key={item.requestId} className="choice-card" role="group" aria-label={item.question}>
           <div className="choice-question">{item.question}</div>
-          <div className="choice-answered">已选择：{item.text}</div>
+          <div className="choice-answered">{t("shell.choiceSelected", [item.text])}</div>
         </div>
       ))}
-      {notice !== null ? <p className="sys-line">{notice}</p> : null}
+      {notice !== null ? <p className="sys-line">{noticeText(notice)}</p> : null}
     </div>
   );
 }

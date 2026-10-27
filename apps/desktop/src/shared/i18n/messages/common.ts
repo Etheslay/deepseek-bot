@@ -3,4 +3,5 @@ import type { Message } from "../types.js";
 
 export const commonMessages = {
   "common.copyOf": { zh: "{0} 副本", en: "Copy of {0}" },
+  "common.unnamedKnowledge": { zh: "未命名知识", en: "Untitled knowledge" },
 } satisfies Record<string, Message>;

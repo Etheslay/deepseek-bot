@@ -109,11 +109,13 @@ const SEED_WORKSPACE_FILES: Array<{
     botId: SESSION_BOT_A,
     relativePath: "summaries/note-summary.md",
     content:
+      // i18n-ignore: 夹具工作区文件的正文，属被编辑的数据而非界面文案
       "# 会议纪要（示例产物）\n\n这是夹具工作区里的真实文本内容，可在画布中编辑并保存。\n\n- 第一版由 bot 写入\n- 用户每次保存都会追加一个新版本\n",
   },
   {
     botId: SESSION_BOT_A,
     relativePath: "reports/index.html",
+    // i18n-ignore: 夹具工作区文件的正文，属被编辑的数据而非界面文案
     content: "<!doctype html>\n<html><body><p>HTML 产物不进入画布编辑。</p></body></html>\n",
   },
 ];
@@ -524,8 +526,8 @@ export function createFixtureService(): DesktopService {
               mediaType: file.mediaType,
               reason:
                 file.mediaType === "text/html"
-                  ? "HTML 不做内联编辑/渲染（防脚本执行）。"
-                  : `mediaType ${file.mediaType} 不是可编辑文本。`,
+                  ? t("services.htmlInlineBlocked")
+                  : t("services.mediaTypeNotEditable", [file.mediaType]),
             };
           }
           await ensureSeedVersion(botId, relativePath, file);
@@ -551,7 +553,7 @@ export function createFixtureService(): DesktopService {
             if (expectedChecksum !== undefined && current !== expectedChecksum) {
               throw new ServiceError(
                 "REVISION_CONFLICT",
-                "文件在编辑期间被修改（可能来自 bot），请刷新后再保存。",
+                t("services.revisionConflict"),
                 false,
               );
             }
@@ -565,7 +567,7 @@ export function createFixtureService(): DesktopService {
           }
           const mediaType = fixtureMediaType(relativePath);
           if (!fixtureEditable(mediaType)) {
-            throw new ServiceError("INVALID_INPUT", `mediaType ${mediaType} 不支持画布编辑。`);
+            throw new ServiceError("INVALID_INPUT", t("services.mediaTypeCanvasUnsupported", [mediaType]));
           }
           const created: FixtureWorkspaceFile = {
             content,
@@ -599,7 +601,7 @@ export function createFixtureService(): DesktopService {
             return {
               kind: "blocked",
               mediaType: file.mediaType,
-              reason: `mediaType ${file.mediaType} 没有可预览的文本内容。`,
+              reason: t("services.mediaTypeNoPreviewText", [file.mediaType]),
             };
           }
           return { kind: "text", mediaType: file.mediaType, content };

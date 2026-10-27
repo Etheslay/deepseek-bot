@@ -4,6 +4,8 @@ import type { Message } from "../types.js";
 export const mainMessages = {
   "main.credentialStoreUnavailable": { zh: "系统凭据存储不可用，无法安全保存 Key", en: "The system credential store is unavailable, so the key cannot be saved securely" },
   "main.hostNotReady": { zh: "Host 进程尚未就绪，请稍后重试", en: "The host process is not ready yet — try again in a moment" },
+  "main.importKnowledge": { zh: "导入知识", en: "Import knowledge" },
   "main.keyFormatInvalid": { zh: "API Key 格式不正确", en: "The API key format is invalid" },
   "main.keyMustBeString": { zh: "API Key 必须是字符串", en: "The API key must be a string" },
+  "main.textFilesFilter": { zh: "文本", en: "Text files" },
 } satisfies Record<string, Message>;

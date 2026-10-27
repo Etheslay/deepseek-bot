@@ -6,6 +6,7 @@
  */
 import { useCallback, useEffect, useState, type JSX } from "react";
 import { METHOD_CONTRACTS } from "@deepseek-bot/contracts";
+import { type Notice, noticeText, t, useLanguage } from "../../i18n.js";
 
 type ConnectorRecord = {
   id: string;
@@ -20,20 +21,21 @@ export function ConnectorSettings(): JSX.Element {
   const [name, setName] = useState("");
   const [credentialRef, setCredentialRef] = useState("");
   const [endpoint, setEndpoint] = useState("");
-  const [notice, setNotice] = useState<string | null>(null);
+  useLanguage();
+  const [notice, setNotice] = useState<Notice | null>(null);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async (): Promise<void> => {
     const response = await window.deepseekBot.host.call("connector.list", {});
     const parsed = METHOD_CONTRACTS["connector.list"].response.parse(response);
     setConnectors(parsed.connectors);
-    setNotice((current) => (current === "连接器读取失败" ? null : current));
+    setNotice((current) => (current?.key === "connectors.readFailed" ? null : current));
   }, []);
 
   useEffect(() => {
     let active = true;
     void load().catch(() => {
-      if (active) setNotice("连接器读取失败");
+      if (active) setNotice({ key: "connectors.readFailed" });
     });
     return () => {
       active = false;
@@ -55,10 +57,10 @@ export function ConnectorSettings(): JSX.Element {
       setName("");
       setCredentialRef("");
       setEndpoint("");
-      setNotice("已登记连接器");
+      setNotice({ key: "connectors.registered" });
       await load();
     } catch {
-      setNotice("连接器注册失败");
+      setNotice({ key: "connectors.registerFailed" });
     } finally {
       setBusy(false);
     }
@@ -72,10 +74,10 @@ export function ConnectorSettings(): JSX.Element {
         id,
         endpoint: value.trim().length === 0 ? null : value.trim(),
       });
-      setNotice(value.trim().length === 0 ? "已清除连接器端点" : "已保存连接器端点");
+      setNotice(value.trim().length === 0 ? { key: "connectors.endpointCleared" } : { key: "connectors.endpointSaved" });
       await load();
     } catch {
-      setNotice("连接器端点保存失败");
+      setNotice({ key: "connectors.endpointSaveFailed" });
     } finally {
       setBusy(false);
     }
@@ -88,10 +90,10 @@ export function ConnectorSettings(): JSX.Element {
       await window.deepseekBot.host.call(enabled ? "connector.enable" : "connector.disable", {
         id,
       });
-      setNotice(enabled ? "已启用连接器" : "已停用连接器");
+      setNotice(enabled ? { key: "connectors.enabled" } : { key: "connectors.disabled" });
       await load();
     } catch {
-      setNotice("连接器更新失败");
+      setNotice({ key: "connectors.updateFailed" });
     } finally {
       setBusy(false);
     }
@@ -99,29 +101,29 @@ export function ConnectorSettings(): JSX.Element {
 
   return (
     <>
-      <div className="settings-section-title">连接器（只登记，默认关闭）</div>
+      <div className="settings-section-title">{t("connectors.sectionTitle")}</div>
       <div className="settings-card">
         <div className="settings-row">
-          <span>名称</span>
+          <span>{t("runs.name")}</span>
           <span className="key-input-wrap">
             <input
-              aria-label="连接器名称"
+              aria-label={t("connectors.name")}
               className="settings-select key-input"
               value={name}
               onChange={(event) => setName(event.target.value)}
             />
             <input
-              aria-label="凭据引用"
+              aria-label={t("connectors.credentialRef")}
               className="settings-select key-input"
               value={credentialRef}
-              placeholder="cred: 引用，可留空"
+              placeholder={t("connectors.credentialRefPlaceholder")}
               onChange={(event) => setCredentialRef(event.target.value)}
             />
             <input
-              aria-label="连接器端点"
+              aria-label={t("connectors.endpoint")}
               className="settings-select key-input"
               value={endpoint}
-              placeholder="http://127.0.0.1:7860，可留空"
+              placeholder={t("connectors.endpointPlaceholder")}
               onChange={(event) => setEndpoint(event.target.value)}
             />
             <button
@@ -130,11 +132,11 @@ export function ConnectorSettings(): JSX.Element {
               disabled={busy || name.trim().length === 0}
               onClick={() => void register()}
             >
-              注册
+              {t("connectors.register")}
             </button>
           </span>
         </div>
-        {notice !== null ? <div role="status">{notice}</div> : null}
+        {notice !== null ? <div role="status">{noticeText(notice)}</div> : null}
         {(connectors ?? []).map((connector) => (
           <ConnectorRow
             key={connector.id}
@@ -164,10 +166,10 @@ function ConnectorRow({
   return (
     <div className="settings-row">
       <span>{connector.name}</span>
-      <span>{connector.enabled ? "已启用" : "已关闭"}</span>
+      <span>{connector.enabled ? t("automation.statusEnabled") : t("automation.statusDisabled")}</span>
       <span className="key-input-wrap">
         <input
-          aria-label={`${connector.name} 端点`}
+          aria-label={t("connectors.endpointAria", [connector.name])}
           className="settings-select key-input"
           value={draft}
           placeholder="http://127.0.0.1:7860"
@@ -179,10 +181,10 @@ function ConnectorRow({
           disabled={busy}
           onClick={() => onSaveEndpoint(draft)}
         >
-          存端点
+          {t("connectors.saveEndpoint")}
         </button>
         <button type="button" className="pill-btn" disabled={busy} onClick={onToggle}>
-          {connector.enabled ? "停用" : "启用"}
+          {connector.enabled ? t("automation.disable") : t("automation.enable")}
         </button>
       </span>
     </div>

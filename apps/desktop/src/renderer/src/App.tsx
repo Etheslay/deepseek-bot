@@ -768,9 +768,9 @@ export function App(): JSX.Element {
     }
     const result = await updateBotEntity(uiBot.bot.id, { name });
     if (result.ok) {
-      setToast("已改名");
+      setToast(t("shell.renamed"));
     } else {
-      setToast(result.errorCode === "REVISION_CONFLICT" ? "改名冲突，请重试" : "改名失败");
+      setToast(result.errorCode === "REVISION_CONFLICT" ? t("shell.renameConflict") : t("shell.renameFailed"));
     }
   };
 
@@ -1375,7 +1375,7 @@ const logout = (): void => {
           ) : (
             <span
               className="identity-name"
-              title={headerBot === null ? undefined : "双击改名"}
+              title={headerBot === null ? undefined : t("shell.renameByDoubleClick")}
               onDoubleClick={() => {
                 if (headerBot === null) {
                   return;
@@ -1779,7 +1779,7 @@ const logout = (): void => {
               }}
             >
               <MenuIcon d="M4 7h10M4 12h7M4 17h10M18 5v9M15 11l3 3 3-3" />
-              改名
+              {t("shell.renameAction")}
             </button>
             <button
               type="button"

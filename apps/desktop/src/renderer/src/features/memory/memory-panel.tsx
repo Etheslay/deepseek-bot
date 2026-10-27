@@ -7,6 +7,7 @@
  */
 import { useCallback, useEffect, useRef, useState, type JSX } from "react";
 import { METHOD_CONTRACTS } from "@deepseek-bot/contracts";
+import { type Notice, noticeText, t, useLanguage } from "../../i18n.js";
 
 type MemoryNote = {
   id: string;
@@ -37,17 +38,17 @@ type RetentionPolicy = {
   knowledgeMaxPerBot: number;
 };
 
-function importNotice(code: "format" | "size" | "empty" | "encoding" | "read"): string {
-  if (code === "format") return "只接受 .txt 和 .md 文件";
-  if (code === "size") return "文件超过 256 KiB，或正文超过 100000 字";
-  if (code === "empty") return "文件没有可导入的正文";
-  if (code === "encoding") return "文件不是 UTF-8 文本";
-  return "无法读取该文件";
+function importNotice(code: "format" | "size" | "empty" | "encoding" | "read"): Notice {
+  if (code === "format") return { key: "memory.knowledgeFileFormat" };
+  if (code === "size") return { key: "memory.fileTooLarge" };
+  if (code === "empty") return { key: "memory.fileNoBody" };
+  if (code === "encoding") return { key: "memory.fileNotUtf8" };
+  return { key: "memory.fileUnreadable" };
 }
 
 export function MemoryPanel({ botId }: { botId: string }): JSX.Element {
   return (
-    <section className="memory-panel" aria-label="记忆">
+    <section className="memory-panel" aria-label={t("memory.memorySectionAria")}>
       <BotMemory key={botId} botId={botId} />
       <KnowledgeSection key={`k-${botId}`} botId={botId} />
       <RetentionControls />
@@ -59,7 +60,8 @@ function BotMemory({ botId }: { botId: string }): JSX.Element {
   const [memories, setMemories] = useState<MemoryNote[] | null>(null);
   const [query, setQuery] = useState("");
   const [draft, setDraft] = useState("");
-  const [notice, setNotice] = useState<string | null>(null);
+  useLanguage();
+  const [notice, setNotice] = useState<Notice | null>(null);
   const [busy, setBusy] = useState(false);
   const active = useRef(true);
   const loadSequence = useRef(0);
@@ -74,7 +76,7 @@ function BotMemory({ botId }: { botId: string }): JSX.Element {
     const parsed = METHOD_CONTRACTS["memory.list"].response.parse(response);
     if (!active.current || sequence !== loadSequence.current) return;
     setMemories(parsed.memories);
-    setNotice((current) => (current === "记忆读取失败" ? null : current));
+    setNotice((current) => (current?.key === "memory.memoryLoadFailed" ? null : current));
   }, [botId, query]);
 
   useEffect(() => {
@@ -82,7 +84,7 @@ function BotMemory({ botId }: { botId: string }): JSX.Element {
     let cancelled = false;
     const run = (): void => {
       void load().catch(() => {
-        if (!cancelled) setNotice("记忆读取失败");
+        if (!cancelled) setNotice({ key: "memory.memoryLoadFailed" });
       });
     };
     run();
@@ -102,10 +104,10 @@ function BotMemory({ botId }: { botId: string }): JSX.Element {
       await window.deepseekBot.host.call("memory.write", { botId, text });
       if (!active.current) return;
       setDraft("");
-      setNotice("已保存记忆");
+      setNotice({ key: "memory.memorySaved" });
       await load();
     } catch {
-      if (active.current) setNotice("记忆保存失败");
+      if (active.current) setNotice({ key: "memory.memorySaveFailed" });
     } finally {
       if (active.current) setBusy(false);
     }
@@ -117,10 +119,10 @@ function BotMemory({ botId }: { botId: string }): JSX.Element {
     try {
       await window.deepseekBot.host.call("memory.delete", { botId, memoryId });
       if (!active.current) return;
-      setNotice("已删除记忆");
+      setNotice({ key: "memory.memoryDeleted" });
       await load();
     } catch {
-      if (active.current) setNotice("记忆删除失败");
+      if (active.current) setNotice({ key: "memory.memoryDeleteFailed" });
     } finally {
       if (active.current) setBusy(false);
     }
@@ -130,25 +132,25 @@ function BotMemory({ botId }: { botId: string }): JSX.Element {
     <div>
       <div>
         <input
-          aria-label="记忆内容"
+          aria-label={t("memory.memoryContent")}
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
         />
         <button type="button" onClick={() => void save()}>
-          保存记忆
+          {t("memory.saveMemory")}
         </button>
       </div>
       <input
-        aria-label="检索记忆"
+        aria-label={t("permissions.memoryRead")}
         value={query}
         onChange={(event) => setQuery(event.target.value)}
       />
-      {notice !== null ? <div role="status">{notice}</div> : null}
+      {notice !== null ? <div role="status">{noticeText(notice)}</div> : null}
       {(memories ?? []).map((memory) => (
         <div key={memory.id}>
           <div>{memory.text}</div>
           <button type="button" onClick={() => void remove(memory.id)}>
-            删除
+            {t("shell.delete")}
           </button>
         </div>
       ))}
@@ -160,7 +162,8 @@ function KnowledgeSection({ botId }: { botId: string }): JSX.Element {
   const [docs, setDocs] = useState<KnowledgeDoc[] | null>(null);
   const [hits, setHits] = useState<KnowledgeHit[] | null>(null);
   const [query, setQuery] = useState("");
-  const [notice, setNotice] = useState<string | null>(null);
+  useLanguage();
+  const [notice, setNotice] = useState<Notice | null>(null);
   const [busy, setBusy] = useState(false);
   const active = useRef(true);
 
@@ -169,14 +172,14 @@ function KnowledgeSection({ botId }: { botId: string }): JSX.Element {
     const parsed = METHOD_CONTRACTS["knowledge.list"].response.parse(response);
     if (!active.current) return;
     setDocs(parsed.docs);
-    setNotice((current) => (current === "知识库读取失败" ? null : current));
+    setNotice((current) => (current?.key === "memory.knowledgeBaseLoadFailed" ? null : current));
   }, [botId]);
 
   useEffect(() => {
     active.current = true;
     let cancelled = false;
     void load().catch(() => {
-      if (!cancelled) setNotice("知识库读取失败");
+      if (!cancelled) setNotice({ key: "memory.knowledgeBaseLoadFailed" });
     });
     return () => {
       active.current = false;
@@ -200,10 +203,10 @@ function KnowledgeSection({ botId }: { botId: string }): JSX.Element {
         text: picked.text,
       });
       if (!active.current) return;
-      setNotice("已导入知识");
+      setNotice({ key: "memory.knowledgeImported" });
       await load();
     } catch {
-      if (active.current) setNotice("知识导入失败");
+      if (active.current) setNotice({ key: "memory.knowledgeImportFailed" });
     } finally {
       if (active.current) setBusy(false);
     }
@@ -222,7 +225,7 @@ function KnowledgeSection({ botId }: { botId: string }): JSX.Element {
       if (!active.current) return;
       setHits(parsed.hits);
     } catch {
-      if (active.current) setNotice("知识检索失败");
+      if (active.current) setNotice({ key: "memory.knowledgeSearchFailed" });
     } finally {
       if (active.current) setBusy(false);
     }
@@ -234,11 +237,11 @@ function KnowledgeSection({ botId }: { botId: string }): JSX.Element {
     try {
       await window.deepseekBot.host.call("knowledge.delete", { botId, docId });
       if (!active.current) return;
-      setNotice("已删除知识");
+      setNotice({ key: "memory.knowledgeDeleted" });
       setHits(null);
       await load();
     } catch {
-      if (active.current) setNotice("知识删除失败");
+      if (active.current) setNotice({ key: "memory.knowledgeDeleteFailed" });
     } finally {
       if (active.current) setBusy(false);
     }
@@ -248,32 +251,32 @@ function KnowledgeSection({ botId }: { botId: string }): JSX.Element {
     <div>
       <div>
         <button type="button" onClick={() => void importFile()}>
-          导入知识
+          {t("main.importKnowledge")}
         </button>
         <input
-          aria-label="检索知识"
+          aria-label={t("memory.searchKnowledgeField")}
           value={query}
           onChange={(event) => setQuery(event.target.value)}
         />
         <button type="button" onClick={() => void search()}>
-          搜索知识
+          {t("memory.searchKnowledgeButton")}
         </button>
       </div>
-      {notice !== null ? <div role="status">{notice}</div> : null}
+      {notice !== null ? <div role="status">{noticeText(notice)}</div> : null}
       {(hits ?? []).map((hit) => (
         <div key={`${hit.docId}:${hit.at}:${hit.snippet}`}>
           <div>{hit.title}</div>
           <div>{hit.snippet}</div>
         </div>
       ))}
-      {hits !== null && hits.length === 0 ? <div role="status">没有匹配的知识</div> : null}
+      {hits !== null && hits.length === 0 ? <div role="status">{t("memory.noKnowledgeMatches")}</div> : null}
       {(docs ?? []).map((doc) => (
         <div key={doc.id}>
           <div>
-            {doc.title}（{doc.size} 字）
+            {t("memory.knowledgeDocMeta", [doc.title, doc.size])}
           </div>
           <button type="button" onClick={() => void remove(doc.id)}>
-            删除
+            {t("shell.delete")}
           </button>
         </div>
       ))}
@@ -289,7 +292,8 @@ const ZERO_POLICY: RetentionPolicy = {
 
 function RetentionControls(): JSX.Element {
   const [policy, setPolicy] = useState<RetentionPolicy>(ZERO_POLICY);
-  const [notice, setNotice] = useState<string | null>(null);
+  useLanguage();
+  const [notice, setNotice] = useState<Notice | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -300,7 +304,7 @@ function RetentionControls(): JSX.Element {
         if (active) setPolicy(parsed.policy);
       })
       .catch(() => {
-        if (active) setNotice("保留策略读取失败");
+        if (active) setNotice({ key: "memory.policyLoadFailed" });
       });
     return () => {
       active = false;
@@ -320,34 +324,34 @@ function RetentionControls(): JSX.Element {
       const response = await window.deepseekBot.host.call("memory.retention.set", { policy });
       const parsed = METHOD_CONTRACTS["memory.retention.set"].response.parse(response);
       setPolicy(parsed.policy);
-      setNotice("已保存保留策略");
+      setNotice({ key: "memory.policySaved" });
     } catch {
-      setNotice("保留策略保存失败");
+      setNotice({ key: "memory.policySaveFailed" });
     }
   }
 
   return (
     <div>
-      <div>保留策略（0 表示不限制；超限或过期会在保存后清理）</div>
+      <div>{t("memory.retentionPolicyHint")}</div>
       <input
-        aria-label="记忆保留天数"
+        aria-label={t("memory.memoryRetentionDays")}
         value={policy.retentionDays}
         onChange={(event) => update("retentionDays", event.target.value)}
       />
       <input
-        aria-label="每bot记忆上限"
+        aria-label={t("memory.perBotMemoryLimit")}
         value={policy.memoryMaxPerBot}
         onChange={(event) => update("memoryMaxPerBot", event.target.value)}
       />
       <input
-        aria-label="每bot知识上限"
+        aria-label={t("memory.perBotKnowledgeLimit")}
         value={policy.knowledgeMaxPerBot}
         onChange={(event) => update("knowledgeMaxPerBot", event.target.value)}
       />
       <button type="button" onClick={() => void save()}>
-        保存策略
+        {t("memory.savePolicy")}
       </button>
-      {notice !== null ? <div role="status">{notice}</div> : null}
+      {notice !== null ? <div role="status">{noticeText(notice)}</div> : null}
     </div>
   );
 }
