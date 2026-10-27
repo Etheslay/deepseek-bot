@@ -14,3 +14,5 @@ allowBuilds:
   koffi: false
   node-pty: false
   protobufjs: false
+  tesseract.js: false
+  opencollective-postinstall: false

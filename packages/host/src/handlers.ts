@@ -886,6 +886,16 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
       return { servers };
     },
 
+    // Contract-first D21 surface. The dependent implementation replaces these guards.
+    "screen.status": () => { throw new ToolRejectionError("RUNTIME_UNAVAILABLE", "screen sensing is not installed"); },
+    "screen.windows.list": () => { throw new ToolRejectionError("RUNTIME_UNAVAILABLE", "screen sensing is not installed"); },
+    "screen.target.set": () => { throw new ToolRejectionError("RUNTIME_UNAVAILABLE", "screen sensing is not installed"); },
+    "screen.request": () => { throw new ToolRejectionError("RUNTIME_UNAVAILABLE", "screen sensing is not installed"); },
+    "screen.cancel": () => { throw new ToolRejectionError("RUNTIME_UNAVAILABLE", "screen sensing is not installed"); },
+    "screen.results.list": () => { throw new ToolRejectionError("RUNTIME_UNAVAILABLE", "screen sensing is not installed"); },
+    "screen.result.read": () => { throw new ToolRejectionError("RUNTIME_UNAVAILABLE", "screen sensing is not installed"); },
+    "screen.result.delete": () => { throw new ToolRejectionError("RUNTIME_UNAVAILABLE", "screen sensing is not installed"); },
+
     "connector.list": () => ({
       connectors: listConnectors(db).map((row) => ({
         id: row.id,
