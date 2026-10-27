@@ -54,6 +54,7 @@ import { RunMonitor } from "./features/run-monitor/run-monitor.js";
 import { CanvasSidecar } from "./features/canvas/canvas-sidecar.js";
 import { ChatMarkdown } from "./features/chat/chat-markdown.js";
 import { ThinkingLine } from "./features/chat/thinking-line.js";
+import { exportConversation } from "./features/chat/export-conversation.js";
 import type { MentionTable } from "./features/chat/mentions.js";
 import {
   attachmentAccept,
@@ -167,6 +168,8 @@ type Msg = {
   } | undefined;
   /** System notices (e.g. blocked cross-group requests) render as a centered muted line. */
   system?: boolean;
+  /** G6: the message re-enters the thread as 重新生成 / 编辑后重发, weakly labelled. */
+  meta?: "regenerate" | "edited_resend";
 };
 
 type ChatState = Record<number, Msg[]>;
@@ -967,6 +970,7 @@ export function App(): JSX.Element {
     botKey: number,
     text: string,
     attachments?: Msg["attachments"],
+    meta?: Msg["meta"],
   ): void => {
     const trimmed = text.trim();
     if (!trimmed && !(attachments && attachments.length > 0)) {
@@ -988,6 +992,7 @@ export function App(): JSX.Element {
             time: Date.now(),
             system: false,
             attachments: attachments && attachments.length > 0 ? attachments : undefined,
+            ...(meta !== undefined ? { meta } : {}),
           },
         ],
       };
@@ -1403,6 +1408,30 @@ const logout = (): void => {
               stroke="currentColor"
               strokeWidth="1.6"
               strokeLinecap="round"
+            />
+          </svg>
+        </button>
+        <button
+          type="button"
+          className="top-icon-btn"
+          aria-label={t("shell.exportConversation")}
+          title={t("shell.exportConversation")}
+          onClick={() => {
+            if (selectedBotEntry === undefined) return;
+            exportConversation(
+              selectedBotEntry.bot.name,
+              chats[selectedBotEntry.key] ?? [],
+            );
+          }}
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path
+              d="M12 4v10m0 0 4-4m-4 4-4-4M5 19h14"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
             />
           </svg>
         </button>
@@ -2746,6 +2775,10 @@ function MessageBubble({
   onReact,
   onQuote,
   onCopy,
+  canRegenerate,
+  onRegenerate,
+  canEditResend,
+  onEditResend,
 }: {
   msg: Msg;
   accent: string;
@@ -2757,6 +2790,12 @@ function MessageBubble({
   onReact: (msgId: number, emoji: Emoji) => void;
   onQuote: (msg: Msg) => void;
   onCopy: (text: string) => void;
+  /** G6: only the latest assistant reply offers 重新生成. */
+  canRegenerate?: boolean;
+  onRegenerate?: () => void;
+  /** G6: only the latest user message offers 编辑重发 (prefills the composer). */
+  canEditResend?: boolean;
+  onEditResend?: (text: string) => void;
 }): JSX.Element {
   const isUser = msg.from === "user";
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -2803,6 +2842,11 @@ function MessageBubble({
           className={"msg-bubble" + (isUser ? " user" : "")}
           style={isUser ? { background: accent, color: readableTextColor(accent) } : undefined}
         >
+          {msg.meta !== undefined && (
+            <span className="msg-meta">
+              {msg.meta === "regenerate" ? t("chat.regeneratedMark") : t("chat.editedResendMark")}
+            </span>
+          )}
           {msg.quote && (
             <div className="msg-quote">
               {t("shell.quotedMessage", [msg.quote.name, msg.quote.text])}
@@ -2948,6 +2992,45 @@ function MessageBubble({
             />
           </svg>
         </button>
+        {!isUser && canRegenerate === true && onRegenerate !== undefined && (
+          <button
+            type="button"
+            className="msg-icon-btn"
+            data-action="regenerate"
+            title={t("shell.regenerateTitle")}
+            onClick={onRegenerate}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                d="M20 12a8 8 0 1 1-2.34-5.66M20 4v4h-4"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </button>
+        )}
+        {isUser && canEditResend === true && onEditResend !== undefined && (
+          <button
+            type="button"
+            className="msg-icon-btn"
+            data-action="edit-resend"
+            title={t("shell.editResendTitle")}
+            onClick={() => onEditResend(msg.text)}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                d="m4 20 1.2-4.2L16.4 4.6a2 2 0 0 1 2.8 0l.2.2a2 2 0 0 1 0 2.8L8.2 18.8 4 20Z"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </button>
+        )}
       </div>
     </div>
   );
@@ -2988,7 +3071,7 @@ function BotsPlaceholder({
   onQuote: (msg: Msg) => void;
   onPairQuote: (name: string, text: string) => void;
   onCancelQuote: () => void;
-  onSend: (text: string, attachments?: Msg["attachments"]) => void;
+  onSend: (text: string, attachments?: Msg["attachments"], meta?: Msg["meta"]) => void;
   onReact: (msgId: number, emoji: Emoji) => void;
   onTalkTo: (otherKey: number) => void;
   onCopy: (text: string) => void;
@@ -3020,6 +3103,8 @@ function BotsPlaceholder({
   const [clarify, setClarify] = useState<ClarifyTarget | null>(null);
   const [memoryOpen, setMemoryOpen] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<AttachmentDraft[]>([]);
+  /** G6: a pending 编辑重发 labels the next sent user bubble. */
+  const [pendingMeta, setPendingMeta] = useState<Msg["meta"] | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const streamRef = useRef<StreamHandle | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
@@ -3260,11 +3345,30 @@ function BotsPlaceholder({
       kind: classifyAttachment(f.mime, f.name),
       ...(f.dataUrl !== undefined ? { dataUrl: f.dataUrl } : {}),
     }));
-    onSend(text, outgoing.length > 0 ? outgoing : undefined);
+    onSend(text, outgoing.length > 0 ? outgoing : undefined, pendingMeta ?? undefined);
+    setPendingMeta(null);
     setPendingFiles([]);
     setFailedText(text);
     setDraft("");
     startChatStream(text);
+  };
+
+  /** G6: 重新生成 — re-ask the latest user question as a new labelled turn. */
+  const regenerate = (): void => {
+    const lastUser = [...msgs].reverse().find((m) => m.from === "user" && !m.system);
+    if (lastUser === undefined) {
+      return;
+    }
+    onSend(lastUser.text, undefined, "regenerate");
+    setFailedText(lastUser.text);
+    startChatStream(lastUser.text);
+  };
+
+  /** G6: 编辑重发 — prefill the composer; the next send carries the label. */
+  const editResend = (text: string): void => {
+    setPendingMeta("edited_resend");
+    setDraft(text);
+    inputRef.current?.focus();
   };
 
   const retryStream = (): void => {
@@ -3288,6 +3392,11 @@ function BotsPlaceholder({
     setFailedText(option.label);
     startChatStream(option.label);
   };
+
+  // G6: only the newest user question may regenerate and only the newest user
+  // message may be edited-resent — older ones stay historical record.
+  const lastBotMsgId = [...msgs].reverse().find((m) => m.from === "bot" && !m.system)?.id;
+  const lastUserMsgId = [...msgs].reverse().find((m) => m.from === "user" && !m.system)?.id;
 
   return (
     <div
@@ -3386,6 +3495,10 @@ function BotsPlaceholder({
                   onReact={onReact}
                   onQuote={onQuote}
                   onCopy={onCopy}
+                  canRegenerate={m.id === lastBotMsgId}
+                  onRegenerate={regenerate}
+                  canEditResend={m.id === lastUserMsgId}
+                  onEditResend={editResend}
                 />
               )}
             </Fragment>

@@ -82,6 +82,11 @@ export interface RunServiceApi {
    */
   retryNode(nodeRunId: string): Promise<NodeRun>;
   /**
+   * run.resume: an interrupted run continues as a NEW run linked via
+   * resumedFromRunId; anything not interrupted is INVALID_INPUT (G14).
+   */
+  resume(runId: string): Promise<Run>;
+  /**
    * approval.decide: validates digest, pending status, validity window and
    * host generation; a decided approval can never be decided again.
    */
@@ -1066,6 +1071,16 @@ export function createFixtureRunService(): RunServiceApi {
         to: "running",
       });
       return spawned;
+    },
+
+    async resume(runId) {
+      // G14: the interrupted fixture run recovers into its prepared successor
+      // (RUN_RESUMED); every other state is INVALID_INPUT, matching the
+      // engine's rule that resumption starts a new run via resumedFromRunId.
+      if (runId !== RUN_INTERRUPTED) {
+        throw invalidInput(t("runs.resumeNotInterrupted"));
+      }
+      return RunSchema.parse(requireScenario(RUN_RESUMED).run);
     },
 
     async decideApproval(input) {
