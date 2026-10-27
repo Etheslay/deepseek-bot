@@ -235,4 +235,36 @@ describe("eventRule host methods", () => {
       host.handleMethod("eventRule.review.approve", { botId: owned.botId, id: randomUUID() }),
     ).rejects.toMatchObject({ code: "INVALID_INPUT" });
   });
+
+  it("records a real state change once, skips a no-op, and lists newest first", async () => {
+    const host = await makeHost();
+    const owned = await seedWorkflow(host, "states");
+    const other = await seedWorkflow(host, "states-other");
+    const saved = (await host.handleMethod("eventRule.save", {
+      botId: owned.botId,
+      rule: { name: "状态记录", workflowId: owned.workflowId, eventType: "run.completed" },
+    })) as { id: string };
+    const empty = (await host.handleMethod("eventRule.state.list", { botId: owned.botId })) as {
+      states: unknown[];
+    };
+    expect(empty.states).toEqual([]);
+
+    await host.handleMethod("eventRule.enable", { botId: owned.botId, id: saved.id });
+    await host.handleMethod("eventRule.enable", { botId: owned.botId, id: saved.id });
+    await host.handleMethod("eventRule.disable", { botId: owned.botId, id: saved.id });
+    await host.handleMethod("eventRule.disable", { botId: owned.botId, id: saved.id });
+    await host.handleMethod("eventRule.review", { botId: owned.botId, id: saved.id });
+    await host.handleMethod("eventRule.review", { botId: owned.botId, id: saved.id });
+
+    const listed = (await host.handleMethod("eventRule.state.list", { botId: owned.botId })) as {
+      states: Array<{ ruleId: string; botId: string; state: string; at: string }>;
+    };
+    expect(listed.states.map((row) => row.state)).toEqual(["review", "disabled", "enabled"]);
+    expect(listed.states.every((row) => row.ruleId === saved.id && row.botId === owned.botId)).toBe(true);
+    expect(listed.states.every((row) => row.at.length > 0)).toBe(true);
+    const hidden = (await host.handleMethod("eventRule.state.list", { botId: other.botId })) as {
+      states: unknown[];
+    };
+    expect(hidden.states).toEqual([]);
+  });
 });

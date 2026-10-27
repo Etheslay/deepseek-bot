@@ -9,12 +9,14 @@
  * `duplicate` record and does not start another run. A rule with review
  * set holds one pending item per event instead of starting; approve and
  * deny write the primary record. A disabled rule still records a skip and
- * does not enter the queue.
+ * does not enter the queue. Enabling, disabling, or switching review on
+ * appends one state row when that flag changes. A repeat call that leaves
+ * the flag as it is does not append another row.
  */
 import { randomUUID } from "node:crypto";
 import type { OpenedDatabase } from "../database.js";
 import { invalidInput } from "../errors.js";
-import { constraintError, isoNow } from "./shared.js";
+import { constraintError, isoNow, runInTransaction } from "./shared.js";
 import { getBot } from "./bots.js";
 import { getWorkflow } from "./workflows.js";
 
@@ -47,6 +49,18 @@ export interface EventRuleRecord {
   readonly outcome: EventRuleOutcome;
   readonly runId: string | null;
   readonly reason: string;
+  readonly createdAt: string;
+}
+
+export const EVENT_RULE_STATES = ["enabled", "disabled", "review"] as const;
+export type EventRuleState = (typeof EVENT_RULE_STATES)[number];
+
+/** One local change of a rule's enabled flag or its review flag. */
+export interface EventRuleStateRecord {
+  readonly id: string;
+  readonly ruleId: string;
+  readonly botId: string;
+  readonly state: EventRuleState;
   readonly createdAt: string;
 }
 
@@ -86,6 +100,14 @@ type RecordSqlRow = {
   created_at: string;
 };
 
+type StateSqlRow = {
+  id: string;
+  rule_id: string;
+  bot_id: string;
+  state: string;
+  created_at: string;
+};
+
 type ReviewSqlRow = {
   id: string;
   rule_id: string;
@@ -119,6 +141,16 @@ function mapRecord(row: RecordSqlRow): EventRuleRecord {
     outcome: row.outcome as EventRuleOutcome,
     runId: row.run_id,
     reason: row.reason,
+    createdAt: row.created_at,
+  };
+}
+
+function mapState(row: StateSqlRow): EventRuleStateRecord {
+  return {
+    id: row.id,
+    ruleId: row.rule_id,
+    botId: row.bot_id,
+    state: row.state as EventRuleState,
     createdAt: row.created_at,
   };
 }
@@ -236,6 +268,17 @@ export function saveEventRule(
   }
 }
 
+function appendEventRuleState(
+  db: OpenedDatabase,
+  input: { ruleId: string; botId: string; state: EventRuleState; at: string },
+): void {
+  db.raw
+    .prepare(
+      "INSERT INTO event_rule_states (id, rule_id, bot_id, state, created_at) VALUES (?, ?, ?, ?, ?);",
+    )
+    .run(randomUUID(), input.ruleId, input.botId, input.state, input.at);
+}
+
 export function setEventRuleEnabled(
   db: OpenedDatabase,
   input: { id: string; botId: string; enabled: boolean },
@@ -245,9 +288,20 @@ export function setEventRuleEnabled(
     throw invalidInput("event rule was not found", { id: input.id });
   }
   const at = isoNow(db.now);
-  db.raw
-    .prepare("UPDATE event_rules SET enabled = ?, updated_at = ? WHERE id = ? AND bot_id = ?;")
-    .run(input.enabled ? 1 : 0, at, input.id, input.botId);
+  const changed = existing.enabled !== input.enabled;
+  runInTransaction(db.raw, () => {
+    db.raw
+      .prepare("UPDATE event_rules SET enabled = ?, updated_at = ? WHERE id = ? AND bot_id = ?;")
+      .run(input.enabled ? 1 : 0, at, input.id, input.botId);
+    if (changed) {
+      appendEventRuleState(db, {
+        ruleId: existing.id,
+        botId: existing.botId,
+        state: input.enabled ? "enabled" : "disabled",
+        at,
+      });
+    }
+  });
   return getEventRule(db, input.id)!;
 }
 
@@ -261,10 +315,35 @@ export function setEventRuleReview(
     throw invalidInput("event rule was not found", { id: input.id });
   }
   const at = isoNow(db.now);
-  db.raw
-    .prepare("UPDATE event_rules SET review = 1, updated_at = ? WHERE id = ? AND bot_id = ?;")
-    .run(at, input.id, input.botId);
+  const changed = existing.review !== true;
+  runInTransaction(db.raw, () => {
+    db.raw
+      .prepare("UPDATE event_rules SET review = 1, updated_at = ? WHERE id = ? AND bot_id = ?;")
+      .run(at, input.id, input.botId);
+    if (changed) {
+      appendEventRuleState(db, {
+        ruleId: existing.id,
+        botId: existing.botId,
+        state: "review",
+        at,
+      });
+    }
+  });
   return getEventRule(db, input.id)!;
+}
+
+/** State changes for one bot, newest first. */
+export function listEventRuleStates(
+  db: OpenedDatabase,
+  input: { botId: string; limit: number },
+): EventRuleStateRecord[] {
+  const limit = Math.max(1, Math.min(100, Math.floor(input.limit)));
+  const rows = db.raw
+    .prepare(
+      "SELECT * FROM event_rule_states WHERE bot_id = ? ORDER BY created_at DESC, rowid DESC LIMIT ?;",
+    )
+    .all(input.botId, limit) as unknown as StateSqlRow[];
+  return rows.map(mapState);
 }
 
 /** Advance the scan cursor. Enabling a rule does not move it backwards. */

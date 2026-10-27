@@ -707,6 +707,23 @@ CREATE TABLE event_rule_reviews (
 CREATE INDEX event_rule_reviews_status ON event_rule_reviews(status, created_at);
 `,
   },
+  {
+    // D20 local state history: enabling, disabling, or switching a rule to
+    // review appends one row when that flag actually changes. A repeat call
+    // that leaves the flag as it is does not append. No network.
+    id: 18,
+    name: "0018-event-rule-states",
+    sql: /* sql */ `
+CREATE TABLE event_rule_states (
+  id TEXT PRIMARY KEY,
+  rule_id TEXT NOT NULL REFERENCES event_rules(id) ON DELETE CASCADE,
+  bot_id TEXT NOT NULL REFERENCES bots(id),
+  state TEXT NOT NULL CHECK (state IN ('enabled', 'disabled', 'review')),
+  created_at TEXT NOT NULL
+);
+CREATE INDEX event_rule_states_bot ON event_rule_states(bot_id, created_at);
+`,
+  },
 
 ];
 
