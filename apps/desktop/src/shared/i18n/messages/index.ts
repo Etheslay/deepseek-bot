@@ -18,6 +18,7 @@ import { mainMessages } from "./main.js";
 import { memoryMessages } from "./memory.js";
 import { permissionsMessages } from "./permissions.js";
 import { questionsMessages } from "./questions.js";
+import { reasonerMessages } from "./reasoner.js";
 import { runsMessages } from "./runs.js";
 import { searchMessages } from "./search.js";
 import { servicesMessages } from "./services.js";
@@ -39,6 +40,7 @@ export const MESSAGES = {
   ...memoryMessages,
   ...permissionsMessages,
   ...questionsMessages,
+  ...reasonerMessages,
   ...runsMessages,
   ...searchMessages,
   ...servicesMessages,

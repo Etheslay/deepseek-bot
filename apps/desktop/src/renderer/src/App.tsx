@@ -59,6 +59,10 @@ import {
   type AttachmentDraft,
 } from "./features/chat/attachments.js";
 import { GlobalSearch } from "./features/search/global-search.js";
+import {
+  deepThinkingTargetId,
+  isDeepThinkingEnabled,
+} from "./features/chat/reasoner.js";
 import { buildSearchIndex, type SearchItem } from "./features/search/search-core.js";
 import {
   ACCENT_PRESETS,
@@ -697,6 +701,28 @@ export function App(): JSX.Element {
 
   const selectedBotEntry = bots.find((b) => b.key === selectedBot);
   const selectedBotName = selectedBotEntry?.bot.name ?? "DeepSeek Bot";
+  /** GAP_AUDIT G5: deep-thinking ships as the bot's model profile. */
+  const deepThinking =
+    selectedBotEntry !== undefined && isDeepThinkingEnabled(selectedBotEntry.bot.modelProfileId);
+
+  const toggleDeepThinking = async (): Promise<void> => {
+    if (selectedBotEntry === undefined) {
+      return;
+    }
+    const enabled = !deepThinking;
+    const result = await updateBotEntity(selectedBotEntry.bot.id, {
+      modelProfileId: deepThinkingTargetId(enabled),
+    });
+    if (result.ok) {
+      setToast(
+        enabled
+          ? t("reasoner.enabledToast")
+          : t("reasoner.disabledToast"),
+      );
+    } else {
+      setToast(t("reasoner.switchFailed", [result.errorCode ?? t("reasoner.unknownError")]));
+    }
+  };
 
   /**
    * Open the create dialog.
@@ -1190,6 +1216,33 @@ const logout = (): void => {
           )}
           {selectedBotName}
         </span>
+        {selectedBotEntry !== undefined && (
+          <button
+            type="button"
+            className={"deep-thinking-toggle" + (deepThinking ? " active" : "")}
+            aria-pressed={deepThinking}
+            title={
+              deepThinking
+                ? t("reasoner.tooltipOn")
+                : t("reasoner.tooltipOff")
+            }
+            onClick={() => {
+              void toggleDeepThinking();
+            }}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                d="M12 3a6 6 0 0 0-3.6 10.8c.5.4.8 1 .8 1.6v.6a1 1 0 0 0 1 1h3.6a1 1 0 0 0 1-1v-.6c0-.6.3-1.2.8-1.6A6 6 0 0 0 12 3Z"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinejoin="round"
+              />
+              <path d="M10 20h4" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+            </svg>
+            {t("reasoner.toggleLabel")}{deepThinking ? t("reasoner.onSuffix") : ""}
+          </button>
+        )}
         <button
           type="button"
           className={"top-icon-btn" + (monitorOpen ? " active" : "")}
