@@ -13,7 +13,7 @@
 
 | 验收项（FR-19） | 实现 | 落点 |
 | --- | --- | --- |
-| 中英双语可切换 | 零依赖类型化字典：`shared/i18n`（`locale` 解析、`translate` 位置参数 + 英文单复数、14 个 domain 文件 **662 条 key**）；渲染层模块级 store（`useSyncExternalStore`）+ 主进程语言镜像；`system`/`zh`/`en` 三档偏好，`system` 取 `app.getLocale()` | [shared/i18n](../../apps/desktop/src/shared/i18n/)、[renderer/src/i18n.ts](../../apps/desktop/src/renderer/src/i18n.ts)、[main/i18n.ts](../../apps/desktop/src/main/i18n.ts) |
+| 中英双语可切换 | 零依赖类型化字典：`shared/i18n`（`locale` 解析、`translate` 位置参数 + 英文单复数、18 个 domain 文件 **764 条 key**）；渲染层模块级 store（`useSyncExternalStore`）+ 主进程语言镜像；`system`/`zh`/`en` 三档偏好，`system` 取 `app.getLocale()` | [shared/i18n](../../apps/desktop/src/shared/i18n/)、[renderer/src/i18n.ts](../../apps/desktop/src/renderer/src/i18n.ts)、[main/i18n.ts](../../apps/desktop/src/main/i18n.ts) |
 | 每 bot 托盘图标 | 单托盘：图标 = 活跃 bot 的 Grok Ball（渲染层 SVG→canvas 32px PNG，经校验的 `tray:sync` 推送）；菜单逐 bot 一项、带各自图标、活跃标记、按"活跃→等待审批→运行中→未读→其余"排序；菜单/tooltip 随界面语言 | [main/tray.ts](../../apps/desktop/src/main/tray.ts)、[main/tray-menu.ts](../../apps/desktop/src/main/tray-menu.ts)、[features/system/tray-avatar.ts](../../apps/desktop/src/renderer/src/features/system/tray-avatar.ts)、[tray-sync.ts](../../apps/desktop/src/renderer/src/features/system/tray-sync.ts) |
 | 通知设置 | 主进程 `Notification`（4 秒同文去重、点击回主窗口并通知渲染层定位 bot）；策略在渲染层：总开关、**仅窗口不在前台时提醒**（默认开）、按 Bot 静音、测试通知按钮（如实回报"系统无通知通道"）；触发点＝回复完成 / 待审批 / 错过定时（FR-08） | [main/notifications.ts](../../apps/desktop/src/main/notifications.ts)、[features/system/notify.ts](../../apps/desktop/src/renderer/src/features/system/notify.ts)、[notifications-panel.tsx](../../apps/desktop/src/renderer/src/features/system/notifications-panel.tsx) |
 | Chrome 数据导入 | **只读书签**（口径见 §2）：扫描 `<User Data>/*/Bookmarks` + `Local State` 取显示名 → 预览条数与样例 → 导入到 `<数据根>/imports/chrome/bookmarks.json` → 查看/导出 Markdown/一键删除；仅 `http(s)`、URL 去重、单文件 >8 MiB 拒绝、上限 5000 条、token 拒绝分隔符与 `..` | [main/chrome-bookmarks.ts](../../apps/desktop/src/main/chrome-bookmarks.ts)、[chrome-panel.tsx](../../apps/desktop/src/renderer/src/features/system/chrome-panel.tsx) |
@@ -42,10 +42,12 @@
 | 去重后唯一文案 | 608 |
 | 自动替换 | 644 处 / 31 个文件 |
 | 需人工改造（模块级常量表 / 数据比较值） | 114 处 / 8 个文件 |
-| 迁移后字典 | 662 key / 14 domain（合入 develop #52 后新增 2 条待执行参数文案） |
+| 迁移后字典 | **764 key / 18 domain**：首轮 662/14，合入 develop 后随对方新增界面继续补（#52 待执行参数 +2、`3afea90` 批（记忆/知识库、事件自动化、连接器、搜索、提问卡、D28 画布侧车、知识导入）+141、`e6a54b1` 批（MCP 工具授权）+26） |
 | 残留未翻译界面文案 | **0**（`i18n` 扫描器：字符串字面量、模板串、`+` 拼接链、JSX 文本段） |
 
-人工改造的关键点（模块级常量在 import 期求值，会冻结启动语言）：`RUN_STATUS_LABELS`、`NODE_STATUS_LABELS`、`DECISION_LABELS`、`CAPABILITY_LABELS`（两份重复表合并为 [capability-labels.ts](../../apps/desktop/src/renderer/src/features/permissions/capability-labels.ts)）、`TONE_PRESETS`、`WORKSPACE_OPTIONS`/`TOOL_POLICY_OPTIONS`、`SEARCH_KIND_LABELS`、夹具会话标题——全部改成"key 表 + 取值函数"。`APPROVAL_TTL_COPY` 由常量改为 `approvalTtlCopy()`。
+两轮补漏的规模（对 develop 新增界面重跑同一流程）：第二轮 140 处 / 11 文件 + 手工 22 处，第三轮 24 处 / 1 文件 + 手工 3 处；扫描器对新文案零漏判（守卫测试 `tests/i18n-scan.test.ts` 会在 CI 直接失败）。develop 的六个新面板（memory / automation / connectors / search-settings / search-results / questions）与 MCP 白名单组件同样把已渲染字符串存进 notice state，已统一改为 `{ key, params }` + `noticeText()`，切语言即时重译（见 §6 顺带修复）。`src/shared/knowledge-import.ts` 因主进程也会 import，不能读渲染层语言 store，兜底文档标题改由调用方注入（develop 的测试同步更新并断言注入）。
+
+人工改造的关键点（模块级常量在 import 期求值，会冻结启动语言）：`RUN_STATUS_LABELS`、`NODE_STATUS_LABELS`、`DECISION_LABELS`、`CAPABILITY_LABELS`（两份重复表合并为 [capability-labels.ts](../../apps/desktop/src/renderer/src/features/permissions/capability-labels.ts)）、`TONE_PRESETS`、`WORKSPACE_OPTIONS`/`TOOL_POLICY_OPTIONS`、`SEARCH_KIND_LABELS`、`EVENT_LABEL`（automation）、夹具会话标题——全部改成"key 表 + 取值函数"；`automation-panel` 的 `名称（事件）` 与画布 `版本历史（3）` 原本是把全角括号写在 JSX 里拼接，已合并为单条消息（英文得到 `Name · On run failure` / `Version history (3)`）。`APPROVAL_TTL_COPY` 由常量改为 `approvalTtlCopy()`。
 
 数据与显示分离的两处：默认分组不再用中文名做身份比较（`group.name` 为空即默认组，标签走 `t("shell.ungrouped")`）；语气 chip 的 `id`/`labelKey`/`instruction` 三分，展示翻译、发给模型的指令保持原值。
 
@@ -55,7 +57,7 @@
 
 | 检查 | 提交 / 环境 | 命令 | 结果 |
 | --- | --- | --- | --- |
-| 全仓测试 | `56d07fc`（已合 develop #52）/ Win11 x64 + Node 24.16.0 | `pnpm test` | exit 0：desktop 31 文件 / **325** 用例（基线 23/206）、contracts 86、storage 147、runtime 128、agent-tools 69、host 61(+1 skip)、harness-adapter 52、shared 6、harness-bridge 10 |
+| 全仓测试 | `bd7ba12`（已合 develop 至 `e6a54b1`）/ Win11 x64 + Node 24.16.0 | `pnpm test` | exit 0：desktop 41 文件 / **385** 用例（基线 `2ecb2f9` 为 23/206）、contracts 97、storage 175、runtime 128、agent-tools 80、host 24 文件 / 152(+1 skip)、harness-adapter 58、shared 6、harness-bridge 29 |
 | 静态检查 | 同上 | `pnpm run lint`；`pnpm run typecheck` | 均 exit 0（10 包） |
 | 未翻译文案扫描 | 同上 | `node d22-tools/i18n.mjs check` | `no untranslated UI copy left in apps/desktop/src` |
 | 双语内核专项 | 同上 | `tests/features/i18n.test.ts`（14 例） | locale 解析、位置参数、英文单复数、未知 key 回退、字典 zh/en 占位符一致、英文不含中文、key 命名空间 |
@@ -68,8 +70,8 @@
 | Chrome 书签 | 同上 | `tests/main/chrome-bookmarks.test.ts`（17 例，临时目录构造真实文件树） | 只留 http(s)、URL 去重、目录路径、垃圾输入不抛、Local State 取名、token 遍历拒绝、导入/读回/导出/清除/损坏文件回落 |
 | 设置 v2 | 同上 | `tests/features/settings-updates.test.ts`（10 例） | v1→v2 迁移、v1 中文默认账户名归一、非法语言/通知字段回落、静音列表去重 |
 | 存量通知重翻译 | 同上 | `tests/features/permissions-panel.test.ts`（5 例） | 失败提示以 key 存储，切换语言后重新渲染为对应语言（取证中发现的缺陷） |
-| 构建 | 同上 | `pnpm --dir apps/desktop exec electron-vite build` | exit 0，renderer bundle 2.20 MB |
-| 界面取证 | 同上 / 无头 Chrome 1440×900 | 驱动**生产 bundle**（`out/renderer` 拷入 `handoff/d22-preview` + 记录型 preload 替身） | 14 张截图 + `d22-evidence-log.json`，见 §5 |
+| 构建 | 同上 | `pnpm --dir apps/desktop exec electron-vite build` | exit 0 |
+| 界面取证 | 同上 / 无头 Chrome 1440×900 | 驱动**生产 bundle**（`out/renderer` 拷入 `handoff/d22-preview` + 记录型 preload 替身） | 16 张截图 + `d22-evidence-log.json`（16 步断言），见 §5 |
 
 ## 5. 证据（`docs/reports/assets/d22/`）
 
@@ -84,9 +86,12 @@
 | `d22-08-chrome-preview.png` / `d22-09-chrome-imported.png` | 扫描到两个配置（128 / 7 条）→ 预览样例 → 导入 toast「Imported 128 bookmarks」 |
 | `d22-10-reload-en.png` / `d22-11-settings-zh-again.png` | 重载后语言保持；切回中文对称生效 |
 | `d22-12-settings-en-clean.png` / `d22-13-settings-zh-clean.png` | 无脚本副作用的干净设置面板对照（修复 `.ghost-btn` 绝对定位后） |
-| `d22-evidence-log.json` | 16 步断言的机器可读日志（托盘 payload、通知请求、Chrome 调用序列、localStorage 值） |
+| `d22-14-connectors-en.png` / `d22-15-connectors-zh.png` | develop 新增的连接器 / MCP 工具授权 / 事件自动化 / 技能分区在中英两种语言下的设置面板（英文截图正文零中文；notice 亦随语言） |
+| `d22-evidence-log.json` | 16 步断言的机器可读日志（托盘 payload、通知请求、Chrome 调用序列、localStorage 值、`developSections` 与 `developChineseLeak`） |
 
-取证脚本与 preload 替身放在 `handoff/`（已 gitignore，不入库）：`d22-preview.mjs`、`d22-serve.mjs`、`d22-evidence.mjs`、`d22-clean-shot.mjs`。
+取证脚本与 preload 替身放在 `handoff/`（已 gitignore，不入库）：`d22-preview.mjs`、`d22-serve.mjs`、`d22-evidence.mjs`、`d22-clean-shot.mjs`、`d22-connector-shot.mjs`（另有若干 `d22-probe-*.mjs` 排障脚本）。
+
+语言切换在合并 develop 后一度静默失效：`CustomSelect` 的触发器文本变成「跟随系统▾」，脚本按精确文本匹配点不到，导致后续英文步骤空跑。改为按 `aria-label` 定位触发器、在 `.custom-select-menu` 内取选项后恢复；步骤 5 同时新增 `developSections` / `developChineseLeak` 两项断言，专门盯住 develop 带来的新界面是否跟随语言。
 
 ## 6. 未验证项与边界（不冒充完成）
 
@@ -97,6 +102,7 @@
    - 打包版（NSIS）下的托盘 AppUserModelId 与通知归属（D11 的 `com.deepseekbot.desktop` 已设置，未在安装版验证）。
 2. **Host 侧错误文案仍为中文**：`packages/host`/`runtime` 抛出的消息串不属桌面渲染层，本轮未翻译；渲染层按 errorCode 映射本地化文案，未知细节原样附带。彻底消除需要契约级错误码约定，列为后续项。
 3. **取证运行在夹具模式**（无 Host 子进程），因此截图中会出现"Failed to load approval requests / permission data"提示——这是替身环境缺 Host 通道的预期结果，不是新缺陷；权限/审批链路由 D16 的 jsdom 测试覆盖。
+3b. **替身环境的已知脆弱点（非本 PR 引入，建议单列）**：develop 的聊天侧面板（memory / knowledge / questions / search-results / connectors / automation）直接调 `window.deepseekBot.host.call(...)`，且渲染树没有 error boundary——`host` 缺失时该 throw 会把整个应用打成白屏（本分支取证时实测复现）。生产里 preload 总会注入 `host`，因此用户看不到；但任何无桥接环境（预览、组件测试、以后若把面板嵌到别处）都会踩到。取证侧已用 `__d22.enableHost()`（服务层选定夹具实现之后再注入拒绝型桥）绕过，产品侧建议改为走 `desktop-service` 或加 error boundary。
 4. **托盘"运行中"状态未在截图中捕获**：夹具回复在毫秒内完成，状态翻转快于取证采样；`onBotStatus` 调用路径与 payload 的 `running` 分支由单测覆盖（`tray-menu`/`tray-sync`）。
 5. **通知未接入工作流运行事件**（运行完成/失败目前只有聊天内与运行监控内提示），本轮触发点为回复完成、待审批、错过定时三类。
 6. **未做**：Chrome 历史/Cookie 导入（口径已定）、macOS/Linux 托盘与通知适配、界面语言对 bot 回复内容的影响（不涉及）、`data.*` 备份是否包含 `imports/chrome/`（当前备份清单未涵盖该目录，见 §8）。
@@ -105,7 +111,8 @@
 
 - 全量文案迁移天然横跨 D05/D07/D09/D16/D17/D24/D25/D26 的渲染层文件（均为 Destinyian 负责的桌面线），因此本 PR 的 diff 面很大但仅限 `apps/desktop`；未触碰 `packages/**`、契约、lockfile、CI。
 - 迁移工具（AST 扫描/替换/字典生成/审计）刻意放在仓库外 `D:\PersonProgram\d22-tools`，避免把一次性脚本当工程资产提交；**代价**是后续新增文案需手工往对应 `messages/<domain>.ts` 追加，或由负责人决定是否把工具收进 `scripts/`。
-- 顺带修复两处非本任务引入但被取证暴露的问题：D16 权限面板把已翻译字符串存进 state（切语言不重译）、D02 `.ghost-btn` 基类绝对定位导致 D17 技能工具栏与 D22 Chrome 面板按钮叠到弹窗外。
+- 顺带修复的非本任务问题：D16 权限面板把已翻译字符串存进 state（切语言不重译）、D02 `.ghost-btn` 基类绝对定位导致 D17 技能工具栏与 D22 Chrome 面板按钮叠到弹窗外；合入 develop 后又在同一缺陷类下扩到七个新面板（memory / automation / connectors ×2 / search-settings / search-results / questions）与 MCP 工具授权组件。
+- 观察到的 flake：一次全仓 `pnpm test` 里 `packages/host` 报 2 例失败，单跑该包 24 文件全绿、重跑全仓亦 exit 0；疑为并发下的端口/计时争用，非本分支引入，未深究，如实记录。
 
 ## 7. 负责人实机验收清单
 
@@ -120,7 +127,7 @@
 
 ## 8. 自审记录（由负责人填写）
 
-自审人：＿＿＿＿　提交 SHA：`377a37b6b70b8a3257447c17b95aa314272e9387`（代码 head；本报告的 docs 提交在其后）　日期：＿＿＿＿
+自审人：＿＿＿＿　提交 SHA：`bd7ba12`（代码 head；本报告的 docs 提交在其后）　日期：＿＿＿＿
 
 - [ ] 差异检查结果：＿＿＿＿
 - [ ] 检查证据（lint / typecheck / pnpm test / 实机清单 §7）：＿＿＿＿
@@ -131,9 +138,15 @@
 
 ## 9. 提交范围与 PR
 
-代码 head：`377a37b`；随后 `d9f4a38`/`84b0f1d` 为文档提交，`56d07fc` 合入 `origin/develop`（#52 工具网关，冲突见下）。自审需覆盖 `2ecb2f9..HEAD` 的全部提交（`git log --oneline 2ecb2f9..HEAD`）。
+代码 head：`377a37b`；随后 `d9f4a38`/`84b0f1d` 为文档提交，`56d07fc`/`49ebf35`/`b6108c7`/`00d7a19→bd7ba12` 四次合入 `origin/develop`（#52 工具网关起，冲突与解法见下），`8f5bcda` 与 `bd7ba12` 内分别接入 develop 带来的新文案。自审需覆盖 `2ecb2f9..HEAD` 的全部提交（`git log --oneline 2ecb2f9..HEAD`）。
 
-第二次合并 `origin/develop` = `426310b`（#53 用户气泡随 bot 配色）：唯一冲突是 `App.tsx` 的 react import 行（本分支加了 `useCallback`，#53 加了 `CSSProperties`），两侧都保留；typecheck / lint / `pnpm test` / 未翻译扫描在合并后重跑通过。§5 证据采集于 `56d07fc` 构建，#53 只改气泡配色与 import 行，不触及 D22 界面。
+第二次合并 `origin/develop` = `426310b`（#53 用户气泡随 bot 配色）：唯一冲突是 `App.tsx` 的 react import 行（本分支加了 `useCallback`，#53 加了 `CSSProperties`），两侧都保留。
+
+第三次合并 `origin/develop` = `3afea90`（#62 技能 composer、#63 知识库、#64 画布共编、#65 连接器调用、#66 事件自动化，共 43 个提交）：7 个文件冲突，统一按"取 develop 的新界面 + 重新挂 message key"处理——`App.tsx` 8 处（保留内联改名、右键快建、D28 画布侧车与新设置分区；旧的产物文本预览按钮随 develop 删除 `desktop.artifacts.preview` 一并移除）；`permission-chat.tsx` / `permissions-panel.tsx` 的能力表统一由 `capability-labels.ts` 提供（develop 在两文件里各抄了一份，且新增 `memory.read/write`）；`avatar-picker.tsx` 保留 develop 的主题色 tone 渲染；`fixture-service.ts` 取 develop 的共编工作区；`main/index.ts` 两侧 import 合并；`styles.css` 保留 develop 并重新追加 D22 段；`tray-avatar.ts` 因 develop 移除 `projectEye` 改为内联中性眼位。随后 `8f5bcda` 把这一批带来的 141 条新文案接入字典。
+
+第四次合并 `origin/develop` = `e6a54b1`（#67 MCP 契约、#68 本地 HTTP MCP 工具、#69 分支台账）：4 个文件冲突，连接器面板保留 develop 的按类型字段（凭据引用只对 sd-webui 显示、端点占位符按类型区分）并改走 key；权限两侧保留 develop 的 `preview` 变量与新增 `mcp.call` 能力；`SPRINTS.md` 保留 develop 新增的 D18×3 / D19×2 / D20 / D28 / D21 行，并把过时的「D22 已实现但未合入 / 从未推送」行改为当前状态。同一提交内接入 MCP 工具授权 UI 的 26 条新文案，并把该组件的 notice state 纳入同一约定。
+
+§5 证据在最新构建（`bd7ba12`）上重新采集；前三次合并后的检查记录见各 merge commit 的正文。
 
 与 develop 的冲突处理：`App.tsx` 取 develop 侧（#52 把聊天内联授权卡移进审批网关路径）；`permission-chat.tsx` 保留 #52 的按 bot 生命周期守卫、`botId` 过滤与新增的「待执行参数」块，并重新套用 D22 文案层（能力表改由 `capability-labels.ts` 提供、选项与提示存 message key、新增 2 条 key）；`docs/SPRINTS.md` 保留 develop 的 D17 行并追加 D22 行。合并后 `pnpm test` / `pnpm run lint` / `pnpm --dir apps/desktop run typecheck` 与未翻译扫描全部通过，§5 证据在合并后的构建上重新采集。
 
