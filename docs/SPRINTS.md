@@ -104,7 +104,7 @@
 | A2 | D16 权限三层 | 三档策略、聊天内授权、审计（复用 D14 卡片组件） |
 | A3 | D18 记忆与知识 | 写入/检索/删除，默认不跨 bot；独立知识表 + 本地向量检索 + 保留策略（`feature/knowledge-base`），见 [知识导入报告](reports/D18-knowledge-import-report.md)、[知识检索报告](reports/D18-knowledge-search-report.md) |
 | A4 | D19 连接器与 MCP | 注册与启停见 [连接器登记报告](reports/D19-connector-registry-report.md)；自定义 MCP、本地 SD 生图和视觉接入仍未做 |
-| A5 | D20 事件自动化 | 规则、评审队列、重复防护 |
+| A5 | D20 事件自动化 | 规则、评审队列、重复防护（`feature/automation-triggers`：规则 + 评审队列 + 通知条后端） |
 | A6 | D21 本地执行守护 | 截图 OCR / 设备动作，默认关闭逐次授权 |
 
 **B 线（Destinyian · 桌面与体验）**：

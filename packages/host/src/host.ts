@@ -67,6 +67,7 @@ import {
   type WebSearchResult,
 } from "@deepseek-bot/agent-tools";
 import { startApplicationToolServer } from "./app-tool-channel.js";
+import { evaluateTriggerRules } from "./triggers.js";
 import { invokeConnector } from "./connectors.js";
 
 export interface HostOptions {
@@ -92,6 +93,8 @@ export interface HostOptions {
   readonly onMissed?: (notices: ReadonlyArray<ScheduleMissNotice>) => void;
   /** Trusted SearXNG configuration. No key, default public endpoint or automatic requests. */
   readonly webSearch?: WebSearchOptions;
+  /** D20 trigger evaluation interval (default 5s). */
+  readonly triggers?: { readonly intervalMs?: number };
 }
 
 export interface DeepSeekBotHost {
@@ -284,6 +287,23 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
   // D18 保留策略: apply configured limits once at startup so expiry and
   // caps hold even when nothing writes for a while.
   sweepRetention(db, readRetentionPolicy(db), now());
+  // D20 事件自动化: catch up on events that accumulated while the host was
+  // down (enqueued as reason "missed", never silently replayed), then keep
+  // scanning the persisted stream on an interval.
+  const bootAt = now();
+  evaluateTriggerRules(db, { bootAt });
+  const triggerTimer = setInterval(
+    () => {
+      try {
+        evaluateTriggerRules(db, { bootAt });
+      } catch {
+        // A failed scan retries on the next tick; the cursor only advances
+        // after a successful pass, so nothing is skipped.
+      }
+    },
+    options.triggers?.intervalMs ?? 5_000,
+  );
+  triggerTimer.unref?.();
 
   let closed = false;
   const agentToolsHolder: { current?: ToolGateway } = {};
