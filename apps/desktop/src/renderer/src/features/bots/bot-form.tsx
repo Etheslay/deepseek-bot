@@ -72,7 +72,7 @@ export function BotForm(
   props: {
     initial?: { name: string; instructions: string; modelProfileId: string; workspaceId: string; toolPolicyId: string };
     submitLabel: string;
-    onSubmit: (draft: BotDraft) => Promise<{ ok: boolean; errorCode?: string }>;
+    onSubmit: (draft: BotDraft) => Promise<{ ok: boolean; errorCode?: string; errorMessage?: string }>;
     onCancel: () => void;
     /** Rendered above the name field (avatar preview). */
     previewSlot?: ReactNode;
@@ -155,10 +155,17 @@ export function BotForm(
     const result = await props.onSubmit(merged);
     setBusy(false);
     if (!result.ok) {
+      // The code alone lies: anything that crosses IPC without a structured
+      // code arrives as INVALID_INPUT, so show the message too — it is the only
+      // part of the failure that survives the boundary.
+      const detail =
+        result.errorMessage !== undefined && result.errorMessage.length > 0
+          ? `：${result.errorMessage}`
+          : "";
       setSubmitError(
         result.errorCode === "REVISION_CONFLICT"
           ? "保存冲突：机器人已被其他窗口修改，已刷新为最新数据。"
-          : `保存失败（${result.errorCode ?? "INVALID_INPUT"}）`,
+          : `保存失败（${result.errorCode ?? "UNKNOWN"}）${detail}`,
       );
     }
   };

@@ -7223,3 +7223,248 @@ select:focus-visible {
     width: min(340px, 42vw);
   }
 }
+
+/* ------------------------------------------------------------
+   Carried over from feature/choice-card-answer during the merge with
+   develop: memory modal, skills composer menu, choice-card answer
+   states and the search-result cards.
+   ------------------------------------------------------------ */
+
+.choice-answered-text {
+  max-width: 360px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.choice-option:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.choice-option:disabled:focus-visible {
+  background: transparent;
+}
+
+.choice-note {
+  margin: 10px 2px 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.memory-modal {
+  width: 620px;
+}
+
+.memory-body {
+  padding: 0 1.25rem 1.1rem;
+}
+
+.memory-section {
+  padding: 0.7rem 0;
+}
+
+.memory-section + .memory-section {
+  border-top: 1px solid var(--border);
+}
+
+.memory-section-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin-bottom: 0.55rem;
+}
+
+.memory-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.memory-row + .memory-row {
+  margin-top: 0.5rem;
+}
+
+.memory-input {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-size: 0.88rem;
+  color: var(--text);
+  background: var(--input-bg);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0.42rem 0.7rem;
+}
+
+.memory-input::placeholder {
+  color: var(--muted);
+}
+
+.memory-input:focus-visible {
+  outline: 2px solid #8ab4ff;
+  outline-offset: 1px;
+}
+
+.memory-btn {
+  flex: none;
+  font: inherit;
+  font-size: 0.82rem;
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.34rem 0.9rem;
+  cursor: pointer;
+}
+
+.memory-btn:hover {
+  background: var(--item-hover);
+}
+
+.memory-btn:focus-visible {
+  outline: 2px solid #8ab4ff;
+  outline-offset: 1px;
+}
+
+.memory-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  padding: 0.45rem 0.7rem;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.memory-item-text {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+  overflow-wrap: anywhere;
+}
+
+.memory-item-sub {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.memory-notice {
+  color: var(--muted);
+  font-size: 0.8rem;
+  margin-top: 0.5rem;
+}
+
+.memory-policy-hint {
+  color: var(--muted);
+  font-size: 0.8rem;
+  margin-bottom: 0.55rem;
+}
+
+.search-result-cards {
+  margin: 10px auto 4px;
+  max-width: 440px;
+  display: grid;
+  gap: 8px;
+}
+
+.search-result-cards > section {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 10px 12px;
+  font-size: 0.85rem;
+}
+
+.search-result-cards section > div:first-child {
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.search-result-cards section > div + div {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.search-result-cards a {
+  color: var(--mention-color, #6ea8ff);
+  overflow-wrap: anywhere;
+}
+
+.search-result-cards [role="status"] {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.skills-toolbar .ghost-btn {
+  position: static;
+  right: auto;
+  top: auto;
+  transform: none;
+}
+
+.composer-skill {
+  font-size: 0.9rem;
+}
+
+.skills-menu {
+  min-width: 240px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.skills-empty {
+  color: var(--muted);
+  font-size: 0.78rem;
+  cursor: default;
+}
+
+.skill-row {
+  display: flex;
+  align-items: stretch;
+}
+
+.skill-apply {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.skill-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skill-version {
+  font-size: 0.66rem;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 1px 5px;
+}
+
+.skill-remove {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.95rem;
+  padding: 0 8px;
+}
+
+.skill-remove:hover {
+  color: var(--text);
+}
+
+.menu-item:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
