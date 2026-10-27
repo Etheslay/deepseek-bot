@@ -41,13 +41,19 @@ export function runChatStream(deps: {
   update: StreamUpdater;
   onAssistant: (text: string) => void;
   /**
+   * Whether this stream is still the caller's active one. The caller owns that
+   * answer (it knows which handle is current); the runner must not infer it from
+   * inside a state updater, which is the render phase.
+   */
+  isCurrent: () => boolean;
+  /**
    * Optional: reported once per stream with the raw result, after the state has
    * settled. D22's tray status and system notifications need the outcome
    * (success / cancelled / failed) that the reducer folds away.
    */
   onSettled?: (result: StreamResult) => void;
 }): StreamHandle {
-  const { stream, botId, text, forKey, update, onAssistant, onSettled } = deps;
+  const { stream, botId, text, forKey, update, onAssistant, isCurrent, onSettled } = deps;
   let acc = "";
   const handle = stream(botId, text, {
     onDelta: (chunk) => {
@@ -63,19 +69,33 @@ export function runChatStream(deps: {
     },
   });
   void handle.finish().then((result: StreamResult) => {
-    update((prev) => {
-      if (!prev || prev.forKey !== forKey) {
-        return prev;
-      }
-      if (result.cancelled) {
-        return { ...applyCancelled(prev), forKey };
-      }
-      if (result.failure) {
-        return { ...applyFailure(prev, result.failure), forKey };
-      }
-      onAssistant(acc);
-      return null;
-    });
+    // `update` is a React state updater: it runs during the render phase and has
+    // to stay pure. Committing the assistant message from inside it made React
+    // warn — "Cannot update a component (App) while rendering a different
+    // component (BotsPlaceholder)" — and drop the update, so a finished reply
+    // reached storage and the Host log but never the thread: the bubble stayed
+    // on the spinner forever. Decide first, commit outside the updater.
+    if (result.cancelled) {
+      update((prev) => (prev && prev.forKey === forKey ? { ...applyCancelled(prev), forKey } : prev));
+      onSettled?.(result);
+      return;
+    }
+    if (result.failure) {
+      const failure = result.failure;
+      update((prev) =>
+        prev && prev.forKey === forKey ? { ...applyFailure(prev, failure), forKey } : prev,
+      );
+      onSettled?.(result);
+      return;
+    }
+    // Another chat took the stream over while this turn was in flight: its
+    // answer belongs to that conversation, not this one, and that turn reports
+    // its own settlement.
+    if (!isCurrent()) {
+      return;
+    }
+    onAssistant(acc);
+    update((prev) => (prev && prev.forKey === forKey ? null : prev));
     onSettled?.(result);
   });
   return handle;

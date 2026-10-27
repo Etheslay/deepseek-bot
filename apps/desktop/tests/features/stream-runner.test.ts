@@ -57,6 +57,7 @@ function run(
     forKey,
     update,
     onAssistant,
+    isCurrent: () => true,
     ...(onSettled !== undefined ? { onSettled } : {}),
   });
 }
@@ -133,5 +134,55 @@ describe("runChatStream (U5: one shared starter for composer, retry and cards)",
       cancelled: false,
       forKey: 8,
     });
+  });
+
+  it("ignores an answer whose stream is no longer the active one", async () => {
+    const { stream } = fakeStream({ cancelled: false, failure: null });
+    const { update, state } = installUpdater();
+    const onAssistant = vi.fn();
+    const takeover = { text: "other", tools: [], failure: null, cancelled: false, forKey: 8 };
+    update(() => takeover);
+    const handle = runChatStream({
+      stream,
+      botId: "bot-1",
+      text: "你好",
+      forKey: 7,
+      update,
+      onAssistant,
+      // Another chat owns the stream by the time this turn lands.
+      isCurrent: () => false,
+    });
+    await handle.finish();
+    expect(onAssistant).not.toHaveBeenCalled();
+    expect(state()).toEqual(takeover);
+  });
+
+  it("never commits the assistant message from inside the state updater", async () => {
+    // React runs updater functions during the render phase, so a setState made
+    // from one is dropped with a warning — which is how a finished reply used
+    // to vanish from the thread while still reaching storage.
+    const { stream } = fakeStream({ cancelled: false, failure: null });
+    let insideUpdater = false;
+    let committedInsideUpdater = false;
+    const update: StreamUpdater = (fn) => {
+      insideUpdater = true;
+      fn(null);
+      insideUpdater = false;
+    };
+    const handle = runChatStream({
+      stream,
+      botId: "bot-1",
+      text: "你好",
+      forKey: 7,
+      update,
+      onAssistant: () => {
+        if (insideUpdater) {
+          committedInsideUpdater = true;
+        }
+      },
+      isCurrent: () => true,
+    });
+    await handle.finish();
+    expect(committedInsideUpdater, "onAssistant ran during a state updater").toBe(false);
   });
 });
