@@ -83,6 +83,7 @@ MCP 实际调用使用独立能力 `mcp.call`，默认 `ask`，禁止全局 `all
 | screen.results.list | v0.6：`{botId: UUID}` → `{results: ScreenResult[]}` | 最多 50 项，按新到旧；满额要求用户删除，不覆盖旧结果 |
 | screen.result.read | v0.6：`{botId: UUID, id: UUID}` → `{result: ScreenResult, imageBase64: string≤360000, text: string≤65536\|null}` | 仅受信桌面本机预览；JPEG base64 与 OCR 正文不进入模型输出；Host 另检查实际文件字节数 |
 | screen.result.delete | v0.6：`{botId: UUID, id: UUID}` → `{deleted: true}` | 仅删除该 bot 的清单产物，不能按任意路径删除 |
+| device.action.request | v0.7：`{botId: UUID, kind: pointer\|key}` → `{id: UUID, at: UTC ISO}` | 设备动作批准闸门。`device.action` 默认 deny，只能 ask 或 deny，且只接受一次精确审批。接受结果只有 id 和时间。不接收坐标、按键名、命令或路径 |
 | memory.list / write / delete | v0.3 人类查看、写入和删除当前 bot 的记忆 | 只作用于 payload.botId；空查询返回最近记录，默认 20、最多 50；删除未命中返回 INVALID_INPUT，不暴露其他 bot 的记录 |
 | memory.retention.get / set | v0.3 保留策略（记忆 + 知识共用）：retentionDays / memoryMaxPerBot / knowledgeMaxPerBot | 0 = 不限制（默认）；损坏值按 0 读——损坏的设置只会让清理变保守；Host 启动与每次写入后执行清扫 |
 | knowledge.list / write / delete | v0.3 当前 bot 的独立知识文档（迁移 `0010-knowledge-docs`） | 正文上限 100000 字（独立于 4000 字记忆）；list 只回摘要（不回正文，1 MiB 消息上限安全）；删除 bot 域隔离同记忆 |
@@ -144,6 +145,10 @@ NodeRun：`pending → running ↔ waiting_approval → succeeded / failed / can
 后续 Host/执行实现负责批准前后目标快照与授权重验、跨 bot 隔离、全局单操作锁（忙时拒绝，不排队）、取消与超时、路径/链接/文件类型检查和原子发布。采集最多 8192×8192 中的 1600 万像素、PNG 8 MiB、JPEG 预览 256 KiB、OCR UTF-8 正文 64 KiB；schema 的字符串长度上限不能代替文件字节校验。超限拒绝并清理本次临时产物，不截断结果。采集 10 秒、OCR 60 秒，审批 10 分钟。停用、清除目标、bot 归档、策略变更、聊天取消和 Host 关闭使相关操作失效。
 
 产物保存在工作区之外的数据根 `screen-outputs/<botId>/<resultId>/`，重启仅恢复产物，不恢复窗口选择；产物目录与正文不进入元数据备份，缺失产物明确报不可用。审计仅存摘要、决定与稳定错误码，不存标题、图像或 OCR 原文。OCR 必须使用随附本地资源；缺失资源报 `RUNTIME_UNAVAILABLE`。任意 shell、键鼠输入、全桌面回退、任意路径 OCR、实时视频和远程识别不在此契约片范围。
+
+## D21 设备动作批准闸门
+
+`device.action` 默认 deny。只能改为 ask，或保持 deny，不能 allow，也不接受会话或永久授权。`device.action.request` 请求 `{botId, kind: pointer|key}`，响应只有 `{id, at}`。一次请求对应一次精确 `actionDigest` 的仅本次审批。拒绝、策略不是 ask，或同一张审批用第二次，都不返回接受结果。模型工具 `device_action` 只接受 `kind`，可信 bot 身份由 Host 绑定。本片不包含坐标、按键名、鼠标移动、击键或 exec daemon 调用。协议仍为 0.7，旧发送方仍被接受。
 
 ## 8. 库导出文件（协议面之外）
 
