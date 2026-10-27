@@ -8162,3 +8162,30 @@ select:focus-visible {
   pointer-events: none;
   z-index: 3;
 }
+
+/* ============================================================
+   Dispatch/notice rows: clean centered lines, no card chrome
+   (user ruling — the amber dashed cards broke the original look).
+   Click still opens the pair chat history.
+   ============================================================ */
+
+.dispatch-msg,
+.task-notice {
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  padding: 2px 0 !important;
+  margin: 3px auto !important;
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  max-width: 800px;
+  text-align: center;
+}
+
+.task-hop {
+  border: none !important;
+}
