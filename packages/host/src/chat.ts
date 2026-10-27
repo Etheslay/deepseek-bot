@@ -27,6 +27,7 @@ import {
 } from "@deepseek-bot/harness-adapter";
 import type { ToolCaller } from "@deepseek-bot/agent-tools";
 import type { ApplicationToolTurn } from "./app-tool-channel.js";
+import type { UiLocale } from "./host.js";
 
 export function chatSessionIdFor(botId: string): string {
   return `chat:${botId}`;
@@ -88,6 +89,8 @@ export class ChatManager {
   constructor(
     private readonly options: DshSdkExecutorOptions,
     private readonly tools: ChatToolWiring,
+    /** Live UI language for Host-authored turn errors (settings.update { ui.locale }). */
+    private readonly locale: () => UiLocale = () => "zh",
   ) {}
 
   /** Live sessions (diagnostics / tests). */
@@ -142,9 +145,13 @@ export class ChatManager {
     try {
       const inputs = await whileActive(
         this.options.resolveBotInputs(bot).catch((error: unknown) => {
+          const detail = error instanceof Error ? error.message : String(error);
           throw new EngineError({
             code: "INVALID_INPUT",
-            message: `无法解析模型凭据：${error instanceof Error ? error.message : String(error)}。请到设置里重新保存 API Key。`,
+            message:
+              this.locale() === "en"
+                ? `Cannot resolve the model credential: ${detail}. Re-save the API Key in Settings.`
+                : `无法解析模型凭据：${detail}。请到设置里重新保存 API Key。`,
             retryable: false,
           });
         }),

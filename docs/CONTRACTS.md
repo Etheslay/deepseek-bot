@@ -66,7 +66,7 @@ MCP 实际调用使用独立能力 `mcp.call`，默认 `ask`，禁止全局 `all
 | events.subscribe | 按 runId + afterSequence 订阅 | 持久事件可重放；无法补齐时返回 snapshotRequired |
 | approval.decide | 允许/拒绝指定动作 | 校验摘要、权限、有效期与 pending 状态；重复决定不得重复执行 |
 | schedule.save / enable / disable | 本地调度 | 唯一 scheduleId + occurrenceUtc 防重复 |
-| settings.testConnection / update | 接入与设置 | Key 写入与测试位于后端；前端只得到是否已配置 |
+| settings.testConnection / update | 接入与设置 | Key 写入与测试位于后端；前端只得到是否已配置。`update` 的 patch 支持 `ui.locale`（`"zh" \| "en"`）：桌面把解析后的界面语言推给 Host（启动与切换时各一次），Host 存入 settings KV 并即时生效——任务派发通知、交接框架（`【上游交接 · …】`）、画布冲突与凭据错误、ask_user 兜底选项等 Host 侧文案随该语言输出；缺省与非法值回落 zh。语言切换只影响之后新写入的行，历史回放保持原样 |
 | data.backup / restore / describe | 数据管理 | restore 必须停止所有运行、校验备份、备份旧数据 |
 | permission.policy.list / set | v0.3 人类读取/修改全局能力策略 | start_run 仅 ask；shell/screen 不能 allow；deny 覆盖全部授权 |
 | permission.grant.list / revoke | v0.3 人类查询/撤销授权 | botId 可筛选；默认仅有效记录，最多 100；撤销已存在授权幂等 |

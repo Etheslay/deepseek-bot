@@ -71,19 +71,134 @@ export interface TaskDispatcherOptions {
   readonly chainLimit?: number;
   /** Q3: queued tasks tolerated per executor bot before dispatch refuses. */
   readonly queuedCapPerBot?: number;
+  /**
+   * Live UI language for every user- and model-visible string (delivery
+   * notices, handoff framing, rate-limit errors). The desktop pushes the
+   * resolved preference via settings.update { ui.locale }; defaults to zh.
+   */
+  readonly locale?: () => DispatchLocale;
 }
+
+export type DispatchLocale = "zh" | "en";
 
 const RESULT_SUMMARY_MAX = 2_000;
 const REASON_MAX = 500;
 
-const TASK_STATUS_LABELS: Readonly<Record<TaskStatus, string>> = {
-  queued: "排队中",
-  running: "执行中",
-  done: "已完成",
-  failed: "已失败",
-  cancelled: "已取消",
-  skipped: "已跳过",
-  interrupted: "已中断",
+/**
+ * Dispatcher copy in both UI languages. The zh column is byte-identical to
+ * the pre-locale strings: stored notices replay into model context and the
+ * existing tests pin them, so only NEW rows follow a language switch.
+ */
+type DispatchStrings = {
+  readonly statusLabels: Readonly<Record<TaskStatus, string>>;
+  readonly queuedCapReached: (cap: number) => string;
+  readonly cancelled: string;
+  readonly cancelledCascaded: string;
+  readonly interruptedByRestart: string;
+  readonly chainAuthInvalid: string;
+  readonly endpointUnavailableSummary: string;
+  readonly endpointUnavailableChain: string;
+  readonly endpointUnavailableNotice: string;
+  readonly turnCancelled: string;
+  readonly completed: string;
+  readonly failed: string;
+  readonly upstreamFailed: (reason: string) => string;
+  readonly skippedHops: (count: number) => string;
+  readonly chainInterruptedNotice: (
+    hop: number,
+    total: number,
+    remaining: string,
+    reason: string,
+  ) => string;
+  readonly handoffGoal: (instruction: string) => string;
+  readonly handoffSummary: (summary: string) => string;
+  readonly handoffNoSummary: string;
+  readonly taskMarker: (instruction: string) => string;
+  readonly unknownBot: string;
+  readonly hopLabel: (hop: number, total: number) => string;
+  readonly resultPreview: (summary: string) => string;
+  readonly notice: (
+    status: string,
+    hopLabel: string,
+    sender: string,
+    executor: string,
+    verdict: string,
+  ) => string;
+};
+
+const DISPATCH_STRINGS: Readonly<Record<DispatchLocale, DispatchStrings>> = {
+  zh: {
+    statusLabels: {
+      queued: "排队中",
+      running: "执行中",
+      done: "已完成",
+      failed: "已失败",
+      cancelled: "已取消",
+      skipped: "已跳过",
+      interrupted: "已中断",
+    },
+    queuedCapReached: (cap) => `该 bot 已有 ${cap} 个排队任务，请稍后再派发`,
+    cancelled: "已被取消",
+    cancelledCascaded: "已被取消（随根任务级联）",
+    interruptedByRestart: "因 Host 重启而中断，可重新派发",
+    chainAuthInvalid: "接力链授权已失效或策略改为拒绝",
+    endpointUnavailableSummary: "执行者或发起者 bot 不存在或已归档",
+    endpointUnavailableChain: "执行者不可用，接力链停止",
+    endpointUnavailableNotice: "已失败（执行者不可用）",
+    turnCancelled: "回合被取消",
+    completed: "已完成",
+    failed: "已失败",
+    upstreamFailed: (reason) => `上游任务失败：${reason}`,
+    skippedHops: (count) => `剩余 ${count} 跳已跳过。`,
+    chainInterruptedNotice: (hop, total, remaining, reason) =>
+      `任务通知（接力链中断）：第 ${hop}/${total} 跳未完成，${remaining}原因：${reason}`,
+    handoffGoal: (instruction) => `【上游交接 · 目标】${instruction}`,
+    handoffSummary: (summary) => `【上游交接 · 完成摘要】${summary}`,
+    handoffNoSummary: "（上游未产出摘要）",
+    taskMarker: (instruction) => `【任务】${instruction}`,
+    unknownBot: "未知 bot",
+    hopLabel: (hop, total) => `（第 ${hop}/${total} 跳）`,
+    resultPreview: (summary) => `\n结果预览：${summary}`,
+    notice: (status, hopLabel, sender, executor, verdict) =>
+      `任务通知（${status}）${hopLabel}：「${sender}」派发给「${executor}」的任务${verdict}。`,
+  },
+  en: {
+    statusLabels: {
+      queued: "Queued",
+      running: "Running",
+      done: "Completed",
+      failed: "Failed",
+      cancelled: "Cancelled",
+      skipped: "Skipped",
+      interrupted: "Interrupted",
+    },
+    queuedCapReached: (cap) => `this bot already has ${cap} queued tasks; try again later`,
+    cancelled: "cancelled",
+    cancelledCascaded: "cancelled (cascaded with the root task)",
+    interruptedByRestart: "interrupted by a Host restart; dispatch again to rerun",
+    chainAuthInvalid: "relay chain authorization is no longer valid or the policy became deny",
+    endpointUnavailableSummary: "executor or sender bot does not exist or is archived",
+    endpointUnavailableChain: "executor unavailable; relay chain stops",
+    endpointUnavailableNotice: "failed (executor unavailable)",
+    turnCancelled: "turn cancelled",
+    completed: "completed",
+    failed: "failed",
+    upstreamFailed: (reason) => `upstream task failed: ${reason}`,
+    skippedHops: (count) => `${count} remaining hop(s) skipped.`,
+    chainInterruptedNotice: (hop, total, remaining, reason) =>
+      `Task notice (relay chain interrupted): hop ${hop}/${total} did not finish. ` +
+      `${remaining}Reason: ${reason}`,
+    handoffGoal: (instruction) => `[Upstream handoff · Goal] ${instruction}`,
+    handoffSummary: (summary) => `[Upstream handoff · Completion summary] ${summary}`,
+    handoffNoSummary: "(no summary produced upstream)",
+    taskMarker: (instruction) => `[Task] ${instruction}`,
+    unknownBot: "unknown bot",
+    hopLabel: (hop, total) => ` (hop ${hop}/${total})`,
+    resultPreview: (summary) => `\nResult preview: ${summary}`,
+    notice: (status, hopLabel, sender, executor, verdict) =>
+      `Task notice (${status})${hopLabel}: task dispatched from "${sender}" to "${executor}" ` +
+      `${verdict}.`,
+  },
 };
 
 function truncate(text: string, max: number): string {
@@ -116,6 +231,7 @@ export class TaskDispatcher {
   private readonly now: () => Date;
   private readonly chainLimit: number;
   private readonly queuedCapPerBot: number;
+  private readonly locale: () => DispatchLocale;
 
   constructor(options: TaskDispatcherOptions) {
     this.db = options.db;
@@ -128,6 +244,11 @@ export class TaskDispatcher {
     }
     this.chainLimit = chainLimit;
     this.queuedCapPerBot = options.queuedCapPerBot ?? 10;
+    this.locale = options.locale ?? (() => "zh");
+  }
+
+  private strings(): DispatchStrings {
+    return DISPATCH_STRINGS[this.locale()];
   }
 
   /**
@@ -169,7 +290,7 @@ export class TaskDispatcher {
     if (countQueuedTasksForBot(this.db, target.id) >= this.queuedCapPerBot) {
       throw new EngineError({
         code: "RATE_LIMITED",
-        message: `该 bot 已有 ${this.queuedCapPerBot} 个排队任务，请稍后再派发`,
+        message: this.strings().queuedCapReached(this.queuedCapPerBot),
         retryable: true,
       });
     }
@@ -230,7 +351,7 @@ export class TaskDispatcher {
     if (task.status === "queued") {
       const cancelled = finishTask(this.db, taskId, { status: "cancelled" });
       this.emitStatus(cancelled, "queued", "cancelled", "cancelled by human");
-      this.writeNotice(cancelled, "已被取消");
+      this.writeNotice(cancelled, this.strings().cancelled);
     } else if (task.status === "running") {
       // The turn settles asynchronously: chat.cancel aborts the attempt and
       // the pump marks the row cancelled (or failed) when it observes it.
@@ -242,7 +363,7 @@ export class TaskDispatcher {
       if (hop.id === taskId) continue;
       const cascaded = finishTask(this.db, hop.id, { status: "cancelled" });
       this.emitStatus(cascaded, "queued", "cancelled", "relay chain cancelled");
-      this.writeNotice(cascaded, "已被取消（随根任务级联）");
+      this.writeNotice(cascaded, this.strings().cancelledCascaded);
     }
     return getTask(this.db, taskId) ?? task;
   }
@@ -261,7 +382,7 @@ export class TaskDispatcher {
         "interrupted",
         "host restarted before the turn finished",
       );
-      this.writeNotice(task, "因 Host 重启而中断，可重新派发");
+      this.writeNotice(task, this.strings().interruptedByRestart);
     }
     return swept;
   }
@@ -305,7 +426,7 @@ export class TaskDispatcher {
     if (task.chainIndex > 0 && !this.revalidateChainAuthorization(root)) {
       const skipped = finishTask(this.db, task.id, { status: "skipped" });
       this.emitStatus(skipped, "queued", "skipped", "relay authorization is no longer valid");
-      this.skipRemainingHops(skipped, "接力链授权已失效或策略改为拒绝");
+      this.skipRemainingHops(skipped, this.strings().chainAuthInvalid);
       return;
     }
     const executor = getBot(this.db, task.toBotId);
@@ -313,11 +434,11 @@ export class TaskDispatcher {
     if (executor === undefined || executor.archivedAt !== null || sender === undefined) {
       const failed = finishTask(this.db, task.id, {
         status: "failed",
-        resultSummary: "执行者或发起者 bot 不存在或已归档",
+        resultSummary: this.strings().endpointUnavailableSummary,
       });
       this.emitStatus(failed, "queued", "failed", "executor or sender unavailable");
-      this.skipRemainingHops(failed, "执行者不可用，接力链停止");
-      this.writeNotice(failed, "已失败（执行者不可用）");
+      this.skipRemainingHops(failed, this.strings().endpointUnavailableChain);
+      this.writeNotice(failed, this.strings().endpointUnavailableNotice);
       return;
     }
 
@@ -354,7 +475,7 @@ export class TaskDispatcher {
         resultSummary: truncate(outcome.finalResponse.trim(), RESULT_SUMMARY_MAX),
       });
       this.emitStatus(done, "running", "done", "executor turn completed");
-      this.writeNotice(done, "已完成");
+      this.writeNotice(done, this.strings().completed);
       this.auditRelayHop(done, "ok", undefined);
       // T7: the next relay hop usually targets a DIFFERENT bot — kick its
       // queue so the chain keeps moving (its start revalidates R-13.6).
@@ -380,7 +501,7 @@ export class TaskDispatcher {
       );
       const finished = finishTask(this.db, task.id, {
         status: cancelled ? "cancelled" : "failed",
-        resultSummary: cancelled ? "回合被取消" : truncate(reason, RESULT_SUMMARY_MAX),
+        resultSummary: cancelled ? this.strings().turnCancelled : truncate(reason, RESULT_SUMMARY_MAX),
       });
       this.emitStatus(
         finished,
@@ -388,10 +509,10 @@ export class TaskDispatcher {
         finished.status,
         cancelled ? "cancelled via chat.cancel" : reason,
       );
-      this.writeNotice(finished, cancelled ? "已被取消" : "已失败");
+      this.writeNotice(finished, cancelled ? this.strings().cancelled : this.strings().failed);
       this.auditRelayHop(finished, "rejected", reason);
       if (!cancelled) {
-        this.skipRemainingHops(finished, `上游任务失败：${reason}`);
+        this.skipRemainingHops(finished, this.strings().upstreamFailed(reason));
       }
     }
   }
@@ -409,14 +530,18 @@ export class TaskDispatcher {
     // queued — the coordinator must always learn the chain ended early.
     const root = getTask(this.db, failedHop.rootTaskId);
     if (root === undefined) return;
-    const remaining = queued.length > 0 ? `剩余 ${queued.length} 跳已跳过。` : "";
+    const s = this.strings();
+    const remaining = queued.length > 0 ? s.skippedHops(queued.length) : "";
     appendChatMessage(this.db, {
       botId: root.fromBotId,
       sessionId: chatSessionIdFor(root.fromBotId),
       role: "user",
-      text:
-        `任务通知（接力链中断）：第 ${failedHop.chainIndex + 1}/${failedHop.chainTotal} 跳未完成，` +
-        `${remaining}原因：${truncate(reason, REASON_MAX)}`,
+      text: s.chainInterruptedNotice(
+        failedHop.chainIndex + 1,
+        failedHop.chainTotal,
+        remaining,
+        truncate(reason, REASON_MAX),
+      ),
       meta: {
         kind: "task_notice",
         taskId: failedHop.id,
@@ -439,15 +564,16 @@ export class TaskDispatcher {
   }
 
   private composePrompt(task: Task, upstream: { instruction: string; resultSummary: string | null } | undefined): string {
+    const s = this.strings();
     const parts: string[] = [];
     if (upstream !== undefined) {
       // T7 R-13.7: fixed structured handoff header for relay hops.
       parts.push(
-        `【上游交接 · 目标】${truncate(upstream.instruction, 800)}`,
-        `【上游交接 · 完成摘要】${upstream.resultSummary ?? "（上游未产出摘要）"}`,
+        s.handoffGoal(truncate(upstream.instruction, 800)),
+        s.handoffSummary(upstream.resultSummary ?? s.handoffNoSummary),
       );
     }
-    parts.push(`【任务】${task.instruction}`);
+    parts.push(s.taskMarker(task.instruction));
     return parts.join("\n\n");
   }
   private requireCoordinator(botId: string) {
@@ -494,23 +620,21 @@ export class TaskDispatcher {
   private writeNotice(task: Task, verdict: string): void {
     const root = getTask(this.db, task.rootTaskId);
     if (root === undefined) return;
+    const s = this.strings();
     const sender = getBot(this.db, task.fromBotId);
     const executor = getBot(this.db, task.toBotId);
-    const senderName = sender?.name ?? "未知 bot";
-    const executorName = executor?.name ?? "未知 bot";
-    const hopLabel = root.chainTotal > 1 ? `（第 ${task.chainIndex + 1}/${root.chainTotal} 跳）` : "";
+    const senderName = sender?.name ?? s.unknownBot;
+    const executorName = executor?.name ?? s.unknownBot;
+    const hopLabel = root.chainTotal > 1 ? s.hopLabel(task.chainIndex + 1, root.chainTotal) : "";
     const preview =
       task.resultSummary === null || task.resultSummary === ""
         ? ""
-        : `\n结果预览：${truncate(task.resultSummary, 400)}`;
+        : s.resultPreview(truncate(task.resultSummary, 400));
     appendChatMessage(this.db, {
       botId: root.fromBotId,
       sessionId: chatSessionIdFor(root.fromBotId),
       role: "user",
-      text:
-        `任务通知（${TASK_STATUS_LABELS[task.status]}）${hopLabel}：` +
-        `「${senderName}」派发给「${executorName}」的任务${verdict}。` +
-        preview,
+      text: `${s.notice(s.statusLabels[task.status], hopLabel, senderName, executorName, verdict)}${preview}`,
       meta: {
         kind: "task_notice",
         taskId: task.id,

@@ -129,6 +129,8 @@ export interface HostOptions {
     readonly chainLimit?: number;
     /** Queued tasks tolerated per executor bot before dispatch refuses. */
     readonly queuedCapPerBot?: number;
+    /** UI language seed for dispatcher copy; settings.update { ui.locale } overrides live. */
+    readonly locale?: UiLocale;
   };
   /** D20 trigger evaluation interval (default 5s). */
   readonly triggers?: { readonly intervalMs?: number };
@@ -197,6 +199,13 @@ export const DEFAULT_MODEL_PROFILE_ID = "44444444-4444-4444-8444-444444444444";
  */
 export const REASONER_MODEL_PROFILE_ID = "8d5a5e30-0000-4000-8000-000000000005";
 export const SEARXNG_ENDPOINT_SETTING = "searxng.endpoint";
+/** Settings KV key the desktop pushes its resolved UI language into (zh/en). */
+export const UI_LOCALE_SETTING = "ui.locale";
+export type UiLocale = "zh" | "en";
+/** Anything unknown (missing, "system", garbage) falls back to zh. */
+export function asUiLocale(value: unknown): UiLocale {
+  return value === "en" ? "en" : "zh";
+}
 const MAX_CHAT_SEARCHES = 20;
 const DEFAULT_WORKSPACE_ID = "55555555-5555-4555-8555-555555555555";
 const DEFAULT_TOOL_POLICY_ID = "66666666-6666-4666-8666-666666666666";
@@ -330,15 +339,27 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
   const bridgePackageDir = existsSync(join(packagedBridge, "package.json"))
     ? packagedBridge
     : fileURLToPath(new URL("../../harness-bridge/", import.meta.url));
-  const chat = new ChatManager(executorOptions, {
-    prepareProfile: () => prepareAppToolProfile({ dshHome: layout.harnessHome, bridgePackageDir }),
-    openTurn: (sessionId, caller, signal) => {
-      return applicationTools.openTurn({ sessionId, caller, signal });
+  // UI language for Host-authored copy (dispatcher notices, chat turn errors,
+  // canvas conflicts, ask_user labels): seeded from the settings KV (the
+  // desktop pushes the resolved preference via settings.update) and mutable
+  // live through the same method, so a language switch applies to new rows
+  // without restarting the Host.
+  const uiLocale: { current: UiLocale } = {
+    current: options.tasks?.locale ?? asUiLocale(getSettingRaw(db, UI_LOCALE_SETTING)),
+  };
+  const chat = new ChatManager(
+    executorOptions,
+    {
+      prepareProfile: () => prepareAppToolProfile({ dshHome: layout.harnessHome, bridgePackageDir }),
+      openTurn: (sessionId, caller, signal) => {
+        return applicationTools.openTurn({ sessionId, caller, signal });
+      },
     },
-  });
+    () => uiLocale.current,
+  );
   // v0.5 manager orchestration: dispatched-task queue + executor. The audit
   // sink is shared with the tool gateway so relay hops (which bypass the
-  // gateway) still leave one record per hop under the same log.
+  // gateway) still leave one audit record per hop under the same log.
   const agentAudit = new JsonlAuditSink(join(layout.logs, "agent-tools-audit.jsonl"));
   const tasks = new TaskDispatcher({
     db,
@@ -349,6 +370,7 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
     ...(options.tasks?.queuedCapPerBot !== undefined
       ? { queuedCapPerBot: options.tasks.queuedCapPerBot }
       : {}),
+    locale: () => uiLocale.current,
   });
   const bridge = await startApprovalBridgeServer({
     sessions: (sessionId) => sessionRegistry.resolve(sessionId),
@@ -359,6 +381,7 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
     db,
     artifactsRoot: layout.artifacts,
     now,
+    locale: () => uiLocale.current,
   });
 
   const engine = new WorkflowEngine({
@@ -440,6 +463,7 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
         })),
     },
     tasks,
+    locale: uiLocale,
     get agentTools(): ToolGateway {
       if (agentToolsHolder.current === undefined) {
         throw new Error("agent tools gateway is not ready yet");

@@ -9,7 +9,9 @@
  * `lang` prop (see ChatMarkdown).
  *
  * The resolved preference is also pushed to the main process so the tray menu
- * and system notifications speak the same language.
+ * and system notifications speak the same language, and to the Host process
+ * (settings.update { ui.locale }) so bot-to-bot delivery notices, relay
+ * handoff framing and ask_user labels follow it too.
  */
 import { useSyncExternalStore } from "react";
 import { localeTag, resolveLanguage } from "../../shared/i18n/locale.js";
@@ -57,6 +59,23 @@ function pushPreferenceToMain(pref: LanguagePreference): void {
   void bridge.i18n.setLanguage(pref).catch(() => undefined);
 }
 
+/**
+ * Fire-and-forget: the Host keeps its own copy of the resolved language for
+ * the copy IT authors (task notices, handoff framing, ask_user labels).
+ * "system" is resolved first — the Host cannot resolve it itself. A failed
+ * push (Host still starting, mid data.restore restart) leaves the previous
+ * value in place until the next switch or app boot re-pushes.
+ */
+function pushLanguageToHost(): void {
+  const bridge = window.deepseekBot;
+  if (!bridge || !("host" in bridge)) {
+    return;
+  }
+  void bridge.host
+    .call("settings.update", { patch: { "ui.locale": currentLanguageValue() } })
+    .catch(() => undefined);
+}
+
 /** Called on boot with the persisted preference and `app.getLocale()`. */
 export function configureI18n(input: {
   preference: LanguagePreference;
@@ -68,12 +87,14 @@ export function configureI18n(input: {
   }
   recompute();
   pushPreferenceToMain(preference);
+  pushLanguageToHost();
 }
 
 export function setLanguagePreference(pref: LanguagePreference): void {
   preference = pref;
   recompute();
   pushPreferenceToMain(pref);
+  pushLanguageToHost();
 }
 
 export function languagePreference(): LanguagePreference {
