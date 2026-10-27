@@ -186,7 +186,7 @@
 | # | 事项 | 需要 | 状态 |
 | --- | --- | --- | --- |
 | 1 | Renderer↔Host 真实数据接线方案（A/B/C/D 或组合） | 两负责人按 [映射提案](RENDERER_HOST_MAPPING.md) §3 达成一致 | 待拍板（提案推荐 D→B 两步） |
-| 2 | mono-shape 头像线与 develop 头像线（PR #18/#19）的分叉合并策略 | Destinyian 定基准 | 待拍板（阻塞该分支 PR） |
+| 2 | mono-shape 头像线与 develop 头像线（PR #18/#19）的分叉合并策略 | Destinyian 定基准 | **已定案（2026-10-27）：develop 头像线为基准，`feature/mono-shape` 作废并删除。** 该分支相对 develop 只有一个提交 `e74e570`（fix(desktop): let the mono avatar use any rounded shape），它改的 `MinimalAvatar` / `shapeIndex` / `{kind:"minimal"}` 已随 B-AVATAR-02 的头像重做全部移除（现网 0 命中），合并只会复活死类型。其意图（mono 换形状）至今仍未实现，但更前置的是：契约 `AvatarSchema` 只有 `shape` + `color`、没有 `kind`，mono 属渲染层 UI-only 值，**无法持久化**，重启后头像按 bot id 派生。若将来要黑白头像可留存，需要的是契约加字段（另立小 PR），不是给 mono 加形状 |
 
 ## 9. 对标缺口盘点（Grok Bot · GitHub 分发 · 本地优先）
 
