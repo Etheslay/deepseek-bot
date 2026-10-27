@@ -94,7 +94,14 @@ export function validateBotDraft(draft: BotDraft): FieldErrors {
 
 export function BotForm(
   props: {
-    initial?: { name: string; instructions: string; modelProfileId: string; workspaceId: string; toolPolicyId: string };
+    initial?: {
+      name: string;
+      instructions: string;
+      modelProfileId: string;
+      workspaceId: string;
+      toolPolicyId: string;
+      role?: "standard" | "coordinator";
+    };
     submitLabel: string;
     onSubmit: (draft: BotDraft) => Promise<{ ok: boolean; errorCode?: string; errorMessage?: string }>;
     onCancel: () => void;
@@ -142,6 +149,14 @@ export function BotForm(
   const set = (field: keyof BotDraft, value: string): void => {
     setDraft((prev) => ({ ...prev, [field]: value }));
     setFieldErrors((prev) => ({ ...prev, [field]: undefined }));
+  };
+
+  // FR-1: the coordinator role is a human-only switch. It renders as a chip
+  // pair like the tone picker; the model-facing batch path never carries it.
+  const role: "standard" | "coordinator" =
+    draft.role === "coordinator" ? "coordinator" : "standard";
+  const setRole = (next: "standard" | "coordinator"): void => {
+    setDraft((prev) => ({ ...prev, role: next }));
   };
 
 
@@ -234,6 +249,28 @@ export function BotForm(
       {fieldErrors.instructions && <em className="field-error">{fieldErrors.instructions}</em>}
       <span className="form-hint">{t("bots.instructionsHint")}</span>
 
+      <span className="tone-label">{t("bots.roleLabel")}</span>
+      <div className="role-picker" role="group" aria-label={t("bots.roleGroupAria")}>
+        <button
+          type="button"
+          className={"role-chip" + (role === "standard" ? " selected" : "")}
+          aria-pressed={role === "standard"}
+          onClick={() => setRole("standard")}
+        >
+          {t("bots.roleStandard")}
+        </button>
+        <button
+          type="button"
+          className={"role-chip coordinator" + (role === "coordinator" ? " selected" : "")}
+          aria-pressed={role === "coordinator"}
+          onClick={() => setRole("coordinator")}
+        >
+          {t("bots.roleCoordinator")}
+        </button>
+      </div>
+      <span className="form-hint">
+        {t("bots.roleHint")}
+      </span>
       <span className="tone-label">{t("bots.personality")}</span>
       <div className="tone-picker" role="group" aria-label={t("bots.toneSelection")}>
         {(props.minimal

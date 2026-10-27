@@ -29,6 +29,16 @@ export interface ToolContext {
   readonly caller: ToolCaller;
   readonly signal?: AbortSignal;
   readonly networkPermissions?: ToolNetworkPermissions;
+  /**
+   * Authorization references the checkpoint accepted for THIS call (D16),
+   * when it minted or consumed an approval/grant. The v0.7 relay chain
+   * stores them on the root task so later hops can revalidate without
+   * re-prompting (TASK_MANAGER_ORCHESTRATION.md R-13.6).
+   */
+  readonly authorization?: {
+    readonly approvalId?: string;
+    readonly grantIds?: readonly string[];
+  };
   /** Trusted lease recheck before a side effect after asynchronous preparation. */
   readonly revalidateAuthorization?: () => void;
 }
@@ -115,7 +125,8 @@ export interface AuditRecord {
   readonly capabilities?: readonly CapabilityId[];
   readonly grantIds?: readonly string[];
   readonly approvalId?: string;
-  readonly decision?: GrantCheckResult["decision"];
+  /** "chain" marks host-side relay-hop records (T7) that bypass the gateway. */
+  readonly decision?: GrantCheckResult["decision"] | "chain";
 }
 
 export interface AuditSink {

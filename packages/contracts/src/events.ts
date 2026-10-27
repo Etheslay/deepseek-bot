@@ -21,8 +21,10 @@ import {
 import {
   isNodeRunTerminal,
   isRunTerminal,
+  isTaskTerminal,
   NODE_RUN_STATUSES,
   RUN_STATUSES,
+  TASK_STATUSES,
 } from "./status.js";
 
 export const EVENT_TYPES = [
@@ -125,6 +127,50 @@ export function parseEventPayload(
   event: Pick<EventEnvelope, "type" | "payload">,
 ): z.ZodSafeParseResult<unknown> {
   return EVENT_PAYLOAD_SCHEMAS[event.type].safeParse(event.payload);
+}
+
+// ---------------------------------------------------------------------------
+// Task events (v0.5 manager orchestration). The persistent `events` log is
+// run-scoped (envelope.runId is a foreign key into runs), so dispatched-task
+ // transitions persist in their own task_events log with the same delivery
+// semantics: at-least-once, deduplicated by eventId, per-task strictly
+// increasing sequence, replay by afterSequence.
+// ---------------------------------------------------------------------------
+
+export const TASK_EVENT_TYPES = ["task.status"] as const;
+
+export type TaskEventType = (typeof TASK_EVENT_TYPES)[number];
+
+export const TaskEventEnvelopeSchema = z.object({
+  eventId: UuidSchema,
+  taskId: UuidSchema,
+  sequence: z.int().nonnegative(),
+  timestamp: IsoDateTimeUtcSchema,
+  type: z.enum(TASK_EVENT_TYPES),
+  payload: z.unknown(),
+});
+
+export type TaskEventEnvelope = z.infer<typeof TaskEventEnvelopeSchema>;
+
+const TaskStatusChangedPayloadSchema = z
+  .object({
+    taskId: UuidSchema,
+    from: z.enum(TASK_STATUSES),
+    to: z.enum(TASK_STATUSES),
+    reason: z.string().max(TEXT_LIMITS.reason).optional(),
+  })
+  .refine((payload) => !isTaskTerminal(payload.to) || payload.reason !== undefined, {
+    message: "terminal task states require a reason",
+  });
+
+export const TASK_EVENT_PAYLOAD_SCHEMAS: Readonly<Record<TaskEventType, z.ZodType>> = {
+  "task.status": TaskStatusChangedPayloadSchema,
+};
+
+export function parseTaskEventPayload(
+  event: Pick<TaskEventEnvelope, "type" | "payload">,
+): z.ZodSafeParseResult<unknown> {
+  return TASK_EVENT_PAYLOAD_SCHEMAS[event.type].safeParse(event.payload);
 }
 
 // ---------------------------------------------------------------------------
