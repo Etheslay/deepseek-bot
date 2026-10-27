@@ -129,6 +129,14 @@ export interface DeepSeekBotHost {
  * bot.create needs a model profile, a workspace and a tool policy.
  */
 export const DEFAULT_MODEL_PROFILE_ID = "44444444-4444-4444-8444-444444444444";
+/**
+ * Built-in reasoning profile (GAP_AUDIT G5): seeded next to the chat default
+ * so the renderer's deep-thinking toggle can switch a bot between the two via
+ * the existing human path bot.update (patch.modelProfileId). Same UUID is
+ * mirrored in apps/desktop renderer (features/chat/reasoner.ts) — the desktop
+ * does not import the host package; the host seeding test pins both rows.
+ */
+export const REASONER_MODEL_PROFILE_ID = "8d5a5e30-0000-4000-8000-000000000005";
 export const SEARXNG_ENDPOINT_SETTING = "searxng.endpoint";
 const MAX_CHAT_SEARCHES = 20;
 const DEFAULT_WORKSPACE_ID = "55555555-5555-4555-8555-555555555555";
@@ -149,6 +157,13 @@ function seedDefaults(db: OpenedDatabase, layout: DataLayout): void {
       "INSERT OR IGNORE INTO model_profiles (id, provider, model, endpoint, credential_ref, limits_json, created_at, updated_at) VALUES (?, 'deepseek', 'deepseek-chat', 'https://api.deepseek.com', ?, '{}', ?, ?);",
     )
     .run(DEFAULT_MODEL_PROFILE_ID, DEFAULT_CREDENTIAL_REF, now, now);
+  // GAP_AUDIT G5: the built-in reasoning profile shares the default
+  // credential; switching a bot onto it is a plain bot.update.
+  db.raw
+    .prepare(
+      "INSERT OR IGNORE INTO model_profiles (id, provider, model, endpoint, credential_ref, limits_json, created_at, updated_at) VALUES (?, 'deepseek', 'deepseek-reasoner', 'https://api.deepseek.com', ?, '{}', ?, ?);",
+    )
+    .run(REASONER_MODEL_PROFILE_ID, DEFAULT_CREDENTIAL_REF, now, now);
   db.raw
     .prepare(
       "INSERT OR IGNORE INTO workspaces (id, canonical_path, grants_json, created_at, updated_at) VALUES (?, ?, '[]', ?, ?);",
