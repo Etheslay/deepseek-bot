@@ -4,6 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { act } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PermissionsPanel } from "../../src/renderer/src/features/permissions/permissions-panel.js";
+import { setLanguagePreference } from "../../src/renderer/src/i18n.js";
 
 const POLICIES = [
   { capability: "app.create_group", mode: "ask" },
@@ -183,5 +184,23 @@ describe("permissions settings panel", () => {
     await vi.waitFor(() => {
       expect(container.textContent).toContain("权限数据读取失败");
     });
+  });
+
+  it("re-translates a stored notice after the interface language changes (D22)", async () => {
+    installHost(() => {
+      throw new Error("host down");
+    });
+    const container = await renderPanel();
+    await vi.waitFor(() => {
+      expect(container.textContent).toContain("权限数据读取失败");
+    });
+    // The notice is kept as a factory, so switching language re-renders it —
+    // a rendered string in state would have stayed Chinese.
+    setLanguagePreference("en");
+    await vi.waitFor(() => {
+      expect(container.textContent).toContain("Failed to load permission data");
+    });
+    expect(container.textContent).not.toContain("权限数据读取失败");
+    setLanguagePreference("zh");
   });
 });

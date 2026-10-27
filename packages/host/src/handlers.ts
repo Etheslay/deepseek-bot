@@ -86,6 +86,8 @@ import {
   revokePermissionGrant,
   listPermissionApprovals,
   listPermissionAudit,
+  countTasks,
+  listTaskEvents,
 } from "@deepseek-bot/storage";
 import type { AgentPermissionService } from "./agent-permissions.js";
 import type { McpService } from "./mcp.js";
@@ -99,6 +101,7 @@ import {
 } from "./host.js";
 import { chatSessionIdFor, type ChatManager } from "./chat.js";
 import { KNOWN_CAPABILITIES, policyKey, readPolicy, type PolicyLevel } from "./permissions.js";
+import { type TaskDispatcher } from "./task-dispatcher.js";
 import { createGrant, listGrants, revokeGrant, type GrantRow } from "@deepseek-bot/storage";
 import {
   ToolRejectionError,
@@ -142,6 +145,8 @@ export interface HostContext {
   readonly searchResults: {
     list(botId: string): ChatSearchRecord[];
   };
+  /** v0.5 manager orchestration: dispatched-task queue + executor. */
+  readonly tasks: TaskDispatcher;
 }
 
 /** The Host never renders or persists the model's own label for the fallback option. */
@@ -323,6 +328,9 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
           toolPolicyId: payload.toolPolicyId,
           ...(payload.avatar !== undefined ? { avatar: payload.avatar } : {}),
           ...(payload.groupId !== undefined ? { groupId: payload.groupId } : {}),
+          // v0.5: the human editor may mint a coordinator directly; the
+          // model-facing batch path never carries a role.
+          role: payload.role ?? "standard",
           archivedAt: null,
         },
         ...(call.requestId !== undefined ? { requestId: call.requestId } : {}),
@@ -343,6 +351,8 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
         ...(p.modelProfileId !== undefined ? { modelProfileId: p.modelProfileId } : {}),
         ...(p.workspaceId !== undefined ? { workspaceId: p.workspaceId } : {}),
         ...(p.toolPolicyId !== undefined ? { toolPolicyId: p.toolPolicyId } : {}),
+        // v0.5 coordinator role: human editor surface only.
+        ...(p.role !== undefined ? { role: p.role } : {}),
         ...(p.avatar !== undefined ? { avatar: p.avatar } : {}),
         ...(p.groupId !== undefined ? { groupId: p.groupId } : {}),
       };
@@ -411,6 +421,8 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
             ),
             workspaceId: resolve(entry.workspaceId, defaults?.workspaceId, "workspaceId"),
             toolPolicyId: resolve(entry.toolPolicyId, defaults?.toolPolicyId, "toolPolicyId"),
+            // Batch creation (the model-facing path) never carries a role.
+            role: "standard" as const,
             archivedAt: null,
           },
           ...(entry.avatar !== undefined ? { avatar: entry.avatar } : {}),
@@ -583,9 +595,20 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
 
     "events.subscribe": (payload) => {
       // Persisted events replay completely (storage owns the log), so a gap
-      // never forces a snapshot in this host build.
+      // never forces a snapshot in this host build. v0.5 adds the task log:
+      // exactly one of runId/taskId arrives (contract refine), and task
+      // replays return taskEvents instead of run events.
+      if (payload.runId !== undefined) {
+        return {
+          events: listEvents(db, payload.runId, { afterSequence: payload.afterSequence }),
+          snapshotRequired: false,
+        };
+      }
       return {
-        events: listEvents(db, payload.runId, { afterSequence: payload.afterSequence }),
+        events: [],
+        taskEvents: listTaskEvents(db, payload.taskId ?? "", {
+          afterSequence: payload.afterSequence,
+        }),
         snapshotRequired: false,
       };
     },
@@ -691,6 +714,7 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
         sessionId: row.sessionId,
         role: row.role,
         text: row.text,
+        ...(row.meta !== undefined ? { meta: row.meta } : {}),
         at: row.createdAt,
       })),
     }),
@@ -703,6 +727,34 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
       if (UuidSchema.safeParse(botId).success) context.screen.cancel(botId);
       return { cancelled };
     },
+
+    /**
+     * v0.5 manager orchestration. task.dispatch is the gateway-internal
+     * surface for the dispatch_task tool: the dispatcher re-checks the
+     * coordinator rules authoritatively (the tool layer already rejected
+     * with explanations) and persists the queue entry. task.list is the
+     * human + read-tool query; task.cancel is human-only (Q2).
+     */
+    "task.dispatch": (payload) =>
+      context.tasks.dispatch({
+        fromBotId: payload.fromBotId,
+        toBotId: payload.toBotId,
+        task: payload.task,
+        ...(payload.context !== undefined ? { context: payload.context } : {}),
+        ...(payload.chain !== undefined ? { chain: payload.chain } : {}),
+      }),
+
+    "task.list": (payload) => ({
+      tasks: context.tasks.list({
+        ...(payload.fromBotId !== undefined ? { fromBotId: payload.fromBotId } : {}),
+        ...(payload.toBotId !== undefined ? { toBotId: payload.toBotId } : {}),
+        ...(payload.rootTaskId !== undefined ? { rootTaskId: payload.rootTaskId } : {}),
+        ...(payload.status !== undefined ? { status: payload.status } : {}),
+        limit: payload.limit,
+      }),
+    }),
+
+    "task.cancel": (payload) => context.tasks.cancel(payload.taskId),
 
     "question.list": (payload) => {
       const bot = requireLiveBot(db, payload.botId);
@@ -1167,6 +1219,7 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
         workflows: listWorkflows(db).length,
         runs: listRuns(db).length,
         schedules: listSchedules(db).length,
+        tasks: countTasks(db),
       },
     }),
   };

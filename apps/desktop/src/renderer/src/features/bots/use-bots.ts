@@ -12,6 +12,7 @@ import type { BotDraft } from "../../services/desktop-service.js";
 import { ServiceError } from "../../services/desktop-service.js";
 import { useService } from "../../services/service-context.js";
 import { defaultAvatarFor, type Avatar } from "../avatars/avatar-meta.js";
+import { t } from "../../i18n.js";
 
 export type UiBot = {
   /** Stable numeric key for list rendering; contract id lives on `bot.id`. */
@@ -136,7 +137,7 @@ export function useBots(defaultGroupKey: number) {
     async (botId: string, patch: Partial<BotDraft>): Promise<BotsOperationResult> => {
       const target = bots.find((b) => b.bot.id === botId);
       if (!target) {
-        return { ok: false, errorCode: "INVALID_INPUT", errorMessage: "找不到这个 Bot" };
+        return { ok: false, errorCode: "INVALID_INPUT", errorMessage: t("bots.botNotFound") };
       }
       try {
         const bot = await service.bots.update(botId, target.bot.revision, patch);
@@ -161,7 +162,7 @@ export function useBots(defaultGroupKey: number) {
     async (botId: string): Promise<BotsOperationResult> => {
       const target = bots.find((b) => b.bot.id === botId);
       if (!target) {
-        return { ok: false, errorCode: "INVALID_INPUT", errorMessage: "找不到这个 Bot" };
+        return { ok: false, errorCode: "INVALID_INPUT", errorMessage: t("bots.botNotFound") };
       }
       try {
         const bot = await service.bots.archive(botId, target.bot.revision);
@@ -186,7 +187,7 @@ export function useBots(defaultGroupKey: number) {
     async (botId: string): Promise<BotsOperationResult> => {
       const target = bots.find((b) => b.bot.id === botId);
       if (!target) {
-        return { ok: false, errorCode: "INVALID_INPUT", errorMessage: "找不到这个 Bot" };
+        return { ok: false, errorCode: "INVALID_INPUT", errorMessage: t("bots.botNotFound") };
       }
       try {
         const copy = await service.bots.duplicate(botId);

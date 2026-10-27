@@ -6,9 +6,10 @@
  * UI-only types (ChatSessionView) live here because CONTRACTS v0.1 has no
  * Session entity — they must never be promoted into packages/contracts.
  */
-import type { ArtifactVersion, Bot, BotArtifact, ErrorCode, EventEnvelope } from "@deepseek-bot/contracts";
+import type { ArtifactVersion, Bot, BotArtifact, ErrorCode, EventEnvelope, Task } from "@deepseek-bot/contracts";
 import type { WorkflowServiceApi } from "../features/workflow-editor/workflow-service.js";
 import type { RunServiceApi } from "../features/run-monitor/run-service.js";
+import type { TaskServiceApi } from "../features/run-monitor/tasks/task-service.js";
 
 export type ChatSessionView = {
   sessionId: string;
@@ -19,12 +20,29 @@ export type ChatSessionView = {
   status: "active" | "ended";
 };
 
+export type BotRoleDraft = "standard" | "coordinator";
+
 export type BotDraft = {
   name: string;
   instructions: string;
   modelProfileId: string;
   workspaceId: string;
   toolPolicyId: string;
+  /** v0.5 coordinator role (FR-1): human editor only, never the model. */
+  role?: BotRoleDraft;
+};
+
+/** One persisted host chat row (chat.history) with its v0.5 meta marker. */
+export type ChatHistoryRow = {
+  id: string;
+  botId: string;
+  sessionId: string;
+  role: "user" | "assistant";
+  text: string;
+  meta?:
+    | { kind: "dispatch"; taskId: string; fromBotId: string }
+    | { kind: "task_notice"; taskId: string; status: Task["status"]; resultSummary?: string };
+  at: string;
 };
 
 export type ToolStatus = {
@@ -97,6 +115,12 @@ export interface DesktopService {
     listSessions(botId: string): Promise<ChatSessionView[]>;
     /** Replays persisted events for a session (fixture-backed in D05). */
     openSession(sessionId: string): Promise<{ events: EventEnvelope[] }>;
+    /**
+     * chat.history: persisted host rows for one bot, including the v0.5
+     * dispatch markers and task notices. The fixture chat is local-only
+     * and returns an empty list.
+     */
+    history(botId: string, limit?: number): Promise<ChatHistoryRow[]>;
     /** Rejects with ServiceError("INVALID_INPUT") for archived bots. */
     stream(
       botId: string,
@@ -148,4 +172,6 @@ export interface DesktopService {
   workflows: WorkflowServiceApi;
   /** Run monitor / approval API (D09); fixture playback, no real engine. */
   runs: RunServiceApi;
+  /** v0.5 manager orchestration: dispatched-task query + human cancel. */
+  tasks: TaskServiceApi;
 }

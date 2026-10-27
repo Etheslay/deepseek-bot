@@ -27,6 +27,7 @@ import {
   canTransitionRun,
   isRunTerminal,
 } from "@deepseek-bot/contracts";
+import { t } from "../../../i18n.js";
 
 /** Snapshot baseline the service composes for one run. */
 export type RunSnapshotInput = {
@@ -160,7 +161,7 @@ export function buildRunView(
   let failure: RunView["failure"] = null;
   let interruptedReason: string | null =
     mode === "snapshot" && snapshot.run.status === "interrupted"
-      ? "快照重建：Host 进程退出（详见 run.interrupted 事件）"
+      ? t("runs.snapshotRebuildInterrupted")
       : null;
 
   const approvals = new Map<string, ApprovalBaseline>();
@@ -190,7 +191,7 @@ export function buildRunView(
           sequence: event.sequence,
           timestamp,
           type: event.type,
-          summary: "运行创建",
+          summary: t("runs.timelineRunCreated"),
         });
         break;
       case "run.statusChanged": {
@@ -205,7 +206,7 @@ export function buildRunView(
           });
           status = payload.to;
           if (payload.to === "interrupted") {
-            interruptedReason = payload.reason ?? "Host 进程退出";
+            interruptedReason = payload.reason ?? t("runs.hostProcessExited");
           }
         } else {
           illegal.push({
@@ -219,7 +220,7 @@ export function buildRunView(
           sequence: event.sequence,
           timestamp,
           type: event.type,
-          summary: `运行状态 ${payload.from} → ${payload.to}`,
+          summary: t("runs.timelineRunStatusChanged", [payload.from, payload.to]),
         });
         break;
       }
@@ -257,7 +258,7 @@ export function buildRunView(
           sequence: event.sequence,
           timestamp,
           type: event.type,
-          summary: `节点 ${payload.nodeId}（第 ${payload.attempt} 次）${payload.from} → ${payload.to}`,
+          summary: t("runs.timelineNodeStatus", [payload.nodeId, payload.attempt, payload.from, payload.to]),
         });
         break;
       }
@@ -270,7 +271,7 @@ export function buildRunView(
           sequence: event.sequence,
           timestamp,
           type: event.type,
-          summary: `工具 ${payload.toolName}${payload.resource ? ` → ${payload.resource}` : ""}`,
+          summary: t("runs.timelineTool", [payload.toolName, payload.resource ? ` → ${payload.resource}` : ""]),
         });
         break;
       }
@@ -295,7 +296,7 @@ export function buildRunView(
           sequence: event.sequence,
           timestamp,
           type: event.type,
-          summary: `请求审批：${payload.approval.resource}`,
+          summary: t("runs.timelineApprovalRequested", [payload.approval.resource]),
         });
         break;
       }
@@ -328,7 +329,7 @@ export function buildRunView(
           sequence: event.sequence,
           timestamp,
           type: event.type,
-          summary: `审批${payload.decision === "approved" ? "已允许" : payload.decision === "denied" ? "已拒绝" : "已过期"}`,
+          summary: t("runs.timelineApprovalResolved", [approvalDecisionLabel(payload.decision)]),
         });
         break;
       }
@@ -341,7 +342,7 @@ export function buildRunView(
           sequence: event.sequence,
           timestamp,
           type: event.type,
-          summary: `产物 ${payload.artifact.relativePath}`,
+          summary: t("runs.timelineArtifact", [payload.artifact.relativePath]),
         });
         break;
       }
@@ -352,7 +353,7 @@ export function buildRunView(
           sequence: event.sequence,
           timestamp,
           type: event.type,
-          summary: "运行完成",
+          summary: t("runs.timelineRunCompleted"),
         });
         break;
       }
@@ -366,7 +367,7 @@ export function buildRunView(
           sequence: event.sequence,
           timestamp,
           type: event.type,
-          summary: `运行失败（${payload.errorCode}）`,
+          summary: t("runs.timelineRunFailed", [payload.errorCode]),
         });
         break;
       }
@@ -380,7 +381,7 @@ export function buildRunView(
           sequence: event.sequence,
           timestamp,
           type: event.type,
-          summary: `运行中断：${payload.reason}`,
+          summary: t("runs.timelineRunInterrupted", [payload.reason]),
         });
         break;
       }
@@ -458,18 +459,34 @@ export function approvalTtlLabel(
 ): string {
   const remaining = Date.parse(baseline.approval.expiresAt) - now;
   if (baseline.invalidReason === "generation") {
-    return "已失效（启动代次绑定）";
+    return t("runs.invalidatedByGeneration");
   }
   if (remaining <= 0) {
-    return "已过期";
+    return t("runs.expired");
   }
   const minutes = Math.floor(remaining / 60_000);
   const seconds = Math.floor((remaining % 60_000) / 1000);
-  return `剩 ${minutes}:${String(seconds).padStart(2, "0")}`;
+  return t("runs.approvalTimeLeft", [minutes, String(seconds).padStart(2, "0")]);
 }
 
 /** Default validity window from the contracts constant, for the UI copy. */
-export const APPROVAL_TTL_COPY = `${APPROVAL_DEFAULT_TTL_MS / 60_000} 分钟`;
+export function approvalTtlCopy(): string {
+  return t("runs.approvalTtlMinutes", [APPROVAL_DEFAULT_TTL_MS / 60_000]);
+}
+
+/** Approval decisions are contract data; only the label is localized (D22). */
+export function approvalDecisionLabel(decision: string): string {
+  switch (decision) {
+    case "approved":
+      return t("runs.approved");
+    case "denied":
+      return t("permissions.denied");
+    case "expired":
+      return t("runs.expired");
+    default:
+      return decision;
+  }
+}
 
 export function isTerminalView(view: RunView): boolean {
   return isRunTerminal(view.status);

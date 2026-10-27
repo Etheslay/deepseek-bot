@@ -11,12 +11,13 @@
  * through the same question.answer path.
  */
 import { useCallback, useEffect, useRef, useState, type JSX } from "react";
+import { type Notice, noticeText, t, useLanguage } from "../../i18n.js";
 import { METHOD_CONTRACTS } from "@deepseek-bot/contracts";
 import { ChoiceCard, type ChoiceOption } from "./choice-card.js";
 
 /** The Host never trusts the model's own label for the fallback option. */
 export const OTHER_OPTION_ID = "D";
-export const OTHER_OPTION_LABEL = "以上都不是";
+export const OTHER_OPTION_LABEL = t("questions.fallbackOption");
 
 type Question = {
   requestId: string;
@@ -55,7 +56,8 @@ function BotQuestionCards({
 }: QuestionChatCardsProps): JSX.Element | null {
   const [questions, setQuestions] = useState<Question[] | null>(null);
   const [closed, setClosed] = useState<Record<string, true>>({});
-  const [notice, setNotice] = useState<string | null>(null);
+  useLanguage();
+  const [notice, setNotice] = useState<Notice | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   /** Last known payload per requestId; vanished questions render from it. */
   const known = useRef<Map<string, Question>>(new Map());
@@ -80,7 +82,7 @@ function BotQuestionCards({
       }
       return changed ? next : current;
     });
-    setNotice((current) => (current === "提问读取失败" ? null : current));
+    setNotice((current) => (current?.key === "questions.readFailed" ? null : current));
   }, [botId]);
 
   useEffect(() => {
@@ -88,7 +90,7 @@ function BotQuestionCards({
     let cancelled = false;
     const run = (): void => {
       void load().catch(() => {
-        if (!cancelled) setNotice("提问读取失败");
+        if (!cancelled) setNotice({ key: "questions.readFailed" });
       });
     };
     run();
@@ -120,7 +122,7 @@ function BotQuestionCards({
         return load();
       })
       .catch(() => {
-        if (active.current) setNotice("回答发送失败");
+        if (active.current) setNotice({ key: "questions.answerFailed" });
       })
       .finally(() => {
         if (active.current) setBusyId(null);
@@ -166,7 +168,7 @@ function BotQuestionCards({
             fallback={hasFallback ? { id: OTHER_OPTION_ID, label: OTHER_OPTION_LABEL } : null}
             disabled={clarify || busyId === question.requestId}
             expired={isClosed(question)}
-            hint={clarify ? "请在下方输入框用一句话说明你的想法。" : null}
+            hint={clarify ? t("questions.explainBelowPlaceholder") : null}
             onChoose={(option) => {
               if (option.id === OTHER_OPTION_ID) {
                 if (question.allowOther) {
@@ -207,7 +209,7 @@ function BotQuestionCards({
           answered={entry.text}
         />
       ))}
-      {notice !== null ? <p className="sys-line">{notice}</p> : null}
+      {notice !== null ? <p className="sys-line">{noticeText(notice)}</p> : null}
     </div>
   );
 }

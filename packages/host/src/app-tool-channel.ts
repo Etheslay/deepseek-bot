@@ -19,6 +19,11 @@ const APPLICATION_TOOLS = [
   "create_group",
   "create_bots_batch",
   "revoke_batch",
+  // v0.5 manager orchestration (keep in lockstep with
+  // packages/harness-bridge/src/app-tools.ts APPLICATION_TOOL_NAMES).
+  "save_workflow",
+  "dispatch_task",
+  "list_tasks",
 ] as const;
 const MAX_BODY_BYTES = 1024 * 1024;
 const MAX_CALLS_PER_TURN = 1000;

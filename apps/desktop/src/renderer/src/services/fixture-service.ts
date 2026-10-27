@@ -28,11 +28,13 @@ import {
 } from "./desktop-service.js";
 import { createFixtureWorkflowService } from "../features/workflow-editor/workflow-service.js";
 import { createFixtureRunService } from "../features/run-monitor/run-service.js";
+import { createFixtureTaskService, fixtureChatHistory } from "../features/run-monitor/tasks/task-service.js";
 
 // Fixture imports resolve through the workspace package exports
 // ("./fixtures/*"); validated against EventEnvelopeSchema in openSession.
 import successRunFixture from "@deepseek-bot/contracts/fixtures/success-run.json";
 import cancelRunFixture from "@deepseek-bot/contracts/fixtures/cancel-run.json";
+import { t } from "../i18n.js";
 
 const SESSION_BOT_A = "11111111-1111-4111-8111-111111111111";
 
@@ -50,6 +52,7 @@ const SEED_BOTS: Bot[] = [
     modelProfileId: "44444444-4444-4444-8444-444444444444",
     workspaceId: "55555555-5555-4555-8555-555555555555",
     toolPolicyId: "66666666-6666-4666-8666-666666666666",
+    role: "standard",
     archivedAt: null,
   },
   {
@@ -60,15 +63,21 @@ const SEED_BOTS: Bot[] = [
     modelProfileId: "44444444-4444-4444-8444-444444444444",
     workspaceId: "55555555-5555-4555-8555-555555555556",
     toolPolicyId: "66666666-6666-4666-8666-666666666667",
+    role: "standard",
     archivedAt: null,
   },
 ];
 
-const SEED_SESSIONS: ChatSessionView[] = [
+/**
+ * Session titles are rendered copy, so they are built per call: a frozen module
+ * constant would keep showing the language the page booted in (D22).
+ */
+function seedSessions(): ChatSessionView[] {
+  return [
   {
     sessionId: "sess-success-run",
     botId: SESSION_BOT_A,
-    title: "note-summarizer · 摘要任务",
+    title: t("services.fixtureBotSummary"),
     startedAt: "2026-10-24T10:00:00Z",
     replayEventCount: successRunFixture.events.length,
     status: "ended",
@@ -76,12 +85,13 @@ const SEED_SESSIONS: ChatSessionView[] = [
   {
     sessionId: "sess-cancel-run",
     botId: SESSION_BOT_A,
-    title: "note-summarizer · 已取消的任务",
+    title: t("services.fixtureBotCancelled"),
     startedAt: "2026-10-24T09:30:00Z",
     replayEventCount: cancelRunFixture.events.length,
     status: "ended",
   },
-];
+  ];
+}
 
 const SESSION_FIXTURES: Record<string, { events: unknown[] }> = {
   "sess-success-run": successRunFixture,
@@ -102,11 +112,13 @@ const SEED_WORKSPACE_FILES: Array<{
     botId: SESSION_BOT_A,
     relativePath: "summaries/note-summary.md",
     content:
+      // i18n-ignore: 夹具工作区文件的正文，属被编辑的数据而非界面文案
       "# 会议纪要（示例产物）\n\n这是夹具工作区里的真实文本内容，可在画布中编辑并保存。\n\n- 第一版由 bot 写入\n- 用户每次保存都会追加一个新版本\n",
   },
   {
     botId: SESSION_BOT_A,
     relativePath: "reports/index.html",
+    // i18n-ignore: 夹具工作区文件的正文，属被编辑的数据而非界面文案
     content: "<!doctype html>\n<html><body><p>HTML 产物不进入画布编辑。</p></body></html>\n",
   },
 ];
@@ -210,6 +222,7 @@ export function createFixtureService(): DesktopService {
           modelProfileId: draft.modelProfileId,
           workspaceId: draft.workspaceId,
           toolPolicyId: draft.toolPolicyId,
+          role: draft.role ?? "standard",
           archivedAt: null,
         };
         const checked = validateBot(bot);
@@ -268,7 +281,7 @@ export function createFixtureService(): DesktopService {
           ...bot,
           id: crypto.randomUUID(),
           revision: crypto.randomUUID(),
-          name: `${bot.name} 副本`,
+          name: t("common.copyOf", [bot.name]),
           archivedAt: null,
         };
         const checked = validateBot(copy);
@@ -315,7 +328,7 @@ export function createFixtureService(): DesktopService {
 
     chat: {
       async listSessions(botId) {
-        return SEED_SESSIONS.filter((s) => s.botId === botId);
+        return seedSessions().filter((s) => s.botId === botId);
       },
 
       async openSession(sessionId) {
@@ -335,6 +348,11 @@ export function createFixtureService(): DesktopService {
         });
         return { events };
       },
+
+      // The fixture chat thread lives in the UI's own state; there are no
+      // persisted host rows to replay (dispatch markers/notices show up
+      // only against a real host).
+      history: async (botId, limit) => fixtureChatHistory(botId, limit),
 
       stream(botId, userText, handlers, options): StreamHandle {
         const bot = requireBot(botId);
@@ -359,7 +377,7 @@ export function createFixtureService(): DesktopService {
         const chunkDelayMs = options?.chunkDelayMs ?? 60;
         const chunkCount = options?.chunkCount ?? 8;
         const simulateFailure = options?.simulateFailure;
-        const reply = `（占位回复）已收到：「${userText.slice(0, 40)}」。真实模型会话将在 D06/D12 接入。`;
+        const reply = t("services.placeholderReply", [userText.slice(0, 40)]);
 
         const schedule = (delay: number, fn: () => void): void => {
           timers.push(setTimeout(() => { if (!settled) fn(); }, delay));
@@ -369,14 +387,14 @@ export function createFixtureService(): DesktopService {
           handlers.onTool({
             toolName: "read_workspace_file",
             state: "requested",
-            summary: "读取工作区样例文件",
+            summary: t("services.fixtureReadTool"),
           } satisfies ToolStatus);
         });
         schedule(chunkDelayMs * 2, () => {
           handlers.onTool({
             toolName: "read_workspace_file",
             state: "succeeded",
-            summary: "已读取 1 个文件",
+            summary: t("services.fixtureReadDone"),
           } satisfies ToolStatus);
         });
         const chunkSize = Math.ceil(reply.length / chunkCount);
@@ -389,8 +407,8 @@ export function createFixtureService(): DesktopService {
                   code: simulateFailure,
                   message:
                     simulateFailure === "RATE_LIMITED"
-                      ? "请求过于频繁，请稍后重试。"
-                      : "请求失败，请检查模型配置。",
+                      ? t("chat.rateLimited")
+                      : t("chat.requestFailed"),
                   retryable: simulateFailure === "RATE_LIMITED",
                 },
               });
@@ -517,8 +535,8 @@ export function createFixtureService(): DesktopService {
               mediaType: file.mediaType,
               reason:
                 file.mediaType === "text/html"
-                  ? "HTML 不做内联编辑/渲染（防脚本执行）。"
-                  : `mediaType ${file.mediaType} 不是可编辑文本。`,
+                  ? t("services.htmlInlineBlocked")
+                  : t("services.mediaTypeNotEditable", [file.mediaType]),
             };
           }
           await ensureSeedVersion(botId, relativePath, file);
@@ -544,7 +562,7 @@ export function createFixtureService(): DesktopService {
             if (expectedChecksum !== undefined && current !== expectedChecksum) {
               throw new ServiceError(
                 "REVISION_CONFLICT",
-                "文件在编辑期间被修改（可能来自 bot），请刷新后再保存。",
+                t("services.revisionConflict"),
                 false,
               );
             }
@@ -558,7 +576,7 @@ export function createFixtureService(): DesktopService {
           }
           const mediaType = fixtureMediaType(relativePath);
           if (!fixtureEditable(mediaType)) {
-            throw new ServiceError("INVALID_INPUT", `mediaType ${mediaType} 不支持画布编辑。`);
+            throw new ServiceError("INVALID_INPUT", t("services.mediaTypeCanvasUnsupported", [mediaType]));
           }
           const created: FixtureWorkspaceFile = {
             content,
@@ -592,7 +610,7 @@ export function createFixtureService(): DesktopService {
             return {
               kind: "blocked",
               mediaType: file.mediaType,
-              reason: `mediaType ${file.mediaType} 没有可预览的文本内容。`,
+              reason: t("services.mediaTypeNoPreviewText", [file.mediaType]),
             };
           }
           return { kind: "text", mediaType: file.mediaType, content };
@@ -617,6 +635,7 @@ export function createFixtureService(): DesktopService {
 
     workflows: createFixtureWorkflowService(),
     runs: createFixtureRunService(),
+    tasks: createFixtureTaskService(),
   };
 
   return service;

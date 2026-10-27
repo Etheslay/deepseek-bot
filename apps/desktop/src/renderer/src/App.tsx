@@ -1,7 +1,18 @@
-import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type JSX } from "react";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type JSX,
+} from "react";
 import { createPortal } from "react-dom";
 import { useBots, type UiBot } from "./features/bots/use-bots.js";
 import { PermissionChatCards } from "./features/permissions/permission-chat.js";
+import { TaskFeedCards } from "./features/chat/task-feed.js";
 import { SearchResultCards } from "./features/search/search-results.js";
 import { MemoryPanel } from "./features/memory/memory-panel.js";
 import { SearchSettings } from "./features/search/search-settings.js";
@@ -58,7 +69,27 @@ import {
   ACCENT_PRESETS,
   loadSettings,
   saveSettings,
+  UNSET_ACCOUNT_NAME,
+  type NotificationPrefs,
 } from "./features/settings/settings-store.js";
+import {
+  formatFullDateTime,
+  formatDate,
+  formatTime,
+  setLanguagePreference,
+  t,
+  useLanguage,
+} from "./i18n.js";
+import { syncTrayState } from "./features/system/tray-sync.js";
+import {
+  createFocusTracker,
+  notificationRequest,
+  notifyUser,
+} from "./features/system/notify.js";
+import { NotificationSettingsPanel } from "./features/system/notifications-panel.js";
+import { ChromeImportPanel } from "./features/system/chrome-panel.js";
+import type { TrayBotStatus } from "../../shared/system-integration.js";
+import type { LanguagePreference } from "../../shared/i18n/types.js";
 import {
   deleteTemplate,
   listTemplates,
@@ -84,6 +115,17 @@ import {
 
 type Group = { key: number; name: string };
 const UNGROUPED = 1;
+
+/**
+ * Group names are UI state; the default group keeps an empty name so its label
+ * follows the interface language instead of freezing at "未分组" (D22).
+ */
+function groupLabel(group: Group | undefined): string {
+  if (group === undefined || group.name.trim().length === 0) {
+    return t("shell.ungrouped");
+  }
+  return group.name;
+}
 
 /**
  * Prepend the bot's bound-skill context to an outgoing turn. The bubble keeps
@@ -153,18 +195,16 @@ function pairKeyOf(a: number, b: number): string {
   return a < b ? `${a}|${b}` : `${b}|${a}`;
 }
 
-function formatChatTime(t: number): string {
-  const d = new Date(t);
-  const hh = String(d.getHours()).padStart(2, "0");
-  const mm = String(d.getMinutes()).padStart(2, "0");
-  const time = `${hh}:${mm}`;
+function formatChatTime(value: number): string {
+  const d = new Date(value);
+  const time = formatTime(value);
   const now = new Date();
   const sameDay =
     d.getFullYear() === now.getFullYear() &&
     d.getMonth() === now.getMonth() &&
     d.getDate() === now.getDate();
   if (sameDay) {
-    return `今天 ${time}`;
+    return t("shell.today", [time]);
   }
   const yesterday = new Date(now);
   yesterday.setDate(now.getDate() - 1);
@@ -173,10 +213,10 @@ function formatChatTime(t: number): string {
     d.getMonth() === yesterday.getMonth() &&
     d.getDate() === yesterday.getDate()
   ) {
-    return `昨天 ${time}`;
+    return t("shell.yesterday", [time]);
   }
-  const weekdays = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
-  return `${d.getMonth() + 1}月${d.getDate()}日${weekdays[d.getDay()]} ${time}`;
+  // Intl carries the weekday and the date pattern; no hand-rolled weekday list.
+  return t("shell.dateWeekdayTime", [formatDate(value), time]);
 }
 
 function readableTextColor(hex: string): string {
@@ -229,6 +269,9 @@ function MenuIcon({ d }: { d: string }): JSX.Element {
 }
 
 export function App(): JSX.Element {
+  // Subscribing here means a language switch re-renders the whole tree, so
+  // every `t()` call in the subtree reads the new catalogue (D22).
+  useLanguage();
   const [version, setVersion] = useState<string>("…");
 
   const [modalOpen, setModalOpen] = useState(false);
@@ -247,7 +290,7 @@ export function App(): JSX.Element {
   const [createName, setCreateName] = useState("");
   const [tplDraft, setTplDraft] = useState<BotDraft | null>(null);
 
-  const [groups, setGroups] = useState<Group[]>([{ key: UNGROUPED, name: "未分组" }]);
+  const [groups, setGroups] = useState<Group[]>([{ key: UNGROUPED, name: "" }]);
   const {
     bots,
     create: createBotEntity,
@@ -374,6 +417,11 @@ export function App(): JSX.Element {
   const [theme, setTheme] = useState<"dark" | "light">(initialSettings.theme);
   const [accountName, setAccountName] = useState(initialSettings.accountName);
   const [accent, setAccent] = useState(initialSettings.accent);
+  const [language, setLanguage] = useState<LanguagePreference>(initialSettings.language);
+  const [notifications, setNotifications] = useState<NotificationPrefs>(initialSettings.notifications);
+  /** "" means the user never set a name — the UI shows the localized default (D22). */
+  const displayName =
+    accountName.trim().length > 0 ? accountName : t("d22.defaultAccountName");
   const [botTemplates, setBotTemplates] = useState<BotTemplate[]>(() =>
     listTemplates(window.localStorage),
   );
@@ -383,7 +431,7 @@ export function App(): JSX.Element {
 
   const saveBotTemplate = (target: UiBot): void => {
     const result = saveTemplate(window.localStorage, {
-      name: `${target.bot.name} 模板`,
+      name: t("shell.templateNameFromBot", [target.bot.name]),
       bot: {
         name: target.bot.name,
         instructions: target.bot.instructions,
@@ -392,10 +440,10 @@ export function App(): JSX.Element {
     });
     if (result.ok) {
       setBotTemplates(listTemplates(window.localStorage));
-      setToast(`已保存模板「${result.template.name}」`);
+      setToast(t("shell.templateSaved", [result.template.name]));
     } else {
       setToast(
-        result.reason === "limit" ? `模板已达上限` : `同名模板已存在`,
+        result.reason === "limit" ? t("shell.templateLimitReached") : t("shell.templateNameExists"),
       );
     }
   };
@@ -405,12 +453,125 @@ export function App(): JSX.Element {
   >(null);
 
   useEffect(() => {
-    saveSettings(window.localStorage, { theme, accountName, accent });
-  }, [theme, accountName, accent]);
+    saveSettings(window.localStorage, { theme, accountName, accent, language, notifications });
+  }, [theme, accountName, accent, language, notifications]);
+
+  useEffect(() => {
+    // Keeps the renderer store and the main process (tray, notifications) in sync.
+    setLanguagePreference(language);
+  }, [language]);
 
   useEffect(() => {
     document.documentElement.style.setProperty("--accent", accent);
   }, [accent]);
+
+  /* ---------------- D22: OS integration (tray, notifications) ---------------- */
+
+  const focusTracker = useRef(createFocusTracker());
+  const notifyClock = useRef<Map<string, number>>(new Map());
+  const [botStatuses, setBotStatuses] = useState<Record<string, TrayBotStatus>>({});
+  const activeBotId = bots.find((b) => b.key === selectedBot)?.bot.id ?? null;
+
+  const raiseNotice = useCallback(
+    (input: {
+      kind: "reply" | "approval" | "missed";
+      botId: string | null;
+      botName: string;
+      count?: number;
+    }): void => {
+      void notifyUser(notifications, input, {
+        focused: focusTracker.current.isFocused(),
+        now: () => Date.now(),
+        lastRaised: notifyClock.current,
+      });
+    },
+    [notifications],
+  );
+
+  const reportBotStatus = useCallback((botId: string, status: TrayBotStatus): void => {
+    setBotStatuses((previous) =>
+      previous[botId] === status ? previous : { ...previous, [botId]: status },
+    );
+  }, []);
+
+  const testNotification = useCallback(async (): Promise<{ shown: boolean; reason: string | null }> => {
+    const bridge = window.deepseekBot;
+    if (!bridge || !("system" in bridge)) {
+      return { shown: false, reason: "unsupported" };
+    }
+    try {
+      return await bridge.system.notifications.show(notificationRequest({ kind: "test", botId: null, botName: "" }));
+    } catch {
+      return { shown: false, reason: "unsupported" };
+    }
+  }, []);
+
+  useEffect(() => {
+    const bridge = window.deepseekBot;
+    if (!bridge || !("system" in bridge)) {
+      // Browser preview: there is no tray and no notification channel to track.
+      return;
+    }
+    return focusTracker.current.attach(bridge);
+  }, []);
+
+  useEffect(() => {
+    // The tray mirrors this window: bot list, which bot is open, unread flags,
+    // live status and the rasterised avatar of each bot (re-rasterised on theme).
+    void syncTrayState(
+      bots.map((bot) => ({
+        id: bot.bot.id,
+        name: bot.bot.name,
+        avatar: bot.avatar,
+        unread: bot.unread,
+        status: botStatuses[bot.bot.id] ?? "idle",
+      })),
+      activeBotId,
+      { theme },
+    );
+  }, [bots, activeBotId, botStatuses, theme, language]);
+
+  useEffect(() => {
+    const bridge = window.deepseekBot;
+    if (!bridge || !("system" in bridge)) {
+      return;
+    }
+    const openBot = (botId: string): void => {
+      const target = bots.find((bot) => bot.bot.id === botId);
+      if (target === undefined) {
+        return;
+      }
+      setSelectedBot(target.key);
+      setUi(target.key, { unread: false });
+    };
+    const offTray = bridge.system.onTrayAction((event) => {
+      if (event.kind === "settings") {
+        setSettingsOpen(true);
+        return;
+      }
+      openBot(event.botId);
+    });
+    const offClick = bridge.system.onNotificationClick((event) => {
+      if (event.botId !== null) {
+        openBot(event.botId);
+      }
+    });
+    return () => {
+      offTray();
+      offClick();
+    };
+  }, [bots, setUi]);
+
+  useEffect(() => {
+    const bridge = window.deepseekBot;
+    if (!bridge?.host?.onMissed) {
+      return;
+    }
+    // FR-08: a missed schedule must be heard as well as written into the chat.
+    return bridge.host.onMissed((notices) => {
+      raiseNotice({ kind: "missed", botId: null, botName: "", count: notices.length });
+    });
+  }, [raiseNotice]);
 
   useEffect(() => {
     // Silent startup check; preview shims have no updates bridge.
@@ -535,8 +696,8 @@ export function App(): JSX.Element {
     if (!toast) {
       return;
     }
-    const t = setTimeout(() => setToast(null), 2600);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => setToast(null), 2600);
+    return () => clearTimeout(timer);
   }, [toast]);
 
   const selectedBotEntry = bots.find((b) => b.key === selectedBot);
@@ -556,11 +717,11 @@ export function App(): JSX.Element {
     if (result.ok) {
       setToast(
         enabled
-          ? "已开启深度思考（deepseek-reasoner），下一条消息生效"
-          : "已切回标准对话（deepseek-chat）",
+          ? t("reasoner.enabledToast")
+          : t("reasoner.disabledToast"),
       );
     } else {
-      setToast(`深度思考切换失败：${result.errorCode ?? "未知错误"}`);
+      setToast(t("reasoner.switchFailed", [result.errorCode ?? t("reasoner.unknownError")]));
     }
   };
 
@@ -584,7 +745,7 @@ export function App(): JSX.Element {
     setColor(2);
     setAvatar({ kind: "grok", shape: "blob", color: "#3b93f0" });
     setModalGroup(
-      groups.find((g) => g.name === "未分组")?.key ?? groups[0]?.key ?? UNGROUPED,
+      groups.find((g) => g.key === UNGROUPED)?.key ?? groups[0]?.key ?? UNGROUPED,
     );
     setEditingBot(null);
     setModalOpen(true);
@@ -603,7 +764,7 @@ export function App(): JSX.Element {
       const result = await updateBotEntity(editingBot.bot.id, draft);
       if (result.ok) {
         setModalOpen(false);
-        setToast("已保存");
+        setToast(t("shell.saved"));
       }
       return result;
     }
@@ -611,7 +772,7 @@ export function App(): JSX.Element {
     if (result.ok && result.key !== undefined) {
       setUi(result.key, { avatar, shape, color, group: modalGroup });
       setModalOpen(false);
-      setToast("已创建");
+      setToast(t("shell.created"));
     }
     return result;
   };
@@ -657,22 +818,22 @@ export function App(): JSX.Element {
     }
     const result = await updateBotEntity(uiBot.bot.id, { name });
     if (result.ok) {
-      setToast("已改名");
+      setToast(t("shell.renamed"));
     } else {
-      setToast(result.errorCode === "REVISION_CONFLICT" ? "改名冲突，请重试" : "改名失败");
+      setToast(result.errorCode === "REVISION_CONFLICT" ? t("shell.renameConflict") : t("shell.renameFailed"));
     }
   };
 
   const pinBot = (botKey: number): void => {
     moveToTop(botKey);
-    setToast("已置顶");
+    setToast(t("shell.pinned"));
     setMenu(null);
   };
 
   const moveToGroup = (botKey: number, groupKey: number): void => {
     const g = groups.find((x) => x.key === groupKey);
     setUi(botKey, { group: groupKey });
-    setToast(g ? `已移至「${g.name}」` : "已移动");
+    setToast(g ? t("shell.movedToGroup", [groupLabel(g)]) : t("shell.moved"));
     setMenu(null);
   };
 
@@ -685,7 +846,7 @@ export function App(): JSX.Element {
   const copyText = async (text: string): Promise<void> => {
     try {
       await navigator.clipboard.writeText(text);
-      setToast("已复制");
+      setToast(t("shell.copied"));
     } catch {
       try {
         const ta = document.createElement("textarea");
@@ -696,9 +857,9 @@ export function App(): JSX.Element {
         ta.select();
         const ok = document.execCommand("copy");
         ta.remove();
-        setToast(ok ? "已复制" : "复制失败（占位环境限制）");
+        setToast(ok ? t("shell.copied") : t("shell.copyFailedPlaceholder"));
       } catch {
-        setToast("复制失败（占位环境限制）");
+        setToast(t("shell.copyFailedPlaceholder"));
       }
     }
   };
@@ -723,8 +884,8 @@ export function App(): JSX.Element {
     text: string,
     attachments?: Msg["attachments"],
   ): void => {
-    const t = text.trim();
-    if (!t && !(attachments && attachments.length > 0)) {
+    const trimmed = text.trim();
+    if (!trimmed && !(attachments && attachments.length > 0)) {
       return;
     }
     setChats((prev) => {
@@ -736,7 +897,7 @@ export function App(): JSX.Element {
           {
             id: Date.now(),
             from: "user",
-            text: t,
+            text: trimmed,
             quote: quoteDraft ? { ...quoteDraft } : null,
             reactions: {},
             mine: [],
@@ -776,8 +937,8 @@ export function App(): JSX.Element {
     }
     const now = Date.now();
     if (from.group !== to.group) {
-      const g1 = groups.find((g) => g.key === from.group)?.name ?? "?";
-      const g2 = groups.find((g) => g.key === to.group)?.name ?? "?";
+      const g1 = groupLabel(groups.find((g) => g.key === from.group));
+      const g2 = groupLabel(groups.find((g) => g.key === to.group));
       setChats((prev) => ({
         ...prev,
         [fromKey]: [
@@ -785,7 +946,7 @@ export function App(): JSX.Element {
           {
             id: now + 2,
             from: "bot",
-            text: `无法发起：不同分组的 Bot 无法主动交流（${g1} ↔ ${g2}）。`,
+            text: t("shell.crossGroupChatBlocked", [g1, g2]),
             quote: null,
             reactions: {},
             mine: [],
@@ -799,13 +960,13 @@ export function App(): JSX.Element {
     // Bot-to-bot dialogue: the transcript lives in the pair store; each main
     // timeline only gets a clickable delivery notice.
     const turns: { speaker: number; text: string }[] = [
-      { speaker: fromKey, text: `${to.bot.name}，在吗？我是 ${from.bot.name}。` },
-      { speaker: toKey, text: `在的 ${from.bot.name}，什么事？` },
+      { speaker: fromKey, text: t("shell.botGreetingTurn", [to.bot.name, from.bot.name]) },
+      { speaker: toKey, text: t("shell.botReplyTurn", [from.bot.name]) },
       {
         speaker: fromKey,
-        text: "先占个位——等真实模型接入后，我们就能这样面对面聊天了。",
+        text: t("shell.botPlaceholderTurn"),
       },
-      { speaker: toKey, text: "好啊，到时候聊个痛快。" },
+      { speaker: toKey, text: t("shell.botEagerTurn") },
     ];
     const pairKey = pairKeyOf(fromKey, toKey);
     setPairTranscripts((prev) => ({
@@ -833,7 +994,7 @@ export function App(): JSX.Element {
           mine: [],
           time: now,
           system: true,
-          notice: { label: "已发消息给", otherKey: toKey },
+          notice: { label: t("shell.sentTo"), otherKey: toKey },
           deliverTo: [toKey],
           peerKey: toKey,
         },
@@ -849,7 +1010,7 @@ export function App(): JSX.Element {
           mine: [],
           time: now,
           system: true,
-          notice: { label: "已只回", otherKey: fromKey },
+          notice: { label: t("shell.repliedOnlyTo"), otherKey: fromKey },
           peerKey: fromKey,
         },
       ],
@@ -868,9 +1029,9 @@ export function App(): JSX.Element {
     setGroups((prev) => [...prev, { key, name }]);
     if (menuDialog.moveBot !== null) {
       setUi(menuDialog.moveBot, { group: key });
-      setToast(`已创建分组「${name}」并移入`);
+      setToast(t("shell.groupCreatedAndMovedIn", [name]));
     } else {
-      setToast(`已创建分组「${name}」`);
+      setToast(t("shell.groupCreated", [name]));
     }
     setMenuDialog(null);
   };
@@ -886,9 +1047,7 @@ export function App(): JSX.Element {
           {
             id: bot.key,
             from: "bot",
-            text: `你好，我是 ${bot.bot.name}。我跑在你这台电脑上，数据和记录都不离开本机。
-
-你可以直接让我干活：读文件、写代码、查资料、整理记录；也可以把反复要做的事交给我，我把它做成工作流。`,
+            text: t("shell.welcomeMessage", [bot.bot.name]),
             quote: null,
             reactions: {},
             mine: [],
@@ -899,7 +1058,7 @@ export function App(): JSX.Element {
           {
             id: bot.key + 0.5,
             from: "bot",
-            text: `想先试哪种能力？也可以在输入框里直接提需求，或 @${bot.bot.name} 让我接手。`,
+            text: t("shell.welcomeChoicesHint", [bot.bot.name]),
             quote: null,
             reactions: {},
             mine: [],
@@ -907,11 +1066,11 @@ export function App(): JSX.Element {
             system: false,
             speakerKey: bot.key,
             choices: {
-              question: "想先试哪种能力？",
+              question: t("shell.choicesQuestion"),
               options: [
-                { id: "A", label: "深度思考一个复杂问题" },
-                { id: "B", label: "帮我起草一个工作流" },
-                { id: "C", label: "查看运行监控" },
+                { id: "A", label: t("shell.choiceDeepThinking") },
+                { id: "B", label: t("shell.choiceDraftWorkflow") },
+                { id: "C", label: t("shell.choiceRunMonitor") },
               ],
               other: true,
             },
@@ -928,11 +1087,11 @@ export function App(): JSX.Element {
       return;
     }
     if (b.group === groupKey) {
-      setToast("已在该分组");
+      setToast(t("shell.alreadyInGroup"));
       return;
     }
     setUi(botKey, { group: groupKey });
-    setToast(`已将「${b.bot.name}」拖至「${g.name}」`);
+    setToast(t("shell.draggedToGroup", [b.bot.name, groupLabel(g)]));
   };
 
   const deleteGroup = (groupKey: number): void => {
@@ -942,22 +1101,22 @@ export function App(): JSX.Element {
     }
     const members = bots.filter((b) => b.group === groupKey);
     if (members.length > 0) {
-      setToast("请先移出或删除组内 Bot");
+      setToast(t("shell.groupNotEmpty"));
       setGroupMenu(null);
       return;
     }
     setGroups((prev) => prev.filter((x) => x.key !== groupKey));
     setCollapsedGroups((prev) => prev.filter((k) => k !== groupKey));
-    setToast(`已删除分组「${g.name}」`);
+    setToast(t("shell.groupDeleted", [groupLabel(g)]));
     setGroupMenu(null);
   };
 
 const logout = (): void => {
-    setAccountName("本地用户");
+    setAccountName(UNSET_ACCOUNT_NAME);
     setTheme("dark");
     setEditingName(false);
     setSettingsOpen(false);
-    setToast("已退出登录（占位，未接入账号系统）");
+    setToast(t("shell.loggedOutPlaceholder"));
   };
 
   const saveName = (): void => {
@@ -996,28 +1155,28 @@ const logout = (): void => {
       bots: bots.map((b) => ({
         key: b.key,
         name: b.bot.name,
-        group: groups.find((g) => g.key === b.group)?.name ?? "未分组",
+        group: groupLabel(groups.find((g) => g.key === b.group)),
       })),
       messages,
       actions: [
         {
           id: "action-settings",
           kind: "action",
-          title: "打开设置",
-          subtitle: "Key、主题、账户",
+          title: t("shell.openSettings"),
+          subtitle: t("shell.settingsSubtitle"),
           action: "settings",
         },
         {
           id: "action-monitor",
           kind: "action",
-          title: "打开运行监控与审批",
+          title: t("shell.openRunMonitor"),
           subtitle: "FR-06/07",
           action: "monitor",
         },
         {
           id: "action-workflow",
           kind: "action",
-          title: "打开工作流编辑器",
+          title: t("shell.openWorkflowEditor"),
           subtitle: "FR-04",
           action: "workflow",
         },
@@ -1057,6 +1216,11 @@ const logout = (): void => {
             <BlobMark />
           )}
           {selectedBotName}
+          {selectedBotEntry?.bot.role === "coordinator" && (
+            <span className="coord-badge" title={t("shell.coordinatorBadgeTitle")}>
+              {t("shell.coordinatorBadge")}
+            </span>
+          )}
         </span>
         {selectedBotEntry !== undefined && (
           <button
@@ -1065,8 +1229,8 @@ const logout = (): void => {
             aria-pressed={deepThinking}
             title={
               deepThinking
-                ? "深度思考已开启：该 Bot 的后续回合走 deepseek-reasoner，点击切回"
-                : "开启后该 Bot 的后续回合走 deepseek-reasoner"
+                ? t("reasoner.tooltipOn")
+                : t("reasoner.tooltipOff")
             }
             onClick={() => {
               void toggleDeepThinking();
@@ -1082,14 +1246,14 @@ const logout = (): void => {
               />
               <path d="M10 20h4" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
             </svg>
-            深度思考{deepThinking ? " · 开" : ""}
+            {t("reasoner.toggleLabel")}{deepThinking ? t("reasoner.onSuffix") : ""}
           </button>
         )}
         <button
           type="button"
           className={"top-icon-btn" + (monitorOpen ? " active" : "")}
-          aria-label="运行监控与审批"
-          title="运行监控与审批"
+          aria-label={t("shell.runMonitorApprovals")}
+          title={t("shell.runMonitorApprovals")}
           onClick={() => {
             setWorkflowOpen(false);
             setMonitorOpen((v) => !v);
@@ -1109,8 +1273,8 @@ const logout = (): void => {
         <button
           type="button"
           className={"top-icon-btn" + (workflowOpen ? " active" : "")}
-          aria-label="工作流编辑器"
-          title="工作流编辑器"
+          aria-label={t("shell.workflowEditor")}
+          title={t("shell.workflowEditor")}
           onClick={() => {
             setMonitorOpen(false);
             setWorkflowOpen((v) => !v);
@@ -1126,8 +1290,8 @@ const logout = (): void => {
         <button
           type="button"
           className="top-icon-btn"
-          aria-label="最近会话"
-          title="最近会话"
+          aria-label={t("shell.recentSessions")}
+          title={t("shell.recentSessions")}
           onClick={() => {
             setArtifactsOpen(false);
             setHistoryOpen((v) => !v);
@@ -1141,8 +1305,8 @@ const logout = (): void => {
         <button
           type="button"
           className="top-icon-btn artifacts-btn"
-          aria-label="产物"
-          title="产物"
+          aria-label={t("shell.artifacts")}
+          title={t("shell.artifacts")}
           onClick={() => {
             setHistoryOpen(false);
             setArtifactsOpen((v) => !v);
@@ -1161,8 +1325,8 @@ const logout = (): void => {
         {historyOpen && (
           <>
             <div className="menu-overlay" onClick={() => setHistoryOpen(false)} />
-            <div className="top-popover" role="dialog" aria-label="最近会话">
-              <div className="popover-title">最近会话</div>
+            <div className="top-popover" role="dialog" aria-label={t("shell.recentSessions")}>
+              <div className="popover-title">{t("shell.recentSessions")}</div>
               {(historySessions ?? []).slice(0, 8).map((session) => (
                 <button
                   key={session.sessionId}
@@ -1175,13 +1339,13 @@ const logout = (): void => {
                 >
                   <span className="tab-title">{session.title}</span>
                   <span className="session-meta">
-                    {new Date(session.startedAt).toLocaleString()} ·{" "}
-                    {session.status === "ended" ? "已结束" : "进行中"}
+                    {formatFullDateTime(session.startedAt)} ·{" "}
+                    {session.status === "ended" ? t("shell.statusEnded") : t("shell.statusInProgress")}
                   </span>
                 </button>
               ))}
               {(historySessions ?? []).length === 0 && (
-                <div className="sys-line">还没有历史会话</div>
+                <div className="sys-line">{t("shell.noSessionsYet")}</div>
               )}
             </div>
           </>
@@ -1189,8 +1353,8 @@ const logout = (): void => {
         {artifactsOpen && (
           <>
             <div className="menu-overlay" onClick={() => setArtifactsOpen(false)} />
-            <div className="top-popover artifacts-popover" role="dialog" aria-label="产物">
-              <div className="popover-title">产物（bot 工作区）</div>
+            <div className="top-popover artifacts-popover" role="dialog" aria-label={t("shell.artifacts")}>
+              <div className="popover-title">{t("shell.artifactsWorkspaceTitle")}</div>
               {(artifactList ?? []).map((artifact) => (
                 <div className="artifact-item" key={artifact.relativePath}>
                   <div className="artifact-meta">
@@ -1213,12 +1377,12 @@ const logout = (): void => {
                         });
                       }}
                     >
-                      在画布中打开
+                      {t("shell.openInCanvas")}
                     </button>
                   )}
                 </div>
               ))}
-              {(artifactList ?? []).length === 0 && <div className="sys-line">工作区暂无产物</div>}
+              {(artifactList ?? []).length === 0 && <div className="sys-line">{t("shell.noArtifacts")}</div>}
             </div>
           </>
         )}
@@ -1229,8 +1393,8 @@ const logout = (): void => {
           <button
             type="button"
             className="circle-btn clickable"
-            aria-label="全局搜索（Ctrl+K）"
-            title="全局搜索（Ctrl+K）"
+            aria-label={t("shell.globalSearch")}
+            title={t("shell.globalSearch")}
             onClick={() => setSearchOpen(true)}
           >
             <svg viewBox="0 0 24 24">
@@ -1241,8 +1405,8 @@ const logout = (): void => {
           <button
             type="button"
             className="circle-btn clickable"
-            aria-label="创建新 Bot"
-            title="创建新 Bot（右键：自动取 Bot01 这样的名字）"
+            aria-label={t("shell.createNewBot")}
+            title={t("shell.createNewBotHint")}
             onClick={() => openCreateBotModal()}
             onContextMenu={(e) => {
               // The shortcut: right-click creates one that is already named.
@@ -1277,7 +1441,7 @@ const logout = (): void => {
                 el?.select();
               }}
               maxLength={80}
-              aria-label={`重命名 ${headerBot.bot.name}`}
+              aria-label={t("shell.renameBot", [headerBot.bot.name])}
               onChange={(e) => setRenameDraft(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
@@ -1293,7 +1457,7 @@ const logout = (): void => {
           ) : (
             <span
               className="identity-name"
-              title={headerBot === null ? undefined : "双击改名"}
+              title={headerBot === null ? undefined : t("shell.renameByDoubleClick")}
               onDoubleClick={() => {
                 if (headerBot === null) {
                   return;
@@ -1352,19 +1516,19 @@ const logout = (): void => {
                 >
                   ›
                 </span>
-                {g.name}
+                {groupLabel(g)}
                 {!collapsedGroups.includes(g.key) && members.length > 0 && (
                   <span className="group-count">{members.length}</span>
                 )}
               </button>
               {!collapsedGroups.includes(g.key) && (
-                <div className="tabs" aria-label={`机器人列表-${g.name}`}>
+                <div className="tabs" aria-label={t("shell.botListAriaLabel", [groupLabel(g)])}>
                   {members.map((b) =>
                   renameKey === b.key && renameScope === "row" ? (
                     /* Inline rename: the row becomes an editable field in place.
                        Esc cancels, Enter or blur commits, and the store takes a
                        partial patch so nothing but the name can change. */
-                    <div key={b.key} className = "tab tab-renaming" data-gaze-zone="">
+                    <div key={b.key} className="tab tab-renaming" data-gaze-zone="">
                       <GazeAvatar avatar={b.avatar} variant="sidebar" size={36} />
                       <input
                         className="tab-rename"
@@ -1375,7 +1539,7 @@ const logout = (): void => {
                           el?.select();
                         }}
                         maxLength={80}
-                        aria-label={`重命名 ${b.bot.name}`}
+                        aria-label={t("shell.renameBot", [b.bot.name])}
                         onChange={(e) => setRenameDraft(e.target.value)}
                         onKeyDown={(e) => {
                           if (e.key === "Enter") {
@@ -1440,7 +1604,12 @@ const logout = (): void => {
                     <span className="tab-label">
                       <span className="tab-title">
                         {b.bot.name}
-                        {b.unread && <span className="unread-dot" aria-label="未读" />}
+                {b.bot.role === "coordinator" && (
+                  <span className="coord-badge" title={t("shell.coordinatorBadgeTitle")}>
+                    {t("shell.coordinatorBadge")}
+                  </span>
+                )}
+                {b.unread && <span className="unread-dot" aria-label={t("shell.unread")} />}
                       </span>
 
                     </span>
@@ -1448,7 +1617,7 @@ const logout = (): void => {
                   )
                 )}
                 {dragging && members.length === 0 && (
-                  <div className="drop-hint">拖到这里移入「{g.name}」</div>
+                  <div className="drop-hint">{t("shell.dropToMove", [groupLabel(g)])}</div>
                 )}
                 </div>
               )}
@@ -1459,7 +1628,9 @@ const logout = (): void => {
           <button
             type="button"
             className="update-badge"
-            title={`下载并安装 ${updateStatus.version ?? "新版本"}`}
+            title={t("shell.downloadAndInstall", [
+              updateStatus.version ?? t("d22.newVersionFallback"),
+            ])}
             onClick={() => {
               const bridge = window.deepseekBot;
               if (!bridge || !("updates" in bridge)) {
@@ -1469,34 +1640,34 @@ const logout = (): void => {
               void bridge.updates
                 .downloadInstall()
                 .then(setUpdateStatus)
-                .catch(() => setUpdateStatus({ ...updateStatus, downloading: false, error: "下载失败" }));
+                .catch(() => setUpdateStatus({ ...updateStatus, downloading: false, error: t("shell.downloadFailed") }));
             }}
           >
             <span className="update-badge-dot" />
-            {updateStatus.downloading ? "更新下载中…" : "有新版本，点击更新"}
+            {updateStatus.downloading ? t("shell.updateDownloading") : t("shell.updateAvailable")}
           </button>
         )}
         <div className="sidebar-foot">
           <button
             type="button"
             className="foot-account"
-            title="打开设置"
-            aria-label="打开设置"
+            title={t("shell.openSettings")}
+            aria-label={t("shell.openSettings")}
             onClick={() => setSettingsOpen(true)}
           >
             <span className="avatar" aria-hidden="true">
-              {accountName.slice(0, 1).toUpperCase()}
+              {displayName.slice(0, 1).toUpperCase()}
             </span>
             <span className="foot-id">
-              <span className="foot-name">{accountName}</span>
-              <span className="foot-sub">本地工作台</span>
+              <span className="foot-name">{displayName}</span>
+              <span className="foot-sub">{t("shell.localWorkspace")}</span>
             </span>
           </button>
           <button
             type="button"
             className="foot-gear"
-            aria-label="打开设置"
-            title="打开设置"
+            aria-label={t("shell.openSettings")}
+            title={t("shell.openSettings")}
             onClick={() => setSettingsOpen(true)}
           >
             <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -1525,11 +1696,11 @@ const logout = (): void => {
               </header>
               <div className="pair-body">
                 <div className="msg-notice">
-                  {new Date(restoredSession.startedAt).toLocaleString()} ·{" "}
-                  {restoredSession.status === "ended" ? "已结束" : "进行中"}
+                  {formatFullDateTime(restoredSession.startedAt)} ·{" "}
+                  {restoredSession.status === "ended" ? t("shell.statusEnded") : t("shell.statusInProgress")}
                 </div>
                 <div className="sys-line">
-                  该会话暂无可回放的聊天消息：当前夹具只含运行事件，真实消息回放需 D06/D12 接入。
+                  {t("shell.noReplayMessages")}
                 </div>
               </div>
               <div className="pair-foot">
@@ -1538,7 +1709,7 @@ const logout = (): void => {
                   className="pill-btn"
                   onClick={() => setRestoredSession(null)}
                 >
-                  返回当前会话
+                  {t("shell.backToCurrentSession")}
                 </button>
               </div>
             </div>
@@ -1555,13 +1726,23 @@ const logout = (): void => {
                 const sender =
                   m.from === "bot"
                     ? bots.find((b) => b.key === (m.speakerKey ?? selectedBot))?.bot.name ?? "Bot"
-                    : "我";
+                    : t("shell.me");
                 setQuoteDraft({ name: sender, text: m.text.slice(0, 60) });
               }}
               onPairQuote={(name, text) => setQuoteDraft({ name, text: text.slice(0, 60) })}
               onCancelQuote={() => setQuoteDraft(null)}
               onSend={(text, attachments) => sendUserMessage(selectedBot, text, attachments)}
-              onAssistant={(t) =>
+              onBotStatus={reportBotStatus}
+              onReplyCompleted={(botId, botName) => {
+                raiseNotice({ kind: "reply", botId, botName });
+              }}
+              onApprovalPending={(botId, botName, count) => {
+                reportBotStatus(botId, count > 0 ? "waiting-approval" : "idle");
+                if (count > 0) {
+                  raiseNotice({ kind: "approval", botId, botName });
+                }
+              }}
+              onAssistant={(assistantText) =>
                 setChats((prev) => ({
                   ...prev,
                   [selectedBot]: [
@@ -1569,7 +1750,7 @@ const logout = (): void => {
                     {
                       id: Date.now() + 1,
                       from: "bot",
-                      text: t,
+                      text: assistantText,
                       quote: null,
                       reactions: {},
                       mine: [],
@@ -1582,7 +1763,7 @@ const logout = (): void => {
               }
               onReact={(msgId, emoji) => toggleReaction(selectedBot, msgId, emoji)}
               onTalkTo={(otherKey) => talkTo(selectedBot, otherKey)}
-              onCopy={(t) => void copyText(t)}
+              onCopy={(text) => void copyText(text)}
               onNotify={(message) => setToast(message)}
               skillContext={(botId) => buildSkillContext(botId, skillLibrary)}
               onOpenBot={(botKey) => {
@@ -1600,9 +1781,9 @@ const logout = (): void => {
                 <BlobMark />
                 <CloudDecor />
               </div>
-              <p>创建一个 Bot 开始使用</p>
+              <p>{t("shell.emptyStateHint")}</p>
               <button type="button" className="primary-btn" onClick={() => openCreateBotModal()}>
-                创建 Bot
+                {t("shell.createBot")}
               </button>
             </div>
           )}
@@ -1627,20 +1808,20 @@ const logout = (): void => {
             ref={menuRef}
             className="menu"
             role="menu"
-            aria-label={`Bot 操作：${menuBot.bot.name}`}
+            aria-label={t("shell.botActionsMenuLabel", [menuBot.bot.name])}
             style={{ left: menu.x, top: menu.y }}
           >
             <button type="button" role="menuitem" className="menu-item" onClick={() => pinBot(menuBot.key)}>
               <MenuIcon d="M12 17v5M9 3h6l1 7 3 3H5l3-3 1-7Z" />
-              置顶
+              {t("shell.pinToTop")}
             </button>
             <div className="menu-sub-wrap">
               <button type="button" role="menuitem" className="menu-item" onClick={(e) => e.currentTarget.focus()}>
                 <MenuIcon d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z" />
-                移至
+                {t("shell.moveTo")}
                 <span className="menu-arrow">›</span>
               </button>
-              <div className="submenu" role="menu" aria-label="移至分组">
+              <div className="submenu" role="menu" aria-label={t("shell.moveToGroup")}>
                 {groups.map((g) => (
                   <button
                     key={g.key}
@@ -1650,7 +1831,7 @@ const logout = (): void => {
                     onClick={() => moveToGroup(menuBot.key, g.key)}
                   >
                     {menuBot.group === g.key && <span className="menu-check">✓</span>}
-                    {g.name}
+                    {groupLabel(g)}
                   </button>
                 ))}
                 <div className="menu-sep" />
@@ -1665,13 +1846,13 @@ const logout = (): void => {
                   }}
                 >
                   <MenuIcon d="M12 5v14M5 12h14" />
-                  创建分组…
+                  {t("shell.createGroupMenuItem")}
                 </button>
               </div>
             </div>
             <button type="button" role="menuitem" className="menu-item" onClick={() => toggleUnread(menuBot.key)}>
               <MenuIcon d="M18 8a6 6 0 1 0-12 0c0 7-3 8-3 8h18s-3-1-3-8M10.3 21a2 2 0 0 0 3.4 0" />
-              {menuBot.unread ? "标为已读" : "标为未读"}
+              {menuBot.unread ? t("shell.markRead") : t("shell.markUnread")}
             </button>
             <button
               type="button"
@@ -1685,7 +1866,7 @@ const logout = (): void => {
               }}
             >
               <MenuIcon d="M4 7h10M4 12h7M4 17h10M18 5v9M15 11l3 3 3-3" />
-              改名
+              {t("shell.renameAction")}
             </button>
             <button
               type="button"
@@ -1697,7 +1878,7 @@ const logout = (): void => {
               }}
             >
               <MenuIcon d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5Z" />
-              编辑 Bot
+              {t("shell.editBotMenuItem")}
             </button>
             <button
               type="button"
@@ -1706,13 +1887,13 @@ const logout = (): void => {
               onClick={() => {
                 void (async () => {
                   const result = await duplicateBotEntity(menuBot.bot.id);
-                  setToast(result.ok ? "已复制（副本）" : "复制失败");
+                  setToast(result.ok ? t("shell.duplicatedCopy") : t("shell.copyFailed"));
                 })();
                 setMenu(null);
               }}
             >
               <MenuIcon d="M9 9h10v12H9zM5 15H3V3h12v2" />
-              复制 Bot
+              {t("shell.duplicateBot")}
             </button>
             <button
               type="button"
@@ -1724,16 +1905,16 @@ const logout = (): void => {
               }}
             >
               <MenuIcon d="M4 5h16v4H4zM6 9v10h12V9M10 13h4" />
-              存为模板
+              {t("shell.saveAsTemplate")}
             </button>
             <button type="button" role="menuitem" className="menu-item" onClick={() => void copyBotId(menuBot.key)}>
               <MenuIcon d="M9 9h10v12H9zM5 15H3V3h12v2" />
-              复制对话 ID
+              {t("shell.copyChatId")}
             </button>
             <div className="menu-sep" />
-            <button type="button" role="menuitem" className="menu-item" onClick={() => removeBot(menuBot.key, "已从侧边栏隐藏")}>
+            <button type="button" role="menuitem" className="menu-item" onClick={() => removeBot(menuBot.key, t("shell.hiddenFromSidebar"))}>
               <MenuIcon d="M3 3l18 18M10.6 10.6a2 2 0 0 0 2.8 2.8M7 11v-3a5 5 0 0 1 9.9-1M21 16v2a2 2 0 0 1-2 2H7" />
-              从侧边栏隐藏
+              {t("shell.hideFromSidebar")}
             </button>
             <button
               type="button"
@@ -1745,7 +1926,7 @@ const logout = (): void => {
               }}
             >
               <MenuIcon d="M4 7h16M9 7V4h6v3m-8 0 1 13h8l1-13" />
-              删除
+              {t("shell.delete")}
             </button>
           </div>
         </>
@@ -1757,19 +1938,19 @@ const logout = (): void => {
             className="modal compact"
             role="dialog"
             aria-modal="true"
-            aria-label="创建分组"
+            aria-label={t("shell.createGroup")}
             onClick={(e) => e.stopPropagation()}
           >
             <header className="modal-head">
-              <h3>创建分组</h3>
-              <button type="button" className="modal-close" aria-label="关闭" onClick={() => setMenuDialog(null)}>
+              <h3>{t("shell.createGroup")}</h3>
+              <button type="button" className="modal-close" aria-label={t("shell.close")} onClick={() => setMenuDialog(null)}>
                 ×
               </button>
             </header>
             <div className="modal-body">
               <input
                 className="name-input"
-                placeholder="分组名称"
+                placeholder={t("shell.groupName")}
                 value={dialogText}
                 maxLength={40}
                 autoFocus
@@ -1783,10 +1964,10 @@ const logout = (): void => {
             </div>
             <footer className="modal-foot">
               <button type="button" className="ghost-btn" onClick={() => setMenuDialog(null)}>
-                取消
+                {t("shell.cancel")}
               </button>
               <button type="button" className="primary-btn" disabled={!dialogText.trim()} onClick={submitDialog}>
-                确定
+                {t("shell.confirm")}
               </button>
             </footer>
           </div>
@@ -1803,24 +1984,24 @@ const logout = (): void => {
             onClick={(e) => e.stopPropagation()}
           >
             <header className="modal-head">
-              <h3 id="delete-bot-title">删除“{deleteTarget.bot.name}”</h3>
+              <h3 id="delete-bot-title">{t("shell.deleteConfirmTitle", [deleteTarget.bot.name])}</h3>
             </header>
             <div className="modal-body">
-              <p className="delete-copy">这将永久删除 Bot 及其聊天记录。此操作无法撤销。</p>
+              <p className="delete-copy">{t("shell.deleteBotWarning")}</p>
             </div>
             <footer className="modal-foot delete-foot">
               <button type="button" className="ghost-btn" onClick={() => setDeleteTarget(null)}>
-                取消
+                {t("shell.cancel")}
               </button>
               <button
                 type="button"
                 className="danger-btn"
                 onClick={() => {
-                  removeBot(deleteTarget.key, "已删除");
+                  removeBot(deleteTarget.key, t("shell.deleted"));
                   setDeleteTarget(null);
                 }}
               >
-                删除
+                {t("shell.delete")}
               </button>
             </footer>
           </div>
@@ -1833,25 +2014,25 @@ const logout = (): void => {
             className="modal"
             role="dialog"
             aria-modal="true"
-            aria-label={editingBot ? "编辑机器人" : "创建新 Bot"}
+            aria-label={editingBot ? t("shell.editBot") : t("shell.createNewBot")}
             onClick={(e) => e.stopPropagation()}
           >
             <header className="modal-head">
-              <h3>{editingBot ? "编辑机器人" : "创建新 Bot"}</h3>
-              <button type="button" className="modal-close" aria-label="关闭" onClick={() => setModalOpen(false)}>
+              <h3>{editingBot ? t("shell.editBot") : t("shell.createNewBot")}</h3>
+              <button type="button" className="modal-close" aria-label={t("shell.close")} onClick={() => setModalOpen(false)}>
                 ×
               </button>
             </header>
             <div className="modal-body">
               {!editingBot && botTemplates.length > 0 && (
-                <div className="tpl-row" role="group" aria-label="从模板开始">
-                  <span className="tpl-label">模板</span>
+                <div className="tpl-row" role="group" aria-label={t("shell.startFromTemplate")}>
+                  <span className="tpl-label">{t("shell.template")}</span>
                   {botTemplates.map((tpl) => (
                     <span className="tpl-chip-wrap" key={tpl.id}>
                       <button
                         type="button"
                         className="tpl-chip"
-                        title={`用模板「${tpl.name}」填充`}
+                        title={t("shell.fillWithTemplate", [tpl.name])}
                         onClick={() => {
                           setAvatar(tpl.bot.avatarUi.avatar as AvatarKind);
                           setShape(tpl.bot.avatarUi.shape);
@@ -1872,7 +2053,7 @@ const logout = (): void => {
                       <button
                         type="button"
                         className="tpl-chip-remove"
-                        aria-label={`删除模板 ${tpl.name}`}
+                        aria-label={t("shell.deleteTemplate", [tpl.name])}
                         onClick={() => {
                           setBotTemplates(deleteTemplate(window.localStorage, tpl.id));
                         }}
@@ -1895,10 +2076,11 @@ const logout = (): void => {
                         modelProfileId: editingBot.bot.modelProfileId,
                         workspaceId: editingBot.bot.workspaceId,
                         toolPolicyId: editingBot.bot.toolPolicyId,
+                        role: editingBot.bot.role,
                       },
                     }
                   : {})}
-                submitLabel={editingBot ? "保存" : "创建"}
+                submitLabel={editingBot ? t("shell.save") : t("shell.create")}
                 minimal={!editingBot}
                 onSubmit={submitBotDraft}
                 onCancel={() => setModalOpen(false)}
@@ -1911,12 +2093,12 @@ const logout = (): void => {
                 groupSlot={
                   !editingBot && (
                     <div className="group-pick compact">
-                      <span>分组</span>
+                      <span>{t("shell.group")}</span>
                       <CustomSelect
                         value={modalGroup}
-                        options={groups.map((g) => ({ value: g.key, label: g.name }))}
+                        options={groups.map((g) => ({ value: g.key, label: groupLabel(g) }))}
                         onChange={(v) => setModalGroup(Number(v))}
-                        ariaLabel="分组"
+                        ariaLabel={t("shell.group")}
                         disabled={groups.length === 0}
                       />
                     </div>
@@ -1953,7 +2135,7 @@ const logout = (): void => {
             ref={groupMenuRef}
             className="menu"
             role="menu"
-            aria-label="分组操作"
+            aria-label={t("shell.groupActions")}
             style={{ left: groupMenu.x, top: groupMenu.y }}
           >
             <button
@@ -1963,9 +2145,9 @@ const logout = (): void => {
               onClick={() => deleteGroup(groupMenu.groupKey)}
             >
               <MenuIcon d="M4 7h16M9 7V4h6v3m-8 0 1 13h8l1-13" />
-              删除分组
+              {t("shell.deleteGroup")}
               {bots.filter((b) => b.group === groupMenu.groupKey).length > 0 &&
-                "（请先移出组内 Bot）"}
+                t("shell.moveBotsOutFirst")}
             </button>
           </div>
         </>
@@ -1977,21 +2159,21 @@ const logout = (): void => {
             className="settings"
             role="dialog"
             aria-modal="true"
-            aria-label="设置"
+            aria-label={t("shell.settings")}
             onClick={(e) => e.stopPropagation()}
           >
-            <aside className="settings-nav" aria-label="设置分类">
+            <aside className="settings-nav" aria-label={t("shell.settingsSections")}>
               <button type="button" className="settings-nav-item active">
                 <MenuIcon d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1-1.55 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.55-1 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.09a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.09a1.7 1.7 0 0 0 1.55 1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.55 1Z" />
-                通用
+                {t("shell.general")}
               </button>
-              {["电脑", "保险库", "用量与账单", "更新"].map((label) => (
+              {[t("shell.computer"), t("shell.vault"), t("shell.usageAndBilling"), t("shell.updates")].map((label) => (
                 <button
                   key={label}
                   type="button"
                   className="settings-nav-item disabled"
                   disabled
-                  title="后续提供"
+                  title={t("shell.comingSoon")}
                 >
                   {label}
                 </button>
@@ -1999,21 +2181,21 @@ const logout = (): void => {
             </aside>
             <div className="settings-main">
               <header className="settings-head">
-                <h3>通用</h3>
+                <h3>{t("shell.general")}</h3>
                 <button
                   type="button"
                   className="modal-close"
-                  aria-label="关闭设置"
+                  aria-label={t("shell.closeSettings")}
                   onClick={() => setSettingsOpen(false)}
                 >
                   ×
                 </button>
               </header>
               <div className="settings-body">
-                <div className="settings-section-title">账户</div>
+                <div className="settings-section-title">{t("shell.account")}</div>
                 <div className="account-card">
                   <span className="account-avatar" aria-hidden="true">
-                    {accountName.slice(0, 1).toUpperCase()}
+                    {displayName.slice(0, 1).toUpperCase()}
                   </span>
                   <div className="account-meta">
                     {editingName ? (
@@ -2022,7 +2204,7 @@ const logout = (): void => {
                         value={nameDraft}
                         maxLength={40}
                         autoFocus
-                        aria-label="账户名称"
+                        aria-label={t("shell.accountName")}
                         onChange={(e) => setNameDraft(e.target.value)}
                         onKeyDown={(e) => {
                           if (e.key === "Enter") {
@@ -2032,43 +2214,43 @@ const logout = (): void => {
                         onBlur={saveName}
                       />
                     ) : (
-                      <span className="account-name">{accountName}</span>
+                      <span className="account-name">{displayName}</span>
                     )}
-                    <span className="account-mail">本地会话 · 未接入账号系统</span>
+                    <span className="account-mail">{t("shell.localSessionNote")}</span>
                   </div>
                   <div className="account-actions">
                     {editingName ? (
                       <button type="button" className="pill-btn" onClick={saveName}>
-                        保存
+                        {t("shell.save")}
                       </button>
                     ) : (
                       <button
                         type="button"
                         className="pill-btn"
                         onClick={() => {
-                          setNameDraft(accountName);
+                          setNameDraft(displayName);
                           setEditingName(true);
                         }}
                       >
-                        改名字
+                        {t("shell.rename")}
                       </button>
                     )}
                     <button type="button" className="pill-btn" onClick={logout}>
-                      退出登录
+                      {t("shell.signOut")}
                     </button>
                   </div>
                 </div>
-                <div className="settings-section-title">电脑与权限（策略 / 授权 / 撤销）</div>
+                <div className="settings-section-title">{t("shell.computerAndPermissions")}</div>
                 <PermissionsPanel />
-                <div className="settings-section-title">接入（Key 加密保存在系统凭据库，只写不读）</div>
+                <div className="settings-section-title">{t("shell.apiAccessSection")}</div>
                 <div className="settings-card">
                   <div className="settings-row">
-                    <span>API Key（只写不读）</span>
+                    <span>{t("shell.apiKeyWriteOnly")}</span>
                     <span className="key-input-wrap">
                       <input
                         type="password"
                         className="settings-select key-input"
-                        placeholder={desktop.settings.keyConfigured() ? "已配置（输入新值覆盖）" : "未配置"}
+                        placeholder={desktop.settings.keyConfigured() ? t("shell.configuredOverwrite") : t("shell.notConfigured")}
                         value={keyDraft}
                         onChange={(e) => setKeyDraft(e.target.value)}
                         aria-label="API Key"
@@ -2082,28 +2264,28 @@ const logout = (): void => {
                             .saveKey(keyDraft)
                             .then(() => {
                               setKeyDraft("");
-                              setToast("已保存（不回显）");
+                              setToast(t("shell.savedNoEcho"));
                             })
                             .catch((error: unknown) => {
                               setToast(
-                                `保存失败：${error instanceof Error ? error.message : String(error)}`,
+                                t("shell.saveFailed", [error instanceof Error ? error.message : String(error)]),
                               );
                             });
                         }}
                       >
-                        保存
+                        {t("shell.save")}
                       </button>
                     </span>
                   </div>
                   <div className="settings-row">
-                    <span>测试连接</span>
+                    <span>{t("shell.testConnection")}</span>
                     <span className="key-input-wrap">
                       {testResult &&
                         (testResult.result === "unverified" ? (
-                          <span className="settings-soon">UNVERIFIED（无真实网络，占位）</span>
+                          <span className="settings-soon">{t("shell.connectionUnverified")}</span>
                         ) : (
                           <span className={testResult.ok ? "settings-ok" : "form-error"}>
-                            {testResult.ok ? "连接成功" : testResult.errorCode}
+                            {testResult.ok ? t("shell.connectionSuccess") : testResult.errorCode}
                           </span>
                         ))}
                       <button
@@ -2118,7 +2300,7 @@ const logout = (): void => {
                             .finally(() => setTesting(false));
                         }}
                       >
-                        {testing ? "测试中…" : "测试连接"}
+                        {testing ? t("shell.testing") : t("shell.testConnection")}
                       </button>
                     </span>
                   </div>
@@ -2126,7 +2308,7 @@ const logout = (): void => {
                 <SearchSettings />
                 <ConnectorSettings />
                 <AutomationPanel />
-                <div className="settings-section-title">技能（复用与导入导出）</div>
+                <div className="settings-section-title">{t("shell.skillsSection")}</div>
                 <div className="settings-card">
                   <SkillsPanel
                     storage={window.localStorage}
@@ -2135,30 +2317,30 @@ const logout = (): void => {
                     onToast={setToast}
                   />
                 </div>
-                <div className="settings-section-title">外观</div>
+                <div className="settings-section-title">{t("shell.appearance")}</div>
                 <div className="settings-card">
                   <div className="settings-row">
-                    <span>主题</span>
+                    <span>{t("shell.theme")}</span>
                     <CustomSelect
                       value={theme}
                       options={[
-                        { value: "dark", label: "深色" },
-                        { value: "light", label: "浅色" },
+                        { value: "dark", label: t("shell.themeDark") },
+                        { value: "light", label: t("shell.themeLight") },
                       ]}
                       onChange={(v) => setTheme(v === "light" ? "light" : "dark")}
-                      ariaLabel="主题"
+                      ariaLabel={t("shell.theme")}
                     />
                   </div>
                   <div className="settings-row">
-                    <span>强调色</span>
-                    <span className="accent-chips" role="radiogroup" aria-label="强调色">
+                    <span>{t("shell.accentColor")}</span>
+                    <span className="accent-chips" role="radiogroup" aria-label={t("shell.accentColor")}>
                       {ACCENT_PRESETS.map((preset) => (
                         <button
                           key={preset}
                           type="button"
                           className={"accent-chip" + (accent === preset ? " selected" : "")}
                           style={{ background: preset }}
-                          aria-label={`强调色 ${preset}`}
+                          aria-label={t("shell.accentColorPreset", [preset])}
                           aria-pressed={accent === preset}
                           onClick={() => setAccent(preset)}
                         />
@@ -2166,27 +2348,39 @@ const logout = (): void => {
                     </span>
                   </div>
                   <div className="settings-row">
-                    <span>语言</span>
-                    <span className="settings-soon">跟随系统</span>
+                    <span>{t("shell.language")}</span>
+                    <CustomSelect
+                      value={language}
+                      options={[
+                        { value: "system", label: t("shell.followSystem") },
+                        // i18n-ignore: language names are shown in their own language
+                        { value: "zh", label: "简体中文" },
+                        { value: "en", label: "English" },
+                      ]}
+                      onChange={(value) =>
+                        setLanguage(value === "zh" || value === "en" ? value : "system")
+                      }
+                      ariaLabel={t("d22.languageLabel")}
+                    />
                   </div>
                 </div>
-                <div className="settings-section-title">关于与更新</div>
+                <div className="settings-section-title">{t("shell.aboutAndUpdates")}</div>
                 <div className="settings-card">
                   <div className="settings-row">
-                    <span>版本</span>
+                    <span>{t("shell.version")}</span>
                     <span className="settings-soon">{version}</span>
                   </div>
                   <div className="settings-row">
-                    <span>检查更新</span>
+                    <span>{t("shell.checkForUpdates")}</span>
                     <span className="key-input-wrap">
                       <span className="update-state">
                         {updateStatus === null
                           ? "（GitHub Releases）"
                           : updateStatus.available
-                            ? `发现新版本 ${updateStatus.version ?? ""}`
+                            ? t("shell.newVersionFound", [updateStatus.version ?? ""])
                             : updateStatus.error
-                              ? "暂无可用更新（尚未发布 Release）"
-                              : "已是最新"}
+                              ? t("shell.noUpdatesReleased")
+                              : t("shell.upToDate")}
                       </span>
                       <button
                         type="button"
@@ -2194,36 +2388,48 @@ const logout = (): void => {
                         onClick={() => {
                           const bridge = window.deepseekBot;
                           if (!bridge || !("updates" in bridge)) {
-                            setToast("更新通道需要主进程（打包版可用）");
+                            setToast(t("shell.updateChannelNeedsMain"));
                             return;
                           }
                           void bridge.updates.check().then(setUpdateStatus).catch(() => {
-                            setToast("检查更新失败（网络或无 Release）");
+                            setToast(t("shell.updateCheckFailed"));
                           });
                         }}
                       >
-                        检查
+                        {t("shell.check")}
                       </button>
                     </span>
                   </div>
                   <div className="settings-row">
-                    <span>本地用量</span>
+                    <span>{t("shell.localUsage")}</span>
                     <span className="settings-soon">
-                      {bots.length} 个 Bot · {Object.keys(chats).length} 个会话 ·{" "}
-                      {Object.values(chats).reduce((sum, list) => sum + list.length, 0)} 条消息
+                      {t("shell.localUsageCounts", [bots.length, Object.keys(chats).length, Object.values(chats).reduce((sum, list) => sum + list.length, 0)])}
                     </span>
                   </div>
                 </div>
-                <div className="settings-section-title">系统</div>
+                <div className="settings-section-title">{t("shell.system")}</div>
                 <div className="settings-card">
                   <div className="settings-row">
-                    <span>麦克风</span>
-                    <span className="settings-soon">已全部拒绝（安全策略）</span>
+                    <span>{t("shell.microphone")}</span>
+                    <span className="settings-soon">{t("shell.allDeniedByPolicy")}</span>
                   </div>
                   <div className="settings-row">
-                    <span>硬件加速</span>
-                    <span className="settings-soon">后续提供</span>
+                    <span>{t("shell.hardwareAcceleration")}</span>
+                    <span className="settings-soon">{t("shell.comingSoon")}</span>
                   </div>
+                </div>
+                <div className="settings-section-title">{t("d22.notifySection")}</div>
+                <div className="settings-card">
+                  <NotificationSettingsPanel
+                    prefs={notifications}
+                    bots={bots.map((bot) => ({ id: bot.bot.id, name: bot.bot.name }))}
+                    onChange={setNotifications}
+                    onTest={testNotification}
+                  />
+                </div>
+                <div className="settings-section-title">{t("d22.chromeSection")}</div>
+                <div className="settings-card">
+                  <ChromeImportPanel onToast={setToast} />
                 </div>
               </div>
             </div>
@@ -2328,7 +2534,7 @@ function MessageBubble({
         >
           {msg.quote && (
             <div className="msg-quote">
-              引用 {msg.quote.name}：{msg.quote.text}
+              {t("shell.quotedMessage", [msg.quote.name, msg.quote.text])}
             </div>
           )}
           {msg.attachments && msg.attachments.length > 0 && (
@@ -2366,11 +2572,11 @@ function MessageBubble({
             <ChoiceCard
               question={msg.choices.question}
               options={msg.choices.options}
-              fallback={msg.choices.other ? { id: "✎", label: "其他，我说明" } : null}
+              fallback={msg.choices.other ? { id: "✎", label: t("shell.choiceOther") } : null}
               answered={msg.choices.answered}
               disabled={lockedChoiceId === msg.id}
               hint={
-                lockedChoiceId === msg.id ? "请在下方输入框用一句话说明你的想法。" : null
+                lockedChoiceId === msg.id ? t("questions.explainBelowPlaceholder") : null
               }
               onChoose={(option) => onChoice?.(msg.id, option)}
             />
@@ -2382,7 +2588,7 @@ function MessageBubble({
                   key={e}
                   type="button"
                   className={"reaction-chip" + (msg.mine.includes(e) ? " mine" : "")}
-                  title={msg.mine.includes(e) ? "取消我的回应" : "回应"}
+                  title={msg.mine.includes(e) ? t("shell.removeMyReaction") : t("shell.react")}
                   onClick={() => onReact(msg.id, e)}
                 >
                   {e} {msg.reactions[e]}
@@ -2400,7 +2606,7 @@ function MessageBubble({
                 ref={pickerRef}
                 className="emoji-picker"
                 role="menu"
-                aria-label="选择表情"
+                aria-label={t("shell.selectEmoji")}
                 style={{ left: pickerPos.x, top: pickerPos.y }}
               >
                 {EMOJIS.map((e) => (
@@ -2409,7 +2615,7 @@ function MessageBubble({
                     type="button"
                     className="react-btn"
                     data-emoji={e}
-                    title={`回应 ${e}`}
+                    title={t("shell.reactWith", [e])}
                     onClick={() => {
                       onReact(msg.id, e);
                       setPickerOpen(false);
@@ -2423,13 +2629,13 @@ function MessageBubble({
             document.body,
           )}
       </div>
-      <div className="msg-actions" role="toolbar" aria-label="消息操作">
+      <div className="msg-actions" role="toolbar" aria-label={t("shell.messageActions")}>
         {!isUser && (
           <button
             type="button"
             className={"msg-icon-btn" + (pickerOpen ? " active" : "")}
             data-action="emoji"
-            title="回应"
+            title={t("shell.react")}
             ref={emojiBtnRef}
             onClick={() => setPickerOpen((v) => !v)}
           >
@@ -2445,7 +2651,7 @@ function MessageBubble({
           type="button"
           className="msg-icon-btn"
           data-action="quote"
-          title="引用"
+          title={t("shell.quote")}
           onClick={() => onQuote(msg)}
         >
           <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -2457,7 +2663,7 @@ function MessageBubble({
           type="button"
           className="msg-icon-btn"
           data-action="copy"
-          title="复制"
+          title={t("shell.copy")}
           onClick={() => onCopy(msg.text)}
         >
           <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -2493,6 +2699,9 @@ function BotsPlaceholder({
   onAssistant,
   onOpenBot,
   onNotify,
+  onBotStatus,
+  onReplyCompleted,
+  onApprovalPending,
   skillContext,
 }: {
   bots: UiBot[];
@@ -2514,6 +2723,12 @@ function BotsPlaceholder({
   onAssistant: (text: string) => void;
   onOpenBot: (botKey: number) => void;
   onNotify: (message: string) => void;
+  /** D22: live bot state for the tray (running / waiting-approval / idle). */
+  onBotStatus: (botId: string, status: TrayBotStatus) => void;
+  /** D22: a reply landed — raise a system notification when the window is away. */
+  onReplyCompleted: (botId: string, botName: string) => void;
+  /** D22: pending approvals change the tray status and may notify. */
+  onApprovalPending: (botId: string, botName: string, count: number) => void;
   /** Bound-skill context for a bot, composed at send time (D17). */
   skillContext: (botId: string) => string;
 }): JSX.Element {
@@ -2553,16 +2768,16 @@ function BotsPlaceholder({
   const saveDraftAsSkill = (): void => {
     const prompt = draft.trim();
     if (prompt.length === 0) {
-      onNotify("先输入内容，再存为技能");
+      onNotify(t("skills.saveNeedsContent"));
       return;
     }
-    const name = `技能 ${skills.length + 1}`;
+    const name = t("skills.appliedLabel", [skills.length + 1]);
     const result = upsertSkill(window.localStorage, { name, prompt });
     if (result.ok) {
       setSkills(listSkills(window.localStorage));
-      onNotify(`已保存「${result.skill.name}」v${result.skill.version}`);
+      onNotify(t("skills.savedVersioned", [result.skill.name, result.skill.version]));
     } else {
-      onNotify(result.reason === "limit" ? "技能已达上限" : "内容为空");
+      onNotify(result.reason === "limit" ? t("skills.limitReachedShort") : t("skills.emptyContent"));
     }
     setSkillMenuOpen(false);
   };
@@ -2581,8 +2796,8 @@ function BotsPlaceholder({
   if (!me) {
     return (
       <div className="bubble">
-        <h2>机器人</h2>
-        <p>该 Bot 已不存在。</p>
+        <h2>{t("shell.bot")}</h2>
+        <p>{t("shell.botNotFound")}</p>
       </div>
     );
   }
@@ -2619,8 +2834,8 @@ function BotsPlaceholder({
                       <button
                         type="button"
                         className="msg-icon-btn"
-                        title="引用"
-                        aria-label="引用"
+                        title={t("shell.quote")}
+                        aria-label={t("shell.quote")}
                         onClick={() => {
                           onPairQuote(speaker?.bot.name ?? "?", turn.text);
                           setDetailOther(null);
@@ -2634,8 +2849,8 @@ function BotsPlaceholder({
                       <button
                         type="button"
                         className="msg-icon-btn"
-                        title="复制"
-                        aria-label="复制"
+                        title={t("shell.copy")}
+                        aria-label={t("shell.copy")}
                         onClick={() => onCopy(turn.text)}
                       >
                         <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -2655,11 +2870,11 @@ function BotsPlaceholder({
               </div>
             );
           })}
-          {turns.length === 0 && <div className="sys-line">暂无消息往来。</div>}
+          {turns.length === 0 && <div className="sys-line">{t("shell.noExchangesYet")}</div>}
         </div>
         <div className="pair-foot">
           <button type="button" className="pill-btn" onClick={() => setDetailOther(null)}>
-            关闭聊天
+            {t("shell.closeChat")}
           </button>
         </div>
       </div>
@@ -2686,7 +2901,7 @@ function BotsPlaceholder({
     const drafts: AttachmentDraft[] = [];
     for (const file of [...files]) {
       if (file.size > MAX_ATTACHMENT_BYTES) {
-        onNotify(`${file.name} 超过 2 MB 上限`);
+        onNotify(t("shell.attachmentTooLarge", [file.name]));
         continue;
       }
       const kind = classifyAttachment(file.type, file.name);
@@ -2701,7 +2916,7 @@ function BotsPlaceholder({
         });
         drafts.push({ name: file.name, size: file.size, mime: file.type, dataUrl });
       } else {
-        onNotify(`${file.name} 暂不支持预览（仅文本与图片）`);
+        onNotify(t("shell.previewUnsupported", [file.name]));
       }
     }
     if (drafts.length > 0) {
@@ -2720,6 +2935,7 @@ function BotsPlaceholder({
     }
     const forKey = me.key;
     setStream({ ...emptyStream(), forKey });
+    onBotStatus(me.bot.id, "running");
     streamRef.current = runChatStream({
       stream: service.chat.stream,
       botId: me.bot.id,
@@ -2727,6 +2943,13 @@ function BotsPlaceholder({
       forKey,
       update: setStream,
       onAssistant,
+      onSettled: (result) => {
+        const settled = result.cancelled || result.failure !== null;
+        onBotStatus(me.bot.id, "idle");
+        if (!settled) {
+          onReplyCompleted(me.bot.id, me.bot.name);
+        }
+      },
     });
   };
 
@@ -2763,7 +2986,7 @@ function BotsPlaceholder({
       .catch(() => {
         setClarify(target);
         setDraft(text);
-        onNotify("回答发送失败，请重试或取消本次说明");
+        onNotify(t("questions.answerRetryFailed"));
       });
   };
 
@@ -2827,7 +3050,7 @@ function BotsPlaceholder({
       }
     >
       <p className="sys-line" aria-live="polite">
-        静态占位 · 无网络请求 · 不同分组的 Bot 无法主动交流
+        {t("shell.staticPlaceholderNotice")}
       </p>
       <div className="chat" ref={listRef}>
         {msgs.map((m, index) => {
@@ -2853,8 +3076,8 @@ function BotsPlaceholder({
                             key={key}
                             type="button"
                             className="stack-avatar"
-                            title={`打开 ${target?.bot.name ?? "?"} 的会话`}
-                            aria-label={`打开 ${target?.bot.name ?? "?"} 的会话`}
+                            title={t("shell.openSessionWith", [target?.bot.name ?? "?"])}
+                            aria-label={t("shell.openSessionWith", [target?.bot.name ?? "?"])}
                             onClick={() => onOpenBot(key)}
                           >
                             <AvatarView
@@ -2867,21 +3090,21 @@ function BotsPlaceholder({
                       })}
                     </span>
                     {m.deliverTo.length > 1 && (
-                      <span className="deliver-count">{m.deliverTo.length} 个 Bot</span>
+                      <span className="deliver-count">{t("shell.botCount", [m.deliverTo.length])}</span>
                     )}
                   </div>
                 ) : m.id === firstNoticeId ? (
                   <div className="chat-summary">
-                    <span className="chat-summary-label">{pairTotal} 条消息往来：</span>
+                    <span className="chat-summary-label">{t("shell.exchangeCount", [pairTotal])}</span>
                     {pairPeers.map((peerKey, peerIndex) => {
                       const peer = bots.find((bot) => bot.key === peerKey);
                       return (
                         <Fragment key={peerKey}>
-                          {peerIndex > 0 && <span className="summary-and">和</span>}
+                          {peerIndex > 0 && <span className="summary-and">{t("shell.and")}</span>}
                           <button
                             type="button"
                             className="summary-bot"
-                            title={`查看与 ${peer?.bot.name ?? "?"} 的消息往来`}
+                            title={t("shell.viewExchangesWith", [peer?.bot.name ?? "?"])}
                             onClick={() => setDetailOther(peerKey)}
                           >
                             <AvatarView avatar={peer?.avatar ?? me.avatar} variant="inline" size={16} />
@@ -2918,19 +3141,19 @@ function BotsPlaceholder({
             </Fragment>
           );
         })}
-        {msgs.length === 0 && <div className="sys-line">会话为空。</div>}
+        {msgs.length === 0 && <div className="sys-line">{t("shell.sessionEmpty")}</div>}
         {stream && stream.forKey === me.key && (
           <>
             {stream.tools.map((tool) => (
               <div className="tool-card" key={tool.toolName}>
                 <span className={"tool-state tool-" + tool.state}>
                   {tool.state === "requested"
-                    ? "请求中"
+                    ? t("shell.toolRequested")
                     : tool.state === "running"
-                      ? "执行中"
+                      ? t("shell.toolRunning")
                       : tool.state === "succeeded"
-                        ? "已完成"
-                        : "失败"}
+                        ? t("shell.toolCompleted")
+                        : t("shell.toolFailed")}
                 </span>
                 <span className="tool-name">{tool.toolName}</span>
                 {tool.summary && <span className="tool-summary">{tool.summary}</span>}
@@ -2945,10 +3168,10 @@ function BotsPlaceholder({
                       <button
                         type="button"
                         className="stream-cancel"
-                        title="取消"
+                        title={t("shell.cancel")}
                         onClick={() => streamRef.current?.cancel()}
                       >
-                        取消
+                        {t("shell.cancel")}
                       </button>
                     )}
                   </div>
@@ -2964,7 +3187,7 @@ function BotsPlaceholder({
                 ) : null}
                 {stream.failure.retryable && (
                   <button type="button" className="pill-btn" onClick={retryStream}>
-                    重试
+                    {t("shell.retry")}
                   </button>
                 )}
               </div>
@@ -2987,10 +3210,14 @@ function BotsPlaceholder({
           }
         />
         <SearchResultCards botId={me.bot.id} />
-        <PermissionChatCards botId={me.bot.id} />
+        <PermissionChatCards
+          botId={me.bot.id}
+          onPendingCount={(count) => onApprovalPending(me.bot.id, me.bot.name, count)}
+        />
+        <TaskFeedCards botId={me.bot.id} bots={bots} onOpenBot={onOpenBot} />
       </div>
       {pendingFiles.length > 0 && (
-        <div className="attach-chips" aria-label="待发送附件">
+        <div className="attach-chips" aria-label={t("shell.pendingAttachments")}>
           {pendingFiles.map((file, index) => (
             <span className="attach-chip" key={`${file.name}-${index}`}>
               <span className="attach-chip-name">{file.name}</span>
@@ -2998,7 +3225,7 @@ function BotsPlaceholder({
               <button
                 type="button"
                 className="attach-chip-remove"
-                aria-label={`移除附件 ${file.name}`}
+                aria-label={t("shell.removeAttachment", [file.name])}
                 onClick={() =>
                   setPendingFiles((prev) => prev.filter((_, i) => i !== index))
                 }
@@ -3012,20 +3239,20 @@ function BotsPlaceholder({
       {quoteDraft && (
         <div className="quote-chip">
           <span>
-            引用 {quoteDraft.name}：{quoteDraft.text}
+            {t("shell.quotedMessage", [quoteDraft.name, quoteDraft.text])}
           </span>
-          <button type="button" className="quote-cancel" aria-label="取消引用" onClick={onCancelQuote}>
+          <button type="button" className="quote-cancel" aria-label={t("shell.cancelQuote")} onClick={onCancelQuote}>
             ×
           </button>
         </div>
       )}
       {clarifyActive && (
         <div className="quote-chip" role="status">
-          <span>正在回答选项卡，请用一句话说明</span>
+          <span>{t("questions.explainPlaceholder")}</span>
           <button
             type="button"
             className="quote-cancel"
-            aria-label="取消回答选项卡"
+            aria-label={t("questions.cancelExplain")}
             onClick={() => setClarify(null)}
           >
             ×
@@ -3038,7 +3265,7 @@ function BotsPlaceholder({
         multiple
         accept={attachmentAccept()}
         style={{ display: "none" }}
-        aria-label="选择附件"
+        aria-label={t("shell.selectAttachments")}
         onChange={(event) => {
           void readPickedFiles(event.target.files);
           event.target.value = "";
@@ -3049,8 +3276,8 @@ function BotsPlaceholder({
           <button
             type="button"
             className="composer-plus composer-skill"
-            aria-label="技能"
-            title="技能：复用常用指令"
+            aria-label={t("skills.menuLabel")}
+            title={t("skills.dialogTitle")}
             onClick={() => setSkillMenuOpen((v) => !v)}
           >
             ⚡
@@ -3058,9 +3285,9 @@ function BotsPlaceholder({
           {skillMenuOpen && (
             <>
               <div className="menu-overlay" onClick={() => setSkillMenuOpen(false)} />
-              <div className="composer-menu skills-menu" role="menu" aria-label="技能">
+              <div className="composer-menu skills-menu" role="menu" aria-label={t("skills.menuLabel")}>
                 {skills.length === 0 && (
-                  <div className="menu-item skills-empty">还没有技能：输入内容后可存为技能</div>
+                  <div className="menu-item skills-empty">{t("skills.emptyHint")}</div>
                 )}
                 {skills.map((skill) => (
                   <div className="skill-row" key={skill.id}>
@@ -3068,7 +3295,7 @@ function BotsPlaceholder({
                       type="button"
                       role="menuitem"
                       className="menu-item skill-apply"
-                      title={`应用「${skill.name}」v${skill.version}`}
+                      title={t("skills.applyAria", [skill.name, skill.version])}
                       onClick={() => applySkillToDraft(skill)}
                     >
                       <span className="skill-name">{skill.name}</span>
@@ -3077,7 +3304,7 @@ function BotsPlaceholder({
                     <button
                       type="button"
                       className="skill-remove"
-                      aria-label={`删除技能 ${skill.name}`}
+                      aria-label={t("skills.removeAria", [skill.name])}
                       onClick={() => removeSkill(skill.id)}
                     >
                       ×
@@ -3093,7 +3320,7 @@ function BotsPlaceholder({
                   onClick={saveDraftAsSkill}
                 >
                   <MenuIcon d="M5 4h9l5 5v11H5zM14 4v5h5" />
-                  把当前输入存为技能
+                  {t("skills.saveCurrentAria")}
                 </button>
               </div>
             </>
@@ -3101,8 +3328,8 @@ function BotsPlaceholder({
           <button
             type="button"
             className="composer-plus"
-            aria-label="更多操作"
-            title="发起交流"
+            aria-label={t("shell.moreActions")}
+            title={t("shell.startConversation")}
             onClick={() => setPlusOpen((v) => !v)}
           >
             ＋
@@ -3110,7 +3337,7 @@ function BotsPlaceholder({
           {plusOpen && (
             <>
               <div className="menu-overlay" onClick={() => setPlusOpen(false)} />
-              <div className="composer-menu" role="menu" aria-label="更多">
+              <div className="composer-menu" role="menu" aria-label={t("shell.more")}>
                 <button
                   type="button"
                   role="menuitem"
@@ -3121,7 +3348,7 @@ function BotsPlaceholder({
                   }}
                 >
                   <MenuIcon d="M21 12.5 12.5 21a5 5 0 0 1-7-7l8-8a3.5 3.5 0 0 1 5 5l-8 8a1.8 1.8 0 0 1-2.5-2.5L15 4.5" />
-                  添加附件
+                  {t("shell.addAttachment")}
                 </button>
                 <button
                   type="button"
@@ -3133,7 +3360,7 @@ function BotsPlaceholder({
                   }}
                 >
                   <MenuIcon d="M7 3.5h10a1 1 0 0 1 1 1V20l-6-3.8-6 3.8V4.5a1 1 0 0 1 1-1Z" />
-                  记忆与知识
+                  {t("memory.dialogTitle")}
                 </button>
                 <div className="menu-sep" />
                 <div className="menu-sub-wrap">
@@ -3144,12 +3371,12 @@ function BotsPlaceholder({
                     onClick={(e) => e.currentTarget.focus()}
                   >
                     <MenuIcon d="M8 12h8m-8 0a3 3 0 1 1 3-3m-3 3a3 3 0 0 0 3 3m5-6h3a3 3 0 0 1 0 6h-3m-2 0a3 3 0 1 0 3 3" />
-                    发起交流
+                    {t("shell.startConversation")}
                     <span className="menu-arrow">›</span>
                   </button>
-                  <div className="submenu" role="menu" aria-label="选择 Bot">
+                  <div className="submenu" role="menu" aria-label={t("shell.selectBot")}>
                     {others.length === 0 && (
-                      <div className="composer-menu-empty">还没有其他 Bot。</div>
+                      <div className="composer-menu-empty">{t("shell.noOtherBots")}</div>
                     )}
                     {others.map((b) => (
                       <button
@@ -3165,7 +3392,7 @@ function BotsPlaceholder({
                         <AvatarView avatar={b.avatar} variant="inline" size={22} />
                         <span className="tab-title">{b.bot.name}</span>
                         <span className="composer-menu-hint">
-                          {groups.find((g) => g.key === b.group)?.name ?? "?"}
+                          {groupLabel(groups.find((g) => g.key === b.group))}
                         </span>
                       </button>
                     ))}
@@ -3178,10 +3405,10 @@ function BotsPlaceholder({
         <input
           ref={inputRef}
           className="composer-input"
-          placeholder={clarifyActive ? "请用一句话说明真实意图" : `给 ${me.bot.name} 发消息`}
+          placeholder={clarifyActive ? t("questions.realIntentPlaceholder") : t("shell.messageBot", [me.bot.name])}
           value={draft}
           maxLength={200}
-          aria-label={`给 ${me.bot.name} 发消息`}
+          aria-label={t("shell.messageBot", [me.bot.name])}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter") {
@@ -3189,7 +3416,7 @@ function BotsPlaceholder({
             }
           }}
         />
-        <span className="composer-mic" title="后续提供" aria-hidden="true">
+        <span className="composer-mic" title={t("shell.comingSoon")} aria-hidden="true">
           <svg viewBox="0 0 24 24">
             <rect x="9" y="3" width="6" height="11" rx="3" fill="none" stroke="currentColor" strokeWidth="1.8" />
             <path
@@ -3201,7 +3428,7 @@ function BotsPlaceholder({
             />
           </svg>
         </span>
-        <button type="button" className="send-btn" aria-label="发送" disabled={!draft.trim() && pendingFiles.length === 0} onClick={send}>
+        <button type="button" className="send-btn" aria-label={t("shell.send")} disabled={!draft.trim() && pendingFiles.length === 0} onClick={send}>
           ↑
         </button>
       </div>

@@ -12,6 +12,11 @@ export const APPLICATION_TOOL_NAMES = [
   "create_group",
   "create_bots_batch",
   "revoke_batch",
+  // v0.5 manager orchestration (keep in lockstep with
+  // packages/host/src/app-tool-channel.ts APPLICATION_TOOLS).
+  "save_workflow",
+  "dispatch_task",
+  "list_tasks",
 ] as const;
 
 // Allow ten minutes for human approval plus two minutes for the service call.

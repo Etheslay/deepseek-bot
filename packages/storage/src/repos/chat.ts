@@ -6,8 +6,9 @@
  * replayed once the renderer wires `chat.history`.
  */
 import { randomUUID } from "node:crypto";
+import { ChatMessageMetaSchema, type ChatMessageMeta } from "@deepseek-bot/contracts";
 import type { OpenedDatabase } from "../database.js";
-import { isoNow } from "./shared.js";
+import { isoNow, parseJsonColumn, stringifyJson } from "./shared.js";
 
 export type ChatRole = "user" | "assistant";
 
@@ -17,6 +18,8 @@ export interface ChatMessageRow {
   readonly sessionId: string;
   readonly role: ChatRole;
   readonly text: string;
+  /** v0.5 dispatch marker / task notice; undefined for plain messages. */
+  readonly meta?: ChatMessageMeta;
   readonly createdAt: string;
 }
 
@@ -28,6 +31,7 @@ export function appendChatMessage(
     sessionId: string;
     role: ChatRole;
     text: string;
+    meta?: ChatMessageMeta;
   },
 ): ChatMessageRow {
   const row: ChatMessageRow = {
@@ -36,14 +40,23 @@ export function appendChatMessage(
     sessionId: input.sessionId,
     role: input.role,
     text: input.text,
+    ...(input.meta !== undefined ? { meta: ChatMessageMetaSchema.parse(input.meta) } : {}),
     createdAt: isoNow(db.now),
   };
   db.raw
     .prepare(
-      "INSERT INTO chat_messages (id, bot_id, session_id, role, text, created_at) " +
-        "VALUES (?, ?, ?, ?, ?, ?);",
+      "INSERT INTO chat_messages (id, bot_id, session_id, role, text, meta_json, created_at) " +
+        "VALUES (?, ?, ?, ?, ?, ?, ?);",
     )
-    .run(row.id, row.botId, row.sessionId, row.role, row.text, row.createdAt);
+    .run(
+      row.id,
+      row.botId,
+      row.sessionId,
+      row.role,
+      row.text,
+      row.meta !== undefined ? stringifyJson(row.meta) : null,
+      row.createdAt,
+    );
   return row;
 }
 
@@ -54,7 +67,7 @@ export function listChatMessages(
 ): ChatMessageRow[] {
   const rows = db.raw
     .prepare(
-      "SELECT id, bot_id, session_id, role, text, created_at FROM chat_messages " +
+      "SELECT id, bot_id, session_id, role, text, meta_json, created_at FROM chat_messages " +
         "WHERE bot_id = ? ORDER BY created_at ASC, rowid ASC LIMIT ?;",
     )
     .all(botId, limit) as Array<{
@@ -63,15 +76,33 @@ export function listChatMessages(
     session_id: string;
     role: string;
     text: string;
+    meta_json: string | null;
     created_at: string;
   }>;
-  return rows.map((row) => ({
-    id: row.id,
-    botId: row.bot_id,
-    sessionId: row.session_id,
-    role: row.role === "assistant" ? "assistant" : "user",
-    text: row.text,
-    createdAt: row.created_at,
-  }));
+  return rows.map((row) => {
+    if (row.meta_json === null) {
+      return {
+        id: row.id,
+        botId: row.bot_id,
+        sessionId: row.session_id,
+        role: row.role === "assistant" ? "assistant" : "user",
+        text: row.text,
+        createdAt: row.created_at,
+      };
+    }
+    return {
+      id: row.id,
+      botId: row.bot_id,
+      sessionId: row.session_id,
+      role: row.role === "assistant" ? "assistant" : "user",
+      text: row.text,
+      meta: parseJsonColumn(
+        ChatMessageMetaSchema,
+        row.meta_json,
+        "chat message meta",
+      ),
+      createdAt: row.created_at,
+    };
+  });
 }
 

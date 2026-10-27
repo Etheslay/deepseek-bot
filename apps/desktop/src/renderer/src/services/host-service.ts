@@ -7,16 +7,18 @@
  * fixture for settings and bots; chat/workflow/run views stay on the fixture
  * until their contract methods exist (see docs/AGENT_PLATFORM.md).
  */
-import type { Bot, ErrorCode } from "@deepseek-bot/contracts";
+import type { Bot, ErrorCode, Task } from "@deepseek-bot/contracts";
 import {
   ServiceError,
   type BotDraft,
+  type ChatHistoryRow,
   type DesktopService,
   type StreamResult,
   type TestConnectionResult,
 } from "./desktop-service.js";
 import { validateArtifactVersion, validateBotArtifact } from "./contract-validation.js";
 import { createFixtureService } from "./fixture-service.js";
+import { t } from "../i18n.js";
 
 type HostBridge = {
   host: { call: (method: string, payload: unknown) => Promise<unknown> };
@@ -67,10 +69,10 @@ export function createHostService(bridge: HostBridge): DesktopService {
         const bots = await listBots();
         const source = bots.find((bot) => bot.id === botId);
         if (!source) {
-          throw new ServiceError("INVALID_INPUT", "找不到要复制的 Bot", false);
+          throw new ServiceError("INVALID_INPUT", t("services.botNotFound"), false);
         }
         return (await bridge.host.call("bot.create", {
-          name: `${source.name} 副本`,
+          name: t("common.copyOf", [source.name]),
           instructions: source.instructions,
           modelProfileId: source.modelProfileId,
           workspaceId: source.workspaceId,
@@ -147,6 +149,13 @@ export function createHostService(bridge: HostBridge): DesktopService {
       // rows (chat.history) but the UI rebuilds its thread from live sends.
       listSessions: async () => [],
       openSession: async () => ({ events: [] }),
+      history: async (botId, limit = 100) => {
+        const response = (await bridge.host.call("chat.history", {
+          botId,
+          limit,
+        })) as { messages: ChatHistoryRow[] };
+        return response.messages;
+      },
       stream: (botId, text, handlers) => {
         let cancelled = false;
         const sessionId = `chat:${botId}`;
@@ -217,6 +226,18 @@ export function createHostService(bridge: HostBridge): DesktopService {
           };
         }
       },
+    },
+    // v0.5 manager orchestration: dispatched tasks are host-backed from day
+    // one (the fixture store only exists for offline UI development).
+    tasks: {
+      list: async (query = {}) =>
+        (await bridge.host.call("task.list", {
+          ...(query.status !== undefined ? { status: query.status } : {}),
+          ...(query.rootTaskId !== undefined ? { rootTaskId: query.rootTaskId } : {}),
+          ...(query.limit !== undefined ? { limit: query.limit } : {}),
+        })) as { tasks: Task[] },
+      cancel: async (taskId) =>
+        (await bridge.host.call("task.cancel", { taskId })) as Task,
     },
   };
 }

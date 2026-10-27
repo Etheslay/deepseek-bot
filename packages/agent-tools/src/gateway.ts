@@ -117,8 +117,7 @@ export class ToolGateway {
       caller,
       ...(options.signal !== undefined ? { signal: options.signal } : {}),
       ...(options.networkPermissions !== undefined ? { networkPermissions: options.networkPermissions } : {}),
-    };
-    let grant: GrantCheckResult | undefined;
+    };    let grant: GrantCheckResult | undefined;
     let executing = false;
     try {
       grant = await this.options.grants?.check(tool, caller, parsed.data, options)
@@ -127,12 +126,40 @@ export class ToolGateway {
       if (options.signal?.aborted) throw new ToolRejectionError("CANCELLED", "tool call was cancelled");
       grant.revalidate?.();
       executing = true;
-      const result = await capability.handler(parsed.data, {
-        ...context,
-        ...(grant.revalidate === undefined ? {} : { revalidateAuthorization: grant.revalidate }),
-      });
+      const contextWithGrant: ToolContext =
+        grant.approvalId !== undefined ||
+        grant.grantIds !== undefined ||
+        grant.revalidate !== undefined
+          ? {
+              ...context,
+              ...(grant.approvalId !== undefined || grant.grantIds !== undefined
+                ? {
+                    authorization: {
+                      ...(grant.approvalId !== undefined ? { approvalId: grant.approvalId } : {}),
+                      ...(grant.grantIds !== undefined ? { grantIds: grant.grantIds } : {}),
+                    },
+                  }
+                : {}),
+              ...(grant.revalidate === undefined
+                ? {}
+                : { revalidateAuthorization: grant.revalidate }),
+            }
+          : context;
+      const result = await capability.handler(parsed.data, contextWithGrant);
       const failed = capability.resultFailed?.(result) === true;
-      await this.audit(caller.id, tool, parsed.data, result, failed ? "error" : "ok", failed ? "RUNTIME_ERROR" : undefined, failed ? "tool reported failure" : undefined, now, undefined, caller, grant);
+      await this.audit(
+        caller.id,
+        tool,
+        parsed.data,
+        result,
+        failed ? "error" : "ok",
+        failed ? "RUNTIME_ERROR" : undefined,
+        failed ? "tool reported failure" : undefined,
+        now,
+        undefined,
+        caller,
+        grant,
+      );
       return result;
     } catch (error) {
       const code: GatewayRejectionCode | "RUNTIME_ERROR" =

@@ -22,7 +22,7 @@ import { existsSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createScreenBackend, type ScreenBackend } from "@deepseek-bot/exec-daemon";
-import { methodContract, type Method, type ToolPolicy } from "@deepseek-bot/contracts";
+import { methodContract, type Method, type Task, type ToolPolicy } from "@deepseek-bot/contracts";
 import {
   DshSdkExecutor,
   SessionRegistry,
@@ -56,6 +56,7 @@ import {
   readRetentionPolicy,
   sweepRetention,
   incrementBootGeneration,
+  listTasks,
   openDatabase,
   type DataLayout,
   type OpenedDatabase,
@@ -69,6 +70,8 @@ import {
   ToolRegistry,
   bindAskUserTool,
   bindReadTools,
+  bindTaskTools,
+  bindWorkflowTools,
   bindWriteTools,
   type UserQuestionControls,
 } from "@deepseek-bot/agent-tools";
@@ -89,6 +92,7 @@ import {
 } from "@deepseek-bot/agent-tools";
 import { startApplicationToolServer } from "./app-tool-channel.js";
 import { createScreenService, unavailableScreenBackend, type ScreenService } from "./screen.js";
+import { TaskDispatcher } from "./task-dispatcher.js";
 import { evaluateTriggerRules } from "./triggers.js";
 import { invokeConnector } from "./connectors.js";
 import { McpService } from "./mcp.js";
@@ -116,6 +120,13 @@ export interface HostOptions {
   readonly onMissed?: (notices: ReadonlyArray<ScheduleMissNotice>) => void;
   /** Trusted SearXNG configuration. No key, default public endpoint or automatic requests. */
   readonly webSearch?: WebSearchOptions;
+  /** v0.7 manager orchestration tuning (T7/Q3/Q6 defaults built in). */
+  readonly tasks?: {
+    /** Total hops per relay chain, 2–4 (contract hard cap 4); default 3. */
+    readonly chainLimit?: number;
+    /** Queued tasks tolerated per executor bot before dispatch refuses. */
+    readonly queuedCapPerBot?: number;
+  };
   /** D20 trigger evaluation interval (default 5s). */
   readonly triggers?: { readonly intervalMs?: number };
   /**
@@ -141,6 +152,8 @@ export interface DeepSeekBotHost {
     interruptedNodeRuns: number;
     expiredApprovals: number;
   }>;
+  /** v0.5: dispatched tasks swept to `interrupted` at startup (FR-10). */
+  readonly interruptedTasks: number;
   /**
    * Execute one CONTRACTS §3 method. The payload is validated against the
    * method contract; the response is validated before returning. Errors are
@@ -319,6 +332,20 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
       return applicationTools.openTurn({ sessionId, caller, signal });
     },
   });
+  // v0.5 manager orchestration: dispatched-task queue + executor. The audit
+  // sink is shared with the tool gateway so relay hops (which bypass the
+  // gateway) still leave one record per hop under the same log.
+  const agentAudit = new JsonlAuditSink(join(layout.logs, "agent-tools-audit.jsonl"));
+  const tasks = new TaskDispatcher({
+    db,
+    chat,
+    audit: agentAudit,
+    ...(options.now !== undefined ? { now: options.now } : {}),
+    ...(options.tasks?.chainLimit !== undefined ? { chainLimit: options.tasks.chainLimit } : {}),
+    ...(options.tasks?.queuedCapPerBot !== undefined
+      ? { queuedCapPerBot: options.tasks.queuedCapPerBot }
+      : {}),
+  });
   const bridge = await startApprovalBridgeServer({
     sessions: (sessionId) => sessionRegistry.resolve(sessionId),
   });
@@ -350,6 +377,9 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
     ...(options.onMissed !== undefined ? { onMissed: options.onMissed } : {}),
   });
   const recoveredRuns = engine.recoverInterruptedRuns();
+  // FR-10: dispatched tasks die with the process — queued/running rows
+  // become `interrupted` and stay queryable, exactly like D10 run recovery.
+  const interruptedTasks = tasks.sweepInterrupted();
   // D18 保留策略: apply configured limits once at startup so expiry and
   // caps hold even when nothing writes for a while.
   sweepRetention(db, readRetentionPolicy(db), now());
@@ -396,6 +426,7 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
           at: item.at,
         })),
     },
+    tasks,
     get agentTools(): ToolGateway {
       if (agentToolsHolder.current === undefined) {
         throw new Error("agent tools gateway is not ready yet");
@@ -516,12 +547,51 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
       },
     }),
     bindScreenCaptureTool(screen),
+    // v0.5 manager orchestration (T4/T3): coordinator workflow saving and
+    // dispatched-task tools. Role rules live inside the task tool layer;
+    // the dispatcher re-checks them authoritatively.
+    ...bindWorkflowTools((method, payload) => dispatch(method as Method, payload)),
+    ...bindTaskTools({
+      resolveBot: (botId) => {
+        const bot = getBot(db, botId);
+        return bot === undefined
+          ? undefined
+          : {
+              id: bot.id,
+              name: bot.name,
+              role: bot.role,
+              groupId: bot.groupId ?? null,
+              archivedAt: bot.archivedAt,
+            };
+      },
+      dispatch: (input) => tasks.dispatch(input),
+      listForBot: async (botId, filter) => {
+        const statusFilter = filter.status !== undefined ? { status: filter.status } : {};
+        const rootFilter =
+          filter.rootTaskId !== undefined ? { rootTaskId: filter.rootTaskId } : {};
+        const merged = new Map<string, Task>();
+        for (const task of [
+          ...listTasks(db, { fromBotId: botId, ...statusFilter, ...rootFilter, limit: 100 }),
+          ...listTasks(db, { toBotId: botId, ...statusFilter, ...rootFilter, limit: 100 }),
+        ]) {
+          merged.set(task.id, task);
+        }
+        const ordered = [...merged.values()].sort((a, b) =>
+          a.createdAt === b.createdAt
+            ? a.chainIndex - b.chainIndex
+            : a.createdAt < b.createdAt
+              ? -1
+              : 1,
+        );
+        return { tasks: ordered.slice(Math.max(0, ordered.length - filter.limit)) };
+      },
+    }),
   ]) {
     agentRegistry.register(capability);
   }
   const agentTools = new ToolGateway({
     registry: agentRegistry,
-    audit: new JsonlAuditSink(join(layout.logs, "agent-tools-audit.jsonl")),
+    audit: agentAudit,
     grants: {
       async check(tool, caller, params, options) {
         if (tool === "screen_capture") {
@@ -568,6 +638,7 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
     bridge,
     bootGeneration,
     recoveredRuns,
+    interruptedTasks: interruptedTasks.length,
     agentTools,
     mcp,
     screen,

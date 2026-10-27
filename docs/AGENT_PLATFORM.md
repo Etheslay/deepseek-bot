@@ -56,6 +56,7 @@ flowchart LR
 | 交互 | `ask_user`（选项卡片 / 确认框） | 暂停当前回合等待人类选择；卡片答案作为用户输入回到会话；组件与 D16 授权弹层共用（见 [开发计划](DEVELOPMENT_PLAN.md) D14） |
 | 搜索 | `web_search` | D15 后端通过受信配置的 SearXNG JSON API 返回标题/URL/摘要；出站前走 D08 网络权限，网关摘要审计；真实聊天接线与 D16 grant 后续完成（见 [接口说明](../packages/agent-tools/README.md)） |
 | 扩展 | 技能调用、连接器调用、记忆读写 | 由技能/连接器声明所需能力 |
+| 协调（v0.5） | `save_workflow` / `dispatch_task` / `list_tasks` | manager-orchestration：`save_workflow` 走既有 `app.create_workflow`（validate→save）；`dispatch_task` 绑定新能力 `app.dispatch_task`，仅协调者可用（网关三重检查：角色/同组/非自身），`list_tasks` 为参与者只读视图；聊天应用工具目录由八个扩至十一个，Host 与 harness-bridge 两侧清单必须一致 |
 
 批量创建必须带 `batchId`，支持一键撤销整批。
 

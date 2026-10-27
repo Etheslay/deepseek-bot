@@ -11,6 +11,9 @@ const names = [
   "create_group",
   "create_bots_batch",
   "revoke_batch",
+  "save_workflow",
+  "dispatch_task",
+  "list_tasks",
 ];
 interface Definition {
   name: string;
@@ -213,7 +216,7 @@ describe("application tool plugin", () => {
   ])("fails closed on an invalid optional MCP directory and preserves readiness", async (mcp) => {
     const { ctx, tools, calls } = await fixture({ mcp });
     await apply(ctx);
-    expect(tools).toHaveLength(14);
+    expect(tools).toHaveLength(17); // v0.7 adds save_workflow, dispatch_task and list_tasks
     expect(tools.some((tool) => tool.name.startsWith("mcp__"))).toBe(false);
     expect(calls).toEqual([{ tools: names }]);
   });
@@ -221,7 +224,7 @@ describe("application tool plugin", () => {
   it("keeps regular tools ready when the MCP endpoint is unavailable", async () => {
     const { ctx, tools, calls } = await fixture({ mcpStatus: 503 });
     await apply(ctx);
-    expect(tools).toHaveLength(14);
+    expect(tools).toHaveLength(17); // v0.7 adds save_workflow, dispatch_task and list_tasks
     expect(calls).toEqual([{ tools: names }]);
   });
 
@@ -235,7 +238,7 @@ describe("application tool plugin", () => {
     try {
       const { ctx, tools, calls } = await fixture({ mcpSlow: true });
       await apply(ctx);
-      expect(tools).toHaveLength(14);
+      expect(tools).toHaveLength(17); // v0.7 adds save_workflow, dispatch_task and list_tasks
       expect(calls).toEqual([{ tools: names }]);
     } finally {
       timeout.mockRestore();
