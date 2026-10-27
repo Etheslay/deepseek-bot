@@ -98,6 +98,7 @@ export function makeBot(refs: SeededRefs, overrides: Partial<Bot> = {}): Bot {
     modelProfileId: refs.profile.id,
     workspaceId: refs.workspaceId,
     toolPolicyId: refs.toolPolicyId,
+    role: "standard",
     archivedAt: null,
     ...overrides,
   };

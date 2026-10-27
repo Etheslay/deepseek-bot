@@ -1,0 +1,620 @@
+/**
+ * TaskDispatcher (v0.5 manager orchestration, TASK_MANAGER_ORCHESTRATION.md
+ * §3.3; relay chains per §7/T7). Sits next to the ChatManager: a coordinator
+ * dispatch becomes a durable task row, the executor's session receives the
+ * marked user-side message, and the Host runs ONE real chat turn for the
+ * executor through the D30 path. Every terminal transition emits a
+ * `task.status` event and writes a delivery notice into the root
+ * coordinator's session (FR-7).
+ *
+ * Invariants (FR-8/FR-9, §3.4): the coordinator only ever "sends one
+ * instruction" — it does not own the executor, whose own tool calls keep
+ * their own policy/grant/approval path and audit identity. Dispatch rules
+ * (coordinator role, same group, not self) are checked at the gateway tool
+ * AND re-checked here authoritatively. Relay chains are pre-declared simple
+ * paths; hops carry no autonomous dispatch right — the dispatcher, not the
+ * bot, moves the chain.
+ */
+import { createHash, randomUUID } from "node:crypto";
+import {
+  TASK_CHAIN_MAX,
+  type Task,
+  type TaskStatus,
+} from "@deepseek-bot/contracts";
+import { EngineError, NodeExecutionError } from "@deepseek-bot/runtime";
+import type { AuditRecord, AuditSink } from "@deepseek-bot/agent-tools";
+import {
+  appendChatMessage,
+  appendTaskEvent,
+  appendWorkerMessageId,
+  countQueuedTasksForBot,
+  finishTask,
+  getBot,
+  getPermissionApproval,
+  getTask,
+  insertTask,
+  listChatMessages,
+  listPermissionGrants,
+  listPermissionPolicies,
+  listQueuedHopsOfRoot,
+  listTasks,
+  markTaskRunning,
+  maxTaskEventSequence,
+  nextQueuedTask,
+  sweepInterruptedTasks,
+  type ListTasksFilter,
+  type OpenedDatabase,
+} from "@deepseek-bot/storage";
+import { chatSessionIdFor, type ChatManager } from "./chat.js";
+
+export interface TaskAuthorizationRef {
+  readonly approvalId?: string;
+  readonly grantIds?: readonly string[];
+}
+
+export interface DispatchInput {
+  readonly fromBotId: string;
+  readonly toBotId: string;
+  readonly task: string;
+  readonly context?: string;
+  readonly chain?: ReadonlyArray<{ botId: string; instruction: string }>;
+  readonly authorization?: TaskAuthorizationRef;
+}
+
+export interface TaskDispatcherOptions {
+  readonly db: OpenedDatabase;
+  readonly chat: ChatManager;
+  /** Chain hops bypass the gateway; each hop still leaves one audit record. */
+  readonly audit: AuditSink;
+  readonly now?: () => Date;
+  /** T7/Q6: total hops per relay chain, 2–4. Default 3 (contract caps at 4). */
+  readonly chainLimit?: number;
+  /** Q3: queued tasks tolerated per executor bot before dispatch refuses. */
+  readonly queuedCapPerBot?: number;
+}
+
+const RESULT_SUMMARY_MAX = 2_000;
+const REASON_MAX = 500;
+
+const TASK_STATUS_LABELS: Readonly<Record<TaskStatus, string>> = {
+  queued: "排队中",
+  running: "执行中",
+  done: "已完成",
+  failed: "已失败",
+  cancelled: "已取消",
+  skipped: "已跳过",
+  interrupted: "已中断",
+};
+
+function truncate(text: string, max: number): string {
+  return text.length <= max ? text : `${text.slice(0, max)}…`;
+}
+
+function invalid(message: string, details?: Record<string, unknown>): EngineError {
+  return new EngineError({
+    code: "INVALID_INPUT",
+    message,
+    ...(details !== undefined ? { details } : {}),
+    retryable: false,
+  });
+}
+
+function unauthorized(message: string, details?: Record<string, unknown>): EngineError {
+  return new EngineError({
+    code: "UNAUTHORIZED_PATH",
+    message,
+    ...(details !== undefined ? { details } : {}),
+    retryable: false,
+  });
+}
+
+export class TaskDispatcher {
+  private readonly draining = new Set<string>();
+  private readonly db: OpenedDatabase;
+  private readonly chat: ChatManager;
+  private readonly audit: AuditSink;
+  private readonly now: () => Date;
+  private readonly chainLimit: number;
+  private readonly queuedCapPerBot: number;
+
+  constructor(options: TaskDispatcherOptions) {
+    this.db = options.db;
+    this.chat = options.chat;
+    this.audit = options.audit;
+    this.now = options.now ?? (() => new Date());
+    const chainLimit = options.chainLimit ?? 3;
+    if (chainLimit < 2 || chainLimit > TASK_CHAIN_MAX) {
+      throw invalid("relay chain limit must be between 2 and 4", { chainLimit });
+    }
+    this.chainLimit = chainLimit;
+    this.queuedCapPerBot = options.queuedCapPerBot ?? 10;
+  }
+
+  /**
+   * Persist a dispatch (with its whole pre-declared relay chain) as queued
+   * tasks and kick the executor queues. Hops beyond the first start running
+   * only when the previous hop settles as `done` (T7 R-13.2); every hop
+   * marked with meta kind "dispatch" appears in the executor's session when
+   * its turn starts.
+   */
+  async dispatch(input: DispatchInput): Promise<Task> {
+    const me = this.requireCoordinator(input.fromBotId);
+    const target = this.requireLiveBot(input.toBotId);
+    if (input.toBotId === me.id) {
+      throw invalid("a coordinator cannot dispatch a task to itself");
+    }
+    if (me.groupId === null || target.groupId !== me.groupId) {
+      throw unauthorized("task dispatch targets must stay inside the coordinator's group");
+    }
+    for (const hop of input.chain ?? []) {
+      const hopBot = this.requireLiveBot(hop.botId);
+      if (hop.botId === me.id || hop.botId === input.toBotId) {
+        throw invalid("relay chain botIds must form a simple path (no repeats)", {
+          botId: hop.botId,
+        });
+      }
+      if (me.groupId === null || hopBot.groupId !== me.groupId) {
+        throw unauthorized("relay chain hops must stay inside the coordinator's group", {
+          botId: hop.botId,
+        });
+      }
+    }
+    const chainTotal = 1 + (input.chain?.length ?? 0);
+    if (chainTotal > this.chainLimit) {
+      throw invalid(
+        `relay chain exceeds this host's limit of ${this.chainLimit} hops (contract hard cap ${TASK_CHAIN_MAX})`,
+        { chainTotal, chainLimit: this.chainLimit },
+      );
+    }
+    if (countQueuedTasksForBot(this.db, target.id) >= this.queuedCapPerBot) {
+      throw new EngineError({
+        code: "RATE_LIMITED",
+        message: `该 bot 已有 ${this.queuedCapPerBot} 个排队任务，请稍后再派发`,
+        retryable: true,
+      });
+    }
+
+    const at = this.now().toISOString();
+    const rootId = randomUUID();
+    const root = insertTask(this.db, {
+      id: rootId,
+      fromBotId: me.id,
+      toBotId: target.id,
+      instruction: input.task,
+      rootTaskId: rootId,
+      chainIndex: 0,
+      chainTotal,
+      ...(input.authorization !== undefined
+        ? {
+            authorization: {
+              ...(input.authorization.approvalId !== undefined
+                ? { approvalId: input.authorization.approvalId }
+                : {}),
+              ...(input.authorization.grantIds !== undefined
+                ? { grantIds: input.authorization.grantIds }
+                : {}),
+            },
+          }
+        : {}),
+      createdAt: at,
+    });
+    let upstreamBotId = target.id;
+    for (const [index, hop] of (input.chain ?? []).entries()) {
+      const hopTask = insertTask(this.db, {
+        id: randomUUID(),
+        fromBotId: upstreamBotId,
+        toBotId: hop.botId,
+        instruction: hop.instruction,
+        rootTaskId: rootId,
+        chainIndex: index + 1,
+        chainTotal,
+        createdAt: at,
+      });
+      upstreamBotId = hopTask.toBotId;
+    }
+    this.auditDispatch(root, "ok", undefined);
+    void this.drain(target.id);
+    return root;
+  }
+
+  /**
+   * Human cancel (FR-6, Q2: v1 never model-initiated). Queued tasks cancel
+   * directly, running tasks ride the chat cancel path, and queued relay
+   * hops of the same root cancel with the root either way (R-13.5).
+   */
+  cancel(taskId: string): Task {
+    const task = getTask(this.db, taskId);
+    if (task === undefined) {
+      throw invalid("task not found", { taskId });
+    }
+    if (task.status === "queued") {
+      const cancelled = finishTask(this.db, taskId, { status: "cancelled" });
+      this.emitStatus(cancelled, "queued", "cancelled", "cancelled by human");
+      this.writeNotice(cancelled, "已被取消");
+    } else if (task.status === "running") {
+      // The turn settles asynchronously: chat.cancel aborts the attempt and
+      // the pump marks the row cancelled (or failed) when it observes it.
+      this.chat.cancel(chatSessionIdFor(task.toBotId));
+    } else {
+      throw invalid(`task is already ${task.status}`, { taskId, status: task.status });
+    }
+    for (const hop of listQueuedHopsOfRoot(this.db, task.rootTaskId)) {
+      if (hop.id === taskId) continue;
+      const cascaded = finishTask(this.db, hop.id, { status: "cancelled" });
+      this.emitStatus(cascaded, "queued", "cancelled", "relay chain cancelled");
+      this.writeNotice(cascaded, "已被取消（随根任务级联）");
+    }
+    return getTask(this.db, taskId) ?? task;
+  }
+
+  list(filter: ListTasksFilter = {}): Task[] {
+    return listTasks(this.db, filter);
+  }
+
+  /** FR-10: host restart marks queued/running work interrupted, queryable. */
+  sweepInterrupted(): Task[] {
+    const swept = sweepInterruptedTasks(this.db);
+    for (const task of swept) {
+      this.emitStatus(
+        task,
+        task.status === "running" ? "running" : "queued",
+        "interrupted",
+        "host restarted before the turn finished",
+      );
+      this.writeNotice(task, "因 Host 重启而中断，可重新派发");
+    }
+    return swept;
+  }
+
+  // -------------------------------------------------------------------------
+  // Per-bot serial queue
+  // -------------------------------------------------------------------------
+
+  private async drain(botId: string): Promise<void> {
+    if (this.draining.has(botId)) return;
+    this.draining.add(botId);
+    try {
+      for (;;) {
+        const task = nextQueuedTask(this.db, botId);
+        if (task === undefined) break;
+        await this.runTask(task);
+        // Safety: runTask must move the row out of `queued`. A bug that
+        // leaves it queued would otherwise spin this loop forever.
+        const after = getTask(this.db, task.id);
+        if (after !== undefined && after.status === "queued") {
+          throw new Error("task pump did not advance a queued row");
+        }
+      }
+    } catch {
+      // The pump is fire-and-forget and never rejects: a dead database
+      // (host shutdown) or a broken turn leaves the row in its last
+      // persisted, queryable state instead of crashing the host.
+    } finally {
+      this.draining.delete(botId);
+    }
+  }
+
+  private async runTask(task: Task): Promise<void> {
+    const root = getTask(this.db, task.rootTaskId);
+    if (root === undefined) {
+      finishTask(this.db, task.id, { status: "failed", resultSummary: "root task record disappeared" });
+      return;
+    }
+    // R-13.6: relay hops revalidate the first hop's authorization right
+    // before their turn starts — revocation or a deny policy stops the chain.
+    if (task.chainIndex > 0 && !this.revalidateChainAuthorization(root)) {
+      const skipped = finishTask(this.db, task.id, { status: "skipped" });
+      this.emitStatus(skipped, "queued", "skipped", "relay authorization is no longer valid");
+      this.skipRemainingHops(skipped, "接力链授权已失效或策略改为拒绝");
+      return;
+    }
+    const executor = getBot(this.db, task.toBotId);
+    const sender = getBot(this.db, task.fromBotId);
+    if (executor === undefined || executor.archivedAt !== null || sender === undefined) {
+      const failed = finishTask(this.db, task.id, {
+        status: "failed",
+        resultSummary: "执行者或发起者 bot 不存在或已归档",
+      });
+      this.emitStatus(failed, "queued", "failed", "executor or sender unavailable");
+      this.skipRemainingHops(failed, "执行者不可用，接力链停止");
+      this.writeNotice(failed, "已失败（执行者不可用）");
+      return;
+    }
+
+    const running = markTaskRunning(this.db, task.id);
+    this.emitStatus(running, "queued", "running");
+    const sessionId = chatSessionIdFor(executor.id);
+    // History BEFORE the dispatch marker: the marker itself is the prompt.
+    const history = listChatMessages(this.db, executor.id, 20).map((row) => ({
+      role: row.role,
+      text: row.text,
+    }));
+    const upstream = this.upstreamResultOf(task);
+    const marker = this.composePrompt(task, upstream);
+    const markerRow = appendChatMessage(this.db, {
+      botId: executor.id,
+      sessionId,
+      role: "user",
+      text: marker,
+      meta: { kind: "dispatch", taskId: task.id, fromBotId: task.fromBotId },
+    });
+    appendWorkerMessageId(this.db, task.id, markerRow.id);
+
+    try {
+      const outcome = await this.chat.send(executor, marker, history);
+      const assistant = appendChatMessage(this.db, {
+        botId: executor.id,
+        sessionId,
+        role: "assistant",
+        text: outcome.finalResponse,
+      });
+      appendWorkerMessageId(this.db, task.id, assistant.id);
+      const done = finishTask(this.db, task.id, {
+        status: "done",
+        resultSummary: truncate(outcome.finalResponse.trim(), RESULT_SUMMARY_MAX),
+      });
+      this.emitStatus(done, "running", "done", "executor turn completed");
+      this.writeNotice(done, "已完成");
+      this.auditRelayHop(done, "ok", undefined);
+      // T7: the next relay hop usually targets a DIFFERENT bot — kick its
+      // queue so the chain keeps moving (its start revalidates R-13.6).
+      const hops = listTasks(this.db, { rootTaskId: task.rootTaskId, limit: 100 });
+      const next = hops.find((hop) => hop.chainIndex === task.chainIndex + 1);
+      if (next !== undefined && next.status === "queued") {
+        void this.drain(next.toBotId);
+      }
+    } catch (error) {
+      // The row may already be terminal when post-completion bookkeeping
+      // itself failed above; never fight the state machine — only a row
+      // still in `running` settles through this catch.
+      const current = getTask(this.db, task.id);
+      if (current === undefined || current.status !== "running") {
+        throw error;
+      }
+      const cancelled =
+        (error instanceof EngineError || error instanceof NodeExecutionError) &&
+        error.code === "CANCELLED";
+      const reason = truncate(
+        error instanceof Error ? error.message : String(error),
+        REASON_MAX,
+      );
+      const finished = finishTask(this.db, task.id, {
+        status: cancelled ? "cancelled" : "failed",
+        resultSummary: cancelled ? "回合被取消" : truncate(reason, RESULT_SUMMARY_MAX),
+      });
+      this.emitStatus(
+        finished,
+        "running",
+        finished.status,
+        cancelled ? "cancelled via chat.cancel" : reason,
+      );
+      this.writeNotice(finished, cancelled ? "已被取消" : "已失败");
+      this.auditRelayHop(finished, "rejected", reason);
+      if (!cancelled) {
+        this.skipRemainingHops(finished, `上游任务失败：${reason}`);
+      }
+    }
+  }
+
+  /** R-13.4: a failed hop stops the chain; remaining queued hops skip. */
+  private skipRemainingHops(failedHop: Task, reason: string): void {
+    const queued = listQueuedHopsOfRoot(this.db, failedHop.rootTaskId).filter(
+      (hop) => hop.chainIndex > failedHop.chainIndex,
+    );
+    for (const hop of queued) {
+      const skipped = finishTask(this.db, hop.id, { status: "skipped" });
+      this.emitStatus(skipped, "queued", "skipped", reason);
+    }
+    // One interruption notice per chain stop, even when nothing remained
+    // queued — the coordinator must always learn the chain ended early.
+    const root = getTask(this.db, failedHop.rootTaskId);
+    if (root === undefined) return;
+    const remaining = queued.length > 0 ? `剩余 ${queued.length} 跳已跳过。` : "";
+    appendChatMessage(this.db, {
+      botId: root.fromBotId,
+      sessionId: chatSessionIdFor(root.fromBotId),
+      role: "user",
+      text:
+        `任务通知（接力链中断）：第 ${failedHop.chainIndex + 1}/${failedHop.chainTotal} 跳未完成，` +
+        `${remaining}原因：${truncate(reason, REASON_MAX)}`,
+      meta: {
+        kind: "task_notice",
+        taskId: failedHop.id,
+        status: "skipped",
+        resultSummary: truncate(reason, RESULT_SUMMARY_MAX),
+      },
+    });
+    this.auditRelayHop(failedHop, "rejected", `chain interrupted: ${reason}`);
+  }
+  // -------------------------------------------------------------------------
+  // Helpers
+  // -------------------------------------------------------------------------
+
+  private upstreamResultOf(task: Task): { instruction: string; resultSummary: string | null } | undefined {
+    if (task.chainIndex === 0) return undefined;
+    const hops = listTasks(this.db, { rootTaskId: task.rootTaskId, limit: 100 });
+    const previous = hops.find((hop) => hop.chainIndex === task.chainIndex - 1);
+    if (previous === undefined) return undefined;
+    return { instruction: previous.instruction, resultSummary: previous.resultSummary };
+  }
+
+  private composePrompt(task: Task, upstream: { instruction: string; resultSummary: string | null } | undefined): string {
+    const parts: string[] = [];
+    if (upstream !== undefined) {
+      // T7 R-13.7: fixed structured handoff header for relay hops.
+      parts.push(
+        `【上游交接 · 目标】${truncate(upstream.instruction, 800)}`,
+        `【上游交接 · 完成摘要】${upstream.resultSummary ?? "（上游未产出摘要）"}`,
+      );
+    }
+    parts.push(`【任务】${task.instruction}`);
+    return parts.join("\n\n");
+  }
+  private requireCoordinator(botId: string) {
+    const bot = getBot(this.db, botId);
+    if (bot === undefined || bot.archivedAt !== null) {
+      throw unauthorized("dispatch sender bot does not exist or is archived", { botId });
+    }
+    if (bot.role !== "coordinator") {
+      throw unauthorized("only coordinator bots may dispatch tasks", { botId });
+    }
+    return bot;
+  }
+
+  private requireLiveBot(botId: string) {
+    const bot = getBot(this.db, botId);
+    if (bot === undefined || bot.archivedAt !== null) {
+      throw invalid("task endpoint bot does not exist or is archived", { botId });
+    }
+    return bot;
+  }
+
+  private emitStatus(
+    task: Task,
+    from: TaskStatus,
+    to: TaskStatus,
+    reason?: string,
+  ): void {
+    void appendTaskEvent(this.db, {
+      eventId: randomUUID(),
+      taskId: task.id,
+      sequence: maxTaskEventSequence(this.db, task.id) + 1,
+      timestamp: this.now().toISOString(),
+      type: "task.status",
+      payload: {
+        taskId: task.id,
+        from,
+        to,
+        ...(reason !== undefined ? { reason } : {}),
+      },
+    });
+  }
+
+  /** FR-7: delivery notice into the root coordinator's session. */
+  private writeNotice(task: Task, verdict: string): void {
+    const root = getTask(this.db, task.rootTaskId);
+    if (root === undefined) return;
+    const sender = getBot(this.db, task.fromBotId);
+    const executor = getBot(this.db, task.toBotId);
+    const senderName = sender?.name ?? "未知 bot";
+    const executorName = executor?.name ?? "未知 bot";
+    const hopLabel = root.chainTotal > 1 ? `（第 ${task.chainIndex + 1}/${root.chainTotal} 跳）` : "";
+    const preview =
+      task.resultSummary === null || task.resultSummary === ""
+        ? ""
+        : `\n结果预览：${truncate(task.resultSummary, 400)}`;
+    appendChatMessage(this.db, {
+      botId: root.fromBotId,
+      sessionId: chatSessionIdFor(root.fromBotId),
+      role: "user",
+      text:
+        `任务通知（${TASK_STATUS_LABELS[task.status]}）${hopLabel}：` +
+        `「${senderName}」派发给「${executorName}」的任务${verdict}。` +
+        preview,
+      meta: {
+        kind: "task_notice",
+        taskId: task.id,
+        status: task.status,
+        ...(task.resultSummary !== null && task.resultSummary !== ""
+          ? { resultSummary: truncate(task.resultSummary, RESULT_SUMMARY_MAX) }
+          : {}),
+      },
+    });
+  }
+
+  private auditDispatch(task: Task, outcome: AuditRecord["outcome"], reason?: string): void {
+    void this.audit.append({
+      timestamp: this.now().toISOString(),
+      caller: chatSessionIdFor(task.fromBotId),
+      tool: "dispatch_task",
+      paramsDigest: createHash("sha256")
+        .update(JSON.stringify({ taskId: task.id, toBotId: task.toBotId, chainTotal: task.chainTotal }))
+        .digest("hex"),
+      resultDigest: "-",
+      outcome,
+      ...(reason !== undefined ? { reason } : {}),
+      botId: task.fromBotId,
+      sessionId: chatSessionIdFor(task.fromBotId),
+      decision: "chain",
+    });
+  }
+
+  /** T7 audit: one record per hop with the upstream bot as the actor. */
+  private auditRelayHop(task: Task, outcome: AuditRecord["outcome"], reason?: string): void {
+    void this.audit.append({
+      timestamp: this.now().toISOString(),
+      caller: chatSessionIdFor(task.fromBotId),
+      tool: "dispatch_task",
+      paramsDigest: createHash("sha256")
+        .update(JSON.stringify({ taskId: task.id, rootTaskId: task.rootTaskId, chainIndex: task.chainIndex }))
+        .digest("hex"),
+      resultDigest: "-",
+      outcome,
+      ...(reason !== undefined ? { reason } : {}),
+      botId: task.fromBotId,
+      sessionId: chatSessionIdFor(task.fromBotId),
+      decision: "chain",
+    });
+  }
+
+  /**
+   * R-13.6 revalidation for relay hops: the D16 policy for
+   * app.dispatch_task must not be deny, and when the first hop recorded
+   * authorization refs, every grant must still be unrevoked and unexpired
+   * and the approval must not have been denied/cancelled/expired. Grant use
+   * counts are NOT charged again — the single chain approval covers all
+   * pre-declared hops (R-13.1/R-13.2). A chain dispatched without recorded
+   * authorization (direct human method call) has nothing to revalidate
+   * beyond the policy — the human can always cancel.
+   */
+  private revalidateChainAuthorization(root: Task): boolean {
+    const denyPolicy = listPermissionPolicies(this.db).find(
+      (policy) => policy.capability === "app.dispatch_task",
+    );
+    if (denyPolicy?.mode === "deny") return false;
+    const authorization = this.readAuthorization(root);
+    if (authorization === undefined) return true;
+    if (authorization.approvalId !== undefined) {
+      const approval = getPermissionApproval(this.db, authorization.approvalId);
+      if (approval !== undefined && ["denied", "cancelled", "expired"].includes(approval.status)) {
+        return false;
+      }
+    }
+    if (authorization.grantIds !== undefined && authorization.grantIds.length > 0) {
+      const known = new Map(
+        listPermissionGrants(this.db, { includeInactive: true, limit: 100, generation: 0 }).map(
+          (grant) => [grant.id, grant],
+        ),
+      );
+      for (const grantId of authorization.grantIds) {
+        const grant = known.get(grantId);
+        if (grant === undefined) return false;
+        if (grant.revokedAt !== null) return false;
+        if (grant.expiresAt !== null && grant.expiresAt <= this.now().toISOString()) {
+          return false;
+        }
+      }
+    }
+    return true;
+  }
+
+  private readAuthorization(root: Task): TaskAuthorizationRef | undefined {
+    const row = this.db.raw
+      .prepare("SELECT authorization_json FROM tasks WHERE id = ?;")
+      .get(root.id) as { authorization_json: string | null } | undefined;
+    if (row === undefined || row.authorization_json === null) return undefined;
+    try {
+      const parsed = JSON.parse(row.authorization_json) as {
+        approvalId?: string;
+        grantIds?: string[];
+      };
+      if (parsed.approvalId === undefined && parsed.grantIds === undefined) return undefined;
+      return {
+        ...(parsed.approvalId !== undefined ? { approvalId: parsed.approvalId } : {}),
+        ...(parsed.grantIds !== undefined ? { grantIds: parsed.grantIds } : {}),
+      };
+    } catch {
+      return undefined;
+    }
+  }
+}

@@ -28,6 +28,7 @@ const CAPABILITY_LABEL_KEYS = {
   "exec.shell": "permissions.executeLocalCommand",
   "screen.capture": "permissions.screenAndWindowAwareness",
   "connector.invoke": "permissions.invokeConnector",
+  "app.dispatch_task": "permissions.dispatchTask",
   "mcp.call": "permissions.mcpCall",
 } as const satisfies Record<CapabilityId, MessageKey>;
 

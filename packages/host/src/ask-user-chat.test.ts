@@ -61,7 +61,7 @@ describe("ask_user desktop answer return", () => {
       tools: Array<{ name: string }>;
     };
     expect(catalog.tools.map((tool) => tool.name)).not.toContain("ask_user");
-    expect(catalog.tools).toHaveLength(8);
+    expect(catalog.tools).toHaveLength(11);
     expect(
       await (
         await request("/app-tools/call", {

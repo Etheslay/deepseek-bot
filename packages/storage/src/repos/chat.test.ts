@@ -53,6 +53,7 @@ function seedBot(db: OpenedDatabase): string {
       modelProfileId: profileId,
       workspaceId,
       toolPolicyId: policyId,
+      role: "standard",
       archivedAt: null,
     },
   });

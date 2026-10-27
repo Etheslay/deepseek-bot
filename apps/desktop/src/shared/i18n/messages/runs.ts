@@ -59,6 +59,7 @@ export const runsMessages = {
   "runs.invalidatedByGeneration": { zh: "已失效（启动代次绑定）", en: "Invalidated (launch-generation binding)" },
   "runs.invalidatedGeneration": { zh: "已失效（代次）", en: "Invalidated (generation)" },
   "runs.loadingRun": { zh: "正在加载运行…", en: "Loading run…" },
+  "runs.monitorViewAria": { zh: "运行监控视图", en: "Run monitor views" },
   "runs.name": { zh: "名称", en: "Name" },
   "runs.nodeAttemptLabel": { zh: "节点 {0}（第 {1} 次）：", en: "Node {0} (attempt {1}): " },
   "runs.nodeEdgeCount": { zh: "{0} 节点 · {1} 边", en: "{0} nodes · {1} edges" },

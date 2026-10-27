@@ -15,6 +15,7 @@ export const permissionsMessages = {
   "permissions.decisionFailed": { zh: "审批决定失败", en: "Approval decision failed" },
   "permissions.denied": { zh: "已拒绝", en: "Denied" },
   "permissions.deny": { zh: "拒绝", en: "Deny" },
+  "permissions.dispatchTask": { zh: "派发任务给其他 bot", en: "Dispatch tasks to other bots" },
   "permissions.executeLocalCommand": { zh: "执行本地命令", en: "Execute local command" },
   "permissions.grantCount": { zh: "{0} 条", en: { one: "{0} grant", other: "{0} grants" } },
   "permissions.grantRevoked": { zh: "授权已撤销", en: "Grant revoked" },

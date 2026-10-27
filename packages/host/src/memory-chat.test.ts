@@ -69,7 +69,7 @@ describe("chat memory", () => {
     expect(names).toContain("memory_search");
     expect(names).not.toContain("memory_delete");
     const catalog = (await (await request("/app-tools")).json()) as { tools: Array<{ name: string }> };
-    expect(catalog.tools).toHaveLength(8);
+    expect(catalog.tools).toHaveLength(11);
     for (const name of ["memory_write", "memory_search", "web_search", "ask_user"]) {
       expect(catalog.tools.map((tool) => tool.name)).not.toContain(name);
     }
