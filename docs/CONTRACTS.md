@@ -4,7 +4,7 @@
 
 v0.5（D19 MCP HTTP 契约片）新增连接器类型、MCP 工具发现与逐机器人精确工具授权方法，以及独立能力 `mcp.call`。该契约片不代表 MCP Host、存储迁移、桌面设置或真实服务联调已经完成。
 
-v0.6（D21 指定窗口截图与本地 OCR 契约片）新增 `screen.*` 受信桌面方法与结果元数据。当前 `protocolVersion` 为 0.6，继续接受 0.1–0.5 发送方；工作流 `schemaVersion` 仍为 0.1。本节定义可执行 schema 与后续实现要求，不代表 Windows 采集、离线 OCR、Host 或桌面已实现或验收。实现依据见 [D21 设计](superpowers/specs/2026-10-27-local-screen-sensing-design.md)。
+v0.6（D21 指定窗口截图与本地 OCR 契约片）新增 `screen.*` 受信桌面方法与结果元数据。当前 `protocolVersion` 为 0.7，继续接受 0.1–0.6 发送方；工作流 `schemaVersion` 仍为 0.1。Windows 采集、离线 OCR 与 Host 网关已在 develop；桌面设置页调用这些方法做本机预览。这不代表真实窗口、打包 Electron 或发布验收已经完成。实现依据见 [D21 设计](superpowers/specs/2026-10-27-local-screen-sensing-design.md)。
 
 ## 1. 通用规则
 
