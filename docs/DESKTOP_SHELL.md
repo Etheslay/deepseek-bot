@@ -10,11 +10,18 @@ apps/desktop/
   tsconfig.json                引用 node / web 两套工程
   electron.vite.config.ts      main / preload（CJS 输出）与 renderer 构建
   electron-builder.yml         NSIS x64 安装包 + unpacked 的 Windows 打包配置
-  src/main/index.ts            窗口、托盘、单实例、生命周期、权限拒绝
+  src/main/index.ts            窗口、单实例、生命周期、权限拒绝
+  src/main/tray.ts             托盘控制器（每 bot 图标与菜单）
+  src/main/tray-menu.ts        托盘菜单模型（纯函数，可单测）
+  src/main/notifications.ts    系统通知（去重、点击回传）
+  src/main/chrome-bookmarks.ts Chrome 书签只读导入（扫描/预览/导入/导出/清除）
+  src/main/i18n.ts             主进程语言镜像（托盘与通知跟随界面语言）
   src/main/ipc/registry.ts     IPC 白名单注册
   src/main/ipc/guards.ts       sender 校验（主窗口主 frame）
   src/preload/index.ts         contextBridge 暴露 window.deepseekBot
   src/shared/ipc-channels.ts   通道常量、白名单、IpcDeniedError
+  src/shared/i18n/             中英字典与纯函数翻译（渲染层与主进程共用）
+  src/shared/system-integration.ts 托盘/通知/Chrome 跨边界 payload 与校验
   src/renderer/                React 导航壳（Bots/Workflows/Runs/Settings 占位页）
   tests/ipc-registry.test.ts   白名单与 sender 校验单元测试
   assets/tray.png              托盘图标（自有素材）
@@ -59,27 +66,62 @@ pnpm --filter @deepseek-bot/desktop pack:win   # 构建 + electron-builder NSIS 
 
 | 通道 | 语义 |
 | --- | --- |
-| `app:getInfo` | 应用名、版本、平台 |
+| `app:getInfo` | 应用名、版本、平台、桌面 locale（`system` 语言判定用） |
 | `window:show` | 显示并聚焦主窗口 |
 | `window:hide` | 隐藏到托盘 |
 | `window:minimize` | 最小化 |
 | `window:toggleMaximize` | 最大化/还原切换 |
 | `window:close` | 关闭窗口（路由到 close 逻辑：默认隐藏到托盘） |
+| `window:set-titlebar-overlay` | 主题切换时重涂原生窗口控制条（两枚 `#rrggbb`） |
+| `settings:saveKey` | safeStorage 加密保存 API Key，仅回传 `cred:` 引用 |
+| `host:call` | 渲染层 → Host 契约调用（方法白名单在主进程与 Host 双重校验） |
+| `updates:check` / `updates:downloadInstall` | D24 应用内更新（GitHub Releases 源） |
+| `i18n:setLanguage` | D22：把 `system\|zh\|en` 偏好镜像给主进程（托盘、通知跟随） |
+| `tray:sync` | D22：渲染层推送托盘状态（Bot 列表、活跃 Bot、未读、状态、32px PNG 头像） |
+| `notification:show` | D22：请求弹一条系统通知，回报 `{shown, reason}` |
+| `chrome:scan` / `chrome:preview` / `chrome:import` / `chrome:state` / `chrome:clear` / `chrome:export` | D22：Chrome 书签只读扫描、预览、导入到本机数据根、查看、删除、导出 Markdown |
 
-preload 暴露面：`deepseekBot.getAppInfo()` 与 `deepseekBot.window.{show,hide,minimize,toggleMaximize,close}`。不暴露 `ipcRenderer`、`require`、`process`、`fs` 或任意 channel。
+主进程 → 渲染层事件通道（只推送，不被 invoke 调用）：`host:event:missed`（FR-08 错过时刻）、`system:event:tray-action`（托盘点击某 Bot 或"打开设置"）、`system:event:notification-click`（通知点击，带 botId）、`system:event:window-focus`（原生焦点变化，通知门控用）。
+
+所有跨边界 payload 在 `src/shared/system-integration.ts` 严格校验后才会被主进程使用：条目上限（托盘 50）、名字长度、状态枚举、图标必须是 `data:image/png;base64,` 且 ≤64 KiB、Chrome profile token 拒绝分隔符与 `..`。
+
+preload 暴露面：`deepseekBot.{getAppInfo, window.*, settings.saveKey, updates.*, host.{call,onMissed}, i18n.setLanguage, system.{tray.sync, notifications.show, chrome.*, onTrayAction, onNotificationClick, onWindowFocus}}`。不暴露 `ipcRenderer`、`require`、`process`、`fs` 或任意 channel。
+
+## 界面语言（D22）
+
+- 字典在 `src/shared/i18n/messages/`：按 domain 分文件，`{ key: { zh, en } }`，英文可为 `{one, other}` 双形式（按首个数值参数选形）；`{0}` 位置参数。key 是封闭联合类型，`t("…")` 写错编译期即报错。
+- 渲染层 `src/renderer/src/i18n.ts` 是模块级 store（`useSyncExternalStore`），任意模块可直接 `t()`；App 根订阅，切换语言整树重渲染。日期/时间/星期一律走 `Intl`。
+- 主进程 `src/main/i18n.ts` 持有同一份字典的语言镜像，初始跟随 `app.getLocale()`，渲染层启动与切换时通过 `i18n:setLanguage` 同步；语言变化时托盘菜单原地重建。
+- 偏好存 `deepseek-bot.settings.v2` 的 `language`（`system|zh|en`），首帧前决定，不闪语言。
+- **不翻译**：发给模型的提示文本与作为数据/比较值的字面量（能力 id、语气指令、分组身份），源码内以 `// i18n-ignore` 标注理由；`tests/i18n-scan.test.ts` 会拒绝任何未标注的新增中文界面文案。
 
 ## 窗口与托盘行为
 
 - 单实例锁：第二次启动直接退出，已有窗口恢复/聚焦。
-- 托盘菜单：Show / Hide / Quit；双击托盘图标显示窗口。
+- 托盘：**单图标随活跃 Bot 切换**（图标由渲染层把该 Bot 的 Grok Ball 栅格化为 32px PNG 后推送，无推送时回落 `assets/tray.png`）；菜单为「N 个 Bot」标题 + 逐 Bot 一项（各自头像图标、`名字 · 状态`、未读追加 `N 条未读`），排序为活跃 → 等待审批 → 运行中 → 未读 → 其余；随后 显示窗口 / 隐藏窗口 / 打开设置 / 退出。
+- 点击 Bot 项：显示并聚焦主窗口，并通知渲染层切到该会话（同时清该 Bot 未读）。双击托盘图标显示窗口。
+- 菜单与 tooltip 文案跟随界面语言（D22）。
 - 关闭窗口默认隐藏到托盘，只有托盘 Quit 才真正退出。
 - 退出时注销 IPC handler 并销毁托盘。
+
+## 系统通知（D22）
+
+- 策略在渲染层（`features/system/notify.ts`）：总开关、**仅窗口不在前台时提醒**（默认开）、按 Bot 静音、同类通知 5 秒节流；主进程（`main/notifications.ts`）再对相同标题+正文做 4 秒去重，并在系统无通知通道时如实回报 `unsupported`。
+- 触发点：Bot 回复完成、出现待审批请求、调度错过（FR-08）。通知正文只含 Bot 名与事件类型，不含消息内容与路径。
+- 点击通知：显示并聚焦主窗口，并把对应 `botId` 回传渲染层定位会话。
+- 设置 → 通知：三个开关 + 「按 Bot 静音」列表 + 发送测试通知（结果标签如实显示已发送 / 被拦截 / 系统不支持）。
+
+## Chrome 书签导入（D22）
+
+- 只读 `<Chrome User Data>/<Profile>/Bookmarks`（配合 `Local State` 取配置显示名），**不读 Cookie、密码、支付信息与浏览历史**；只保留 `http(s)` 链接、按 URL 去重、上限 5000 条、单文件 >8 MiB 拒绝。
+- 流程：扫描 → 选择配置 → 预览条数与样例 → 导入到 `<数据根>/imports/chrome/bookmarks.json` → 可查看 / 导出 `bookmarks.md` / 一键删除。profile token 只接受 `Default`、`Profile N` 形态的简单目录名，解析后仍校验落在 User Data 内。
+- 无桌面壳（浏览器预览）时该分区显示"需要桌面壳"，不做假成功。隐私边界见 [本地数据与权限](SECURITY_DATA.md) §5。
 
 ## 界面（当前为占位）
 
 - 侧边栏没有固定页面：只包含用户自建的分组与 Bot（初始一个「未分组」，右键组名可删除——组内有 Bot 时需先移出），以及右上 ＋ 创建 Bot、左下角账户按钮进设置。点击窗口 × 即隐藏到托盘。
 - 主界面即选中 Bot 的会话：问候语为首条消息，消息流 + 贴底输入条（左 ＋ 菜单 / 右麦克风占位与发送钮）；无选中时显示创建引导空状态。头部胶囊显示当前 Bot 名。
-- 设置弹窗：点击左下角账户按钮进入。分类「通用」可用（电脑 / 保险库 / 用量与账单 / 更新为占位禁用）；实现账户改名字、退出登录（占位）、主题深色/浅色切换；其余项标「后续提供」。
+- 设置弹窗：点击左下角账户按钮进入。分类「通用」可用（电脑 / 保险库 / 用量与账单 / 更新为占位禁用）；实现账户改名字、退出登录（占位）、主题深色/浅色切换、强调色、**界面语言（D22）**、**通知设置（D22）**、**Chrome 数据导入（D22）**、本地用量与检查更新（D24）；其余项标「后续提供」。
 - 会话内占位交互（全部仅存内存，重启即清空，不涉及后端）：
   - 创建 Bot 弹窗：名称、形状、颜色；新 Bot 默认归入「未分组」。
   - Bot 分组：创建分组（Bot 右键 → 移至 → 创建分组）、移至分组、**拖拽换组**（头像拖拽影像 + 目标分组虚线高亮 + 空组放置提示）、**分组折叠/展开**（点组名收起，箭头指示）。
@@ -97,7 +139,7 @@ preload 暴露面：`deepseekBot.getAppInfo()` 与 `deepseekBot.window.{show,hid
 
 ## 已知限制
 
-- 界面与设置状态不持久化；Bot/分组/账户名/主题等在应用重启后恢复默认。
+- 界面与设置状态不持久化；Bot/分组/账户名/主题等在应用重启后恢复默认。（D24 起主题/账户名/强调色、D22 起语言与通知偏好已持久化；Bot/分组等界面状态仍为会话内存。）
 - 「退出登录」「复制对话 ID」为占位（未接入账号系统）；真实账号体系见待办。
 - 不接 Harness、不调用 DeepSeek API、无数据库；真实机器人 CRUD、会话、工作流、运行属于 D03–D09。
 - CI 不构建 GUI；桌面打包证据来自本地运行（见 D02 报告）。

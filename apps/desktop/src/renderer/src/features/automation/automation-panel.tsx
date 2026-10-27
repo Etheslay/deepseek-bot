@@ -6,6 +6,7 @@
  */
 import { useCallback, useEffect, useState, type JSX } from "react";
 import { METHOD_CONTRACTS } from "@deepseek-bot/contracts";
+import { type MessageKey, type Notice, noticeText, t, useLanguage } from "../../i18n.js";
 
 type TriggerRule = {
   id: string;
@@ -28,15 +29,20 @@ type Firing = {
   at: string;
 };
 
-const EVENT_LABEL: Record<TriggerRule["eventType"], string> = {
-  "run.failed": "运行失败时",
-  "run.completed": "运行完成时",
+const EVENT_LABEL_KEYS: Record<TriggerRule["eventType"], MessageKey> = {
+  "run.failed": "automation.eventRunFailed",
+  "run.completed": "automation.eventRunCompleted",
 };
+
+/** Event labels live in a module table, so they are read through a function. */
+export function eventLabel(eventType: TriggerRule["eventType"]): string {
+  return t(EVENT_LABEL_KEYS[eventType]);
+}
 
 export function AutomationPanel(): JSX.Element {
   return (
     <>
-      <div className="settings-section-title">事件自动化（规则与评审队列）</div>
+      <div className="settings-section-title">{t("automation.automationSectionTitle")}</div>
       <div className="settings-card">
         <TriggerRules />
         <ReviewQueue />
@@ -51,7 +57,8 @@ function TriggerRules(): JSX.Element {
   const [name, setName] = useState("");
   const [workflowId, setWorkflowId] = useState("");
   const [eventType, setEventType] = useState<TriggerRule["eventType"]>("run.failed");
-  const [notice, setNotice] = useState<string | null>(null);
+  useLanguage();
+  const [notice, setNotice] = useState<Notice | null>(null);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async (): Promise<void> => {
@@ -63,13 +70,13 @@ function TriggerRules(): JSX.Element {
     const parsedWorkflows = METHOD_CONTRACTS["workflow.list"].response.parse(workflowResponse);
     setRules(parsedRules.rules);
     setWorkflows(parsedWorkflows.workflows);
-    setNotice((current) => (current === "规则读取失败" ? null : current));
+    setNotice((current) => (current?.key === "automation.ruleLoadFailed" ? null : current));
   }, []);
 
   useEffect(() => {
     let active = true;
     void load().catch(() => {
-      if (active) setNotice("规则读取失败");
+      if (active) setNotice({ key: "automation.ruleLoadFailed" });
     });
     return () => {
       active = false;
@@ -85,10 +92,10 @@ function TriggerRules(): JSX.Element {
         rule: { name: trimmed, workflowId, eventType },
       });
       setName("");
-      setNotice("已保存规则（默认关闭）");
+      setNotice({ key: "automation.ruleSaved" });
       await load();
     } catch {
-      setNotice("规则保存失败");
+      setNotice({ key: "automation.ruleSaveFailed" });
     } finally {
       setBusy(false);
     }
@@ -101,10 +108,10 @@ function TriggerRules(): JSX.Element {
       await window.deepseekBot.host.call(rule.enabled ? "trigger.disable" : "trigger.enable", {
         id: rule.id,
       });
-      setNotice(rule.enabled ? "已停用规则" : "已启用规则");
+      setNotice(rule.enabled ? { key: "automation.ruleDisabled" } : { key: "automation.ruleEnabled" });
       await load();
     } catch {
-      setNotice("规则更新失败");
+      setNotice({ key: "automation.ruleUpdateFailed" });
     } finally {
       setBusy(false);
     }
@@ -115,10 +122,10 @@ function TriggerRules(): JSX.Element {
     setBusy(true);
     try {
       await window.deepseekBot.host.call("trigger.delete", { id: ruleId });
-      setNotice("已删除规则");
+      setNotice({ key: "automation.ruleDeleted" });
       await load();
     } catch {
-      setNotice("规则删除失败");
+      setNotice({ key: "automation.ruleDeleteFailed" });
     } finally {
       setBusy(false);
     }
@@ -128,17 +135,17 @@ function TriggerRules(): JSX.Element {
     <div>
       <div>
         <input
-          aria-label="规则名称"
+          aria-label={t("automation.ruleNameField")}
           value={name}
-          placeholder="例如：失败即修复"
+          placeholder={t("automation.ruleNamePlaceholder")}
           onChange={(event) => setName(event.target.value)}
         />
         <select
-          aria-label="目标工作流"
+          aria-label={t("automation.targetWorkflowField")}
           value={workflowId}
           onChange={(event) => setWorkflowId(event.target.value)}
         >
-          <option value="">选择要启动的工作流…</option>
+          <option value="">{t("automation.selectWorkflowOption")}</option>
           {workflows.map((workflow) => (
             <option key={workflow.id} value={workflow.id}>
               {workflow.name}
@@ -146,29 +153,29 @@ function TriggerRules(): JSX.Element {
           ))}
         </select>
         <select
-          aria-label="触发事件"
+          aria-label={t("automation.triggerEventField")}
           value={eventType}
           onChange={(event) => setEventType(event.target.value as TriggerRule["eventType"])}
         >
-          <option value="run.failed">运行失败时</option>
-          <option value="run.completed">运行完成时</option>
+          <option value="run.failed">{eventLabel("run.failed")}</option>
+          <option value="run.completed">{eventLabel("run.completed")}</option>
         </select>
         <button type="button" disabled={busy} onClick={() => void save()}>
-          保存规则
+          {t("automation.saveRule")}
         </button>
       </div>
-      {notice !== null ? <div role="status">{notice}</div> : null}
+      {notice !== null ? <div role="status">{noticeText(notice)}</div> : null}
       {(rules ?? []).map((rule) => (
         <div key={rule.id}>
           <span>
-            {rule.name}（{EVENT_LABEL[rule.eventType]}）
+            {t("automation.ruleEventSummary", [rule.name, eventLabel(rule.eventType)])}
           </span>
-          <span>{rule.enabled ? "已启用" : "已关闭"}</span>
+          <span>{rule.enabled ? t("automation.statusEnabled") : t("automation.statusDisabled")}</span>
           <button type="button" disabled={busy} onClick={() => void toggle(rule)}>
-            {rule.enabled ? "停用" : "启用"}
+            {rule.enabled ? t("automation.disable") : t("automation.enable")}
           </button>
           <button type="button" disabled={busy} onClick={() => void remove(rule.id)}>
-            删除
+            {t("shell.delete")}
           </button>
         </div>
       ))}
@@ -178,7 +185,8 @@ function TriggerRules(): JSX.Element {
 
 function ReviewQueue(): JSX.Element {
   const [firings, setFirings] = useState<Firing[] | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  useLanguage();
+  const [notice, setNotice] = useState<Notice | null>(null);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async (): Promise<void> => {
@@ -187,13 +195,13 @@ function ReviewQueue(): JSX.Element {
     });
     const parsed = METHOD_CONTRACTS["trigger.firing.list"].response.parse(response);
     setFirings(parsed.firings);
-    setNotice((current) => (current === "评审队列读取失败" ? null : current));
+    setNotice((current) => (current?.key === "automation.reviewQueueLoadFailed" ? null : current));
   }, []);
 
   useEffect(() => {
     let active = true;
     void load().catch(() => {
-      if (active) setNotice("评审队列读取失败");
+      if (active) setNotice({ key: "automation.reviewQueueLoadFailed" });
     });
     return () => {
       active = false;
@@ -205,10 +213,10 @@ function ReviewQueue(): JSX.Element {
     setBusy(true);
     try {
       await window.deepseekBot.host.call("trigger.firing.decide", { firingId, decision });
-      setNotice(decision === "start" ? "已批准并启动工作流" : "已忽略该触发");
+      setNotice(decision === "start" ? { key: "automation.workflowApprovedStarted" } : { key: "automation.triggerDismissed" });
       await load();
     } catch {
-      setNotice("评审操作失败");
+      setNotice({ key: "automation.reviewActionFailed" });
     } finally {
       setBusy(false);
     }
@@ -216,23 +224,26 @@ function ReviewQueue(): JSX.Element {
 
   return (
     <div>
-      <div>评审队列（触发不会自动运行，由你逐条决定）</div>
-      {notice !== null ? <div role="status">{notice}</div> : null}
+      <div>{t("automation.reviewQueueTitle")}</div>
+      {notice !== null ? <div role="status">{noticeText(notice)}</div> : null}
       {(firings ?? []).map((firing) => (
         <div key={firing.id}>
           <span>
-            {firing.ruleName}（{EVENT_LABEL[firing.eventType]}
-            {firing.reason === "missed" ? "，错过补记" : ""}）
+            {t("automation.firingEventSummary", [
+              firing.ruleName,
+              eventLabel(firing.eventType),
+              firing.reason === "missed" ? t("automation.missedCatchUp") : "",
+            ])}
           </span>
           <button type="button" disabled={busy} onClick={() => void decide(firing.id, "start")}>
-            启动
+            {t("automation.start")}
           </button>
           <button type="button" disabled={busy} onClick={() => void decide(firing.id, "dismiss")}>
-            忽略
+            {t("automation.dismiss")}
           </button>
         </div>
       ))}
-      {firings !== null && firings.length === 0 ? <div role="status">队列是空的</div> : null}
+      {firings !== null && firings.length === 0 ? <div role="status">{t("automation.queueEmpty")}</div> : null}
     </div>
   );
 }

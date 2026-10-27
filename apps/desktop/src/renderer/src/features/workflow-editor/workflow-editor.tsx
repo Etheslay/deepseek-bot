@@ -11,13 +11,14 @@ import { EdgeKeyDialog, WorkflowCanvas } from "./canvas/workflow-canvas.js";
 import { InspectorPanel } from "./inspector/node-inspector.js";
 import { ValidationPanel } from "./validation/validation-panel.js";
 import { ExportDialog, ImportDialog } from "./template/template-io.js";
+import { t } from "../../i18n.js";
 
 export function WorkflowEditor(props: { onClose: () => void }): JSX.Element {
   const editor = useWorkflowEditor();
   const { state, dispatch } = editor;
   const canSave = editor.issues.length === 0 && !editor.busy;
   const saveTitle =
-    editor.issues.length > 0 ? `存在 ${editor.issues.length} 个校验错误，修复后可保存` : undefined;
+    editor.issues.length > 0 ? t("workflow.validationBlockSave", [editor.issues.length]) : undefined;
 
   const onUpdateNode = useCallback(
     (nodeId: string, patch: WorkflowNodePatch) => {
@@ -47,25 +48,25 @@ export function WorkflowEditor(props: { onClose: () => void }): JSX.Element {
     <div className="wf-editor">
       <header className="wf-toolbar">
         <button type="button" className="ghost-btn" onClick={props.onClose}>
-          ← 返回对话
+          {t("workflow.backToChat")}
         </button>
         <span className="wf-toolbar-divider" aria-hidden="true" />
         <span className="wf-catalog">
           <CustomSelect
             value={state.loadedFrom?.id ?? ""}
             options={[
-              { value: "", label: state.loadedFrom ? state.draft.name : "未保存草稿" },
+              { value: "", label: state.loadedFrom ? state.draft.name : t("workflow.unsavedDraft") },
               ...editor.catalog
                 .filter((entry) => entry.id !== state.loadedFrom?.id)
                 .map((entry) => ({ value: entry.id, label: entry.name })),
             ]}
             onChange={editor.selectWorkflow}
-            ariaLabel="选择工作流"
+            ariaLabel={t("workflow.selectWorkflow")}
           />
         </span>
         <span className="wf-toolbar-actions">
           <button type="button" className="ghost-btn" onClick={editor.newWorkflow}>
-            新建
+            {t("workflow.newWorkflow")}
           </button>
           <button
             type="button"
@@ -74,16 +75,16 @@ export function WorkflowEditor(props: { onClose: () => void }): JSX.Element {
             title={saveTitle}
             onClick={editor.save}
           >
-            保存{editor.issues.length > 0 ? `（${editor.issues.length} 个错误）` : ""}
+            {t("shell.save")}{editor.issues.length > 0 ? t("workflow.errorCountSuffix", [editor.issues.length]) : ""}
           </button>
           <button type="button" className="ghost-btn" onClick={editor.copyWorkflow}>
-            复制
+            {t("shell.copy")}
           </button>
           <button type="button" className="ghost-btn" onClick={editor.openImport}>
-            导入
+            {t("skills.import")}
           </button>
           <button type="button" className="ghost-btn" onClick={editor.openExport}>
-            导出
+            {t("skills.export")}
           </button>
         </span>
       </header>
@@ -91,22 +92,22 @@ export function WorkflowEditor(props: { onClose: () => void }): JSX.Element {
       {editor.conflict && (
         <div className="wf-conflict" role="alert">
           <span>
-            保存被拒绝：工作流已被其他窗口修改（REVISION_CONFLICT）。刷新后基于最新版本重试；不会覆盖他人修改。
+            {t("workflow.revisionConflictBanner")}
           </span>
           <span className="wf-conflict-actions">
             <button type="button" className="primary-btn" onClick={editor.refreshAfterConflict}>
-              刷新并重试
+              {t("workflow.refreshAndRetry")}
             </button>
             <button type="button" className="ghost-btn" onClick={editor.dismissConflict}>
-              稍后
+              {t("workflow.later")}
             </button>
           </span>
         </div>
       )}
 
       <div className="wf-body">
-        <aside className="wf-palette" aria-label="节点面板">
-          <div className="wf-palette-title">节点</div>
+        <aside className="wf-palette" aria-label={t("workflow.nodePalette")}>
+          <div className="wf-palette-title">{t("workflow.node")}</div>
           <button
             type="button"
             className="wf-palette-item"
@@ -118,7 +119,7 @@ export function WorkflowEditor(props: { onClose: () => void }): JSX.Element {
             onClick={() => editor.addNode("bot")}
           >
             <span className="wf-palette-badge bot">Bot</span>
-            <span>机器人节点</span>
+            <span>{t("workflow.botNode")}</span>
           </button>
           <button
             type="button"
@@ -130,10 +131,10 @@ export function WorkflowEditor(props: { onClose: () => void }): JSX.Element {
             }}
             onClick={() => editor.addNode("approval")}
           >
-            <span className="wf-palette-badge approval">审批</span>
-            <span>人工审批节点</span>
+            <span className="wf-palette-badge approval">{t("runs.approval")}</span>
+            <span>{t("workflow.manualApprovalNode")}</span>
           </button>
-          <p className="wf-palette-hint">点击添加，或拖入画布。画布内：拖动移动节点；输出端口拖到输入端口连线；选中后 Delete 删除；聚焦节点按 C 键盘连线。</p>
+          <p className="wf-palette-hint">{t("workflow.paletteHint")}</p>
         </aside>
 
         <WorkflowCanvas
@@ -149,7 +150,7 @@ export function WorkflowEditor(props: { onClose: () => void }): JSX.Element {
           registerNodeEl={registerNodeEl}
         />
 
-        <aside className="wf-inspector-wrap" aria-label="参数检查器">
+        <aside className="wf-inspector-wrap" aria-label={t("workflow.parameterInspector")}>
           <InspectorPanel
             state={state}
             bots={editor.bots}

@@ -54,6 +54,7 @@ export function buildAttachmentContext(draft: AttachmentDraft): string {
   const body = (draft.text ?? "")
     .slice(0, MAX_TEXT_CONTEXT_CHARS)
     .replaceAll("```", "``\u200b`");
+  // i18n-ignore: model-facing attachment block, not interface copy
   return `【附件 ${draft.name} · ${formatAttachmentSize(draft.size)}】\n\`\`\`\n${body}\n\`\`\``;
 }
 
