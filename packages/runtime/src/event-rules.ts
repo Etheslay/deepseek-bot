@@ -1,12 +1,14 @@
 /**
  * Local event-rule evaluation (D20 slice).
  *
- * Scans the persisted event log from each rule's cursor and, for one
- * matching local event, starts one run through WorkflowEngine.startRun.
- * The scheduler is not involved. A second sighting of the same event
- * records `duplicate` and does not start another run. A disabled rule
- * records `skipped` and does not start a run. Events that already
- * happened before the rule was saved stay behind the cursor.
+ * Scans the persisted event log from each rule's cursor. An enabled rule
+ * starts one run through WorkflowEngine.startRun, unless the rule was set
+ * to review: then one pending item is stored and no run starts until
+ * approve. Deny records a skip and starts nothing. The scheduler is not
+ * involved. A second sighting of the same event records `duplicate` and
+ * does not enqueue or start again. A disabled rule records `skipped` and
+ * does not enter the queue. Events that already happened before the rule
+ * was saved stay behind the cursor.
  *
  * Runs are started with a manual trigger whose idempotency key is derived
  * from (rule, event), so a crash between start and the ledger write still
@@ -16,10 +18,18 @@ import { createHash } from "node:crypto";
 import type { WorkflowEngine } from "./engine.js";
 import {
   appendEventRuleRecord,
+  decideEventRuleReview,
+  enqueueEventRuleReview,
   findEventRulePrimary,
+  findEventRuleReview,
+  getEventRule,
+  getEventRuleReview,
+  invalidInput,
   listEventRules,
   setEventRuleCursor,
   wasRunStartedByEventRule,
+  type EventRule,
+  type EventRuleReview,
   type OpenedDatabase,
 } from "@deepseek-bot/storage";
 
@@ -28,6 +38,8 @@ export interface EventRuleEvaluation {
   readonly started: number;
   readonly duplicates: number;
   readonly skipped: number;
+  /** New pending review items created by this pass. */
+  readonly pending: number;
 }
 
 interface EventRow {
@@ -109,6 +121,7 @@ export function evaluateEventRules(
   let started = 0;
   let duplicates = 0;
   let skipped = 0;
+  let pending = 0;
   const maxRow = (
     db.raw.prepare("SELECT COALESCE(MAX(rowid), 0) AS m FROM events;").get() as { m: number }
   ).m;
@@ -135,6 +148,18 @@ export function evaluateEventRules(
         duplicates += 1;
         continue;
       }
+      const review = findEventRuleReview(db, rule.id, event.event_id);
+      if (review !== undefined) {
+        appendEventRuleRecord(db, {
+          ruleId: rule.id,
+          eventId: event.event_id,
+          outcome: "duplicate",
+          runId: review.runId,
+          reason: "duplicate event",
+        });
+        duplicates += 1;
+        continue;
+      }
       if (!rule.enabled) {
         appendEventRuleRecord(db, {
           ruleId: rule.id,
@@ -155,6 +180,11 @@ export function evaluateEventRules(
           reason: "source run was started by an event rule",
         });
         skipped += 1;
+        continue;
+      }
+      if (rule.review) {
+        enqueueEventRuleReview(db, { ruleId: rule.id, eventId: event.event_id });
+        pending += 1;
         continue;
       }
       const idempotencyKey = eventRuleIdempotencyKey(rule.id, event.event_id);
@@ -208,5 +238,79 @@ export function evaluateEventRules(
     }
     setEventRuleCursor(db, rule.id, maxRow);
   }
-  return { scanned, started, duplicates, skipped };
+  return { scanned, started, duplicates, skipped, pending };
+}
+
+function requirePendingReview(
+  db: OpenedDatabase,
+  input: { botId: string; reviewId: string },
+): { review: EventRuleReview; rule: EventRule } {
+  const review = getEventRuleReview(db, input.reviewId);
+  const rule = review === undefined ? undefined : getEventRule(db, review.ruleId);
+  if (review === undefined || rule === undefined || rule.botId !== input.botId) {
+    throw invalidInput("event rule review was not found", { id: input.reviewId });
+  }
+  if (review.status !== "pending") {
+    throw invalidInput("event rule review is not pending", { id: input.reviewId });
+  }
+  return { review, rule };
+}
+
+/**
+ * Start the one run for a pending item. A second call finds the item is no
+ * longer pending and starts nothing.
+ */
+export function approveEventRuleReview(
+  db: OpenedDatabase,
+  engine: WorkflowEngine,
+  input: { botId: string; reviewId: string },
+): EventRuleReview & { readonly status: "approved"; readonly runId: string; readonly decidedAt: string } {
+  const { review, rule } = requirePendingReview(db, input);
+  const idempotencyKey = eventRuleIdempotencyKey(rule.id, review.eventId);
+  let runId: string;
+  try {
+    const { run } = engine.startRun({
+      workflowId: rule.workflowId,
+      trigger: { kind: "manual", idempotencyKey },
+    });
+    runId = run.id;
+  } catch (error) {
+    const existingId = findRunIdByIdempotency(db, idempotencyKey);
+    if (existingId === undefined) {
+      throw error;
+    }
+    runId = existingId;
+  }
+  const primary = findEventRulePrimary(db, rule.id, review.eventId);
+  if (primary === undefined) {
+    appendEventRuleRecord(db, {
+      ruleId: rule.id,
+      eventId: review.eventId,
+      outcome: "started",
+      runId,
+      reason: "review approved",
+    });
+  }
+  const decided = decideEventRuleReview(db, { id: review.id, status: "approved", runId });
+  return { ...decided, status: "approved", runId, decidedAt: decided.decidedAt };
+}
+
+/** Record a skip and start nothing. A second call does not write another skip. */
+export function denyEventRuleReview(
+  db: OpenedDatabase,
+  input: { botId: string; reviewId: string },
+): EventRuleReview & { readonly status: "denied"; readonly runId: null; readonly decidedAt: string } {
+  const { review, rule } = requirePendingReview(db, input);
+  const primary = findEventRulePrimary(db, rule.id, review.eventId);
+  if (primary === undefined) {
+    appendEventRuleRecord(db, {
+      ruleId: rule.id,
+      eventId: review.eventId,
+      outcome: "skipped",
+      runId: null,
+      reason: "review denied",
+    });
+  }
+  const decided = decideEventRuleReview(db, { id: review.id, status: "denied", runId: null });
+  return { ...decided, status: "denied", runId: null, decidedAt: decided.decidedAt };
 }

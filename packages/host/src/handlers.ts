@@ -24,7 +24,13 @@ import {
   type MethodResponse,
   type WorkflowDraft,
 } from "@deepseek-bot/contracts";
-import { EngineError, type LocalScheduler, type WorkflowEngine } from "@deepseek-bot/runtime";
+import {
+  approveEventRuleReview,
+  denyEventRuleReview,
+  EngineError,
+  type LocalScheduler,
+  type WorkflowEngine,
+} from "@deepseek-bot/runtime";
 import {
   archiveBot,
   archiveBotUnchecked,
@@ -73,8 +79,10 @@ import {
   getEventRule,
   listEventRules,
   listEventRuleRecords,
+  listPendingEventRuleReviews,
   saveEventRule,
   setEventRuleEnabled,
+  setEventRuleReview,
   listConnectors,
   registerConnector,
   setConnectorEnabled,
@@ -227,6 +235,7 @@ function toEventRuleResponse(row: {
   workflowId: string;
   eventType: "run.failed" | "run.completed";
   enabled: boolean;
+  review: boolean;
   createdAt: string;
   updatedAt: string;
 }): {
@@ -236,6 +245,7 @@ function toEventRuleResponse(row: {
   workflowId: string;
   eventType: "run.failed" | "run.completed";
   enabled: boolean;
+  review: boolean;
   at: string;
   updatedAt: string;
 } {
@@ -246,6 +256,7 @@ function toEventRuleResponse(row: {
     workflowId: row.workflowId,
     eventType: row.eventType,
     enabled: row.enabled,
+    review: row.review,
     at: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -990,8 +1001,9 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
       };
     },
 
-    // Local event rules for one bot. The timer calls evaluateEventRules;
-    // these methods only save, list, and switch the rule. Default is off.
+    // Local event rules for one bot. The timer calls evaluateEventRules.
+    // These methods save, list, switch, and decide a local review. Default
+    // is off, and review is off until eventRule.review. No network.
     "eventRule.list": (payload) => {
       requireLiveBot(db, payload.botId);
       return { rules: listEventRules(db, payload.botId).map(toEventRuleResponse) };
@@ -1048,6 +1060,63 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
           reason: record.reason,
           at: record.createdAt,
         })),
+      };
+    },
+
+    "eventRule.review": (payload) => ({
+      ...toEventRuleResponse(setEventRuleReview(db, { id: payload.id, botId: payload.botId })),
+      review: true as const,
+    }),
+
+    "eventRule.review.list": (payload) => {
+      requireLiveBot(db, payload.botId);
+      if (payload.ruleId !== undefined) {
+        const rule = getEventRule(db, payload.ruleId);
+        if (rule === undefined || rule.botId !== payload.botId) {
+          throw invalid("event rule was not found", { id: payload.ruleId });
+        }
+      }
+      return {
+        items: listPendingEventRuleReviews(db, {
+          botId: payload.botId,
+          ...(payload.ruleId !== undefined ? { ruleId: payload.ruleId } : {}),
+          limit: payload.limit,
+        }).map((item) => ({
+          id: item.id,
+          ruleId: item.ruleId,
+          eventId: item.eventId,
+          status: "pending" as const,
+          at: item.createdAt,
+        })),
+      };
+    },
+
+    "eventRule.review.approve": (payload) => {
+      const review = approveEventRuleReview(db, engine, {
+        botId: payload.botId,
+        reviewId: payload.id,
+      });
+      return {
+        id: review.id,
+        ruleId: review.ruleId,
+        eventId: review.eventId,
+        status: "approved" as const,
+        runId: review.runId,
+        at: review.createdAt,
+        decidedAt: review.decidedAt,
+      };
+    },
+
+    "eventRule.review.deny": (payload) => {
+      const review = denyEventRuleReview(db, { botId: payload.botId, reviewId: payload.id });
+      return {
+        id: review.id,
+        ruleId: review.ruleId,
+        eventId: review.eventId,
+        status: "denied" as const,
+        runId: null,
+        at: review.createdAt,
+        decidedAt: review.decidedAt,
       };
     },
 

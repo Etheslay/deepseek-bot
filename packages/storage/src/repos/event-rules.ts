@@ -6,7 +6,10 @@
  * starts at the current end of the event log so older rows are not replayed.
  * The evaluator (runtime) writes one primary record per (rule, event):
  * `started` or `skipped`. A later sighting of that same event is a
- * `duplicate` record and does not start another run.
+ * `duplicate` record and does not start another run. A rule with review
+ * set holds one pending item per event instead of starting; approve and
+ * deny write the primary record. A disabled rule still records a skip and
+ * does not enter the queue.
  */
 import { randomUUID } from "node:crypto";
 import type { OpenedDatabase } from "../database.js";
@@ -29,6 +32,8 @@ export interface EventRule {
   readonly workflowId: string;
   readonly eventType: EventRuleEventType;
   readonly enabled: boolean;
+  /** When true, a match is queued for a local decision instead of started. */
+  readonly review: boolean;
   /** Last scanned `events.rowid`. Rows at or below this are not replayed. */
   readonly cursorEventRowId: number;
   readonly createdAt: string;
@@ -45,6 +50,19 @@ export interface EventRuleRecord {
   readonly createdAt: string;
 }
 
+export const EVENT_RULE_REVIEW_STATUSES = ["pending", "approved", "denied"] as const;
+export type EventRuleReviewStatus = (typeof EVENT_RULE_REVIEW_STATUSES)[number];
+
+export interface EventRuleReview {
+  readonly id: string;
+  readonly ruleId: string;
+  readonly eventId: string;
+  readonly status: EventRuleReviewStatus;
+  readonly runId: string | null;
+  readonly createdAt: string;
+  readonly decidedAt: string | null;
+}
+
 type RuleSqlRow = {
   id: string;
   bot_id: string;
@@ -52,6 +70,7 @@ type RuleSqlRow = {
   workflow_id: string;
   event_type: string;
   enabled: number;
+  review: number;
   cursor_event_rowid: number;
   created_at: string;
   updated_at: string;
@@ -67,6 +86,16 @@ type RecordSqlRow = {
   created_at: string;
 };
 
+type ReviewSqlRow = {
+  id: string;
+  rule_id: string;
+  event_id: string;
+  status: string;
+  run_id: string | null;
+  created_at: string;
+  decided_at: string | null;
+};
+
 function mapRule(row: RuleSqlRow): EventRule {
   return {
     id: row.id,
@@ -75,6 +104,7 @@ function mapRule(row: RuleSqlRow): EventRule {
     workflowId: row.workflow_id,
     eventType: row.event_type as EventRuleEventType,
     enabled: row.enabled === 1,
+    review: row.review === 1,
     cursorEventRowId: row.cursor_event_rowid,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -90,6 +120,18 @@ function mapRecord(row: RecordSqlRow): EventRuleRecord {
     runId: row.run_id,
     reason: row.reason,
     createdAt: row.created_at,
+  };
+}
+
+function mapReview(row: ReviewSqlRow): EventRuleReview {
+  return {
+    id: row.id,
+    ruleId: row.rule_id,
+    eventId: row.event_id,
+    status: row.status as EventRuleReviewStatus,
+    runId: row.run_id,
+    createdAt: row.created_at,
+    decidedAt: row.decided_at,
   };
 }
 
@@ -209,6 +251,22 @@ export function setEventRuleEnabled(
   return getEventRule(db, input.id)!;
 }
 
+/** Hold later matches for a local decision. Enabling is a separate switch. */
+export function setEventRuleReview(
+  db: OpenedDatabase,
+  input: { id: string; botId: string },
+): EventRule {
+  const existing = getEventRule(db, input.id);
+  if (existing === undefined || existing.botId !== input.botId) {
+    throw invalidInput("event rule was not found", { id: input.id });
+  }
+  const at = isoNow(db.now);
+  db.raw
+    .prepare("UPDATE event_rules SET review = 1, updated_at = ? WHERE id = ? AND bot_id = ?;")
+    .run(at, input.id, input.botId);
+  return getEventRule(db, input.id)!;
+}
+
 /** Advance the scan cursor. Enabling a rule does not move it backwards. */
 export function setEventRuleCursor(db: OpenedDatabase, id: string, rowId: number): void {
   const result = db.raw
@@ -313,4 +371,98 @@ export function listEventRuleRecords(
     )
     .all(...params) as unknown as RecordSqlRow[];
   return rows.map(mapRecord);
+}
+
+export function getEventRuleReview(db: OpenedDatabase, id: string): EventRuleReview | undefined {
+  const row = db.raw.prepare("SELECT * FROM event_rule_reviews WHERE id = ?;").get(id) as
+    | ReviewSqlRow
+    | undefined;
+  return row === undefined ? undefined : mapReview(row);
+}
+
+/** The one review item for this event, including items that are already decided. */
+export function findEventRuleReview(
+  db: OpenedDatabase,
+  ruleId: string,
+  eventId: string,
+): EventRuleReview | undefined {
+  const row = db.raw
+    .prepare("SELECT * FROM event_rule_reviews WHERE rule_id = ? AND event_id = ?;")
+    .get(ruleId, eventId) as ReviewSqlRow | undefined;
+  return row === undefined ? undefined : mapReview(row);
+}
+
+/** One pending item. A second insert for the same event fails the unique key. */
+export function enqueueEventRuleReview(
+  db: OpenedDatabase,
+  input: { ruleId: string; eventId: string },
+): EventRuleReview {
+  const id = randomUUID();
+  const at = isoNow(db.now);
+  try {
+    db.raw
+      .prepare(
+        "INSERT INTO event_rule_reviews (id, rule_id, event_id, status, run_id, created_at, decided_at) " +
+          "VALUES (?, ?, ?, 'pending', NULL, ?, NULL);",
+      )
+      .run(id, input.ruleId, input.eventId, at);
+  } catch (error) {
+    constraintError(error, "enqueue event rule review");
+  }
+  return getEventRuleReview(db, id)!;
+}
+
+export function listPendingEventRuleReviews(
+  db: OpenedDatabase,
+  input: { botId: string; ruleId?: string; limit: number },
+): EventRuleReview[] {
+  const params: Array<string | number> = [input.botId];
+  let ruleClause = "";
+  if (input.ruleId !== undefined) {
+    ruleClause = " AND reviews.rule_id = ?";
+    params.push(input.ruleId);
+  }
+  const limit = Math.max(1, Math.min(100, Math.floor(input.limit)));
+  params.push(limit);
+  const rows = db.raw
+    .prepare(
+      "SELECT reviews.* FROM event_rule_reviews AS reviews " +
+        "JOIN event_rules AS rules ON rules.id = reviews.rule_id " +
+        `WHERE rules.bot_id = ? AND reviews.status = 'pending'${ruleClause} ` +
+        "ORDER BY reviews.created_at DESC, reviews.id ASC LIMIT ?;",
+    )
+    .all(...params) as unknown as ReviewSqlRow[];
+  return rows.map(mapReview);
+}
+
+/**
+ * Close a pending item. The caller writes the started or skipped record.
+ * A second decision finds the row is no longer pending.
+ */
+export function decideEventRuleReview(
+  db: OpenedDatabase,
+  input: { id: string; status: "approved" | "denied"; runId: string | null },
+): EventRuleReview & { readonly decidedAt: string } {
+  const existing = getEventRuleReview(db, input.id);
+  if (existing === undefined) {
+    throw invalidInput("event rule review was not found", { id: input.id });
+  }
+  if (existing.status !== "pending") {
+    throw invalidInput("event rule review is not pending", { id: input.id });
+  }
+  const at = isoNow(db.now);
+  const result = db.raw
+    .prepare(
+      "UPDATE event_rule_reviews SET status = ?, run_id = ?, decided_at = ? WHERE id = ? AND status = 'pending';",
+    )
+    .run(input.status, input.runId, at, input.id);
+  if (Number(result.changes) !== 1) {
+    throw invalidInput("event rule review is not pending", { id: input.id });
+  }
+  return {
+    ...existing,
+    status: input.status,
+    runId: input.runId,
+    decidedAt: at,
+  };
 }

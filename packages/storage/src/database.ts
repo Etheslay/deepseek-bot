@@ -684,6 +684,29 @@ CREATE UNIQUE INDEX event_rule_records_primary
 CREATE INDEX event_rule_records_rule ON event_rule_records(rule_id, created_at);
 `,
   },
+  {
+    // D20 local review: an enabled rule can hold a matching event instead of
+    // starting a run. One pending item per (rule, event). Disabled rules
+    // still skip and do not enter this table. No network and no remote relay.
+    id: 17,
+    name: "0017-event-rule-reviews",
+    sql: /* sql */ `
+ALTER TABLE event_rules ADD COLUMN review INTEGER NOT NULL DEFAULT 0
+  CHECK (review IN (0, 1));
+
+CREATE TABLE event_rule_reviews (
+  id TEXT PRIMARY KEY,
+  rule_id TEXT NOT NULL REFERENCES event_rules(id) ON DELETE CASCADE,
+  event_id TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('pending', 'approved', 'denied')),
+  run_id TEXT,
+  created_at TEXT NOT NULL,
+  decided_at TEXT,
+  UNIQUE (rule_id, event_id)
+);
+CREATE INDEX event_rule_reviews_status ON event_rule_reviews(status, created_at);
+`,
+  },
 
 ];
 

@@ -147,6 +147,10 @@ export const METHODS = [
   "eventRule.enable",
   "eventRule.disable",
   "eventRule.record.list",
+  "eventRule.review",
+  "eventRule.review.list",
+  "eventRule.review.approve",
+  "eventRule.review.deny",
   "grant.create",
   "grant.list",
   "grant.revoke",
@@ -1116,12 +1120,14 @@ export const METHOD_CONTRACTS = {
     }),
   },
   /**
-   * Local event rules for one bot (D20 slice). Trusted desktop methods, not
-   * model tools. A new rule is off. An enabled rule starts one run for one
-   * matching local event; the same event does not start another. A disabled
-   * rule records a skip that `eventRule.record.list` can return later.
-   * Nothing in this group opens a network connection or a remote relay.
-   * The review queue (`trigger.*`) is unchanged and still does not auto-start.
+   * Local event rules for one bot (D20). Trusted desktop methods, not model
+   * tools. A new rule is off and does not require review. An enabled rule
+   * starts one run for one matching local event, unless `eventRule.review`
+   * was called: then the event becomes one pending item and no run starts
+   * until `eventRule.review.approve`. Deny records a skip and starts
+   * nothing. The same event cannot enqueue or start twice. A disabled rule
+   * records a skip and does not enter the queue. Nothing in this group
+   * opens a network connection or a remote relay. `trigger.*` is unchanged.
    */
   "eventRule.list": {
     request: z.object({ botId: UuidSchema }).strict(),
@@ -1134,6 +1140,7 @@ export const METHOD_CONTRACTS = {
           workflowId: UuidSchema,
           eventType: z.enum(["run.failed", "run.completed"]),
           enabled: z.boolean(),
+          review: z.boolean(),
           at: IsoDateTimeUtcSchema,
           updatedAt: IsoDateTimeUtcSchema,
         }),
@@ -1161,6 +1168,7 @@ export const METHOD_CONTRACTS = {
       workflowId: UuidSchema,
       eventType: z.enum(["run.failed", "run.completed"]),
       enabled: z.boolean(),
+      review: z.boolean(),
       at: IsoDateTimeUtcSchema,
       updatedAt: IsoDateTimeUtcSchema,
     }),
@@ -1174,6 +1182,7 @@ export const METHOD_CONTRACTS = {
       workflowId: UuidSchema,
       eventType: z.enum(["run.failed", "run.completed"]),
       enabled: z.literal(true),
+      review: z.boolean(),
       at: IsoDateTimeUtcSchema,
       updatedAt: IsoDateTimeUtcSchema,
     }),
@@ -1187,6 +1196,7 @@ export const METHOD_CONTRACTS = {
       workflowId: UuidSchema,
       eventType: z.enum(["run.failed", "run.completed"]),
       enabled: z.literal(false),
+      review: z.boolean(),
       at: IsoDateTimeUtcSchema,
       updatedAt: IsoDateTimeUtcSchema,
     }),
@@ -1212,6 +1222,64 @@ export const METHOD_CONTRACTS = {
           at: IsoDateTimeUtcSchema,
         }),
       ),
+    }),
+  },
+  "eventRule.review": {
+    request: z.object({ botId: UuidSchema, id: UuidSchema }).strict(),
+    response: z.object({
+      id: UuidSchema,
+      botId: UuidSchema,
+      name: NonEmptyStringSchema(TEXT_LIMITS.name),
+      workflowId: UuidSchema,
+      eventType: z.enum(["run.failed", "run.completed"]),
+      enabled: z.boolean(),
+      review: z.literal(true),
+      at: IsoDateTimeUtcSchema,
+      updatedAt: IsoDateTimeUtcSchema,
+    }),
+  },
+  "eventRule.review.list": {
+    request: z
+      .object({
+        botId: UuidSchema,
+        ruleId: UuidSchema.optional(),
+        limit: z.int().min(1).max(100).default(50),
+      })
+      .strict(),
+    response: z.object({
+      items: z.array(
+        z.object({
+          id: UuidSchema,
+          ruleId: UuidSchema,
+          eventId: UuidSchema,
+          status: z.literal("pending"),
+          at: IsoDateTimeUtcSchema,
+        }),
+      ),
+    }),
+  },
+  "eventRule.review.approve": {
+    request: z.object({ botId: UuidSchema, id: UuidSchema }).strict(),
+    response: z.object({
+      id: UuidSchema,
+      ruleId: UuidSchema,
+      eventId: UuidSchema,
+      status: z.literal("approved"),
+      runId: UuidSchema,
+      at: IsoDateTimeUtcSchema,
+      decidedAt: IsoDateTimeUtcSchema,
+    }),
+  },
+  "eventRule.review.deny": {
+    request: z.object({ botId: UuidSchema, id: UuidSchema }).strict(),
+    response: z.object({
+      id: UuidSchema,
+      ruleId: UuidSchema,
+      eventId: UuidSchema,
+      status: z.literal("denied"),
+      runId: z.null(),
+      at: IsoDateTimeUtcSchema,
+      decidedAt: IsoDateTimeUtcSchema,
     }),
   },
   "grant.create": {

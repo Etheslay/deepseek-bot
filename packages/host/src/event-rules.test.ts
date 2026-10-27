@@ -128,4 +128,111 @@ describe("eventRule host methods", () => {
       expect.objectContaining({ eventId, reason: "rule disabled", runId: null }),
     ]);
   });
+
+  it("lists a pending review, approves one run, and denies another", async () => {
+    const host = await makeHost();
+    const owned = await seedWorkflow(host, "review");
+    const other = await seedWorkflow(host, "stranger");
+    const saved = (await host.handleMethod("eventRule.save", {
+      botId: owned.botId,
+      rule: { name: "失败先看", workflowId: owned.workflowId, eventType: "run.failed" },
+    })) as { id: string; enabled: boolean; review: boolean };
+    expect(saved).toMatchObject({ enabled: false, review: false });
+    await expect(
+      host.handleMethod("eventRule.review", { botId: other.botId, id: saved.id }),
+    ).rejects.toMatchObject({ code: "INVALID_INPUT" });
+    const reviewing = (await host.handleMethod("eventRule.review", {
+      botId: owned.botId,
+      id: saved.id,
+    })) as { review: boolean; enabled: boolean };
+    expect(reviewing.review).toBe(true);
+    expect(reviewing.enabled).toBe(false);
+    await host.handleMethod("eventRule.enable", { botId: owned.botId, id: saved.id });
+
+    const firstEvent = randomUUID();
+    const secondEvent = randomUUID();
+    const at = "2026-10-27T06:00:00.000Z";
+    for (const eventId of [firstEvent, secondEvent]) {
+      const runId = randomUUID();
+      host.db.raw
+        .prepare(
+          "INSERT INTO runs (id, status, trigger_kind, trigger_json, workflow_snapshot_json, bot_snapshots_json, idempotency_key, created_at, finished_at) " +
+            "VALUES (?, 'failed', 'manual', ?, '{}', ?, ?, ?, ?);",
+        )
+        .run(
+          runId,
+          JSON.stringify({ kind: "manual", idempotencyKey: randomUUID() }),
+          JSON.stringify([{ id: owned.botId }]),
+          randomUUID(),
+          at,
+          at,
+        );
+      host.db.raw
+        .prepare(
+          "INSERT INTO events (event_id, run_id, sequence, timestamp, type, payload_json) VALUES (?, ?, 0, ?, 'run.failed', '{}');",
+        )
+        .run(eventId, runId, at);
+    }
+    expect(evaluateEventRules(host.db, host.engine)).toMatchObject({ started: 0, pending: 2, skipped: 0 });
+    const listed = (await host.handleMethod("eventRule.review.list", { botId: owned.botId })) as {
+      items: Array<{ id: string; eventId: string; status: string }>;
+    };
+    expect(listed.items).toHaveLength(2);
+    expect(listed.items.every((item) => item.status === "pending")).toBe(true);
+    const otherList = (await host.handleMethod("eventRule.review.list", { botId: other.botId })) as {
+      items: unknown[];
+    };
+    expect(otherList.items).toEqual([]);
+    const runsBefore = (
+      host.db.raw.prepare("SELECT COUNT(*) AS n FROM runs;").get() as { n: number }
+    ).n;
+
+    const approved = (await host.handleMethod("eventRule.review.approve", {
+      botId: owned.botId,
+      id: listed.items[0]!.id,
+    })) as { status: string; runId: string; eventId: string };
+    expect(approved.status).toBe("approved");
+    expect(approved.runId).toEqual(expect.any(String));
+    expect(
+      (host.db.raw.prepare("SELECT COUNT(*) AS n FROM runs;").get() as { n: number }).n,
+    ).toBe(runsBefore + 1);
+    await expect(
+      host.handleMethod("eventRule.review.approve", { botId: owned.botId, id: listed.items[0]!.id }),
+    ).rejects.toMatchObject({ code: "INVALID_INPUT" });
+    expect(
+      (host.db.raw.prepare("SELECT COUNT(*) AS n FROM runs;").get() as { n: number }).n,
+    ).toBe(runsBefore + 1);
+
+    const denied = (await host.handleMethod("eventRule.review.deny", {
+      botId: owned.botId,
+      id: listed.items[1]!.id,
+    })) as { status: string; runId: null; eventId: string };
+    expect(denied).toMatchObject({ status: "denied", runId: null });
+    const remaining = (await host.handleMethod("eventRule.review.list", { botId: owned.botId })) as {
+      items: unknown[];
+    };
+    expect(remaining.items).toEqual([]);
+    const records = (await host.handleMethod("eventRule.record.list", { botId: owned.botId })) as {
+      records: Array<{ eventId: string; outcome: string; reason: string; runId: string | null }>;
+    };
+    expect(records.records).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          eventId: approved.eventId,
+          outcome: "started",
+          reason: "review approved",
+          runId: approved.runId,
+        }),
+        expect.objectContaining({
+          eventId: denied.eventId,
+          outcome: "skipped",
+          reason: "review denied",
+          runId: null,
+        }),
+      ]),
+    );
+    await expect(
+      host.handleMethod("eventRule.review.approve", { botId: owned.botId, id: randomUUID() }),
+    ).rejects.toMatchObject({ code: "INVALID_INPUT" });
+  });
 });
