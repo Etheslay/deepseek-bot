@@ -21,10 +21,10 @@ const requests = {
 } as const;
 
 describe("D21 screen contracts", () => {
-  it("accepts protocol 0.6 and every previous sender without changing workflow documents", () => {
-    expect(PROTOCOL_VERSION).toBe("0.6");
+  it("accepts protocol 0.7 and every previous sender without changing workflow documents", () => {
+    expect(PROTOCOL_VERSION).toBe("0.7");
     expect(WORKFLOW_SCHEMA_VERSION).toBe("0.1");
-    for (const protocolVersion of ["0.1", "0.2", "0.3", "0.4", "0.5", "0.6"]) {
+    for (const protocolVersion of ["0.1", "0.2", "0.3", "0.4", "0.5", "0.6", "0.7"]) {
       expect(RequestEnvelopeSchema.safeParse({ protocolVersion, requestId: id, method: "bot.list", payload: {} }).success).toBe(true);
     }
   });

@@ -128,3 +128,47 @@ export function isRunTerminal(status: RunStatus): boolean {
 export function isNodeRunTerminal(status: NodeRunStatus): boolean {
   return NODE_RUN_TERMINAL_STATUSES.includes(status);
 }
+
+// ---------------------------------------------------------------------------
+// Dispatched task (manager orchestration, CONTRACTS §5). A task is one chat
+// turn owed to an executor bot: queued waits for the executor to finish any
+// current turn, running is the live turn, and cancellation of a running task
+// goes through the chat cancel path before it may end as `cancelled`.
+// `skipped` (T7 relay) is only reachable for queued downstream hops of a
+// relay chain whose predecessor failed, was denied or was cancelled.
+// ---------------------------------------------------------------------------
+
+export const TASK_STATUSES = [
+  "queued",
+  "running",
+  "done",
+  "failed",
+  "cancelled",
+  "skipped",
+  "interrupted",
+] as const;
+
+export type TaskStatus = (typeof TASK_STATUSES)[number];
+
+export const TASK_TRANSITIONS: Readonly<Record<TaskStatus, readonly TaskStatus[]>> = {
+  queued: ["running", "cancelled", "skipped", "interrupted"],
+  running: ["done", "failed", "cancelled", "interrupted"],
+  done: [],
+  failed: [],
+  cancelled: [],
+  skipped: [],
+  interrupted: [],
+};
+
+export function canTransitionTask(from: TaskStatus, to: TaskStatus): boolean {
+  return TASK_TRANSITIONS[from].includes(to);
+}
+
+export const TASK_TERMINAL_STATUSES: readonly TaskStatus[] = (
+  Object.keys(TASK_TRANSITIONS) as TaskStatus[]
+).filter((status) => TASK_TRANSITIONS[status].length === 0);
+
+export function isTaskTerminal(status: TaskStatus): boolean {
+  return TASK_TERMINAL_STATUSES.includes(status);
+}
+

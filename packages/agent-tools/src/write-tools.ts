@@ -41,7 +41,9 @@ const createBotsBatchShape: CapabilityShape = {
     "per-bot fields fall back to `defaults`; omitted avatars get distinct " +
     "shape×color assignments inside the group (explicit avatars win). " +
     "Pass newGroup to mint the group in the same operation, or groupId to " +
-    "target an existing one — never both. Returns batchId for revoke_batch.",
+    "target an existing one — never both. Returns batchId for revoke_batch. " +
+    "组队推荐顺序：先建成员，拿到返回的 botId，再用 save_workflow 保存引用这些 " +
+    "botId 的工作流——两次调用会合并进同一张审批卡。",
   inputSchema: z
     .object({
       groupId: z.string().uuid().optional(),

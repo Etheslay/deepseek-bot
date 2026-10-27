@@ -65,6 +65,8 @@ function createBotRow(db: OpenedDatabase, profileId: string, workspaceId: string
       modelProfileId: profileId,
       workspaceId,
       toolPolicyId: policyId,
+      /* v0.7 manager orchestration: bots carry a coordinator role (default here). */
+      role: "standard",
       archivedAt: null,
     },
   });

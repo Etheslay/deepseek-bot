@@ -7,10 +7,11 @@
  * fixture for settings and bots; chat/workflow/run views stay on the fixture
  * until their contract methods exist (see docs/AGENT_PLATFORM.md).
  */
-import type { Bot, ErrorCode } from "@deepseek-bot/contracts";
+import type { Bot, ErrorCode, Task } from "@deepseek-bot/contracts";
 import {
   ServiceError,
   type BotDraft,
+  type ChatHistoryRow,
   type DesktopService,
   type StreamResult,
   type TestConnectionResult,
@@ -154,6 +155,13 @@ export function createHostService(bridge: HostBridge): DesktopService {
       // rows (chat.history) but the UI rebuilds its thread from live sends.
       listSessions: async () => [],
       openSession: async () => ({ events: [] }),
+      history: async (botId, limit = 100) => {
+        const response = (await bridge.host.call("chat.history", {
+          botId,
+          limit,
+        })) as { messages: ChatHistoryRow[] };
+        return response.messages;
+      },
       stream: (botId, text, handlers) => {
         let cancelled = false;
         const sessionId = `chat:${botId}`;
@@ -225,6 +233,19 @@ export function createHostService(bridge: HostBridge): DesktopService {
         }
       },
     },
+    // v0.5 manager orchestration: dispatched tasks are host-backed from day
+    // one (the fixture store only exists for offline UI development).
+    tasks: {
+      list: async (query = {}) =>
+        (await bridge.host.call("task.list", {
+          ...(query.status !== undefined ? { status: query.status } : {}),
+          ...(query.rootTaskId !== undefined ? { rootTaskId: query.rootTaskId } : {}),
+          ...(query.limit !== undefined ? { limit: query.limit } : {}),
+        })) as { tasks: Task[] },
+      cancel: async (taskId) =>
+        (await bridge.host.call("task.cancel", { taskId })) as Task,
+    },
+
     vault: {
       listBackups: async () => {
         if (bridge.backups === undefined) {
