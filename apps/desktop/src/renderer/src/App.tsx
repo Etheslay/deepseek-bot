@@ -2667,14 +2667,20 @@ function BotsPlaceholder({
     }
     const forKey = me.key;
     setStream({ ...emptyStream(), forKey });
-    streamRef.current = runChatStream({
+    const started = runChatStream({
       stream: service.chat.stream,
       botId: me.bot.id,
       text: withSkillContext(skillContext, me.bot.id, text),
       forKey,
       update: setStream,
       onAssistant,
+      /* Only this handle may commit its answer. Once a newer turn (or another
+         bot's chat) owns streamRef, this one is stale — and that has to be
+         asked here rather than inferred inside the state updater, which React
+         runs during render. */
+      isCurrent: () => streamRef.current === started,
     });
+    streamRef.current = started;
   };
 
   /**
