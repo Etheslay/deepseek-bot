@@ -99,6 +99,7 @@ export async function startApplicationToolServer(
     "memory_search",
     "knowledge_search",
   ]);
+  const connectorSchemas = gateway.capabilities.schemas(["connector_invoke"]);
   let closed = false;
   const server = createServer((request, response) => {
     void handle(request, response).catch(() =>
@@ -138,13 +139,18 @@ export async function startApplicationToolServer(
       send(response, 200, { tools: memorySchemas });
       return;
     }
+    if (request.method === "GET" && request.url === "/connectors") {
+      send(response, 200, { tools: connectorSchemas });
+      return;
+    }
     if (
       request.method !== "POST" ||
       (request.url !== "/app-tools/ready" &&
         request.url !== "/app-tools/call" &&
         request.url !== "/ask-user/call" &&
         request.url !== "/web-search/call" &&
-        request.url !== "/memory/call")
+        request.url !== "/memory/call" &&
+        request.url !== "/connectors/call")
     ) {
       send(response, 404, failure("INVALID_INPUT", "unknown application tool route"));
       return;
@@ -190,7 +196,9 @@ export async function startApplicationToolServer(
             ? parsed.tool === "memory_write" ||
               parsed.tool === "memory_search" ||
               parsed.tool === "knowledge_search"
-            : (APPLICATION_TOOLS as readonly string[]).includes(parsed.tool);
+            : request.url === "/connectors/call"
+              ? parsed.tool === "connector_invoke"
+              : (APPLICATION_TOOLS as readonly string[]).includes(parsed.tool);
     if (!toolAllowed) {
       send(response, 400, failure("INVALID_INPUT", "tool is not available in chat"));
       return;

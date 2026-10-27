@@ -16,6 +16,8 @@ export const APPLICATION_TOOL_NAMES = [
 
 const CALL_TIMEOUT_MS = 660_000;
 const ASK_USER_TIMEOUT_MS = 31 * 60_000;
+// Local Stable Diffusion renders can take minutes on slow GPUs.
+const CONNECTOR_TIMEOUT_MS = 10 * 60_000;
 const STARTUP_TIMEOUT_MS = 30_000;
 const CODES = new Set([
   "INVALID_INPUT",
@@ -90,6 +92,29 @@ function catalog(value: unknown): ToolSchema[] {
     names.add(tool.name);
     return { name: tool.name, description: tool.description, parameters: tool.parameters };
   });
+}
+
+function connectorTools(value: unknown): ToolSchema[] {
+  if (!object(value) || !Array.isArray(value.tools) || value.tools.length !== 1) {
+    throw new Error("invalid catalog");
+  }
+  const tool: unknown = value.tools[0];
+  if (
+    !object(tool) ||
+    tool.name !== "connector_invoke" ||
+    typeof tool.description !== "string" ||
+    !object(tool.parameters) ||
+    tool.parameters.type !== "object"
+  ) {
+    throw new Error("invalid catalog");
+  }
+  return [
+    {
+      name: "connector_invoke",
+      description: tool.description,
+      parameters: tool.parameters,
+    },
+  ];
 }
 
 function askUserTool(value: unknown): ToolSchema {
@@ -234,6 +259,9 @@ export async function applyApplicationTools(ctx: ApplicationToolContext): Promis
     const memory = memoryTools(
       await request(origin, token, "/memory", AbortSignal.timeout(STARTUP_TIMEOUT_MS)),
     );
+    const connectors = connectorTools(
+      await request(origin, token, "/connectors", AbortSignal.timeout(STARTUP_TIMEOUT_MS)),
+    );
     const webSearch = webSearchTool(
       await request(origin, token, "/web-search", AbortSignal.timeout(STARTUP_TIMEOUT_MS)),
     );
@@ -299,6 +327,7 @@ export async function applyApplicationTools(ctx: ApplicationToolContext): Promis
     for (const schema of schemas) bindRemote(schema, "/app-tools/call", CALL_TIMEOUT_MS);
     bindRemote(askUser, "/ask-user/call", ASK_USER_TIMEOUT_MS);
     for (const schema of memory) bindRemote(schema, "/memory/call", CALL_TIMEOUT_MS);
+    for (const schema of connectors) bindRemote(schema, "/connectors/call", CONNECTOR_TIMEOUT_MS);
     // Harness already publishes a global web_search. A second global name
     // aborts plugin startup, so the chat tool is registered on each agent and
     // shadows that built-in for the session.

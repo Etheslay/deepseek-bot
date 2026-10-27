@@ -31,6 +31,7 @@ import {
   type RunningApprovalBridge,
 } from "@deepseek-bot/harness-adapter";
 import { ChatManager } from "./chat.js";
+import { createWorkspaceArtifacts } from "./artifacts.js";
 import { EngineError, NodeExecutionError, WorkflowEngine, LocalScheduler, evaluateToolAction, type ScheduleMissNotice } from "@deepseek-bot/runtime";
 import {
   appendChatMessage,
@@ -56,6 +57,7 @@ import { AskUserCoordinator, JsonlAuditSink, ToolGateway, ToolRegistry, bindAskU
 import {
   ToolRejectionError,
   WebSearchService,
+  bindConnectorTools,
   bindKnowledgeTools,
   bindMemoryTools,
   bindWebSearchTool,
@@ -66,6 +68,7 @@ import {
 } from "@deepseek-bot/agent-tools";
 import { startApplicationToolServer } from "./app-tool-channel.js";
 import { evaluateTriggerRules } from "./triggers.js";
+import { invokeConnector } from "./connectors.js";
 
 export interface HostOptions {
   /** Data root (storage layout: database, harness home, artifacts, backups). */
@@ -255,6 +258,12 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
   });
   bridgeRef.current = bridge;
 
+  const workspaceArtifacts = createWorkspaceArtifacts({
+    db,
+    artifactsRoot: layout.artifacts,
+    now,
+  });
+
   const engine = new WorkflowEngine({
     db,
     executor,
@@ -328,6 +337,7 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
       }
       return agentToolsHolder.current;
     },
+    artifacts: workspaceArtifacts,
   };
   const handlers = buildHandlers(context);
 
@@ -415,6 +425,11 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
           text: row.text,
           at: row.createdAt,
         }));
+      },
+    }),
+    ...bindConnectorTools({
+      invoke(connectorId, action, params) {
+        return invokeConnector(db, layout.connectorOutputs, { connectorId, action, params }, { now });
       },
     }),
     ...bindKnowledgeTools({

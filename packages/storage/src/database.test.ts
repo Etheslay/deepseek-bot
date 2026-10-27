@@ -35,6 +35,12 @@ describe("openDatabase migrations", () => {
     expect(
       upgraded.raw.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'connectors'").get(),
     ).toMatchObject({ name: "connectors" });
+    expect(
+      upgraded.raw.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'knowledge_docs'").get(),
+    ).toMatchObject({ name: "knowledge_docs" });
+    expect(
+      upgraded.raw.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'artifact_versions'").get(),
+    ).toMatchObject({ name: "artifact_versions" });
     expect(upgraded.raw.prepare("SELECT value_json FROM settings WHERE key = 'preserved'").get()).toMatchObject({ value_json: '{"value":42}' });
     expect(upgraded.raw.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('permission_grants','permission_audit','app_approvals','permission_authorizations')").all()).toHaveLength(4);
     expect(upgraded.raw.prepare("SELECT checksum FROM schema_migrations WHERE id <= 4 ORDER BY id").all().map(row => row.checksum)).toEqual(checksums);

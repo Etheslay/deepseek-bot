@@ -8,7 +8,7 @@ FR-17（事件触发与规则、评审队列；重复触发防护；错过触发
 
 | 块 | 实现 |
 | --- | --- |
-| 触发规则 | 迁移 `0011-automation-triggers`：`trigger_rules`（名称/目标工作流/事件类型 run.failed·run.completed/可选源工作流过滤/启停/游标）。受信方法 `trigger.list/save/enable/disable/delete`——规则管理只属于桌面控制面，不是模型工具；目标与源工作流必须存在，新建默认关闭，删除级联清理评审记录 |
+| 触发规则 | 迁移 `0013-automation-triggers`：`trigger_rules`（名称/目标工作流/事件类型 run.failed·run.completed/可选源工作流过滤/启停/游标）。受信方法 `trigger.list/save/enable/disable/delete`——规则管理只属于桌面控制面，不是模型工具；目标与源工作流必须存在，新建默认关闭，删除级联清理评审记录 |
 | 评审队列 | `trigger_firings`：规则命中持久事件流后入队（UNIQUE (rule, source event)——**一个事件只触发一次**）。受信方法 `trigger.firing.list/decide`；`decide("start")` 复用 run.start 路径（同策略钉扎、revision 校验、幂等键）启动目标工作流并记录 `started_run_id`；`decide("dismiss")` 仅关闭条目。**没有任何自动启动路径** |
 | 重复触发防护 | 两层： firing 唯一约束（单事件单触发）；**循环防护**——队列自己启动的运行（started_run_id）在评估时被跳过，失败的自愈链路不会无限级联 |
 | 错过可见 | 评估器按规则游标扫 `events` 表（持久事件流），Host 启动时补扫一次 + 5 秒轮询（间隔可配，shutdown 清理）；**宕机期间积累的事件以 reason="missed" 入队**——可见、由人决定，绝不静默补跑。游标只在整次扫描成功后推进 |
@@ -32,7 +32,7 @@ FR-17（事件触发与规则、评审队列；重复触发防护；错过触发
 - 真实 Harness 下"运行失败 → 评审 → 启动修复工作流"的完整人工闭环未演练（评估器用真实引擎 + 直接注入事件验证）。
 - 聊天内通知条（对标 #5）未接线——依赖 D14 通知条组件（B 线）；模型汇报链路已由 `list_automations` 打通，真实模型会话未演练。
 - 远程 CI、安装包、签名、GitHub 保护规则复核未执行。
-- 迁移编号协调：`feature/connector-invoke`（在途 PR）带 `0011-connectors-endpoint`；本分支的迁移在其合并时需按"先合并者持有 0011、后者重编号"处理（两分支的 MIGRATIONS 数组在合并时按 id 顺序排列）。
+- 迁移编号协调：develop 的共编侧车持 `0011-artifact-versions`，连接器 PR 持 `0012-connectors-endpoint`；本分支迁移顺延为 `0013-automation-triggers`，按 id 顺序应用。
 
 ## 4. Etheslay 本人自审
 

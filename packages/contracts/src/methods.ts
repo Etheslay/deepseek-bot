@@ -9,7 +9,9 @@
 import { z } from "zod";
 import {
   ApprovalSchema,
+  ArtifactVersionSchema,
   AvatarSchema,
+  BotArtifactSchema,
   BotGroupSchema,
   BotSchema,
   ImportableWorkflowDraftSchema,
@@ -24,7 +26,9 @@ import {
 } from "./errors.js";
 import {
   IsoDateTimeUtcSchema,
+  MediaTypeSchema,
   NonEmptyStringSchema,
+  RelativeArtifactPathSchema,
   Sha256HexSchema,
   TEXT_LIMITS,
   UuidSchema,
@@ -41,6 +45,17 @@ import { WorkflowIssueSchema } from "./workflow.js";
 import { PERMISSION_METHODS } from "./permissions.js";
 
 export const MAX_MESSAGE_BYTES = 1_048_576;
+
+/**
+ * Largest artifact content one `artifacts.save`/`artifacts.read` payload may
+ * carry, in UTF-8 bytes (D28). The method-boundary envelope caps a single
+ * message at 1 MiB of JSON, and JSON escaping can roughly double the wire
+ * size of text with many newlines/quotes, so the content budget stays well
+ * under the envelope to keep save calls deliverable. Larger workspace files
+ * stay listable and versionable but refuse inline reads/saves with an
+ * explicit error — never a silent truncation.
+ */
+export const MAX_ARTIFACT_CONTENT_BYTES = 768 * 1024;
 
 export function messageSizeBytes(value: unknown): number {
   return new TextEncoder().encode(JSON.stringify(value ?? null)).length;
@@ -97,6 +112,13 @@ export const METHODS = [
   "connector.register",
   "connector.enable",
   "connector.disable",
+  "connector.setEndpoint",
+  "artifacts.list",
+  "artifacts.read",
+  "artifacts.save",
+  "artifacts.versions",
+  "artifacts.versionContent",
+  "artifacts.revert",
   "trigger.list",
   "trigger.save",
   "trigger.enable",
@@ -701,6 +723,7 @@ export const METHOD_CONTRACTS = {
           name: NonEmptyStringSchema(TEXT_LIMITS.name),
           enabled: z.boolean(),
           credentialRef: z.string().nullable(),
+          endpoint: z.string().nullable(),
           at: IsoDateTimeUtcSchema,
           updatedAt: IsoDateTimeUtcSchema,
         }),
@@ -712,6 +735,9 @@ export const METHOD_CONTRACTS = {
       .object({
         name: z.string().trim().min(1).max(TEXT_LIMITS.name),
         credentialRef: z.string().trim().min(1).max(TEXT_LIMITS.label).nullable().optional(),
+        // Loopback http(s) URL of the local service (D19); validated by the
+        // Host before storage, never contacted at registration time.
+        endpoint: z.string().trim().max(2048).nullable().optional(),
       })
       .strict(),
     response: z.object({
@@ -719,6 +745,7 @@ export const METHOD_CONTRACTS = {
       name: NonEmptyStringSchema(TEXT_LIMITS.name),
       enabled: z.literal(false),
       credentialRef: z.string().nullable(),
+      endpoint: z.string().nullable(),
       at: IsoDateTimeUtcSchema,
       updatedAt: IsoDateTimeUtcSchema,
     }),
@@ -730,6 +757,7 @@ export const METHOD_CONTRACTS = {
       name: NonEmptyStringSchema(TEXT_LIMITS.name),
       enabled: z.literal(true),
       credentialRef: z.string().nullable(),
+      endpoint: z.string().nullable(),
       at: IsoDateTimeUtcSchema,
       updatedAt: IsoDateTimeUtcSchema,
     }),
@@ -741,9 +769,96 @@ export const METHOD_CONTRACTS = {
       name: NonEmptyStringSchema(TEXT_LIMITS.name),
       enabled: z.literal(false),
       credentialRef: z.string().nullable(),
+      endpoint: z.string().nullable(),
       at: IsoDateTimeUtcSchema,
       updatedAt: IsoDateTimeUtcSchema,
     }),
+  },
+  /**
+   * D19: set or clear the loopback http(s) endpoint of a local connector.
+   * The Host validates the URL shape (http/https, loopback host only)
+   * before storage and never contacts the endpoint here.
+   */
+  "connector.setEndpoint": {
+    request: z.object({
+      id: UuidSchema,
+      endpoint: z.string().trim().max(2048).nullable(),
+    }).strict(),
+    response: z.object({
+      id: UuidSchema,
+      name: NonEmptyStringSchema(TEXT_LIMITS.name),
+      enabled: z.boolean(),
+      credentialRef: z.string().nullable(),
+      endpoint: z.string().nullable(),
+      at: IsoDateTimeUtcSchema,
+      updatedAt: IsoDateTimeUtcSchema,
+    }),
+  },
+  /**
+   * D28 co-edit sidecar: artifacts are the editable files of one bot's
+   * workspace directory, addressed by (botId, relativePath). list/read
+   * reconcile unrecorded workspace changes as "bot" versions, so the version
+   * trail covers bot writes that bypass every method call. text/html and
+   * binary media stay listed but refuse inline content (kind "blocked") —
+   * QA-14: user-facing surfaces never execute embedded scripts. Saves and
+   * reverts always append a version (author "user"); reverts never rewrite
+   * history. expectedChecksum on save is optimistic concurrency against a
+   * concurrent bot write (REVISION_CONFLICT).
+   */
+  "artifacts.list": {
+    request: z.object({ botId: UuidSchema }).strict(),
+    response: z.object({ artifacts: z.array(BotArtifactSchema) }),
+  },
+  "artifacts.read": {
+    request: z
+      .object({ botId: UuidSchema, path: RelativeArtifactPathSchema })
+      .strict(),
+    response: z.discriminatedUnion("kind", [
+      z.object({
+        kind: z.literal("text"),
+        mediaType: MediaTypeSchema,
+        checksum: BotArtifactSchema.shape.checksum,
+        content: z.string().max(MAX_ARTIFACT_CONTENT_BYTES),
+      }),
+      z.object({ kind: z.literal("blocked"), mediaType: MediaTypeSchema, reason: z.string().min(1).max(2_000) }),
+    ]),
+  },
+  "artifacts.save": {
+    request: z
+      .object({
+        botId: UuidSchema,
+        path: RelativeArtifactPathSchema,
+        content: z.string().max(MAX_ARTIFACT_CONTENT_BYTES),
+        /** sha256 of the version the edit started from; omit for blind saves. */
+        expectedChecksum: Sha256HexSchema.optional(),
+      })
+      .strict(),
+    response: z.object({ artifact: BotArtifactSchema, version: ArtifactVersionSchema }),
+  },
+  "artifacts.versions": {
+    request: z
+      .object({ botId: UuidSchema, path: RelativeArtifactPathSchema })
+      .strict(),
+    response: z.object({ versions: z.array(ArtifactVersionSchema) }),
+  },
+  "artifacts.versionContent": {
+    request: z
+      .object({ botId: UuidSchema, path: RelativeArtifactPathSchema, versionId: UuidSchema })
+      .strict(),
+    response: z.discriminatedUnion("kind", [
+      z.object({
+        kind: z.literal("text"),
+        mediaType: MediaTypeSchema,
+        content: z.string().max(MAX_ARTIFACT_CONTENT_BYTES),
+      }),
+      z.object({ kind: z.literal("blocked"), mediaType: MediaTypeSchema, reason: z.string().min(1).max(2_000) }),
+    ]),
+  },
+  "artifacts.revert": {
+    request: z
+      .object({ botId: UuidSchema, path: RelativeArtifactPathSchema, versionId: UuidSchema })
+      .strict(),
+    response: z.object({ artifact: BotArtifactSchema, version: ArtifactVersionSchema }),
   },
   /**
    * D20 event automation (FR-17). A rule watches the persisted event stream

@@ -72,6 +72,7 @@ import {
   listConnectors,
   registerConnector,
   setConnectorEnabled,
+  setConnectorEndpoint,
   updateBot,
   type BotPatch,
   type DataLayout,
@@ -80,6 +81,7 @@ import {
   revokePermissionGrant, listPermissionApprovals, listPermissionAudit,
 } from "@deepseek-bot/storage";
 import type { AgentPermissionService } from "./agent-permissions.js";
+import type { WorkspaceArtifacts } from "./artifacts.js";
 import { DEFAULT_MODEL_PROFILE_ID, SEARXNG_ENDPOINT_SETTING, backupDirFor, newBackupId } from "./host.js";
 import { chatSessionIdFor, type ChatManager } from "./chat.js";
 import { KNOWN_CAPABILITIES, policyKey, readPolicy, type PolicyLevel } from "./permissions.js";
@@ -115,6 +117,8 @@ export interface HostContext {
   readonly chat: ChatManager;
   /** D15 agent tool gateway; `tool.invoke` routes model calls through it. */
   readonly agentTools: ToolGateway;
+  /** D28 co-edit sidecar over bot workspace files. */
+  readonly artifacts: WorkspaceArtifacts;
   /** Trusted ask_user controls. The desktop answers; the model never sees these methods. */
   readonly userQuestions: UserQuestionControls;
   /** Trusted SearXNG endpoint. The model cannot set or read this through a tool. */
@@ -855,6 +859,7 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
         name: row.name,
         enabled: row.enabled,
         credentialRef: row.credentialRef,
+        endpoint: row.endpoint,
         at: row.createdAt,
         updatedAt: row.updatedAt,
       })),
@@ -864,12 +869,14 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
       const row = registerConnector(db, {
         name: payload.name,
         ...(payload.credentialRef !== undefined ? { credentialRef: payload.credentialRef } : {}),
+        ...(payload.endpoint !== undefined ? { endpoint: payload.endpoint } : {}),
       });
       return {
         id: row.id,
         name: row.name,
         enabled: false as const,
         credentialRef: row.credentialRef,
+        endpoint: row.endpoint,
         at: row.createdAt,
         updatedAt: row.updatedAt,
       };
@@ -882,6 +889,7 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
         name: row.name,
         enabled: true as const,
         credentialRef: row.credentialRef,
+        endpoint: row.endpoint,
         at: row.createdAt,
         updatedAt: row.updatedAt,
       };
@@ -894,10 +902,44 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
         name: row.name,
         enabled: false as const,
         credentialRef: row.credentialRef,
+        endpoint: row.endpoint,
         at: row.createdAt,
         updatedAt: row.updatedAt,
       };
     },
+
+    "connector.setEndpoint": (payload) => {
+      const row = setConnectorEndpoint(db, { id: payload.id, endpoint: payload.endpoint });
+      return {
+        id: row.id,
+        name: row.name,
+        enabled: row.enabled,
+        credentialRef: row.credentialRef,
+        endpoint: row.endpoint,
+        at: row.createdAt,
+        updatedAt: row.updatedAt,
+      };
+    },
+
+    "artifacts.list": (payload) => context.artifacts.list(payload.botId),
+
+    "artifacts.read": (payload) => context.artifacts.read(payload.botId, payload.path),
+
+    "artifacts.save": (payload) =>
+      context.artifacts.save(
+        payload.botId,
+        payload.path,
+        payload.content,
+        payload.expectedChecksum,
+      ),
+
+    "artifacts.versions": (payload) => context.artifacts.versions(payload.botId, payload.path),
+
+    "artifacts.versionContent": (payload) =>
+      context.artifacts.versionContent(payload.botId, payload.path, payload.versionId),
+
+    "artifacts.revert": (payload) =>
+      context.artifacts.revert(payload.botId, payload.path, payload.versionId),
 
     "settings.testConnection": async (payload) => {
       const credentialRef = getSettingRaw(db, "apiKeyRef");
