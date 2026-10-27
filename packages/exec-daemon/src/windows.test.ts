@@ -1,6 +1,8 @@
 import { readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { MAX_EDGE, MAX_PIXELS, MAX_PNG_BYTES, MAX_WINDOWS } from "./limits.js";
+import { ProcessRunError } from "./process.js";
 import {
   createPowerShellRunner,
   helperLaunch,
@@ -131,11 +133,97 @@ describe("PowerShell helper contract", () => {
   });
 
   it("reports that PowerShell did not start", async () => {
+    const started = Date.now();
     const runner = createPowerShellRunner("/missing/win32-capture.ps1");
     await expect(
       runner.run({ op: "list" }, new AbortController().signal, 1_000),
     ).rejects.toMatchObject({
       code: "RUNTIME_UNAVAILABLE",
+      reason: "helper",
+      message: "Windows capture helper is unavailable",
+    });
+    expect(Date.now() - started).toBeLessThan(1_000);
+  });
+
+  it("does not launch when the helper script is missing", async () => {
+    let calls = 0;
+    const runner = createPowerShellRunner("/missing/win32-capture.ps1", {
+      async runProcess() {
+        calls += 1;
+        throw new ProcessRunError("timeout", "helper timed out");
+      },
+    });
+    await expect(
+      runner.run({ op: "list" }, new AbortController().signal, 1_000),
+    ).rejects.toMatchObject({
+      code: "RUNTIME_UNAVAILABLE",
+    });
+    expect(calls).toBe(0);
+  });
+
+  it("reports a helper path that is not a file as unavailable", async () => {
+    const runner = createPowerShellRunner(fileURLToPath(new URL(".", import.meta.url)));
+    await expect(
+      runner.run({ op: "list" }, new AbortController().signal, 1_000),
+    ).rejects.toMatchObject({
+      code: "RUNTIME_UNAVAILABLE",
+      message: "Windows capture helper is unavailable",
     });
   });
+
+  it("reports cancellation before starting a missing helper", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const runner = createPowerShellRunner("/missing/win32-capture.ps1");
+    await expect(runner.run({ op: "list" }, controller.signal, 1_000)).rejects.toMatchObject({
+      code: "CANCELLED",
+    });
+  });
+
+  it("reports a timeout when an existing helper hangs", async () => {
+    const scriptPath = windowsHelperScriptPath();
+    let timeoutMs = 0;
+    const runner = createPowerShellRunner(scriptPath, {
+      async runProcess(options) {
+        timeoutMs = options.timeoutMs;
+        expect(options.command).toBe("powershell.exe");
+        expect(options.args).toContain(scriptPath);
+        throw new ProcessRunError("timeout", "helper timed out");
+      },
+    });
+    await expect(
+      runner.run({ op: "list" }, new AbortController().signal, 1_000),
+    ).rejects.toMatchObject({
+      code: "TOOL_TIMEOUT",
+      message: "capture helper timed out",
+    });
+    expect(timeoutMs).toBe(2_000);
+  });
+
+  it("maps a helper that exits without a refusal onto unavailable", async () => {
+    const runner = createPowerShellRunner(windowsHelperScriptPath(), {
+      async runProcess() {
+        throw new ProcessRunError("exit", "helper exited with a failure", "not json");
+      },
+    });
+    await expect(
+      runner.run({ op: "list" }, new AbortController().signal, 1_000),
+    ).rejects.toMatchObject({
+      code: "RUNTIME_UNAVAILABLE",
+      message: "capture helper failed",
+    });
+  });
+
+  it.skipIf(process.platform === "win32")(
+    "reports an unavailable runtime when powershell.exe cannot be spawned",
+    async () => {
+      const runner = createPowerShellRunner(windowsHelperScriptPath());
+      await expect(
+        runner.run({ op: "list" }, new AbortController().signal, 1_000),
+      ).rejects.toMatchObject({
+        code: "RUNTIME_UNAVAILABLE",
+        message: "Windows capture helper is unavailable",
+      });
+    },
+  );
 });

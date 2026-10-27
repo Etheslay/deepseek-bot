@@ -1,3 +1,4 @@
+import { stat } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import {
   cancelled,
@@ -104,12 +105,23 @@ export function helperLaunch(
   return { command: POWERSHELL_EXE, args, shell: false, windowsHide: true };
 }
 
-export function createPowerShellRunner(scriptPath = windowsHelperScriptPath()): HelperRunner {
+export function createPowerShellRunner(
+  scriptPath = windowsHelperScriptPath(),
+  dependencies?: { runProcess?: typeof runFixedProcess },
+): HelperRunner {
+  // Test seam. Production uses the fixed PowerShell process.
+  const runProcess = dependencies?.runProcess ?? runFixedProcess;
   return {
     async run(request, signal, timeoutMs) {
       const launch = helperLaunch(request, scriptPath);
+      if (signal.aborted) throw cancelled();
+      // powershell.exe exists on Windows, so a missing -File is not spawn
+      // ENOENT. Cold start can outlast the grace period and look like a
+      // timeout. A script that exists is still launched, and one that hangs
+      // still hits the process timeout below.
+      await assertHelperScript(scriptPath);
       try {
-        return await runFixedProcess({
+        return await runProcess({
           command: launch.command,
           args: launch.args,
           signal,
@@ -222,11 +234,25 @@ function failureMessage(reason: string): string {
   }
 }
 
+async function assertHelperScript(scriptPath: string): Promise<void> {
+  let info;
+  try {
+    info = await stat(scriptPath);
+  } catch {
+    throw helperUnavailable();
+  }
+  if (!info.isFile()) throw helperUnavailable();
+}
+
+function helperUnavailable(): ScreenBackendError {
+  return unavailable("Windows capture helper is unavailable", "helper");
+}
+
 function mapProcessError(error: unknown): ScreenBackendError {
   if (!(error instanceof ProcessRunError)) return unavailable("capture helper failed", "helper");
   if (error.kind === "cancelled") return cancelled();
   if (error.kind === "timeout") return timedOut("capture helper timed out");
-  if (error.kind === "spawn") return unavailable("Windows capture helper is unavailable", "helper");
+  if (error.kind === "spawn") return helperUnavailable();
   const failure = parseHelperFailure(error.stdout);
   if (failure !== undefined) return failure;
   return unavailable("capture helper failed", "helper");
