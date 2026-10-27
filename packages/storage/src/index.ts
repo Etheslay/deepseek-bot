@@ -38,6 +38,7 @@ export * from "./repos/memories.js";
 export * from "./repos/knowledge.js";
 export * from "./repos/retention.js";
 export * from "./repos/triggers.js";
+export * from "./repos/event-rules.js";
 export * from "./repos/connectors.js";
 export * from "./repos/grants.js";
 export * from "./repos/mcp-grants.js";
