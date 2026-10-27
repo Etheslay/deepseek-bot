@@ -22,6 +22,7 @@ import {
   saveTemplate,
 } from "../templates/bot-templates.js";
 import { loadSkills, saveSkill, type SkillLibrary } from "./skills.js";
+import { t } from "../../i18n.js";
 
 export type ImportSummary = {
   addedSkills: number;
@@ -92,11 +93,11 @@ export function importLibrary(
   try {
     parsed = JSON.parse(text) as unknown;
   } catch {
-    return { ok: false, reason: "文件不是合法 JSON" };
+    return { ok: false, reason: t("skills.invalidJson") };
   }
   const validated = parseLibraryExport(parsed);
   if (!validated.ok) {
-    return { ok: false, reason: `文件校验失败：${validated.reason}` };
+    return { ok: false, reason: t("skills.validationFailed", [validated.reason]) };
   }
   const summary: ImportSummary = {
     addedSkills: 0,

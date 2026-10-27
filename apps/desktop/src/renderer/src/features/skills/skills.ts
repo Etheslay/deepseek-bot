@@ -292,10 +292,12 @@ export function buildSkillContext(
     .join("\n\n");
   const capped =
     body.length > MAX_SKILL_CONTEXT_CHARS
-      ? `${body.slice(0, MAX_SKILL_CONTEXT_CHARS)}\n…（技能上下文已截断）`
+      ? // i18n-ignore: model-facing skill context, not interface copy
+        `${body.slice(0, MAX_SKILL_CONTEXT_CHARS)}\n…（技能上下文已截断）`
       : body;
   const fence = "`".repeat(Math.max(3, longestBacktickRun(capped) + 1));
   return [
+    // i18n-ignore: model-facing skill context, not interface copy
     `已为该 bot 启用 ${skills.length} 个技能（按绑定顺序）：`,
     fence,
     capped,

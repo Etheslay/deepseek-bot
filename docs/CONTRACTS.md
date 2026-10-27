@@ -1,8 +1,10 @@
-# 接口与数据契约 v0.5
+# 接口与数据契约 v0.6
 
 本文件定义本项目前后端契约，不是 DeepSeek Harness 官方 API。状态：v0.1 已冻结（2026-10-23，D00 验收记录见 D00 Issue）；v0.2 为 D15 写层扩展；v0.3（2026-10-26，D16 后端）新增人类权限控制方法；v0.4（2026-10-26，D28 共编侧车）新增 `artifacts.*` 方法组，`protocolVersion` 升至 0.4，继续接受 0.1–0.3 发送方。工作流文档 `schemaVersion` 保持 0.1（存量数据可读）。后续变更按 §7 提升版本并由变更负责人自审同步使用方。可执行实现位于 `packages/contracts/`：schema、§7 夹具与双方共用契约测试见 [packages/contracts/README.md](../packages/contracts/README.md)。所有字段均需后端校验，TypeScript 类型不能替代运行时校验。
 
-v0.5（D19 MCP HTTP 契约片）新增连接器类型、MCP 工具发现与逐机器人精确工具授权方法，以及独立能力 `mcp.call`。当前 `protocolVersion` 为 0.5，继续接受 0.1–0.4 发送方；工作流 `schemaVersion` 仍为 0.1。本片仅交付可执行契约，不代表 MCP Host、存储迁移、桌面设置或真实服务联调已经完成。
+v0.5（D19 MCP HTTP 契约片）新增连接器类型、MCP 工具发现与逐机器人精确工具授权方法，以及独立能力 `mcp.call`。该契约片不代表 MCP Host、存储迁移、桌面设置或真实服务联调已经完成。
+
+v0.6（D21 指定窗口截图与本地 OCR 契约片）新增 `screen.*` 受信桌面方法与结果元数据。当前 `protocolVersion` 为 0.6，继续接受 0.1–0.5 发送方；工作流 `schemaVersion` 仍为 0.1。本节定义可执行 schema 与后续实现要求，不代表 Windows 采集、离线 OCR、Host 或桌面已实现或验收。实现依据见 [D21 设计](superpowers/specs/2026-10-27-local-screen-sensing-design.md)。
 
 ## 1. 通用规则
 
@@ -33,6 +35,8 @@ v0.5（D19 MCP HTTP 契约片）新增连接器类型、MCP 工具发现与逐�
 | Artifact | id, runId, nodeRunId, relativePath, mediaType, size, checksum | 限于授权产物目录；校验后打开；预览不执行主动内容 |
 | BotArtifact | relativePath, mediaType, size, updatedAt, checksum | v0.4：bot 工作区可编辑文件，按 (botId, relativePath) 寻址；mediaType 由扩展名映射，text/html 与二进制不进内联编辑（QA-14） |
 | ArtifactVersion | id, botId, relativePath, revision, author(user\|bot), mediaType, size, checksum, createdAt | v0.4：只追加版本链，同文件 revision 唯一；快照内容存于数据根 `artifacts/coedit-versions/<botId>/`（含产物备份即含版本）；回退以新版本落盘，不改写历史 |
+| ScreenResult | id, mode(image\|ocr), at, width, height, hasOcr | v0.6：严格元数据对象；id 为 UUID，at 为 UTC ISO，每边整数 1–8192；不含路径、窗口标题、图像或 OCR 正文 |
+| ScreenStatus | supported, enabled, target, busy | v0.6：布尔状态；target 为 null 或 `{id: UUID, title: string≤512}`，id 是当前 Host 代次的不透明窗口 token |
 | CapabilityPolicy | capability, mode | v0.3；全局 allow/ask/deny 默认策略，受高风险能力限制 |
 | ConnectorKind | sd-webui / mcp-http | v0.5；register 省略 kind 时默认 sd-webui；现有连接器响应 kind 可选以兼容旧 Host，后续实现应始终输出类型；旧记录按 sd-webui 解释 |
 | McpTool | name, description?, inputSchema | v0.5；name 为 1–200 字符精确名称，description ≤4000 字符，inputSchema 为 JSON 对象（record unknown）；发现最多 200 项，不把远端描述当指令或授权 |
@@ -69,6 +73,14 @@ MCP 实际调用使用独立能力 `mcp.call`，默认 `ask`，禁止全局 `all
 | connector.mcp.discover | v0.5 受信桌面契约：`{id: UUID}` → `{tools: McpTool[], at: UTC ISO}` | 请求严格字段；最多 200 个工具。Host 后续负责启用状态、mcp-http 类型、端点与远端响应验证 |
 | connector.mcp.grants.get | v0.5 受信桌面契约：`{botId: UUID}` → `{servers: McpServerGrant[]}` | 请求严格字段；返回最多 50 个服务器，仅当前 bot 的授权 |
 | connector.mcp.grants.set | v0.5 受信桌面契约：`{botId: UUID, id: UUID, allowedTools: string[]}` → `{servers: McpServerGrant[]}` | 仅替换指定 bot 与连接器的工具白名单；最多 200 个唯一精确名称，空数组清空；不得扩大其他服务器权限。后续 Host 校验名称确实存在于该服务器的发现结果 |
+| screen.status | v0.6：`{botId: UUID}` → `ScreenStatus` | 仅受信桌面；不能凭读取状态取得采集授权 |
+| screen.windows.list | v0.6：`{}` → `{windows: {id: UUID, title: string≤512}[]}` | 最多 200 个窗口；不暴露 HWND、PID 或文件路径；列表仅含元数据 |
+| screen.target.set | v0.6：`{botId: UUID, id: UUID\|null}` → `ScreenStatus` | null 清除目标；选择绑定当前代次，重启后重新选择；设置目标不触发采集 |
+| screen.request | v0.6：`{botId: UUID, mode: image\|ocr}` → `ScreenResult` | 指定窗口截图或截图后本地 OCR；复用 `screen.capture` 默认 deny、仅单次审批；返回严格元数据 |
+| screen.cancel | v0.6：`{botId: UUID}` → `{cancelled: boolean}` | 取消该 bot 等待审批或进行中的操作；仅结束应用拥有的辅助进程 |
+| screen.results.list | v0.6：`{botId: UUID}` → `{results: ScreenResult[]}` | 最多 50 项，按新到旧；满额要求用户删除，不覆盖旧结果 |
+| screen.result.read | v0.6：`{botId: UUID, id: UUID}` → `{result: ScreenResult, imageBase64: string≤360000, text: string≤65536\|null}` | 仅受信桌面本机预览；JPEG base64 与 OCR 正文不进入模型输出；Host 另检查实际文件字节数 |
+| screen.result.delete | v0.6：`{botId: UUID, id: UUID}` → `{deleted: true}` | 仅删除该 bot 的清单产物，不能按任意路径删除 |
 | memory.list / write / delete | v0.3 人类查看、写入和删除当前 bot 的记忆 | 只作用于 payload.botId；空查询返回最近记录，默认 20、最多 50；删除未命中返回 INVALID_INPUT，不暴露其他 bot 的记录 |
 | memory.retention.get / set | v0.3 保留策略（记忆 + 知识共用）：retentionDays / memoryMaxPerBot / knowledgeMaxPerBot | 0 = 不限制（默认）；损坏值按 0 读——损坏的设置只会让清理变保守；Host 启动与每次写入后执行清扫 |
 | knowledge.list / write / delete | v0.3 当前 bot 的独立知识文档（迁移 `0010-knowledge-docs`） | 正文上限 100000 字（独立于 4000 字记忆）；list 只回摘要（不回正文，1 MiB 消息上限安全）；删除 bot 域隔离同记忆 |
@@ -109,6 +121,14 @@ NodeRun：`pending → running ↔ waiting_approval → succeeded / failed / can
 新增可选字段可兼容扩展；删除/更名必需字段、状态语义或事件顺序变化需提升 protocolVersion / schemaVersion、提供迁移说明，由变更负责人自审并同步使用方。拒绝未知更高版本，不能默默丢字段。
 
 契约夹具至少覆盖成功、限流、取消、审批拒绝、重复消息、并发编辑、崩溃重连、循环图、路径越界和过期审批。前端可用这些夹具开发；集成验收必须使用真实适配层。
+
+## D21 屏幕感知边界（实现要求）
+
+`screen.*` 全部仅供受信桌面调用，请求与响应严格校验字段，不接受用户路径、命令、原生窗口句柄或任意输入模式。模型工具 `screen_capture` 只接受 `mode`，可信 bot 身份从 Host 会话登记表取得；内部授权参数绑定 `mode`、`selectionId` 与 `windowTitle`，不能由模型更改目标或策略。模型仅得到 `ScreenResult` 元数据，`screen.result.read` 的图像与文本仅供受信界面读取；识别正文不自动进入聊天、Harness、审计或遥测。窗口标题和 OCR 文本都按数据转义显示。
+
+后续 Host/执行实现负责批准前后目标快照与授权重验、跨 bot 隔离、全局单操作锁（忙时拒绝，不排队）、取消与超时、路径/链接/文件类型检查和原子发布。采集最多 8192×8192 中的 1600 万像素、PNG 8 MiB、JPEG 预览 256 KiB、OCR UTF-8 正文 64 KiB；schema 的字符串长度上限不能代替文件字节校验。超限拒绝并清理本次临时产物，不截断结果。采集 10 秒、OCR 60 秒，审批 10 分钟。停用、清除目标、bot 归档、策略变更、聊天取消和 Host 关闭使相关操作失效。
+
+产物保存在工作区之外的数据根 `screen-outputs/<botId>/<resultId>/`，重启仅恢复产物，不恢复窗口选择；产物目录与正文不进入元数据备份，缺失产物明确报不可用。审计仅存摘要、决定与稳定错误码，不存标题、图像或 OCR 原文。OCR 必须使用随附本地资源；缺失资源报 `RUNTIME_UNAVAILABLE`。任意 shell、键鼠输入、全桌面回退、任意路径 OCR、实时视频和远程识别不在此契约片范围。
 
 ## 8. 库导出文件（协议面之外）
 

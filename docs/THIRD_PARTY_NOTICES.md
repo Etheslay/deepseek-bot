@@ -1,5 +1,13 @@
 # 第三方资产与许可
 
+## D21 离线 OCR
+
+- 固定引擎：`tesseract.js@7.0.0`、`tesseract.js-core@7.0.0`（Apache-2.0）。来源：[Tesseract.js](https://github.com/naptha/tesseract.js)、[Tesseract.js core](https://github.com/naptha/tesseract.js-core)。
+- 固定语言数据：`@tesseract.js-data/eng@1.0.0` 与 `@tesseract.js-data/chi_sim@1.0.0`，上游为 [Tesseract 语言数据](https://github.com/tesseract-ocr/tessdata)，分发说明见 [naptha/tessdata](https://github.com/naptha/tessdata)。
+- Worker、WASM 和模型仅作为本地资源使用，不从 CDN 下载，也不向远程 OCR 服务提交图像。构建复制上游 LICENSE/NOTICE 与所使用的数据许可；完整依赖许可证仍以锁文件和发行资源为准。
+- `packages/exec-daemon` 的构建把 worker、core/WASM、`4.0.0_best_int` 的 eng/chi_sim 和上述许可复制到构建目录。运行时只读该目录的绝对路径。语言包 1.0.0 的 package.json 声明 MIT，发布包本身没有 LICENSE 文件，构建目录里的 `licenses/tesseract-data.json` 记录了这一点。
+- 本片没有发行安装包验收。Host 接线、桌面预览和真实 Windows 窗口仍由后续片交付。
+
 ## DeepSeek 蓝海豚
 
 - 文件：`apps/desktop/assets/avatars/dolphin.png`

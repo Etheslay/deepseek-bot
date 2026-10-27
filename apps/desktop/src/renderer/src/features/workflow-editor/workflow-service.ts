@@ -25,6 +25,7 @@ import {
   type WorkflowIssue,
 } from "@deepseek-bot/contracts";
 import { ServiceError } from "../../services/desktop-service.js";
+import { t } from "../../i18n.js";
 
 export type WorkflowSummary = {
   id: string;
@@ -135,7 +136,7 @@ export function duplicateDraft(source: WorkflowDraft): {
     toNodeId: idMap[edge.toNodeId] ?? edge.toNodeId,
   }));
   const draft: WorkflowDraft = {
-    name: truncated(`${source.name} 副本`, TEXT_LIMITS.name),
+    name: truncated(t("common.copyOf", [source.name]), TEXT_LIMITS.name),
     schemaVersion: source.schemaVersion,
     nodes,
     edges,
@@ -288,14 +289,14 @@ export function createFixtureWorkflowService(): WorkflowServiceApi {
 
     async importTemplate(template): Promise<WorkflowImportResult> {
       if (!isWithinMessageSizeLimit(template)) {
-        return invalid("模板超过 1 MiB 契约消息上限");
+        return invalid(t("workflow.templateTooLarge"));
       }
       if (typeof template !== "object" || template === null) {
-        return invalid("template 必须是对象", "schemaVersion");
+        return invalid(t("workflow.templateMustBeObject"), "schemaVersion");
       }
       const outer = template as { schemaVersion?: unknown; workflow?: unknown };
       if (typeof outer.schemaVersion !== "string") {
-        return invalid("template.schemaVersion 必须是字符串", "schemaVersion");
+        return invalid(t("workflow.templateSchemaVersion"), "schemaVersion");
       }
       if (outer.schemaVersion !== WORKFLOW_SCHEMA_VERSION) {
         // Unknown (higher or otherwise unsupported) version: refuse before
@@ -304,12 +305,12 @@ export function createFixtureWorkflowService(): WorkflowServiceApi {
       }
       const inner = outer.workflow;
       if (typeof inner !== "object" || inner === null) {
-        return invalid("template.workflow 必须是对象", "workflow");
+        return invalid(t("workflow.templateWorkflowObject"), "workflow");
       }
       const innerVersion = (inner as { schemaVersion?: unknown }).schemaVersion;
       if (innerVersion !== WORKFLOW_SCHEMA_VERSION) {
         if (typeof innerVersion !== "string") {
-          return invalid("workflow.schemaVersion 必须是字符串", "workflow.schemaVersion");
+          return invalid(t("workflow.workflowSchemaVersion"), "workflow.schemaVersion");
         }
         return { accepted: false, errors: [], errorCode: "DATA_VERSION_UNSUPPORTED" };
       }

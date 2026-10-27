@@ -46,8 +46,14 @@ export function runChatStream(deps: {
    * inside a state updater, which is the render phase.
    */
   isCurrent: () => boolean;
+  /**
+   * Optional: reported once per stream with the raw result, after the state has
+   * settled. D22's tray status and system notifications need the outcome
+   * (success / cancelled / failed) that the reducer folds away.
+   */
+  onSettled?: (result: StreamResult) => void;
 }): StreamHandle {
-  const { stream, botId, text, forKey, update, onAssistant, isCurrent } = deps;
+  const { stream, botId, text, forKey, update, onAssistant, isCurrent, onSettled } = deps;
   let acc = "";
   const handle = stream(botId, text, {
     onDelta: (chunk) => {
@@ -71,20 +77,26 @@ export function runChatStream(deps: {
     // on the spinner forever. Decide first, commit outside the updater.
     if (result.cancelled) {
       update((prev) => (prev && prev.forKey === forKey ? { ...applyCancelled(prev), forKey } : prev));
+      onSettled?.(result);
       return;
     }
     if (result.failure) {
       const failure = result.failure;
-      update((prev) => (prev && prev.forKey === forKey ? { ...applyFailure(prev, failure), forKey } : prev));
+      update((prev) =>
+        prev && prev.forKey === forKey ? { ...applyFailure(prev, failure), forKey } : prev,
+      );
+      onSettled?.(result);
       return;
     }
     // Another chat took the stream over while this turn was in flight: its
-    // answer belongs to that conversation, not this one.
+    // answer belongs to that conversation, not this one, and that turn reports
+    // its own settlement.
     if (!isCurrent()) {
       return;
     }
     onAssistant(acc);
     update((prev) => (prev && prev.forKey === forKey ? null : prev));
+    onSettled?.(result);
   });
   return handle;
 }

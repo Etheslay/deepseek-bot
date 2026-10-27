@@ -6,23 +6,33 @@
 import { useRef, useState, type JSX, type KeyboardEvent } from "react";
 import type { Run } from "@deepseek-bot/contracts";
 import { isRunTerminal } from "@deepseek-bot/contracts";
+import { formatFullDateTime, t, type MessageKey } from "../../../i18n.js";
 
-export const RUN_STATUS_LABELS: Record<Run["status"], string> = {
-  queued: "排队中",
-  running: "运行中",
-  waiting_approval: "等待审批",
-  cancelling: "取消中",
-  succeeded: "已成功",
-  failed: "已失败",
-  cancelled: "已取消",
-  interrupted: "已中断",
+/**
+ * Run status labels are message keys, not strings: a module-level Chinese table
+ * would freeze the language at import time (D22). `runStatusLabel()` reads the
+ * live catalogue instead, so a language switch re-renders correctly.
+ */
+const RUN_STATUS_LABEL_KEYS: Record<Run["status"], MessageKey> = {
+  queued: "runs.queued",
+  running: "runs.statusRunning",
+  waiting_approval: "chat.awaitingApproval",
+  cancelling: "runs.cancelling",
+  succeeded: "runs.statusSucceeded",
+  failed: "runs.statusFailed",
+  cancelled: "runs.statusCancelled",
+  interrupted: "runs.statusInterrupted",
 };
+
+export function runStatusLabel(status: Run["status"]): string {
+  return t(RUN_STATUS_LABEL_KEYS[status]);
+}
 
 function formatTime(iso: string | null): string {
   if (iso === null) {
     return "—";
   }
-  return new Date(iso).toLocaleString();
+  return formatFullDateTime(iso);
 }
 
 export function RunList(props: {
@@ -67,14 +77,14 @@ export function RunList(props: {
         >
           <span className="rm-run-line">
             <span className={`rm-status rm-status--${run.status}`}>
-              {RUN_STATUS_LABELS[run.status]}
+              {runStatusLabel(run.status)}
             </span>
             <span className="rm-run-name">{run.workflowSnapshot.name}</span>
           </span>
           <span className="rm-run-meta">
-            {run.trigger.kind === "manual" ? "手动" : "定时"} ·{" "}
+            {run.trigger.kind === "manual" ? t("runs.triggerManual") : t("runs.triggerScheduled")} ·{" "}
             {formatTime(run.createdAt)}
-            {run.resumedFromRunId !== undefined ? " · 恢复运行" : ""}
+            {run.resumedFromRunId !== undefined ? t("runs.resumedSuffix") : ""}
           </span>
         </button>
       </li>
@@ -82,22 +92,22 @@ export function RunList(props: {
   };
 
   return (
-    <div className="rm-run-list" role="region" aria-label="运行列表">
-      <div className="rm-list-head">运行（{runs.length}）</div>
-      <ul className="rm-run-groups" ref={listRef} onKeyDown={onKeyDown} aria-label="运行条目">
+    <div className="rm-run-list" role="region" aria-label={t("runs.runList")}>
+      <div className="rm-list-head">{t("runs.runCountHeader", [runs.length])}</div>
+      <ul className="rm-run-groups" ref={listRef} onKeyDown={onKeyDown} aria-label={t("runs.runListItems")}>
         {activeRuns.length > 0 && (
           <li className="rm-group-label" aria-hidden="true">
-            活跃
+            {t("runs.active")}
           </li>
         )}
         {activeRuns.map((run, index) => renderItem(run, index))}
         {historyRuns.length > 0 && (
           <li className="rm-group-label" aria-hidden="true">
-            历史
+            {t("runs.history")}
           </li>
         )}
         {historyRuns.map((run, index) => renderItem(run, activeRuns.length + index))}
-        {runs.length === 0 && <li className="rm-empty">暂无运行</li>}
+        {runs.length === 0 && <li className="rm-empty">{t("runs.noRuns")}</li>}
       </ul>
     </div>
   );

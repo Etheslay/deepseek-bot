@@ -5,7 +5,12 @@ import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { MISFIRE_POLICY } from "@deepseek-bot/contracts";
-import { createHost, type DeepSeekBotHost } from "./host.js";
+import {
+  DEFAULT_MODEL_PROFILE_ID,
+  REASONER_MODEL_PROFILE_ID,
+  createHost,
+  type DeepSeekBotHost,
+} from "./host.js";
 
 const fakeHarness = fileURLToPath(
   new URL("../../harness-adapter/src/testing/fake-harness.mjs", import.meta.url),
@@ -113,6 +118,52 @@ describe("createHost", () => {
     host = created;
     return created;
   }
+
+  it("seeds the built-in chat and reasoner model profiles idempotently (GAP_AUDIT G5)", async () => {
+    // Deliberately NOT via started(): that helper seeds extra test profiles,
+    // and this case pins the exact built-in set.
+    const first = await createHost({
+      dataRoot: root,
+      resolveApiKey: async () => "test-key",
+      dshBin: fakeHarness,
+      childEnv: (env) => ({ ...env, FAKE_SCENARIO: "ok" }),
+    });
+    hosts.push(first);
+    host = first;
+    const rows = first.db.raw
+      .prepare("SELECT id, model, endpoint FROM model_profiles;")
+      .all() as Array<{ id: string; model: string; endpoint: string }>;
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    expect(byId.get(DEFAULT_MODEL_PROFILE_ID)).toMatchObject({
+      model: "deepseek-chat",
+      endpoint: "https://api.deepseek.com",
+    });
+    expect(byId.get(REASONER_MODEL_PROFILE_ID)).toMatchObject({
+      model: "deepseek-reasoner",
+      endpoint: "https://api.deepseek.com",
+    });
+
+    // Re-open the same data root: the seed runs again and INSERT OR IGNORE
+    // must keep exactly one row per built-in profile.
+    await first.shutdown();
+    hosts.pop();
+    const reopened = await createHost({
+      dataRoot: root,
+      resolveApiKey: async () => "test-key",
+      dshBin: fakeHarness,
+      childEnv: (env) => ({ ...env, FAKE_SCENARIO: "ok" }),
+    });
+    hosts.push(reopened);
+    host = reopened;
+    const reasonerRows = reopened.db.raw
+      .prepare("SELECT id FROM model_profiles WHERE id = ?;")
+      .all(REASONER_MODEL_PROFILE_ID) as Array<{ id: string }>;
+    expect(reasonerRows).toHaveLength(1);
+    const total = reopened.db.raw
+      .prepare("SELECT COUNT(*) AS total FROM model_profiles;")
+      .get() as { total: number };
+    expect(total.total).toBe(2);
+  });
 
   it("runs a workflow end to end through the method surface (fake harness)", async () => {
     await started();

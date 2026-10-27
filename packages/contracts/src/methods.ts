@@ -47,6 +47,7 @@ import {
 } from "./events.js";
 import { WorkflowIssueSchema } from "./workflow.js";
 import { PERMISSION_METHODS } from "./permissions.js";
+import { SCREEN_METHODS } from "./screen.js";
 
 export const MAX_MESSAGE_BYTES = 1_048_576;
 
@@ -154,6 +155,14 @@ export const METHODS = [
   "permission.approval.list",
   "permission.approval.decide",
   "permission.audit.list",
+  "screen.status",
+  "screen.windows.list",
+  "screen.target.set",
+  "screen.request",
+  "screen.cancel",
+  "screen.results.list",
+  "screen.result.read",
+  "screen.result.delete",
 ] as const;
 
 export type Method = (typeof METHODS)[number];
@@ -1082,6 +1091,7 @@ export const METHOD_CONTRACTS = {
     }),
   },
   ...PERMISSION_METHODS,
+  ...SCREEN_METHODS,
 } as const satisfies Record<
   Method,
   { request: z.ZodType; response: z.ZodType }
