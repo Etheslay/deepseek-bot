@@ -111,6 +111,7 @@ export function makeBot(
     modelProfileId: profile.id,
     workspaceId,
     toolPolicyId: randomUUID(),
+    role: "standard",
     archivedAt: null,
     ...overrides,
   };

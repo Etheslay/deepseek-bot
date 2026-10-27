@@ -127,6 +127,8 @@ async function setup(options?: { catalogTimeoutMs?: number }) {
       modelProfileId: profileId,
       workspaceId,
       toolPolicyId: policy.id,
+      /* v0.7 manager orchestration: every bot carries a coordinator role. */
+      role: "standard",
       archivedAt: null,
     },
   }).bot;

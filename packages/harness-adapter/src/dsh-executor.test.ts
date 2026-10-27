@@ -41,6 +41,7 @@ function bot(overrides: Partial<Bot> = {}): Bot {
     modelProfileId: profile.id,
     workspaceId: "workspace-1",
     toolPolicyId: "policy-1",
+    role: "standard",
     archivedAt: null,
     ...overrides,
   };

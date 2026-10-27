@@ -248,6 +248,7 @@ function botSnapshot(
     modelProfileId: MODEL_PROFILE,
     workspaceId: WORKSPACE,
     toolPolicyId: TOOL_POLICY,
+    role: "standard",
     archivedAt: null,
   };
 }

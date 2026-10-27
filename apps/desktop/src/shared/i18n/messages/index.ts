@@ -24,6 +24,7 @@ import { searchMessages } from "./search.js";
 import { servicesMessages } from "./services.js";
 import { shellMessages } from "./shell.js";
 import { skillsMessages } from "./skills.js";
+import { tasksMessages } from "./tasks.js";
 import { workflowMessages } from "./workflow.js";
 import { d22Messages } from "./d22.js";
 
@@ -46,6 +47,7 @@ export const MESSAGES = {
   ...servicesMessages,
   ...shellMessages,
   ...skillsMessages,
+  ...tasksMessages,
   ...workflowMessages,
   ...d22Messages,
 } satisfies Record<string, Message>;
