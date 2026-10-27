@@ -24,11 +24,8 @@ import {
   readChromeImport,
   scanChromeProfiles,
 } from "./chrome-bookmarks.js";
-import {
-  DATA_ROOT_DIR_NAME,
-  HOST_EVENT_MISSED,
-  SYSTEM_EVENT_WINDOW_FOCUS,
-} from "../shared/ipc-channels.js";
+import { DATA_ROOT_DIR_NAME, HOST_EVENT_MISSED, SYSTEM_EVENT_WINDOW_FOCUS } from "../shared/ipc-channels.js";
+import { pickKnowledgeFile } from "./knowledge-import.js";
 
 let mainWindow: BrowserWindow | null = null;
 let trayController: TrayController | null = null;
@@ -220,6 +217,7 @@ function registerShellIpc(win: BrowserWindow): void {
         locale: app.getLocale(),
       }),
       saveKey: (key) => saveApiKey(key),
+      importKnowledge: () => pickKnowledgeFile(win),
       checkUpdates: () => checkUpdates(),
       downloadAndInstallUpdate: () => downloadAndInstallUpdate(),
       setLanguage: (preference) => setMainLanguagePreference(preference),

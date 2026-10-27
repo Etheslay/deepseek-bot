@@ -29,25 +29,57 @@ import { WORKFLOW_SCHEMA_VERSION } from "./version.js";
  * a data contract: batch creation assigns members distinct combinations, so
  * every consumer must compare the same pool. Renderers map these ids to
  * their own visuals; ids are stable, palettes evolve only via a contract PR.
+ *
+ * The 2026-10 shape pass replaced the traced-outline set with a compiled
+ * primitive family (blob / pebble / bean / … / leaf). Ids already handed out to
+ * stored avatars are NOT deleted: they move to `AVATAR_SHAPE_IDS_RETIRED`, so
+ * existing rows keep validating and keep rendering, while nothing new is ever
+ * assigned a retired id. Same rule for retired colours in
+ * `AVATAR_COLORS_RETIRED`.
  */
 export const AVATAR_SHAPES = [
-  "circle",
   "blob",
   "squircle",
-  "star4",
+  "cylinder",
+  "hex",
+  "gem",
+  "crystal",
+  "shield",
+  "arch",
   "cloud",
+  "leaf",
   "heart",
-  "flower6",
-  "egg",
-  "capsule",
-  "triangle",
-  "pentagon",
+] as const;
+
+/** Kept for compatibility: valid input, never assigned. */
+export const AVATAR_SHAPE_IDS_RETIRED = [
+  "circle",
+  "star4",
   "star5",
+  "flower6",
+  "pentagon",
   "hexagon",
   "pumpkin",
+  "triangle",
+  "egg",
+  "capsule",
 ] as const;
 
 export const AVATAR_COLORS = [
+  "#A27952",
+  "#FF3E51",
+  "#FF781C",
+  "#FFAF38",
+  "#00C972",
+  "#1CC3B0",
+  "#2A92FE",
+  "#A97EFE",
+  "#FF5EB1",
+  "#959595",
+] as const;
+
+/** Kept for compatibility: valid input, never assigned. */
+export const AVATAR_COLORS_RETIRED = [
   "#8b5e3c",
   "#e8483f",
   "#f08a24",
@@ -61,8 +93,8 @@ export const AVATAR_COLORS = [
 ] as const;
 
 export const AvatarSchema = z.object({
-  shape: z.enum(AVATAR_SHAPES),
-  color: z.enum(AVATAR_COLORS),
+  shape: z.enum([...AVATAR_SHAPES, ...AVATAR_SHAPE_IDS_RETIRED]),
+  color: z.enum([...AVATAR_COLORS, ...AVATAR_COLORS_RETIRED]),
 });
 
 export type Avatar = z.infer<typeof AvatarSchema>;
@@ -492,3 +524,107 @@ export const ArtifactSchema = z.object({
 });
 
 export type Artifact = z.infer<typeof ArtifactSchema>;
+
+// ---------------------------------------------------------------------------
+// Bot workspace artifact (D28 co-edit sidecar)
+// ---------------------------------------------------------------------------
+
+/**
+ * One editable file in a bot's workspace directory. Unlike the run-scoped
+ * {@link ArtifactSchema}, a workspace artifact has no run identity: it is
+ * addressed by (botId, relativePath) and co-edited by the user and the bot.
+ */
+export const BotArtifactSchema = z.object({
+  relativePath: RelativeArtifactPathSchema,
+  mediaType: MediaTypeSchema,
+  size: z.int().nonnegative(),
+  updatedAt: IsoDateTimeUtcSchema,
+  checksum: z.object({
+    algorithm: z.literal("sha256"),
+    value: Sha256HexSchema,
+  }),
+});
+
+export type BotArtifact = z.infer<typeof BotArtifactSchema>;
+
+/**
+ * One immutable version of a workspace artifact. `author` records who produced
+ * the content: "user" for sidecar saves and reverts, "bot" for content the
+ * Host observed in the workspace that no version recorded yet (lazy capture —
+ * the Harness writes workspace files directly, outside any method call).
+ */
+export const ArtifactVersionSchema = z.object({
+  id: UuidSchema,
+  botId: UuidSchema,
+  relativePath: RelativeArtifactPathSchema,
+  revision: z.int().min(1),
+  author: z.enum(["user", "bot"]),
+  mediaType: MediaTypeSchema,
+  size: z.int().nonnegative(),
+  checksum: z.object({
+    algorithm: z.literal("sha256"),
+    value: Sha256HexSchema,
+  }),
+  createdAt: IsoDateTimeUtcSchema,
+});
+
+export type ArtifactVersion = z.infer<typeof ArtifactVersionSchema>;
+
+/** Extensions the Host maps to inline-editable text media types (D28). */
+const TEXT_MEDIA_EXTENSIONS: Readonly<Record<string, string>> = {
+  ".md": "text/markdown",
+  ".markdown": "text/markdown",
+  ".txt": "text/plain",
+  ".json": "application/json",
+  ".csv": "text/csv",
+  ".yaml": "text/yaml",
+  ".yml": "text/yaml",
+  ".xml": "text/xml",
+};
+
+const IMAGE_MEDIA_EXTENSIONS: Readonly<Record<string, string>> = {
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".gif": "image/gif",
+  ".webp": "image/webp",
+  ".svg": "image/svg+xml",
+};
+
+/**
+ * Media type for a workspace file path. Unknown extensions are binary
+ * (application/octet-stream); HTML keeps its type but is never editable
+ * (QA-14: no inline script execution).
+ */
+export function artifactMediaTypeForPath(relativePath: string): string {
+  const lower = relativePath.toLowerCase();
+  if (lower.endsWith(".html") || lower.endsWith(".htm")) {
+    return "text/html";
+  }
+  const dot = lower.lastIndexOf(".");
+  if (dot < 0) {
+    return "application/octet-stream";
+  }
+  const extension = lower.slice(dot);
+  return (
+    TEXT_MEDIA_EXTENSIONS[extension] ??
+    IMAGE_MEDIA_EXTENSIONS[extension] ??
+    "application/octet-stream"
+  );
+}
+
+/**
+ * Whether a media type can be opened in the co-edit editor. text/html is
+ * deliberately excluded: rendering user-editable HTML would let a document
+ * execute scripts inside the renderer (QA-14).
+ */
+export function isTextEditableMediaType(mediaType: string): boolean {
+  return (
+    mediaType === "text/markdown" ||
+    mediaType === "text/plain" ||
+    mediaType === "application/json" ||
+    mediaType === "text/csv" ||
+    mediaType === "text/yaml" ||
+    mediaType === "text/xml"
+  );
+}

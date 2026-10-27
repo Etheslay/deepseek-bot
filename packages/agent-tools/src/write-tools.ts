@@ -13,7 +13,7 @@
  * typos are rejected here; dispatch re-validates against the authoritative
  * contract schema anyway (CONTRACTS §3).
  */
-import { BotCreationDraftSchema } from "@deepseek-bot/contracts";
+import { AvatarSchema, BotCreationDraftSchema } from "@deepseek-bot/contracts";
 import { z } from "zod";
 import type { ToolCapability } from "./types.js";
 import type { ContractCaller } from "./read-tools.js";
@@ -61,38 +61,9 @@ const createBotsBatchShape: CapabilityShape = {
             modelProfileId: z.string().uuid().optional(),
             workspaceId: z.string().uuid().optional(),
             toolPolicyId: z.string().uuid().optional(),
-            avatar: z
-              .object({
-                shape: z.enum([
-                  "circle",
-                  "blob",
-                  "squircle",
-                  "star4",
-                  "cloud",
-                  "heart",
-                  "flower6",
-                  "egg",
-                  "capsule",
-                  "triangle",
-                  "pentagon",
-                  "star5",
-                  "hexagon",
-                  "pumpkin",
-                ]),
-                color: z.enum([
-                  "#8b5e3c",
-                  "#e8483f",
-                  "#f08a24",
-                  "#f0b429",
-                  "#3ecf8e",
-                  "#2fbfa0",
-                  "#3b93f0",
-                  "#8b5cf6",
-                  "#e152b0",
-                  "#a3a3a3",
-                ]),
-              })
-              .optional(),
+            // Reused verbatim from the contract: this list drifted from the
+            // canonical pool once already, which is why it is not restated.
+            avatar: AvatarSchema.optional(),
           }),
         )
         .min(1)

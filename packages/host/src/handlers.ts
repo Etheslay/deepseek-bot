@@ -52,6 +52,27 @@ import {
   getSettingRaw,
   appendChatMessage,
   listChatMessages,
+  deleteMemory,
+  listMemories,
+  writeMemory,
+  deleteKnowledgeDoc,
+  listKnowledgeDocs,
+  searchKnowledge,
+  writeKnowledgeDoc,
+  readRetentionPolicy,
+  writeRetentionPolicy,
+  sweepRetention,
+  deleteTriggerRule,
+  decideTriggerFiring,
+  getTriggerFiring,
+  listTriggerFirings,
+  listTriggerRules,
+  saveTriggerRule,
+  setTriggerEnabled,
+  listConnectors,
+  registerConnector,
+  setConnectorEnabled,
+  setConnectorEndpoint,
   updateBot,
   type BotPatch,
   type DataLayout,
@@ -60,7 +81,8 @@ import {
   revokePermissionGrant, listPermissionApprovals, listPermissionAudit,
 } from "@deepseek-bot/storage";
 import type { AgentPermissionService } from "./agent-permissions.js";
-import { DEFAULT_MODEL_PROFILE_ID, backupDirFor, newBackupId } from "./host.js";
+import type { WorkspaceArtifacts } from "./artifacts.js";
+import { DEFAULT_MODEL_PROFILE_ID, SEARXNG_ENDPOINT_SETTING, backupDirFor, newBackupId } from "./host.js";
 import { chatSessionIdFor, type ChatManager } from "./chat.js";
 import { KNOWN_CAPABILITIES, policyKey, readPolicy, type PolicyLevel } from "./permissions.js";
 import {
@@ -69,7 +91,18 @@ import {
   revokeGrant,
   type GrantRow,
 } from "@deepseek-bot/storage";
-import type { ToolGateway } from "@deepseek-bot/agent-tools";
+import {
+  ToolRejectionError,
+  type ToolGateway,
+  type UserQuestionControls,
+} from "@deepseek-bot/agent-tools";
+
+export interface ChatSearchRecord {
+  readonly query: string;
+  readonly results: Array<{ title: string; url: string; snippet: string }>;
+  readonly warnings: string[];
+  readonly at: string;
+}
 
 export interface HostContext {
   readonly permissions: AgentPermissionService;
@@ -84,6 +117,19 @@ export interface HostContext {
   readonly chat: ChatManager;
   /** D15 agent tool gateway; `tool.invoke` routes model calls through it. */
   readonly agentTools: ToolGateway;
+  /** D28 co-edit sidecar over bot workspace files. */
+  readonly artifacts: WorkspaceArtifacts;
+  /** Trusted ask_user controls. The desktop answers; the model never sees these methods. */
+  readonly userQuestions: UserQuestionControls;
+  /** Trusted SearXNG endpoint. The model cannot set or read this through a tool. */
+  readonly webSearch: {
+    currentEndpoint(): string | undefined;
+    setEndpoint(endpoint: string | undefined): void;
+  };
+  /** In-memory chat search cards for one bot. Restart clears them. */
+  readonly searchResults: {
+    list(botId: string): ChatSearchRecord[];
+  };
 }
 
 function grantResponse(row: GrantRow): {
@@ -128,7 +174,46 @@ function invalid(message: string, details?: Record<string, unknown>): EngineErro
   });
 }
 
+/** Storage rows carry createdAt; the wire shape calls it `at`. */
+function toRuleResponse(row: {
+  id: string;
+  name: string;
+  workflowId: string;
+  eventType: "run.failed" | "run.completed";
+  filterWorkflowId: string | null;
+  enabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+}): {
+  id: string;
+  name: string;
+  workflowId: string;
+  eventType: "run.failed" | "run.completed";
+  filterWorkflowId: string | null;
+  enabled: boolean;
+  at: string;
+  updatedAt: string;
+} {
+  return {
+    id: row.id,
+    name: row.name,
+    workflowId: row.workflowId,
+    eventType: row.eventType,
+    filterWorkflowId: row.filterWorkflowId,
+    enabled: row.enabled,
+    at: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
 /** bot.create/bot.update accept a groupId; it must reference a live group. */
+function requireLiveBot(db: OpenedDatabase, botId: string) {
+  const bot = getBot(db, botId);
+  if (bot === undefined) throw invalid(`bot '${botId}' was not found`);
+  if (bot.archivedAt !== null) throw invalid("archived bots cannot chat");
+  return bot;
+}
+
 function requireGroup(db: OpenedDatabase, groupId: string): void {
   const group = getGroup(db, groupId);
   if (group === undefined) {
@@ -290,6 +375,14 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
       markBatchRevoked(db, payload.batchId);
       return { revokedBotIds, revokedGroupId };
     },
+
+    "workflow.list": () => ({
+      workflows: listWorkflows(db).map((workflow) => ({
+        id: workflow.id,
+        name: workflow.name,
+        revision: workflow.revision,
+      })),
+    }),
 
     "workflow.validate": (payload) => {
       const issues = validateWorkflowDraft(payload.workflow);
@@ -520,6 +613,333 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
     }),
 
     "chat.cancel": (payload) => ({ cancelled: chat.cancel(payload.sessionId) }),
+
+    "question.list": (payload) => {
+      const bot = requireLiveBot(db, payload.botId);
+      return {
+        questions: context.userQuestions.listPending(chatSessionIdFor(bot.id)).map((request) => ({
+          requestId: request.requestId,
+          question: request.question,
+          options: request.options.map((option) => ({ id: option.id, label: option.label })),
+          allowOther: request.allowOther,
+          expiresAt: request.expiresAt,
+        })),
+      };
+    },
+
+    "question.answer": (payload) => {
+      const bot = requireLiveBot(db, payload.botId);
+      let result;
+      try {
+        result = context.userQuestions.answer(
+          payload.requestId,
+          chatSessionIdFor(bot.id),
+          "optionId" in payload ? { optionId: payload.optionId } : { text: payload.text },
+        );
+      } catch (error) {
+        if (error instanceof ToolRejectionError) {
+          throw new EngineError({
+            code: error.code,
+            message: error.message,
+            retryable: false,
+          });
+        }
+        throw error;
+      }
+      const message = appendChatMessage(db, {
+        botId: bot.id,
+        sessionId: chatSessionIdFor(bot.id),
+        role: "user",
+        text: result.text,
+      });
+      return {
+        requestId: result.requestId,
+        ...(result.optionId !== undefined ? { optionId: result.optionId } : {}),
+        text: result.text,
+        messageId: message.id,
+        at: message.createdAt,
+      };
+    },
+
+    "search.config.get": () => ({ endpoint: context.webSearch.currentEndpoint() ?? null }),
+
+    "search.config.set": (payload) => {
+      try {
+        context.webSearch.setEndpoint(payload.endpoint ?? undefined);
+      } catch (error) {
+        if (error instanceof ToolRejectionError) {
+          throw new EngineError({ code: error.code, message: error.message, retryable: false });
+        }
+        throw error;
+      }
+      setSetting(db, SEARXNG_ENDPOINT_SETTING, payload.endpoint);
+      return { endpoint: payload.endpoint };
+    },
+
+    "search.results.list": (payload) => {
+      const bot = requireLiveBot(db, payload.botId);
+      return { searches: context.searchResults.list(bot.id) };
+    },
+
+    "memory.list": (payload) => {
+      const bot = requireLiveBot(db, payload.botId);
+      return {
+        memories: listMemories(db, {
+          botId: bot.id,
+          ...(payload.query !== undefined ? { query: payload.query } : {}),
+          limit: payload.limit,
+        }).map((row) => ({
+          id: row.id,
+          botId: row.botId,
+          text: row.text,
+          at: row.createdAt,
+        })),
+      };
+    },
+
+    "memory.write": (payload) => {
+      const bot = requireLiveBot(db, payload.botId);
+      const row = writeMemory(db, { botId: bot.id, text: payload.text });
+      // Retention limits apply right after a write, so the configured cap
+      // holds without waiting for the next host restart.
+      sweepRetention(db, readRetentionPolicy(db), now());
+      return { id: row.id, botId: row.botId, text: row.text, at: row.createdAt };
+    },
+
+    "memory.delete": (payload) => {
+      const bot = requireLiveBot(db, payload.botId);
+      deleteMemory(db, { botId: bot.id, memoryId: payload.memoryId });
+      return { deleted: true as const };
+    },
+
+    // D20 event automation: rules and the review queue. Nothing auto-starts;
+    // trigger.firing.decide "start" reuses the run.start path (same policy
+    // pinning, revision guard and idempotency semantics).
+    "trigger.list": () => ({
+      rules: listTriggerRules(db).map(toRuleResponse),
+    }),
+
+    "trigger.save": (payload) => {
+      const rule = payload.rule;
+      return toRuleResponse(
+        saveTriggerRule(db, {
+          ...(rule.id !== undefined ? { id: rule.id } : {}),
+          name: rule.name,
+          workflowId: rule.workflowId,
+          eventType: rule.eventType,
+          ...(rule.filterWorkflowId !== undefined
+            ? { filterWorkflowId: rule.filterWorkflowId }
+            : {}),
+        }),
+      );
+    },
+
+    "trigger.enable": (payload) => ({
+      ...toRuleResponse(setTriggerEnabled(db, { id: payload.id, enabled: true })),
+      enabled: true as const,
+    }),
+
+    "trigger.disable": (payload) => ({
+      ...toRuleResponse(setTriggerEnabled(db, { id: payload.id, enabled: false })),
+      enabled: false as const,
+    }),
+
+    "trigger.delete": (payload) => {
+      deleteTriggerRule(db, payload.id);
+      return { deleted: true as const };
+    },
+
+    "trigger.firing.list": (payload) => ({
+      firings: listTriggerFirings(db, {
+        ...(payload.status !== undefined ? { status: payload.status } : {}),
+        limit: payload.limit,
+      }).map((firing) => ({
+        id: firing.id,
+        ruleId: firing.ruleId,
+        ruleName: firing.ruleName,
+        workflowId: firing.workflowId,
+        eventType: firing.eventType,
+        sourceRunId: firing.sourceRunId,
+        reason: firing.reason,
+        status: firing.status,
+        at: firing.createdAt,
+        decidedAt: firing.decidedAt,
+      })),
+    }),
+
+    "trigger.firing.decide": (payload) => {
+      const firing = getTriggerFiring(db, payload.firingId);
+      if (firing === undefined) {
+        throw invalid("trigger firing was not found", { firingId: payload.firingId });
+      }
+      if (payload.decision === "dismiss") {
+        const decided = decideTriggerFiring(db, { firingId: firing.id, decision: "dismiss" });
+        return {
+          firing: { id: decided.id, status: decided.status, decidedAt: decided.decidedAt },
+          runId: null,
+        };
+      }
+      const workflow = getWorkflow(db, firing.workflowId);
+      if (workflow === undefined) {
+        throw invalid("target workflow no longer exists", { workflowId: firing.workflowId });
+      }
+      const { run } = engine.startRun({
+        workflowId: firing.workflowId,
+        trigger: { kind: "manual", idempotencyKey: randomUUID() },
+      });
+      const decided = decideTriggerFiring(db, {
+        firingId: firing.id,
+        decision: "start",
+        startedRunId: run.id,
+      });
+      return {
+        firing: { id: decided.id, status: decided.status, decidedAt: decided.decidedAt },
+        runId: run.id,
+      };
+    },
+
+    "memory.retention.get": () => ({ policy: readRetentionPolicy(db) }),
+
+    "memory.retention.set": (payload) => ({
+      policy: writeRetentionPolicy(db, payload.policy),
+    }),
+
+    // D18 独立知识表: long-form per-bot documents, separate from the 4k
+    // memory notes. list stays summary-only; search ranks local windows.
+    "knowledge.list": (payload) => {
+      const bot = requireLiveBot(db, payload.botId);
+      return {
+        docs: listKnowledgeDocs(db, { botId: bot.id }).map((doc) => ({
+          id: doc.id,
+          botId: doc.botId,
+          title: doc.title,
+          size: doc.size,
+          at: doc.createdAt,
+        })),
+      };
+    },
+
+    "knowledge.write": (payload) => {
+      const bot = requireLiveBot(db, payload.botId);
+      const doc = writeKnowledgeDoc(db, {
+        botId: bot.id,
+        title: payload.title,
+        text: payload.text,
+      });
+      sweepRetention(db, readRetentionPolicy(db), now());
+      return {
+        id: doc.id,
+        botId: doc.botId,
+        title: doc.title,
+        size: doc.size,
+        at: doc.createdAt,
+      };
+    },
+
+    "knowledge.delete": (payload) => {
+      const bot = requireLiveBot(db, payload.botId);
+      deleteKnowledgeDoc(db, { botId: bot.id, docId: payload.docId });
+      return { deleted: true as const };
+    },
+
+    "knowledge.search": (payload) => {
+      const bot = requireLiveBot(db, payload.botId);
+      return {
+        hits: searchKnowledge(db, {
+          botId: bot.id,
+          query: payload.query,
+          limit: payload.limit,
+        }),
+      };
+    },
+
+    "connector.list": () => ({
+      connectors: listConnectors(db).map((row) => ({
+        id: row.id,
+        name: row.name,
+        enabled: row.enabled,
+        credentialRef: row.credentialRef,
+        endpoint: row.endpoint,
+        at: row.createdAt,
+        updatedAt: row.updatedAt,
+      })),
+    }),
+
+    "connector.register": (payload) => {
+      const row = registerConnector(db, {
+        name: payload.name,
+        ...(payload.credentialRef !== undefined ? { credentialRef: payload.credentialRef } : {}),
+        ...(payload.endpoint !== undefined ? { endpoint: payload.endpoint } : {}),
+      });
+      return {
+        id: row.id,
+        name: row.name,
+        enabled: false as const,
+        credentialRef: row.credentialRef,
+        endpoint: row.endpoint,
+        at: row.createdAt,
+        updatedAt: row.updatedAt,
+      };
+    },
+
+    "connector.enable": (payload) => {
+      const row = setConnectorEnabled(db, { id: payload.id, enabled: true });
+      return {
+        id: row.id,
+        name: row.name,
+        enabled: true as const,
+        credentialRef: row.credentialRef,
+        endpoint: row.endpoint,
+        at: row.createdAt,
+        updatedAt: row.updatedAt,
+      };
+    },
+
+    "connector.disable": (payload) => {
+      const row = setConnectorEnabled(db, { id: payload.id, enabled: false });
+      return {
+        id: row.id,
+        name: row.name,
+        enabled: false as const,
+        credentialRef: row.credentialRef,
+        endpoint: row.endpoint,
+        at: row.createdAt,
+        updatedAt: row.updatedAt,
+      };
+    },
+
+    "connector.setEndpoint": (payload) => {
+      const row = setConnectorEndpoint(db, { id: payload.id, endpoint: payload.endpoint });
+      return {
+        id: row.id,
+        name: row.name,
+        enabled: row.enabled,
+        credentialRef: row.credentialRef,
+        endpoint: row.endpoint,
+        at: row.createdAt,
+        updatedAt: row.updatedAt,
+      };
+    },
+
+    "artifacts.list": (payload) => context.artifacts.list(payload.botId),
+
+    "artifacts.read": (payload) => context.artifacts.read(payload.botId, payload.path),
+
+    "artifacts.save": (payload) =>
+      context.artifacts.save(
+        payload.botId,
+        payload.path,
+        payload.content,
+        payload.expectedChecksum,
+      ),
+
+    "artifacts.versions": (payload) => context.artifacts.versions(payload.botId, payload.path),
+
+    "artifacts.versionContent": (payload) =>
+      context.artifacts.versionContent(payload.botId, payload.path, payload.versionId),
+
+    "artifacts.revert": (payload) =>
+      context.artifacts.revert(payload.botId, payload.path, payload.versionId),
 
     "settings.testConnection": async (payload) => {
       const credentialRef = getSettingRaw(db, "apiKeyRef");

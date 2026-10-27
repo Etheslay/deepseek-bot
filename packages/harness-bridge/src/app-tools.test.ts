@@ -43,7 +43,61 @@ async function fixture(
     for await (const chunk of request) chunks.push(chunk);
     const body = Buffer.concat(chunks as Buffer[]).toString();
     response.setHeader("content-type", "application/json");
-    if (request.url === "/app-tools") {
+    if (request.url === "/web-search") {
+      response.end(
+        JSON.stringify({
+          tool: {
+            name: "web_search",
+            description: "web_search",
+            parameters: { type: "object", additionalProperties: false, properties: {} },
+          },
+        }),
+      );
+    } else if (request.url === "/memory") {
+      response.end(
+        JSON.stringify({
+          tools: [
+            {
+              name: "memory_write",
+              description: "memory_write",
+              parameters: { type: "object", additionalProperties: false, properties: {} },
+            },
+            {
+              name: "memory_search",
+              description: "memory_search",
+              parameters: { type: "object", additionalProperties: false, properties: {} },
+            },
+            {
+              name: "knowledge_search",
+              description: "knowledge_search",
+              parameters: { type: "object", additionalProperties: false, properties: {} },
+            },
+          ],
+        }),
+      );
+    } else if (request.url === "/connectors") {
+      response.end(
+        JSON.stringify({
+          tools: [
+            {
+              name: "connector_invoke",
+              description: "connector_invoke",
+              parameters: { type: "object", additionalProperties: false, properties: {} },
+            },
+          ],
+        }),
+      );
+    } else if (request.url === "/ask-user") {
+      response.end(
+        JSON.stringify({
+          tool: {
+            name: "ask_user",
+            description: "ask_user",
+            parameters: { type: "object", additionalProperties: false, properties: {} },
+          },
+        }),
+      );
+    } else if (request.url === "/app-tools") {
       response.statusCode = options.status ?? 200;
       response.end(
         JSON.stringify({
@@ -95,7 +149,15 @@ describe("application tool plugin", () => {
   it("registers the eight Host schemas before readiness and forwards exact runtime identity", async () => {
     const { ctx, tools, calls, requests } = await fixture();
     await apply(ctx);
-    expect(tools.map((tool) => tool.name)).toEqual(names);
+    expect(tools.map((tool) => tool.name)).toEqual([
+      ...names,
+      "ask_user",
+      "memory_write",
+      "memory_search",
+      "knowledge_search",
+      "connector_invoke",
+      "web_search",
+    ]);
     expect(calls).toEqual([{ tools: names }]);
     const tool = tools.find((item) => item.name === "create_group")!;
     expect(tool.timeoutMs).toBeGreaterThan(600_000);
@@ -112,7 +174,45 @@ describe("application tool plugin", () => {
     expect(tool.output.render(params, { ok: true })).toEqual([
       { type: "text", text: '{"ok":true}' },
     ]);
-    expect(requests).toEqual(["/app-tools", "/app-tools/ready", "/app-tools/call"]);
+    const ask = tools.find((item) => item.name === "ask_user")!;
+    expect(ask.timeoutMs).toBeGreaterThan(30 * 60_000);
+    expect(
+      await ask.execute(
+        { question: "Which first?" },
+        { agent: { session: { id: "physical-session" } }, callId: "q1" },
+      ),
+    ).toEqual({ group: { id: "g1" } });
+    expect(calls[2]).toEqual({
+      sessionId: "physical-session",
+      callId: "q1",
+      tool: "ask_user",
+      params: { question: "Which first?" },
+    });
+    const search = tools.find((item) => item.name === "web_search")!;
+    expect(search.timeoutMs).toBe(tool.timeoutMs);
+    expect(
+      await search.execute(
+        { query: "local docs" },
+        { agent: { session: { id: "physical-session" } }, callId: "s1" },
+      ),
+    ).toEqual({ group: { id: "g1" } });
+    expect(calls[3]).toEqual({
+      sessionId: "physical-session",
+      callId: "s1",
+      tool: "web_search",
+      params: { query: "local docs" },
+    });
+    expect(requests).toEqual([
+      "/app-tools",
+      "/ask-user",
+      "/memory",
+      "/connectors",
+      "/web-search",
+      "/app-tools/ready",
+      "/app-tools/call",
+      "/ask-user/call",
+      "/web-search/call",
+    ]);
   });
 
   it("rejects unsupported control tools without registering any tool", async () => {
@@ -153,5 +253,49 @@ describe("application tool plugin", () => {
     );
     controller.abort();
     await expect(pending).rejects.toMatchObject({ code: "CANCELLED" });
+  });
+
+  it("shadows a built-in web_search on the agent instead of failing startup", async () => {
+    const { ctx, tools, calls, requests } = await fixture();
+    const listeners = new Map<string, (payload: unknown) => void>();
+    (ctx as { on: (event: string, handler: (payload: unknown) => void) => void }).on = (event, handler) => {
+      listeners.set(event, handler);
+    };
+    const register = ctx.tools.register;
+    ctx.tools.register = (tool: Definition) => {
+      if (tool.name === "web_search") throw new Error('tool "web_search" is already registered');
+      return register(tool);
+    };
+    await apply(ctx);
+    expect(tools.map((tool) => tool.name)).toEqual([
+      ...names,
+      "ask_user",
+      "memory_write",
+      "memory_search",
+      "knowledge_search",
+      "connector_invoke",
+    ]);
+    expect(calls[0]).toEqual({ tools: names });
+    const agentTools: Definition[] = [];
+    listeners.get("agent/created")?.({
+      agent: {
+        ctx: {
+          tools: {
+            register: (tool: Definition) => {
+              agentTools.push(tool);
+              return () => undefined;
+            },
+          },
+        },
+      },
+    });
+    expect(agentTools.map((tool) => tool.name)).toEqual(["web_search"]);
+    expect(
+      await agentTools[0]!.execute(
+        { query: "local docs" },
+        { agent: { session: { id: "physical-session" } }, callId: "s1" },
+      ),
+    ).toEqual({ group: { id: "g1" } });
+    expect(requests).toContain("/web-search/call");
   });
 });

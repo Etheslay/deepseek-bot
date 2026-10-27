@@ -25,7 +25,7 @@
 | `apps/desktop/src/renderer/` | 聊天内卡片、授权弹层、设置页、渲染器 | 直接读写密钥 | Destinyian |
 | `packages/contracts/` | 新方法、实体、事件与版本迁移 | 业务状态 | Etheslay 主责并自审 |
 
-现有模块边界不变：桌面主进程只经白名单 IPC 与渲染层通信，Host 持有数据库与子进程，Harness 适配层不向 UI 暴露上游对象。
+现有模块边界不变：桌面主进程只经白名单 IPC 与渲染层通信，Host 持有数据库与子进程，Harness 适配层不向 UI 暴露上游对象。记忆的写入、检索和删除目前放在 `packages/storage` 与 `packages/agent-tools`，本片不新建 `packages/memory/`。`.txt` / `.md` 知识导入写进现有记忆行，不新建 `packages/memory/` 或知识表。向量检索和保留策略仍留在后续。连接器的登记、列出和启停放在 `packages/storage` 与桌面设置，本片不新建 `packages/connectors/`。自定义 MCP、本地生图和视觉理解仍留在后续。
 
 ## 3. 数据流
 

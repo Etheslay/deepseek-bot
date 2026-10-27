@@ -12,8 +12,15 @@ import {
 import { createPortal } from "react-dom";
 import { useBots, type UiBot } from "./features/bots/use-bots.js";
 import { PermissionChatCards } from "./features/permissions/permission-chat.js";
+import { QuestionChatCards } from "./features/questions/question-chat.js";
+import { SearchResultCards } from "./features/search/search-results.js";
+import { MemoryPanel } from "./features/memory/memory-panel.js";
+import { SearchSettings } from "./features/search/search-settings.js";
+import { ConnectorSettings } from "./features/connectors/connector-settings.js";
+import { AutomationPanel } from "./features/automation/automation-panel.js";
 import { PermissionsPanel } from "./features/permissions/permissions-panel.js";
 import { BotForm } from "./features/bots/bot-form.js";
+import { nextBotName } from "./features/bots/bot-names.js";
 import { CustomSelect } from "./components/custom-select.js";
 import type { BotDraft } from "./services/desktop-service.js";
 import { useService } from "./services/service-context.jsx";
@@ -29,12 +36,15 @@ import {
 import type { StreamHandle } from "./services/desktop-service.js";
 import { Avatar as AvatarView } from "./features/avatars/avatar.js";
 import { AvatarPicker } from "./features/avatars/avatar-picker.js";
+import { GazeAvatar } from "./features/avatars/gaze-avatar.js";
 import {
   avatarColor,
+  bubbleInk,
   type Avatar as AvatarKind,
 } from "./features/avatars/avatar-meta.js";
 import { WorkflowEditor } from "./features/workflow-editor/workflow-editor.js";
 import { RunMonitor } from "./features/run-monitor/run-monitor.js";
+import { CanvasSidecar } from "./features/canvas/canvas-sidecar.js";
 import { ChatMarkdown } from "./features/chat/chat-markdown.js";
 import type { MentionTable } from "./features/chat/mentions.js";
 import {
@@ -238,6 +248,7 @@ export function App(): JSX.Element {
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editingBot, setEditingBot] = useState<UiBot | null>(null);
+
   const [shape, setShape] = useState(0);
   const [color, setColor] = useState(2);
   const [avatar, setAvatar] = useState<AvatarKind>(() => ({
@@ -247,6 +258,8 @@ export function App(): JSX.Element {
   }));
   const [modalGroup, setModalGroup] = useState<number>(UNGROUPED);
   const [tplSeed, setTplSeed] = useState("new");
+  /** Name suggested for the next bot, computed when the create dialog opens. */
+  const [createName, setCreateName] = useState("");
   const [tplDraft, setTplDraft] = useState<BotDraft | null>(null);
 
   const [groups, setGroups] = useState<Group[]>([{ key: UNGROUPED, name: "" }]);
@@ -261,11 +274,27 @@ export function App(): JSX.Element {
   } = useBots(UNGROUPED);
 
   const [menu, setMenu] = useState<MenuState | null>(null);
+  // Inline rename: the key of the sidebar row being edited and its draft name.
+  // `renameScope` matters because the same bot is shown twice — once in the
+  // sidebar row and once in the header plate — and only the place the gesture
+  // came from may turn into a field, or two editors appear at once.
+  const [renameKey, setRenameKey] = useState<number | null>(null);
+  const [renameScope, setRenameScope] = useState<"row" | "header">("row");
+  const [renameDraft, setRenameDraft] = useState("");
+  const renameInputRef = useRef<HTMLInputElement | null>(null);
+  const renameOpenedAtRef = useRef(0);
   const [menuDialog, setMenuDialog] = useState<DialogState | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<UiBot | null>(null);
   const [dialogText, setDialogText] = useState("");
 
   const [selectedBot, setSelectedBot] = useState<number | null>(null);
+  /**
+   * The bot the sidebar header speaks for: whichever conversation is active,
+   * falling back to the first bot before one is picked. The header used to be a
+   * fixed "DeepSeek Bot" plate, which meant it contradicted the list under it as
+   * soon as any bot existed.
+   */
+  const headerBot = bots.find((b) => b.key === selectedBot) ?? bots[0] ?? null;
   const [toast, setToast] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [artifactsOpen, setArtifactsOpen] = useState(false);
@@ -273,10 +302,11 @@ export function App(): JSX.Element {
     { sessionId: string; botId: string; title: string; startedAt: string; status: string }[] | null
   >(null);
   const [artifactList, setArtifactList] = useState<
-    import("@deepseek-bot/contracts").Artifact[] | null
+    import("@deepseek-bot/contracts").BotArtifact[] | null
   >(null);
-  const [artifactPreview, setArtifactPreview] = useState<
-    { id: string; kind: "text"; content: string } | { id: string; kind: "blocked"; reason: string } | null
+  /** D28: the open co-edit sidecar (one workspace file beside the chat). */
+  const [canvas, setCanvas] = useState<
+    { botKey: number; botId: string; botName: string; path: string } | null
   >(null);
   const [restoredSession, setRestoredSession] = useState<{
     sessionId: string;
@@ -577,19 +607,22 @@ export function App(): JSX.Element {
       return;
     }
     let cancelled = false;
-    void desktop.chat
-      .listSessions(bot.bot.id)
-      .then((sessions) => (sessions.length > 0 ? sessions[0]!.sessionId : null))
-      .then((sessionId) => (sessionId ? desktop.artifacts.listBySession(sessionId) : []))
+    void desktop.artifacts
+      .list(bot.bot.id)
       .then((list) => {
         if (!cancelled) {
           setArtifactList(list);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setArtifactList([]);
         }
       });
     return () => {
       cancelled = true;
     };
-  }, [artifactsOpen, selectedBot, bots, desktop]);
+  }, [artifactsOpen, selectedBot, bots, desktop, canvas]);
 
   useEffect(() => {
     let cancelled = false;
@@ -642,9 +675,22 @@ export function App(): JSX.Element {
   const selectedBotEntry = bots.find((b) => b.key === selectedBot);
   const selectedBotName = selectedBotEntry?.bot.name ?? "DeepSeek Bot";
 
-  const openCreateBotModal = () => {
+  /**
+   * Open the create dialog.
+   *
+   * A plain click leaves the name empty: naming is the user's business, and a
+   * field that already holds a placeholder makes them clear it first. The
+   * right-click entry (see the + button) pre-fills the next free BotNN instead,
+   * for the times you just want a bot in a hurry.
+   */
+  const openCreateBotModal = (withSuggestedName = false) => {
     setTplDraft(null);
-    setTplSeed("new");
+    // Unique per open, so the form remounts and picks up the freshly computed
+    // suggestion even when the previous dialog was cancelled with a typed name.
+    setTplSeed(`new-${Date.now()}`);
+    setCreateName(
+      withSuggestedName ? nextBotName(bots.map((b) => b.bot.name)) : "",
+    );
     setShape(0);
     setColor(2);
     setAvatar({ kind: "grok", shape: "blob", color: "#3b93f0" });
@@ -679,6 +725,53 @@ export function App(): JSX.Element {
       setToast(t("shell.created"));
     }
     return result;
+  };
+
+  /**
+   * Open the inline rename field. Deferred by one task on purpose: mounting it
+   * synchronously inside the double-click lets the tail of that click sequence
+   * blur the fresh field, which fires the blur-commit and closes it again. The
+   * deferral lets the click finish first.
+   */
+  const startRename = (botKey: number, name: string, scope: "row" | "header" = "row"): void => {
+    window.setTimeout(() => {
+      renameOpenedAtRef.current = performance.now();
+      setRenameScope(scope);
+      setRenameKey(botKey);
+      setRenameDraft(name);
+    }, 0);
+  };
+
+  /**
+   * Blur handler for the rename field. A blur within the first moments of
+   * opening is the tail of the opening gesture, not the user leaving, so the
+   * caret goes back instead of the edit being committed away.
+   */
+  const handleRenameBlur = (uiBot: UiBot, raw: string): void => {
+    if (performance.now() - renameOpenedAtRef.current < 400) {
+      renameInputRef.current?.focus();
+      return;
+    }
+    void commitRename(uiBot, raw);
+  };
+
+  /**
+   * Commit an inline rename. The bot's other fields are untouched — the store
+   * takes a partial patch — so renaming can never disturb the model profile or
+   * the instructions. Empty and unchanged names are treated as a cancel.
+   */
+  const commitRename = async (uiBot: UiBot, raw: string): Promise<void> => {
+    setRenameKey(null);
+    const name = raw.trim();
+    if (name === "" || name === uiBot.bot.name) {
+      return;
+    }
+    const result = await updateBotEntity(uiBot.bot.id, { name });
+    if (result.ok) {
+      setToast("已改名");
+    } else {
+      setToast(result.errorCode === "REVISION_CONFLICT" ? "改名冲突，请重试" : "改名失败");
+    }
   };
 
   const pinBot = (botKey: number): void => {
@@ -904,7 +997,7 @@ export function App(): JSX.Element {
           {
             id: bot.key,
             from: "bot",
-            text: t("shell.markdownWelcomeMessage", [bot.bot.name]),
+            text: t("shell.welcomeMessage", [bot.bot.name]),
             quote: null,
             reactions: {},
             mine: [],
@@ -1066,9 +1159,9 @@ const logout = (): void => {
   return (
     <div className="shell">
       <header className="top">
-        <span className="page-chip">
+        <span className="page-chip" data-gaze-zone="">
           {selectedBotEntry ? (
-            <AvatarView avatar={selectedBotEntry.avatar} variant="message-header" />
+            <GazeAvatar avatar={selectedBotEntry.avatar} variant="message-header" />
           ) : (
             <BlobMark />
           )}
@@ -1135,7 +1228,6 @@ const logout = (): void => {
           onClick={() => {
             setHistoryOpen(false);
             setArtifactsOpen((v) => !v);
-            setArtifactPreview(null);
           }}
         >
           <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -1180,39 +1272,35 @@ const logout = (): void => {
           <>
             <div className="menu-overlay" onClick={() => setArtifactsOpen(false)} />
             <div className="top-popover artifacts-popover" role="dialog" aria-label={t("shell.artifacts")}>
-              <div className="popover-title">{t("shell.artifacts")}</div>
+              <div className="popover-title">{t("shell.artifactsWorkspaceTitle")}</div>
               {(artifactList ?? []).map((artifact) => (
-                <div className="artifact-item" key={artifact.id}>
+                <div className="artifact-item" key={artifact.relativePath}>
                   <div className="artifact-meta">
                     <div className="tab-title">{artifact.relativePath}</div>
                     <div className="session-meta">
                       {artifact.mediaType} · {artifact.size} bytes
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    className="pill-btn"
-                    onClick={() => {
-                      void desktop.artifacts.preview(artifact).then((result: { kind: "text"; content: string } | { kind: "blocked"; reason: string }) => {
-                        setArtifactPreview(
-                          result.kind === "text"
-                            ? { id: artifact.id, kind: "text", content: result.content }
-                            : { id: artifact.id, kind: "blocked", reason: result.reason },
-                        );
-                      });
-                    }}
-                  >
-                    {t("shell.preview")}
-                  </button>
+                  {selectedBotEntry !== undefined && selectedBot !== null && (
+                    <button
+                      type="button"
+                      className="pill-btn"
+                      onClick={() => {
+                        setArtifactsOpen(false);
+                        setCanvas({
+                          botKey: selectedBot,
+                          botId: selectedBotEntry.bot.id,
+                          botName: selectedBotEntry.bot.name,
+                          path: artifact.relativePath,
+                        });
+                      }}
+                    >
+                      {t("shell.openInCanvas")}
+                    </button>
+                  )}
                 </div>
               ))}
               {(artifactList ?? []).length === 0 && <div className="sys-line">{t("shell.noArtifacts")}</div>}
-              {artifactPreview !== null &&
-                (artifactPreview.kind === "text" ? (
-                  <pre className="artifact-preview">{artifactPreview.content}</pre>
-                ) : (
-                  <p className="form-error">{artifactPreview.reason}</p>
-                ))}
             </div>
           </>
         )}
@@ -1236,8 +1324,13 @@ const logout = (): void => {
             type="button"
             className="circle-btn clickable"
             aria-label={t("shell.createNewBot")}
-            title={t("shell.createNewBot")}
-            onClick={openCreateBotModal}
+            title={t("shell.createNewBotHint")}
+            onClick={() => openCreateBotModal()}
+            onContextMenu={(e) => {
+              // The shortcut: right-click creates one that is already named.
+              e.preventDefault();
+              openCreateBotModal(true);
+            }}
           >
             <svg viewBox="0 0 24 24">
               <line x1="12" y1="5" x2="12" y2="19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
@@ -1245,11 +1338,54 @@ const logout = (): void => {
             </svg>
           </button>
         </div>
-        <div className="side-identity">
+        <div className="side-identity" data-gaze-zone="">
           <span className="big-avatar">
-            <AvatarView avatar={{ kind: "grok", shape: "circle", color: "#3b93f0" }} variant="preview" size={84} />
+            <GazeAvatar
+              avatar={headerBot?.avatar ?? { kind: "grok", shape: "circle", color: "#3b93f0" }}
+              variant="preview"
+              size={84}
+            />
           </span>
-          <span className="identity-name">DeepSeek Bot</span>
+          {headerBot !== null && renameKey === headerBot.key && renameScope === "header" ? (
+            <input
+              className="tab-rename identity-rename"
+              value={renameDraft}
+              /* A ref callback focuses and selects on mount. `autoFocus` alone
+                 lost the race against the double-click that created the field,
+                 so the text arrived unselected and unfocused. */
+              ref={(el) => {
+                renameInputRef.current = el;
+                el?.focus();
+                el?.select();
+              }}
+              maxLength={80}
+              aria-label={t("shell.renameBot", [headerBot.bot.name])}
+              onChange={(e) => setRenameDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  void commitRename(headerBot, renameDraft);
+                } else if (e.key === "Escape") {
+                  e.preventDefault();
+                  setRenameKey(null);
+                }
+              }}
+              onBlur={() => handleRenameBlur(headerBot, renameDraft)}
+            />
+          ) : (
+            <span
+              className="identity-name"
+              title={headerBot === null ? undefined : "双击改名"}
+              onDoubleClick={() => {
+                if (headerBot === null) {
+                  return;
+                }
+                startRename(headerBot.key, headerBot.bot.name, "header");
+              }}
+            >
+              {headerBot?.bot.name ?? "DeepSeek Bot"}
+            </span>
+          )}
         </div>
         {groups.map((g) => {
           const members = bots.filter((b) => b.group === g.key);
@@ -1305,9 +1441,40 @@ const logout = (): void => {
               </button>
               {!collapsedGroups.includes(g.key) && (
                 <div className="tabs" aria-label={t("shell.botListAriaLabel", [groupLabel(g)])}>
-                  {members.map((b) => (
+                  {members.map((b) =>
+                  renameKey === b.key && renameScope === "row" ? (
+                    /* Inline rename: the row becomes an editable field in place.
+                       Esc cancels, Enter or blur commits, and the store takes a
+                       partial patch so nothing but the name can change. */
+                    <div key={b.key} className="tab tab-renaming" data-gaze-zone="">
+                      <GazeAvatar avatar={b.avatar} variant="sidebar" size={36} />
+                      <input
+                        className="tab-rename"
+                        value={renameDraft}
+                        ref={(el) => {
+                          renameInputRef.current = el;
+                          el?.focus();
+                          el?.select();
+                        }}
+                        maxLength={80}
+                        aria-label={t("shell.renameBot", [b.bot.name])}
+                        onChange={(e) => setRenameDraft(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            void commitRename(b, renameDraft);
+                          } else if (e.key === "Escape") {
+                            e.preventDefault();
+                            setRenameKey(null);
+                          }
+                        }}
+                        onBlur={() => handleRenameBlur(b, renameDraft)}
+                      />
+                    </div>
+                  ) : (
                   <button
                     key={b.key}
+                    data-gaze-zone=""
                     type="button"
                     draggable
                     onDragStart={(e) => {
@@ -1339,17 +1506,19 @@ const logout = (): void => {
                       setDragOverGroup(null);
                     }}
                     className={selectedBot === b.key ? "tab active" : "tab"}
+
                     onClick={() => {
                       setSelectedBot(b.key);
                       setQuoteDraft(null);
                       ensureChat(b);
                     }}
+                    onDoubleClick={() => startRename(b.key, b.bot.name)}
                     onContextMenu={(e) => {
                       e.preventDefault();
                       setMenu({ x: e.clientX, y: e.clientY, botKey: b.key });
                     }}
                   >
-                    <AvatarView avatar={b.avatar} variant="sidebar" size={36} />
+                    <GazeAvatar avatar={b.avatar} variant="sidebar" size={36} />
                     <span className="tab-label">
                       <span className="tab-title">
                         {b.bot.name}
@@ -1358,7 +1527,8 @@ const logout = (): void => {
 
                     </span>
                   </button>
-                ))}
+                  )
+                )}
                 {dragging && members.length === 0 && (
                   <div className="drop-hint">{t("shell.dropToMove", [groupLabel(g)])}</div>
                 )}
@@ -1435,7 +1605,7 @@ const logout = (): void => {
           ) : restoredSession !== null && selectedBot !== null ? (
             <div className="restored-view">
               <header className="pair-head">
-                <span className="page-chip">{restoredSession.title}</span>
+                <span className="page-chip" data-gaze-zone="">{restoredSession.title}</span>
               </header>
               <div className="pair-body">
                 <div className="msg-notice">
@@ -1525,13 +1695,23 @@ const logout = (): void => {
                 <CloudDecor />
               </div>
               <p>{t("shell.emptyStateHint")}</p>
-              <button type="button" className="primary-btn" onClick={openCreateBotModal}>
+              <button type="button" className="primary-btn" onClick={() => openCreateBotModal()}>
                 {t("shell.createBot")}
               </button>
             </div>
           )}
         </main>
       </section>
+      {canvas !== null && (
+        <CanvasSidecar
+          key={`${canvas.botId}:${canvas.path}`}
+          service={desktop}
+          botId={canvas.botId}
+          botName={canvas.botName}
+          relativePath={canvas.path}
+          onClose={() => setCanvas(null)}
+        />
+      )}
       </div>
 
       {menu && menuBot && (
@@ -1586,6 +1766,20 @@ const logout = (): void => {
             <button type="button" role="menuitem" className="menu-item" onClick={() => toggleUnread(menuBot.key)}>
               <MenuIcon d="M18 8a6 6 0 1 0-12 0c0 7-3 8-3 8h18s-3-1-3-8M10.3 21a2 2 0 0 0 3.4 0" />
               {menuBot.unread ? t("shell.markRead") : t("shell.markUnread")}
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className="menu-item"
+              onClick={() => {
+                // Same inline editor the double-click opens: renaming should not
+                // require opening the whole edit dialog.
+                startRename(menuBot.key, menuBot.bot.name);
+                setMenu(null);
+              }}
+            >
+              <MenuIcon d="M4 7h10M4 12h7M4 17h10M18 5v9M15 11l3 3 3-3" />
+              改名
             </button>
             <button
               type="button"
@@ -1786,6 +1980,7 @@ const logout = (): void => {
               <BotForm
                 key={editingBot?.bot.id ?? tplSeed}
                 {...(!editingBot && tplDraft ? { initial: tplDraft } : {})}
+                {...(!editingBot && !tplDraft ? { defaultName: createName } : {})}
                 {...(editingBot
                   ? {
                       initial: {
@@ -2022,6 +2217,9 @@ const logout = (): void => {
                     </span>
                   </div>
                 </div>
+                <SearchSettings />
+                <ConnectorSettings />
+                <AutomationPanel />
                 <div className="settings-section-title">{t("shell.skillsSection")}</div>
                 <div className="settings-card">
                   <SkillsPanel
@@ -2733,18 +2931,24 @@ function BotsPlaceholder({
   };
 
   return (
-    <div className="chat-page">
+    <div
+      className="chat-page"
+      /* SPRINTS §6 #8: the user bubble follows the current bot's colour, and so
+         does the composer's send button. The pair is scoped to the page rather
+         than to the message list, because the composer is its sibling — a
+         variable set on `.chat` cannot reach it. Switching bots re-tints only
+         this pane. */
+      style={
+        {
+          "--bot-color": avatarColor(me.avatar),
+          "--bot-ink": bubbleInk(avatarColor(me.avatar)),
+        } as CSSProperties
+      }
+    >
       <p className="sys-line" aria-live="polite">
         {t("shell.staticPlaceholderNotice")}
       </p>
-      <div
-        className="chat"
-        ref={listRef}
-        /* SPRINTS §6 #8: the user bubble follows the current bot's colour.
-           The variable is scoped to this conversation, so switching bots
-           re-tints only this pane. */
-        style={{ "--bot-color": avatarColor(me.avatar) } as CSSProperties}
-      >
+      <div className="chat" ref={listRef}>
         {msgs.map((m, index) => {
           const prev = msgs[index - 1];
           const showTime =
@@ -2883,6 +3087,9 @@ function BotsPlaceholder({
             )}
           </>
         )}
+        <QuestionChatCards botId={me.bot.id} />
+        <SearchResultCards botId={me.bot.id} />
+        <MemoryPanel botId={me.bot.id} />
         <PermissionChatCards
           botId={me.bot.id}
           onPendingCount={(count) => onApprovalPending(me.bot.id, me.bot.name, count)}

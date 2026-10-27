@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  MAX_ARTIFACT_CONTENT_BYTES,
   MAX_MESSAGE_BYTES,
   METHODS,
   METHOD_CONTRACTS,
@@ -26,43 +27,51 @@ describe("method whitelist", () => {
   it("defines a contract for every whitelisted method and nothing else", () => {
     const contractMethods = Object.keys(METHOD_CONTRACTS).sort();
     expect(contractMethods).toEqual([...METHODS].sort());
-    expect(METHODS).toHaveLength(44);
+    expect(METHODS).toHaveLength(77);
   });
 
   it("covers every method group from CONTRACTS §3", () => {
     const groups = new Set(METHODS.map((method) => method.split(".")[0]));
     expect([...groups].sort()).toEqual([
       "approval",
+      "artifacts",
       "bot",
       "chat",
+      "connector",
       "creation",
       "data",
       "events",
       "grant",
       "group",
+      "knowledge",
+      "memory",
       "permission",
       "policy",
+      "question",
       "run",
       "schedule",
+      "search",
       "settings",
       "tool",
+      "trigger",
       "workflow",
     ]);
   });
 });
 
 describe("protocol version", () => {
-  it("accepts v0.3 and previous v0.1/v0.2 senders", () => {
+  it("accepts v0.4 and previous v0.1–v0.3 senders", () => {
     expect(isProtocolVersionSupported("0.2")).toBe(true);
     expect(isProtocolVersionSupported("0.1")).toBe(true);
     expect(isProtocolVersionSupported("0.3")).toBe(true);
-    expect(isProtocolVersionSupported("0.4")).toBe(false);
+    expect(isProtocolVersionSupported("0.4")).toBe(true);
+    expect(isProtocolVersionSupported("0.5")).toBe(false);
     expect(isProtocolVersionSupported("1.0")).toBe(false);
   });
 
   it("rejects unknown or higher protocol versions outright", () => {
     const result = RequestEnvelopeSchema.safeParse({
-      protocolVersion: "0.4",
+      protocolVersion: "0.5",
       requestId: REQUEST_ID,
       method: "bot.list",
       payload: {},
@@ -264,6 +273,128 @@ describe("parseRequest", () => {
       parseRequest(envelope("creation.revoke", { batchId: "nope" }), "creation.revoke")
         .success,
     ).toBe(false);
+  });
+
+  it("validates artifacts.save payloads and rejects traversal paths (D28)", () => {
+    const botId = "11111111-1111-4111-8111-111111111111";
+    expect(
+      parseRequest(
+        envelope("artifacts.save", {
+          botId,
+          path: "notes/todo.md",
+          content: "# hello",
+        }),
+        "artifacts.save",
+      ).success,
+    ).toBe(true);
+    expect(
+      parseRequest(
+        envelope("artifacts.save", {
+          botId,
+          path: "notes/todo.md",
+          content: "# hello",
+          expectedChecksum: "a".repeat(64),
+        }),
+        "artifacts.save",
+      ).success,
+    ).toBe(true);
+    for (const traversal of ["../escape.md", "a/../../b.md", "C:\\abs.md", "/abs.md", "a//b.md"]) {
+      expect(
+        parseRequest(
+          envelope("artifacts.read", { botId, path: traversal }),
+          "artifacts.read",
+        ).success,
+        `expected traversal rejection for ${traversal}`,
+      ).toBe(false);
+    }
+  });
+
+  it("rejects artifact content above the co-edit budget (D28)", () => {
+    expect(MAX_ARTIFACT_CONTENT_BYTES).toBeLessThan(MAX_MESSAGE_BYTES);
+    const result = parseRequest(
+      envelope("artifacts.save", {
+        botId: "11111111-1111-4111-8111-111111111111",
+        path: "notes/todo.md",
+        content: "x".repeat(MAX_ARTIFACT_CONTENT_BYTES + 1),
+      }),
+      "artifacts.save",
+    );
+    expect(result.success).toBe(false);
+  });
+
+  it("validates knowledge payloads (D18 independent knowledge table)", () => {
+    const botId = "77777777-7777-4777-8777-777777777777";
+    const docId = "99999999-9999-4999-8999-999999999999";
+    expect(
+      parseRequest(envelope("knowledge.list", { botId }), "knowledge.list")
+        .success,
+    ).toBe(true);
+    expect(
+      parseRequest(
+        envelope("knowledge.write", {
+          botId,
+          title: "产品手册",
+          text: "很长的正文……",
+        }),
+        "knowledge.write",
+      ).success,
+    ).toBe(true);
+    expect(
+      parseRequest(
+        envelope("knowledge.write", { botId, title: "t", text: "  " }),
+        "knowledge.write",
+      ).success,
+    ).toBe(false);
+    expect(
+      parseRequest(
+        envelope("knowledge.delete", { botId, docId }),
+        "knowledge.delete",
+      ).success,
+    ).toBe(true);
+    const search = parseRequest(
+      envelope("knowledge.search", { botId, query: "部署流程" }),
+      "knowledge.search",
+    );
+    expect(search.success).toBe(true);
+    if (search.success) {
+      expect(search.payload.limit).toBe(5);
+    }
+    expect(
+      parseRequest(
+        envelope("knowledge.search", { botId, query: "" }),
+        "knowledge.search",
+      ).success,
+    ).toBe(false);
+  });
+
+  it("validates the retention policy payloads (D18 保留策略)", () => {
+    expect(
+      parseRequest(envelope("memory.retention.get", {}), "memory.retention.get")
+        .success,
+    ).toBe(true);
+    const policy = { retentionDays: 30, memoryMaxPerBot: 500, knowledgeMaxPerBot: 100 };
+    expect(
+      parseRequest(
+        envelope("memory.retention.set", { policy }),
+        "memory.retention.set",
+      ).success,
+    ).toBe(true);
+    expect(
+      parseRequest(
+        envelope("memory.retention.set", {
+          policy: { retentionDays: -1, memoryMaxPerBot: 0, knowledgeMaxPerBot: 0 },
+        }),
+        "memory.retention.set",
+      ).success,
+    ).toBe(false);
+    expect(
+      parseRequest(
+        envelope("memory.retention.set", {
+          policy: { retentionDays: 0, memoryMaxPerBot: 0, knowledgeMaxPerBot: 0 },
+        }),
+        "memory.retention.set",
+      ).success,
+    ).toBe(true);
   });
 });
 

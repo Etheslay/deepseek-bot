@@ -36,6 +36,12 @@ type DesktopBridge = {
       error: string | null;
     }>;
   };
+  knowledge: {
+    importFile: () => Promise<
+      | { ok: true; title: string; text: string }
+      | { ok: false; code: "format" | "size" | "empty" | "encoding" | "cancelled" | "read" }
+    >;
+  };
   host: {
     call: (method: string, payload: unknown) => Promise<unknown>;
     onMissed: (listener: (notices: unknown[]) => void) => () => void;

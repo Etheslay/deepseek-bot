@@ -32,7 +32,7 @@ await result; // { requestId, optionId: "A", text: "整理资料" }
 
 `userQuestions.cancel(requestId, callerId)` 与调用的 `AbortSignal` 以 `CANCELLED` 结束等待。等待 30 分钟后以 `TOOL_TIMEOUT` 结束；回答入口也会检查期限，迟到答案不能抢在延迟的定时器前生效。Host 关闭以 `RUNTIME_UNAVAILABLE` 结束全部等待，同时清除定时器与监听器；重启不恢复问题。此时上层需要重新发起提问。
 
-问题与答案只存在 Host 内存。JSONL 审计沿用网关的参数/结果 SHA-256 摘要，错误消息使用固定文本。未来聊天接线负责显示卡片并将结构化答案回写会话；本切片没有桌面 IPC、真实 Harness 调用方或会话持久化。
+问题与答案只存在 Host 内存，重启不恢复。JSONL 审计沿用网关的参数/结果 SHA-256 摘要，错误消息使用固定文本。桌面用受信方法 `question.list` / `question.answer` 读取当前 bot 的等待并提交选项或自由文本；成功答案写入该 bot 的用户聊天记录，同时作为工具结果返回。模型目录不包含这两个方法。`/app-tools` 仍只登记八个应用工具，`ask_user` 走单独的 `/ask-user` 路由。
 
 ## `web_search` 后端切片
 
@@ -62,7 +62,13 @@ const result = await host.agentTools.call(caller, "web_search", {
 
 无配置、提供方 HTTP/JSON 异常返回 `RUNTIME_UNAVAILABLE`，429 返回 `RATE_LIMITED`，超时为 `TOOL_TIMEOUT`，调用取消为 `CANCELLED`；Host 关闭终止活动请求并返回 `RUNTIME_UNAVAILABLE`。异常消息采用固定文本，避免原始查询、端点或响应内容混入网关错误审计。合法空结果返回空数组；上游报告引擎失败时返回“不完整结果”提示。未配置真实服务地址时，不将受控 HTTP 测试宣称为公共实例验证。
 
-独立 Host 进程可在启动前配置 `DEEPSEEK_BOT_SEARXNG_URL`，见[开发环境说明](../../docs/DEVELOPMENT_SETUP.md)。D15 搜索切片不增加公开契约或桌面 IPC；D16 另增人类权限控制面。真实模型调用/聊天渲染仍待接线。
+独立 Host 进程可在启动前配置 `DEEPSEEK_BOT_SEARXNG_URL`，见[开发环境说明](../../docs/DEVELOPMENT_SETUP.md)。桌面可用受信方法保存或清空该地址；已保存的值在下次启动时覆盖环境变量，显式空值也会覆盖。聊天调用由 Host 绑定该 bot 的网络策略句柄，不由模型传入。`/app-tools` 仍只登记八个应用工具，`web_search` 走单独的 `/web-search` 路由。成功结果可记入该聊天 bot 的助手记录；工作流调用不写聊天记录。真实公共 SearXNG 与付费模型验收仍未执行。
+
+## 记忆
+
+`memory_write` 保存一条只属于当前 bot 的笔记，`memory_search` 在该 bot 的笔记里做不区分大小写的子串检索。空查询返回最新记录。参数只有 `text`，或可选的 `query` 与 `limit`（1–50，默认 20）。不能传入 botId，也没有删除工具。调用方必须带受信 `caller.botId`；缺失时返回 `UNAUTHORIZED_PATH`。
+
+`memory.read` 默认允许，`memory.write` 默认询问。允许检索时仍然必须是有效 bot。桌面用 `memory.list` / `memory.write` / `memory.delete` 查看、写入和删除当前 bot 的笔记；删的是那一行，没有墓碑。其他 bot 的列表为空，用别人的 id 删除会得到 `INVALID_INPUT`，原记录还在。`/app-tools` 仍只登记八个应用工具，记忆走单独的 `/memory` 路由。网关 JSONL 只记摘要。桌面可将一个不超过 16 KiB 的 `.txt` 或 `.md` 文件写成当前 bot 的一条记忆；模型不能选择文件。
 
 ## 检查
 

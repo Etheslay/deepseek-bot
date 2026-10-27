@@ -21,6 +21,11 @@ describe("IPC allowlist", () => {
     expect(() => assertAllowedChannel(IPC_CHANNELS.APP_GET_INFO)).not.toThrow();
   });
 
+  it("registers the knowledge import channel without a path argument", () => {
+    expect(ALLOWED_CHANNELS.has(IPC_CHANNELS.KNOWLEDGE_IMPORT)).toBe(true);
+    expect(() => assertAllowedChannel(IPC_CHANNELS.KNOWLEDGE_IMPORT)).not.toThrow();
+  });
+
   it("registers the D24 update channels", () => {
     expect(ALLOWED_CHANNELS.has(IPC_CHANNELS.UPDATES_CHECK)).toBe(true);
     expect(ALLOWED_CHANNELS.has(IPC_CHANNELS.UPDATES_DOWNLOAD_INSTALL)).toBe(true);

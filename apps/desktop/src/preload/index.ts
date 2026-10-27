@@ -70,6 +70,9 @@ export type DesktopBridge = {
     check: () => Promise<import("../shared/ipc-channels.js").UpdateStatus>;
     downloadInstall: () => Promise<import("../shared/ipc-channels.js").UpdateStatus>;
   };
+  knowledge: {
+    importFile: () => Promise<import("../shared/knowledge-import.js").KnowledgeImportResult>;
+  };
   host: {
     call: (method: string, payload: unknown) => Promise<unknown>;
     /** Scheduler skip-and-notify notices (FR-08); returns an unsubscribe. */
@@ -123,6 +126,9 @@ const api: DesktopBridge = {
   updates: {
     check: () => ipcRenderer.invoke(IPC_CHANNELS.UPDATES_CHECK),
     downloadInstall: () => ipcRenderer.invoke(IPC_CHANNELS.UPDATES_DOWNLOAD_INSTALL),
+  },
+  knowledge: {
+    importFile: () => ipcRenderer.invoke(IPC_CHANNELS.KNOWLEDGE_IMPORT),
   },
   host: {
     call: (method, payload) => ipcRenderer.invoke(IPC_CHANNELS.HOST_CALL, method, payload),

@@ -31,21 +31,44 @@ import {
   type RunningApprovalBridge,
 } from "@deepseek-bot/harness-adapter";
 import { ChatManager } from "./chat.js";
-import { EngineError, WorkflowEngine, LocalScheduler, type ScheduleMissNotice } from "@deepseek-bot/runtime";
+import { createWorkspaceArtifacts } from "./artifacts.js";
+import { EngineError, NodeExecutionError, WorkflowEngine, LocalScheduler, evaluateToolAction, type ScheduleMissNotice } from "@deepseek-bot/runtime";
 import {
+  appendChatMessage,
   ensureDataLayout,
+  getBot,
   getModelProfile,
+  getSettingRaw,
+  getToolPolicy,
   getWorkspace,
+  listMemories,
+  writeMemory,
+  searchKnowledge,
+  readRetentionPolicy,
+  sweepRetention,
   incrementBootGeneration,
   openDatabase,
   type DataLayout,
   type OpenedDatabase,
 } from "@deepseek-bot/storage";
-import { buildHandlers, type HostContext } from "./handlers.js";
+import { buildHandlers, type ChatSearchRecord, type HostContext } from "./handlers.js";
 import { AgentPermissionService } from "./agent-permissions.js";
 import { AskUserCoordinator, JsonlAuditSink, ToolGateway, ToolRegistry, bindAskUserTool, bindReadTools, bindWriteTools, type UserQuestionControls } from "@deepseek-bot/agent-tools";
-import { WebSearchService, bindWebSearchTool, type WebSearchOptions } from "@deepseek-bot/agent-tools";
+import {
+  ToolRejectionError,
+  WebSearchService,
+  bindConnectorTools,
+  bindKnowledgeTools,
+  bindMemoryTools,
+  bindWebSearchTool,
+  type ToolCaller,
+  type ToolNetworkPermissions,
+  type WebSearchOptions,
+  type WebSearchResult,
+} from "@deepseek-bot/agent-tools";
 import { startApplicationToolServer } from "./app-tool-channel.js";
+import { evaluateTriggerRules } from "./triggers.js";
+import { invokeConnector } from "./connectors.js";
 
 export interface HostOptions {
   /** Data root (storage layout: database, harness home, artifacts, backups). */
@@ -70,6 +93,8 @@ export interface HostOptions {
   readonly onMissed?: (notices: ReadonlyArray<ScheduleMissNotice>) => void;
   /** Trusted SearXNG configuration. No key, default public endpoint or automatic requests. */
   readonly webSearch?: WebSearchOptions;
+  /** D20 trigger evaluation interval (default 5s). */
+  readonly triggers?: { readonly intervalMs?: number };
 }
 
 export interface DeepSeekBotHost {
@@ -92,6 +117,11 @@ export interface DeepSeekBotHost {
   readonly agentTools: ToolGateway;
   /** Trusted in-process human controls. Never registered as model capabilities. */
   readonly userQuestions: UserQuestionControls;
+  /**
+   * Chat-only D08 network handle. `allowed` proceeds, `disabled` denies, and
+   * `approval-required` fails closed because a chat turn has no workflow run.
+   */
+  chatNetworkPermissions(caller: ToolCaller): ToolNetworkPermissions;
   /** Start the scheduler tick loop (FR-08). */
   start(): void;
   /** Stop the scheduler, close the approval bridge and the database. */
@@ -104,6 +134,8 @@ export interface DeepSeekBotHost {
  * bot.create needs a model profile, a workspace and a tool policy.
  */
 export const DEFAULT_MODEL_PROFILE_ID = "44444444-4444-4444-8444-444444444444";
+export const SEARXNG_ENDPOINT_SETTING = "searxng.endpoint";
+const MAX_CHAT_SEARCHES = 20;
 const DEFAULT_WORKSPACE_ID = "55555555-5555-4555-8555-555555555555";
 const DEFAULT_TOOL_POLICY_ID = "66666666-6666-4666-8666-666666666666";
 const DEFAULT_CREDENTIAL_REF = "cred:00000000-0000-4000-8000-000000000001";
@@ -158,9 +190,18 @@ function seedDefaults(db: OpenedDatabase, layout: DataLayout): void {
 export async function createHost(options: HostOptions): Promise<DeepSeekBotHost> {
   // Validate configuration before allocating the database or approval server.
   const webSearch = new WebSearchService(options.webSearch);
+  const chatSearches = new Map<string, ChatSearchRecord[]>();
   const layout = ensureDataLayout(options.dataRoot);
   const db = openDatabase(layout.dbFile, options.now !== undefined ? { now: options.now } : {});
   seedDefaults(db, layout);
+  restoreSearchEndpoint(webSearch, getSettingRaw(db, SEARXNG_ENDPOINT_SETTING));
+  webSearch.observe((caller, result) => {
+    try {
+      recordChatSearch(db, chatSearches, caller, result);
+    } catch {
+      // A display write must not turn a completed search into a tool failure.
+    }
+  });
   const bootGeneration = incrementBootGeneration(db);
   const permissions = new AgentPermissionService(db, bootGeneration);
   const patches = writeProfilePatches(layout.harnessHome);
@@ -217,6 +258,12 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
   });
   bridgeRef.current = bridge;
 
+  const workspaceArtifacts = createWorkspaceArtifacts({
+    db,
+    artifactsRoot: layout.artifacts,
+    now,
+  });
+
   const engine = new WorkflowEngine({
     db,
     executor,
@@ -237,9 +284,30 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
     ...(options.onMissed !== undefined ? { onMissed: options.onMissed } : {}),
   });
   const recoveredRuns = engine.recoverInterruptedRuns();
+  // D18 保留策略: apply configured limits once at startup so expiry and
+  // caps hold even when nothing writes for a while.
+  sweepRetention(db, readRetentionPolicy(db), now());
+  // D20 事件自动化: catch up on events that accumulated while the host was
+  // down (enqueued as reason "missed", never silently replayed), then keep
+  // scanning the persisted stream on an interval.
+  const bootAt = now();
+  evaluateTriggerRules(db, { bootAt });
+  const triggerTimer = setInterval(
+    () => {
+      try {
+        evaluateTriggerRules(db, { bootAt });
+      } catch {
+        // A failed scan retries on the next tick; the cursor only advances
+        // after a successful pass, so nothing is skipped.
+      }
+    },
+    options.triggers?.intervalMs ?? 5_000,
+  );
+  triggerTimer.unref?.();
 
   let closed = false;
   const agentToolsHolder: { current?: ToolGateway } = {};
+  const questions = new AskUserCoordinator();
   const context: HostContext = {
     db,
     engine,
@@ -249,12 +317,27 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
     resolveApiKey: options.resolveApiKey,
     permissions,
     chat,
+    userQuestions: questions,
+    webSearch: {
+      currentEndpoint: () => webSearch.currentEndpoint(),
+      setEndpoint: (endpoint) => webSearch.setEndpoint(endpoint),
+    },
+    searchResults: {
+      list: (botId) =>
+        (chatSearches.get(botId) ?? []).map((item) => ({
+          query: item.query,
+          results: item.results.map((result) => ({ ...result })),
+          warnings: [...item.warnings],
+          at: item.at,
+        })),
+    },
     get agentTools(): ToolGateway {
       if (agentToolsHolder.current === undefined) {
         throw new Error("agent tools gateway is not ready yet");
       }
       return agentToolsHolder.current;
     },
+    artifacts: workspaceArtifacts,
   };
   const handlers = buildHandlers(context);
 
@@ -317,13 +400,47 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
   };
 
   const agentRegistry = new ToolRegistry();
-  const questions = new AskUserCoordinator();
   // D16: every registered tool crosses the Host authorization checkpoint.
   for (const capability of [
     ...bindReadTools((method, payload) => dispatch(method as Method, payload)),
     ...bindWriteTools((method, payload) => dispatch(method as Method, payload)),
     bindAskUserTool(questions),
     bindWebSearchTool(webSearch),
+    ...bindMemoryTools({
+      write(botId, text) {
+        const bot = getBot(db, botId);
+        if (bot === undefined || bot.archivedAt !== null) {
+          throw new ToolRejectionError("UNAUTHORIZED_PATH", "memory bot is not available");
+        }
+        const row = writeMemory(db, { botId, text });
+        return { id: row.id, text: row.text, at: row.createdAt };
+      },
+      search(botId, query, limit) {
+        const bot = getBot(db, botId);
+        if (bot === undefined || bot.archivedAt !== null) {
+          throw new ToolRejectionError("UNAUTHORIZED_PATH", "memory bot is not available");
+        }
+        return listMemories(db, { botId, query, limit }).map((row) => ({
+          id: row.id,
+          text: row.text,
+          at: row.createdAt,
+        }));
+      },
+    }),
+    ...bindConnectorTools({
+      invoke(connectorId, action, params) {
+        return invokeConnector(db, layout.connectorOutputs, { connectorId, action, params }, { now });
+      },
+    }),
+    ...bindKnowledgeTools({
+      search(botId, query, limit) {
+        const bot = getBot(db, botId);
+        if (bot === undefined || bot.archivedAt !== null) {
+          throw new ToolRejectionError("UNAUTHORIZED_PATH", "knowledge bot is not available");
+        }
+        return searchKnowledge(db, { botId, query, limit });
+      },
+    }),
   ]) {
     agentRegistry.register(capability);
   }
@@ -333,7 +450,12 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
     grants: permissions,
   });
   agentToolsHolder.current = agentTools;
-  const applicationTools = await startApplicationToolServer(agentTools);
+  const chatNetworkPermissions = (caller: ToolCaller): ToolNetworkPermissions => ({
+    authorize: (action) => authorizeChatSearch(db, caller, action),
+  });
+  const applicationTools = await startApplicationToolServer(agentTools, {
+    networkPermissions: chatNetworkPermissions,
+  });
 
   return {
     layout,
@@ -349,6 +471,7 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
       answer: (requestId, callerId, answer) => questions.answer(requestId, callerId, answer),
       cancel: (requestId, callerId) => questions.cancel(requestId, callerId),
     },
+    chatNetworkPermissions,
     handleMethod: dispatch,
     start(): void {
       scheduler.start();
@@ -372,6 +495,104 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
       }
     },
   };
+}
+
+function restoreSearchEndpoint(search: WebSearchService, saved: unknown): void {
+  if (saved === null) {
+    search.setEndpoint(undefined);
+    return;
+  }
+  if (typeof saved !== "string") return;
+  try {
+    search.setEndpoint(saved);
+  } catch (error) {
+    if (!(error instanceof ToolRejectionError)) throw error;
+  }
+}
+
+function recordChatSearch(
+  db: OpenedDatabase,
+  searches: Map<string, ChatSearchRecord[]>,
+  caller: ToolCaller,
+  result: WebSearchResult,
+): void {
+  if (caller.botId === undefined || !caller.id.startsWith("chat:")) return;
+  const bot = getBot(db, caller.botId);
+  if (bot === undefined || bot.archivedAt !== null) return;
+  const record: ChatSearchRecord = {
+    query: result.query,
+    results: result.results.map((item) => ({
+      title: item.title,
+      url: item.url,
+      snippet: item.snippet,
+    })),
+    warnings: [...result.warnings],
+    at: db.now().toISOString(),
+  };
+  const current = searches.get(caller.botId) ?? [];
+  current.push(record);
+  searches.set(caller.botId, current.slice(-MAX_CHAT_SEARCHES));
+  const lines = [`搜索「${result.query}」`];
+  result.results.forEach((item, index) => {
+    lines.push(`${index + 1}. ${item.title}`, item.url, item.snippet);
+  });
+  lines.push(...result.warnings);
+  appendChatMessage(db, {
+    botId: caller.botId,
+    sessionId: caller.id,
+    role: "assistant",
+    text: lines.join("\n").slice(0, 4_000),
+  });
+}
+
+function authorizeChatSearch(
+  db: OpenedDatabase,
+  caller: ToolCaller,
+  action: {
+    readonly kind: "network.request";
+    readonly callId: string;
+    readonly toolName: string;
+    readonly url: string;
+    readonly arguments: Readonly<Record<string, unknown>>;
+  },
+): Promise<{ approvalId: null; resource: string }> {
+  if (caller.botId === undefined) {
+    throw new NodeExecutionError({
+      code: "UNAUTHORIZED_PATH",
+      message: "web_search chat caller is not bound to a bot",
+      retryable: false,
+    });
+  }
+  const bot = getBot(db, caller.botId);
+  const policy =
+    bot === undefined || bot.archivedAt !== null ? undefined : getToolPolicy(db, bot.toolPolicyId);
+  if (bot === undefined || bot.archivedAt !== null || policy === undefined) {
+    throw new NodeExecutionError({
+      code: "UNAUTHORIZED_PATH",
+      message: "web_search chat bot is not available",
+      retryable: false,
+    });
+  }
+  const decision = evaluateToolAction(
+    {
+      kind: "network.request",
+      callId: action.callId,
+      toolName: action.toolName,
+      url: action.url,
+      arguments: action.arguments,
+    },
+    undefined,
+    { policy, workspace: getWorkspace(db, bot.workspaceId), artifactsRoot: undefined },
+  );
+  if (decision.effect === "allow") return Promise.resolve({ approvalId: null, resource: decision.resource });
+  if (decision.effect === "deny") {
+    throw new NodeExecutionError({ code: decision.code, message: decision.message, retryable: false });
+  }
+  throw new NodeExecutionError({
+    code: "APPROVAL_REQUIRED",
+    message: "chat web_search cannot open a workflow approval",
+    retryable: false,
+  });
 }
 
 /** Backup directory name for a backup id (backups live under layout.backups). */

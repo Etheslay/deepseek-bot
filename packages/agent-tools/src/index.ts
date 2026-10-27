@@ -31,3 +31,22 @@ export {
   type WebSearchOptions,
   type WebSearchResult,
 } from "./web-search.js";
+export {
+  bindMemoryTools,
+  MemorySearchInputSchema,
+  MemoryWriteInputSchema,
+  type MemoryRecord,
+  type MemoryStore,
+} from "./memory.js";
+export {
+  bindConnectorTools,
+  ConnectorInvokeInputSchema,
+  type ConnectorInvokeResult,
+  type ConnectorStore,
+} from "./connectors.js";
+export {
+  bindKnowledgeTools,
+  KnowledgeSearchInputSchema,
+  type KnowledgeSearchHit,
+  type KnowledgeStore,
+} from "./knowledge.js";

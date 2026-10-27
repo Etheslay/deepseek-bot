@@ -72,7 +72,10 @@ function streamMessage(
 }
 
 async function localProvider() {
-  const bodies: Array<{ tools?: Array<{ name: string }>; messages?: unknown[] }> = [];
+  const bodies: Array<{
+    tools?: Array<{ name: string; description?: string }>;
+    messages?: unknown[];
+  }> = [];
   const server = createServer((request, response) => {
     void (async () => {
       let raw = "";
@@ -143,6 +146,9 @@ describe("real Harness application tools", () => {
     );
     const names = provider.bodies[0]?.tools?.map((tool) => tool.name) ?? [];
     expect(names.filter((name) => APP_TOOLS.includes(name)).sort()).toEqual([...APP_TOOLS].sort());
+    expect(provider.bodies[0]?.tools?.find((tool) => tool.name === "web_search")?.description).toContain(
+      "SearXNG",
+    );
     expect(names.some((name) => name.startsWith("permission."))).toBe(false);
     expect(await host.handleMethod("group.list", {})).toEqual({ groups: [] });
     expect(approval?.params).toEqual({ name: "local controlled group" });

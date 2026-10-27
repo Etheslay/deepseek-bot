@@ -1,12 +1,12 @@
 /**
- * Session history + artifacts (D05 brief §2.1 会话历史 / 产物面板).
+ * Session history + artifacts (D05 brief §2.1 会话历史 / 产物面板; D28 共编).
  *
- * Lists fixture-backed sessions for a bot; opening one replays persisted
- * events (via chat-reducer replayTimeline) and lists artifacts with safe
- * preview (text/markdown only; HTML blocked, QA-14).
+ * Lists sessions for a bot; opening one replays persisted events (via
+ * chat-reducer replayTimeline) and lists the bot's workspace artifacts with
+ * safe read (text only; HTML/binary blocked, QA-14).
  */
 import { useState, type JSX } from "react";
-import type { Artifact } from "@deepseek-bot/contracts";
+import type { BotArtifact } from "@deepseek-bot/contracts";
 import type { ChatSessionView } from "../../services/desktop-service.js";
 import type { DesktopService } from "../../services/desktop-service.js";
 import { replayTimeline } from "./chat-reducer.js";
@@ -21,9 +21,9 @@ export function SessionHistory(props: {
   const [replay, setReplay] = useState<{ items: ReturnType<typeof replayTimeline> } | null>(
     null,
   );
-  const [artifacts, setArtifacts] = useState<Artifact[] | null>(null);
+  const [artifacts, setArtifacts] = useState<BotArtifact[] | null>(null);
   const [preview, setPreview] = useState<
-    { artifactId: string; kind: "text"; content: string } | { artifactId: string; kind: "blocked"; reason: string } | null
+    { artifactPath: string; kind: "text"; content: string } | { artifactPath: string; kind: "blocked"; reason: string } | null
   >(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -42,21 +42,21 @@ export function SessionHistory(props: {
       const { events } = await props.service.chat.openSession(sessionId);
       setReplay({ items: replayTimeline(events) });
       setOpenSessionId(sessionId);
-      setArtifacts(await props.service.artifacts.listBySession(sessionId));
+      setArtifacts(await props.service.artifacts.list(props.botId));
       setPreview(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
   };
 
-  const previewArtifact = async (artifact: Artifact): Promise<void> => {
+  const previewArtifact = async (artifact: BotArtifact): Promise<void> => {
     setError(null);
     try {
-      const result = await props.service.artifacts.preview(artifact);
+      const result = await props.service.artifacts.read(props.botId, artifact.relativePath);
       if (result.kind === "text") {
-        setPreview({ artifactId: artifact.id, kind: "text", content: result.content });
+        setPreview({ artifactPath: artifact.relativePath, kind: "text", content: result.content });
       } else {
-        setPreview({ artifactId: artifact.id, kind: "blocked", reason: result.reason });
+        setPreview({ artifactPath: artifact.relativePath, kind: "blocked", reason: result.reason });
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -111,7 +111,7 @@ export function SessionHistory(props: {
           <div className="replay-title">{t("shell.artifacts")}</div>
           <div className="artifact-list" aria-label={t("chat.artifactList")}>
             {(artifacts ?? []).map((a) => (
-              <div className="artifact-item" key={a.id}>
+              <div className="artifact-item" key={a.relativePath}>
                 <div className="artifact-meta">
                   <div className="tab-title">{a.relativePath}</div>
                   <div className="session-meta">

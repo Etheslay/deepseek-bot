@@ -179,3 +179,38 @@
 - 审批卡展示精确参数，旧 `grant.create` 按钮移除；插件构建与准备纳入链路，拒绝目录链接写出 profile。无新公开契约、迁移、依赖或 lockfile 改动。
 - 最终 lint/typecheck/test、Host/桥接包/desktop build、diff check 通过；全仓 794 通过、1 跳过。真实 Electron + 生产 Host + 钉扎 Harness + 本地受控模型完成仅本次授权闭环，截图和实际命令见 `docs/reports/D16-harness-tools-report.md`。
 - 本片通过 `feature/harness-tool-gateway` 交付，待真人自审与 PR 合入。付费模型、远程 CI、安装包、`ask_user` / `web_search` 真实聊天接线及原生聊天 D08 审批未验收；后续按提问 → 搜索 → D18 的顺序推进。Etheslay 最新提交的真人自审留空。
+
+## 2026-10-26：D18 收尾——独立知识表、本地向量检索与保留策略
+
+- 用户确认继续 D18；分支 `feature/knowledge-base` 自 develop cc4a379（PR #61 后）创建。
+- 契约（协议仍 0.3，附加式）：受信方法 `knowledge.list/write/delete/search` + `memory.retention.get/set`；`TEXT_LIMITS.knowledgeText = 100000`。
+- 迁移 `0010-knowledge-docs`：独立知识文档表（bot 外键、bot 域隔离同记忆）；导入上限 16 KiB→256 KiB，从写记忆改为写知识文档，标题取文件名主干。
+- 本地向量检索：480 字窗（100 重叠）+ CJK 双字/拉丁词 TF-IDF 余弦 + 精确短语加分；纯本地零依赖，不预存向量、不引嵌入模型；模型工具 `knowledge_search`（能力映射 memory.read，/memory 路由第三工具，桥接目录名单同步扩为三）。
+- 保留策略：单设置键 `memory.retention`（retentionDays / memoryMaxPerBot / knowledgeMaxPerBot，0=不限制默认，损坏值按 0 读）；Host 启动 + 每次写入后清扫；知识不按时钟过期只受数量上限。
+- 桌面记忆面板三区：记忆（不变）/知识库（导入/搜索/删除/列表）/保留策略；文本一律按文本渲染。
+- 全仓 lint/typecheck/test 全绿：shared 6、bridge 16、contracts 88、agent-tools 75、storage 159、desktop 226、runtime 128、adapter 58、host 88（+1 跳过冒烟）。
+- 未验证（docs/reports/D18-knowledge-search-report.md §4）：真实 Electron 手测、真实模型调用 knowledge_search、真实语料相关性人工评估、远程 CI；神经语义检索未评估。
+- 自审记录留空待负责人 Etheslay 填写；PR 合并由本人确认。
+
+## 2026-10-27：D19 连接器调用管道与本地 SD 生图（feature/connector-invoke）
+
+- D18 收尾经 PR #63 合入 develop 后继续 A4：连接器从"只登记"到"可调用"。
+- 迁移 0012-connectors-endpoint：回环端点列；connector.setEndpoint 受信方法；端点仅接受 127.0.0.1/localhost/[::1] 的 http(s) URL（存储层校验，不带路径），只存储不探测。
+- 模型工具 connector_invoke（能力 connector.invoke，默认 ask）：txt2img → 本机 SD WebUI /sdapi/v1/txt2img（120s 超时），图片落盘 connector-outputs/<connectorId>/（≤8 MiB，不进备份），返回绝对路径；字节不进契约信封。新 /connectors 通道路由 + 桥接目录名单。
+- 全仓 lint/typecheck/test 全绿：shared 6、bridge 16、contracts 89、agent-tools 78、storage 161、desktop 228、runtime 128、adapter 58、host 92（+1 跳过）。
+- 未验证（docs/reports/D19-connector-invoke-report.md §3）：真实 SD WebUI 联调（本机未装，假 HTTP 服务验证协议）、真实 Electron 手测、真实模型审批链路、远程 CI。聊天内图片预览归 B 线。
+- 自审记录留空待负责人 Etheslay 填写；PR 由本人确认合并。
+## 2026-10-27：D20 事件自动化第一片——触发规则与评审队列（feature/automation-triggers）
+
+- FR-17 后端：迁移 0013-automation-triggers（trigger_rules + trigger_firings）；受信方法 trigger.list/save/enable/disable/delete + trigger.firing.list/decide；补 workflow.list 摘要方法供选择器。
+- 三层防护：(rule, source event) 唯一去重；队列自启运行经 started_run_id 跳过（循环防护）；宕机积累事件以 reason=missed 补入评审队列——可见、绝不静默补跑。游标整轮扫描成功后才推进；Host 启动补扫 + 5 秒轮询（可配、shutdown 清理）。
+- decide("start") 复用 run.start 路径（策略钉扎/revision/幂等）；无任何自动启动路径。桌面设置页新增自动化面板（规则管理 + 评审队列）。
+- 全仓 lint/typecheck/test 全绿（连续两轮）：shared 6、bridge 16、contracts 90、agent-tools 78、storage 163、desktop 229、runtime 128、adapter 58、host 92（+1 跳过）。
+- 过程修复：跨分支迁移编号协调（共编侧车持 0011、connector-invoke 持 0012，本分支顺延为 0013-automation-triggers）；host 测试清理遇 Windows 文件锁改尽力而为重试。
+- 未验证（docs/reports/D20-triggers-report.md §3）：真实 Electron 手测、真实 Harness 人工闭环、聊天内通知条（B 线 D14 组件）、远程 CI。自审留空待负责人签署；PR 由本人确认合并。
+
+## 2026-10-27：D20 第二片——list_automations 聊天可见性工具
+
+- 只读模型工具 `list_automations`（能力 app.read 默认允许，新 /triggers 通道 + 桥接目录）：模型可汇报规则清单/启停状态/待评审条目；无写入参数（空参严格 schema）。对标 #5 的通知条渲染仍归 B 线。
+- 全仓 lint/typecheck/test 全绿：shared 6、bridge 16、contracts 90、agent-tools 80、storage 163、desktop 229、runtime 128、adapter 58、host 92（+1 跳过）。
+- 自审留空待负责人签署；与 D20 第一片同一分支（feature/automation-triggers），随该片 PR 一并交付。

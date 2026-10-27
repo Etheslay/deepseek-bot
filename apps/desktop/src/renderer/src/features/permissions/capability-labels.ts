@@ -21,6 +21,8 @@ const CAPABILITY_LABEL_KEYS = {
   "app.revoke_creation": "permissions.revokeCreationBatch",
   "interaction.ask_user": "permissions.askUser",
   "network.search": "permissions.webSearch",
+  "memory.read": "permissions.memoryRead",
+  "memory.write": "permissions.memoryWrite",
   "fs.read": "permissions.readWorkspaceFiles",
   "fs.write": "permissions.writeWorkspaceFiles",
   "exec.shell": "permissions.executeLocalCommand",

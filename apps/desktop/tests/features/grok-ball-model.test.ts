@@ -1,75 +1,155 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   GROK_BALL_SHAPES,
   GROK_BALL_SHAPE_IDS,
   GROK_BALL_SIZES,
   GROK_BALL_STATE_FRAMES,
+  GROK_BALL_COLORS,
+  GROK_BALL_TONES,
+  toneKeyFor,
   contourPath,
   interpolatePoints,
   interpolateStateFrame,
   isStaticVariant,
   mixColor,
-  projectEye,
+  radialLookupOf,
   sampleContour,
-  shadePalette,
+  type GrokBallShapeId,
 } from "../../src/renderer/src/features/avatars/grok-ball-model.js";
 
-const REQUIRED_SHAPES = [
-  "circle",
+/** What the picker hands out. */
+const OFFERED_SHAPES = [
   "blob",
   "squircle",
-  "star4",
+  "cylinder",
+  "hex",
+  "gem",
+  "crystal",
+  "shield",
+  "arch",
   "cloud",
+  "leaf",
   "heart",
-  "flower6",
-  "egg",
-  "capsule",
-  "triangle",
-  "pentagon",
-  "star5",
-  "hexagon",
-  "pumpkin",
 ] as const;
 
-describe("Grok Ball shapes", () => {
-  it("exposes the full self-designed shape set", () => {
-    for (const id of REQUIRED_SHAPES) {
-      expect(GROK_BALL_SHAPE_IDS).toContain(id);
-      expect(GROK_BALL_SHAPES[id]).toBeDefined();
+/** Ids kept only so stored avatars still render. */
+const RETIRED_SHAPES = [
+  "circle",
+  "star4",
+  "star5",
+  "flower6",
+  "pentagon",
+  "hexagon",
+  "pumpkin",
+  "triangle",
+  "egg",
+  "capsule",
+] as const;
+
+const ALL_POINTS = (id: GrokBallShapeId) => GROK_BALL_SHAPES[id].points;
+
+describe("Grok Ball silhouette compiler", () => {
+  it("offers the primitive family and keeps retired ids renderable", () => {
+    for (const id of [...OFFERED_SHAPES, ...RETIRED_SHAPES]) {
+      expect(GROK_BALL_SHAPES[id], id).toBeDefined();
     }
+    expect([...GROK_BALL_SHAPE_IDS].sort()).toEqual([...OFFERED_SHAPES].sort());
   });
 
   it("keeps the id list in sync with the shape map", () => {
     expect([...GROK_BALL_SHAPE_IDS].sort()).toEqual(
-      Object.keys(GROK_BALL_SHAPES).sort(),
+      Object.keys(GROK_BALL_SHAPES)
+        .filter((id) => (GROK_BALL_SHAPE_IDS as string[]).includes(id))
+        .sort(),
     );
   });
 
   it("gives every shape a closed, in-frame contour with a seat for two eyes", () => {
     for (const id of GROK_BALL_SHAPE_IDS) {
       const shape = GROK_BALL_SHAPES[id];
-      expect(shape.points.length).toBeGreaterThanOrEqual(3);
+      expect(shape.points.length, id).toBeGreaterThanOrEqual(3);
       for (const [x, y] of shape.points) {
-        expect(Number.isFinite(x)).toBe(true);
-        expect(Number.isFinite(y)).toBe(true);
-        expect(x).toBeGreaterThanOrEqual(0);
-        expect(x).toBeLessThanOrEqual(100);
-        expect(y).toBeGreaterThanOrEqual(0);
-        expect(y).toBeLessThanOrEqual(100);
+        expect(Number.isFinite(x) && Number.isFinite(y), id).toBe(true);
+        expect(x, id).toBeGreaterThanOrEqual(0);
+        expect(x, id).toBeLessThanOrEqual(100);
+        expect(y, id).toBeGreaterThanOrEqual(0);
+        expect(y, id).toBeLessThanOrEqual(100);
       }
-      // Eye centers must sit inside the horizontal body band.
-      expect(shape.eyeSpacing).toBeGreaterThan(12);
-      expect(shape.eyeY).toBeGreaterThan(0);
-      expect(shape.eyeY).toBeLessThan(100);
+      expect(shape.eyeSpacing, id).toBeGreaterThan(12);
+      expect(shape.eyeY, id).toBeGreaterThan(0);
+      expect(shape.eyeY, id).toBeLessThan(100);
     }
+  });
+
+  it("fills its slot: no body is a stub, none overflows the plate", () => {
+    for (const id of GROK_BALL_SHAPE_IDS) {
+      const lookup = radialLookupOf(ALL_POINTS(id));
+      let min = Infinity;
+      let max = 0;
+      for (let i = 0; i < 360; i++) {
+        const r = lookup((i * Math.PI) / 180);
+        min = Math.min(min, r);
+        max = Math.max(max, r);
+      }
+      expect(max, id).toBeGreaterThan(38);
+      expect(max, id).toBeLessThan(50);
+      // A body that collapsed to a sliver in some direction would read as a
+      // scratch, not a character.
+      expect(min / max, id).toBeGreaterThan(0.42);
+    }
+  });
+
+  it("has no square corner or needle tip in any silhouette", () => {
+    // Adjacent samples of r(θ) must not jump: a cliff is a hard corner (square)
+    // or a needle (spike), and both were rejected in favour of soft solids.
+    for (const id of GROK_BALL_SHAPE_IDS) {
+      const lookup = radialLookupOf(ALL_POINTS(id));
+      const step = (Math.PI * 2) / 720;
+      let peak = 0;
+      let jump = 0;
+      for (let i = 0; i < 720; i++) {
+        const theta = i * step;
+        const r = lookup(theta);
+        peak = Math.max(peak, r);
+        jump = Math.max(jump, Math.abs(r - lookup(theta + step)));
+      }
+      expect(jump / peak, id).toBeLessThan(0.045);
+    }
+  });
+
+  it("stands every single-apex body on its width, not its point", () => {
+    // The old ▽ read as a warning sign. Anything that comes to one point must
+    // keep that point up and rest on its width. (A pentagon is deliberately not
+    // in this list: vertex-up, its widest ring sits above the middle, which is
+    // correct for that body.)
+    for (const id of ["triangle"] as const) {
+      const points = ALL_POINTS(id);
+      const span = (list: [number, number][]) =>
+        Math.max(...list.map(([x]) => x)) - Math.min(...list.map(([x]) => x));
+      const upper = points.filter(([, y]) => y < 32);
+      const lower = points.filter(([, y]) => y > 66);
+      expect(upper.length, id).toBeGreaterThan(2);
+      expect(lower.length, id).toBeGreaterThan(2);
+      expect(span(upper), id).toBeLessThan(span(lower));
+    }
+  });
+
+  it("gives every body a plumpness the solid loft can use", () => {
+    for (const id of GROK_BALL_SHAPE_IDS) {
+      const plump = GROK_BALL_SHAPES[id].plump;
+      expect(plump, id).toBeGreaterThan(0);
+      expect(plump, id).toBeLessThanOrEqual(1);
+    }
+    // A circle must loft into a true sphere, so it keeps the full depth.
+    expect(GROK_BALL_SHAPES.circle.plump).toBe(1);
   });
 
   it("samples a contour at the requested resolution", () => {
     const sampled = sampleContour(GROK_BALL_SHAPES.cloud.points, 48);
     expect(sampled).toHaveLength(48);
     for (const [x, y] of sampled) {
-      expect(Number.isFinite(x)).toBe(true);
-      expect(Number.isFinite(y)).toBe(true);
+      expect(Number.isFinite(x) && Number.isFinite(y)).toBe(true);
     }
   });
 
@@ -78,18 +158,8 @@ describe("Grok Ball shapes", () => {
     expect(d.startsWith("M ")).toBe(true);
     expect(d.endsWith("Z")).toBe(true);
     expect(d).toContain("C ");
-  });
-});
-
-describe("Grok Ball soft-blob shading", () => {
-  it("derives a lit tone above and an occluded tone below the base color", () => {
-    const palette = shadePalette("#3b93f0");
-    expect(palette.mid).toBe("#3b93f0");
-    const lit = Number.parseInt(palette.hi.slice(1, 3), 16);
-    const base = Number.parseInt(palette.mid.slice(1, 3), 16);
-    const shade = Number.parseInt(palette.shade.slice(1, 3), 16);
-    expect(lit).toBeGreaterThan(base);
-    expect(shade).toBeLessThan(base);
+    // A malformed control point would show up as NaN in the path data.
+    expect(d).not.toContain("NaN");
   });
 
   it("marks the multi-lobe bodies with soft creases", () => {
@@ -107,29 +177,50 @@ describe("Grok Ball soft-blob shading", () => {
   });
 });
 
-describe("Grok Ball eye projection", () => {
-  it("keeps both eyes on the front hemisphere for a centered gaze", () => {
-    const left = projectEye({ x: 0, y: 0 }, -1);
-    const right = projectEye({ x: 0, y: 0 }, 1);
-    expect(left.visible).toBe(true);
-    expect(right.visible).toBe(true);
-    expect(left.x).toBeLessThan(right.x);
+describe("Grok Ball palette", () => {
+  it("offers ten body colours plus the theme-aware mono ball", () => {
+    expect(GROK_BALL_COLORS).toHaveLength(10);
+    for (const color of GROK_BALL_COLORS) {
+      expect(color).toMatch(/^#[0-9A-F]{6}$/);
+    }
   });
 
-  it("swaps the eye order when the gaze crosses to the far side", () => {
-    const left = projectEye({ x: 0.9, y: 0 }, -1);
-    const right = projectEye({ x: 0.9, y: 0 }, 1);
-    expect(right.x).toBeGreaterThan(left.x);
+  it("pairs every colour with a deeper value for the dark theme", () => {
+    for (const tone of GROK_BALL_TONES) {
+      expect(tone.light).toMatch(/^#[0-9A-F]{6}$/);
+      expect(tone.dark).toMatch(/^#[0-9A-F]{6}$/);
+      expect(tone.dark, tone.key).not.toBe(tone.light);
+    }
   });
 
-  it("hides an eye that rotates behind the ball (backface culling)", () => {
-    const behind = projectEye({ x: 3, y: 0 }, 1);
-    expect(behind.z).toBeLessThan(0);
-    expect(behind.visible).toBe(false);
+  it("resolves a stored colour back to its tone, either theme or not", () => {
+    for (const tone of GROK_BALL_TONES) {
+      expect(toneKeyFor(tone.light), tone.key).toBe(tone.key);
+      // A row saved while the app was dark still maps to the same pair.
+      expect(toneKeyFor(tone.dark), tone.key).toBe(tone.key);
+      expect(toneKeyFor(tone.light.toLowerCase()), tone.key).toBe(tone.key);
+    }
+    // A retired or hand-picked hex has no pair: it renders as itself.
+    expect(toneKeyFor("#3b93f0")).toBeNull();
+    expect(toneKeyFor("mono")).toBeNull();
+  });
+
+  it("keeps the stylesheet in step with the palette", () => {
+    // The tone values live in CSS because they are theme-scoped, so nothing in
+    // the type system catches a colour added here but not there.
+    const css = readFileSync(
+      new URL("../../src/renderer/src/styles.css", import.meta.url),
+      "utf8",
+    );
+    for (const tone of GROK_BALL_TONES) {
+      expect(css, `${tone.key} dark`).toContain(`--gb-body-${tone.key}: ${tone.dark}`);
+      expect(css, `${tone.key} light`).toContain(`--gb-body-${tone.key}: ${tone.light}`);
+      expect(css, `${tone.key} rule`).toContain(`[data-tone="${tone.key}"]`);
+    }
   });
 });
 
-describe("Grok Ball keyframe interpolation", () => {
+describe("Grok Ball state keyframes", () => {
   it("interpolates points linearly", () => {
     const mid = interpolatePoints(
       [
@@ -183,11 +274,5 @@ describe("Grok Ball fixed-slot variants", () => {
     expect(isStaticVariant("inline")).toBe(true);
     expect(isStaticVariant("sidebar")).toBe(false);
     expect(isStaticVariant("message-header")).toBe(false);
-    expect(isStaticVariant("preview")).toBe(false);
   });
 });
-
-
-
-
-

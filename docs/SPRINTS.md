@@ -81,7 +81,7 @@
 | D15 工具网关读层 | 已交付 | `feature/agent-tools` → `80e2074` | [D15-report](reports/D15-report.md) |
 | D15 工具网关写层 | 已交付 | `feature/agent-tools` → `d4a3f35` | [D15-report](reports/D15-report.md) |
 | D15 `ask_user` 后端 | 已交付 | `feature/agent-tools` → `0350e40` | [D15-report](reports/D15-report.md) |
-| D15 `web_search` 后端 | 已合入；真实聊天接线待做 | `feature/agent-tools`（`573421e`）→ PR #42 `b693c5b` | [D15-report](reports/D15-report.md) |
+| D15 `web_search` 后端 | 后端已合入；聊天接线见 [web_search 聊天报告](reports/D16-web-search-chat-report.md) | `feature/agent-tools`（`573421e`）→ PR #42 `b693c5b` | [D15-report](reports/D15-report.md) |
 | D16 授权后端与设置/聊天卡 | 已合入 | PR #47 `a0af1f5`、#49 `8a8e01c`、#51 `9ebab3a` | [D16-report](reports/D16-report.md) |
 | D16 真实聊天应用工具 | 本功能分支已实现；受控模型与真实桌面验证通过，待真人自审/PR 合入 | `feature/harness-tool-gateway`，基线 `2ecb2f9` | [D16-harness-tools-report](reports/D16-harness-tools-report.md) |
 | D14 渲染片 + 交互片 | 已交付（mermaid 砍除，验收部分达成） | `feature/chat-experience` → `feature/settings-updates` → `0f20970` | [D14-report](reports/D14-report.md) |
@@ -103,9 +103,9 @@
 | --- | --- | --- |
 | A1 | D15 工具网关 | 读层 → 写层（创建草案/批量撤销/头像自动分配）→ `ask_user` → 内置 `web_search`（免费源） |
 | A2 | D16 权限三层 | 三档策略、聊天内授权、审计（复用 D14 卡片组件） |
-| A3 | D18 记忆与知识 | 写入/检索/删除，默认不跨 bot |
-| A4 | D19 连接器与 MCP | 连接器生命周期 + 本地 SD 生图 + 视觉接入 |
-| A5 | D20 事件自动化 | 规则、评审队列、重复防护 |
+| A3 | D18 记忆与知识 | 写入/检索/删除，默认不跨 bot；独立知识表 + 本地向量检索 + 保留策略（`feature/knowledge-base`），见 [知识导入报告](reports/D18-knowledge-import-report.md)、[知识检索报告](reports/D18-knowledge-search-report.md) |
+| A4 | D19 连接器与 MCP | 注册与启停见 [连接器登记报告](reports/D19-connector-registry-report.md)；自定义 MCP、本地 SD 生图和视觉接入仍未做 |
+| A5 | D20 事件自动化 | 规则、评审队列、重复防护（`feature/automation-triggers`：规则 + 评审队列 + 通知条后端） |
 | A6 | D21 本地执行守护 | 截图 OCR / 设备动作，默认关闭逐次授权 |
 
 **B 线（Destinyian · 桌面与体验）**：

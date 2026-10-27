@@ -9,7 +9,9 @@
 import { z } from "zod";
 import {
   ApprovalSchema,
+  ArtifactVersionSchema,
   AvatarSchema,
+  BotArtifactSchema,
   BotGroupSchema,
   BotSchema,
   ImportableWorkflowDraftSchema,
@@ -24,7 +26,9 @@ import {
 } from "./errors.js";
 import {
   IsoDateTimeUtcSchema,
+  MediaTypeSchema,
   NonEmptyStringSchema,
+  RelativeArtifactPathSchema,
   Sha256HexSchema,
   TEXT_LIMITS,
   UuidSchema,
@@ -41,6 +45,17 @@ import { WorkflowIssueSchema } from "./workflow.js";
 import { PERMISSION_METHODS } from "./permissions.js";
 
 export const MAX_MESSAGE_BYTES = 1_048_576;
+
+/**
+ * Largest artifact content one `artifacts.save`/`artifacts.read` payload may
+ * carry, in UTF-8 bytes (D28). The method-boundary envelope caps a single
+ * message at 1 MiB of JSON, and JSON escaping can roughly double the wire
+ * size of text with many newlines/quotes, so the content budget stays well
+ * under the envelope to keep save calls deliverable. Larger workspace files
+ * stay listable and versionable but refuse inline reads/saves with an
+ * explicit error — never a silent truncation.
+ */
+export const MAX_ARTIFACT_CONTENT_BYTES = 768 * 1024;
 
 export function messageSizeBytes(value: unknown): number {
   return new TextEncoder().encode(JSON.stringify(value ?? null)).length;
@@ -63,6 +78,7 @@ export const METHODS = [
   "group.create",
   "group.list",
   "creation.revoke",
+  "workflow.list",
   "workflow.validate",
   "workflow.save",
   "workflow.export",
@@ -78,6 +94,38 @@ export const METHODS = [
   "chat.send",
   "chat.history",
   "chat.cancel",
+  "question.list",
+  "question.answer",
+  "search.config.get",
+  "search.config.set",
+  "search.results.list",
+  "memory.list",
+  "memory.write",
+  "memory.delete",
+  "memory.retention.get",
+  "memory.retention.set",
+  "knowledge.list",
+  "knowledge.write",
+  "knowledge.delete",
+  "knowledge.search",
+  "connector.list",
+  "connector.register",
+  "connector.enable",
+  "connector.disable",
+  "connector.setEndpoint",
+  "artifacts.list",
+  "artifacts.read",
+  "artifacts.save",
+  "artifacts.versions",
+  "artifacts.versionContent",
+  "artifacts.revert",
+  "trigger.list",
+  "trigger.save",
+  "trigger.enable",
+  "trigger.disable",
+  "trigger.delete",
+  "trigger.firing.list",
+  "trigger.firing.decide",
   "grant.create",
   "grant.list",
   "grant.revoke",
@@ -282,6 +330,23 @@ export const METHOD_CONTRACTS = {
       revokedGroupId: UuidSchema.nullable(),
     }),
   },
+  /**
+   * Workflow summaries for pickers (D20 automation panel). Metadata only —
+   * full documents stay behind workflow.get-style editor flows; summaries
+   * keep any library size under the 1 MiB message cap.
+   */
+  "workflow.list": {
+    request: z.object({}).strict(),
+    response: z.object({
+      workflows: z.array(
+        z.object({
+          id: UuidSchema,
+          name: NonEmptyStringSchema(TEXT_LIMITS.name),
+          revision: UuidSchema,
+        }),
+      ),
+    }),
+  },
   "workflow.validate": {
     request: z.object({ workflow: WorkflowDraftSchema }),
     response: z.object({
@@ -423,6 +488,492 @@ export const METHOD_CONTRACTS = {
   "chat.cancel": {
     request: z.object({ sessionId: z.string().min(1).max(128) }),
     response: z.object({ cancelled: z.boolean() }),
+  },
+  "question.list": {
+    request: z.object({ botId: UuidSchema }).strict(),
+    response: z.object({
+      questions: z.array(
+        z.object({
+          requestId: UuidSchema,
+          question: z.string().min(1).max(2_000),
+          options: z
+            .array(
+              z.object({
+                id: z.enum(["A", "B", "C", "D"]),
+                label: z.string().min(1).max(1_000),
+              }),
+            )
+            .min(2)
+            .max(4),
+          allowOther: z.boolean(),
+          expiresAt: IsoDateTimeUtcSchema,
+        }),
+      ),
+    }),
+  },
+  "question.answer": {
+    request: z.union([
+      z
+        .object({
+          botId: UuidSchema,
+          requestId: UuidSchema,
+          optionId: z.enum(["A", "B", "C", "D"]),
+        })
+        .strict(),
+      z
+        .object({
+          botId: UuidSchema,
+          requestId: UuidSchema,
+          text: z.string().trim().min(1).max(4_000),
+        })
+        .strict(),
+    ]),
+    response: z.object({
+      requestId: UuidSchema,
+      optionId: z.enum(["A", "B", "C", "D"]).optional(),
+      text: z.string().min(1).max(4_000),
+      messageId: UuidSchema,
+      at: IsoDateTimeUtcSchema,
+    }),
+  },
+  "search.config.get": {
+    request: z.object({}).strict(),
+    response: z.object({ endpoint: z.string().nullable() }),
+  },
+  "search.config.set": {
+    request: z
+      .object({
+        endpoint: z.string().trim().min(1).max(2_000).nullable(),
+      })
+      .strict(),
+    response: z.object({ endpoint: z.string().nullable() }),
+  },
+  "search.results.list": {
+    request: z.object({ botId: UuidSchema }).strict(),
+    response: z.object({
+      searches: z.array(
+        z.object({
+          query: z.string(),
+          results: z.array(
+            z.object({
+              title: z.string(),
+              url: z.string(),
+              snippet: z.string(),
+            }),
+          ),
+          warnings: z.array(z.string()),
+          at: IsoDateTimeUtcSchema,
+        }),
+      ),
+    }),
+  },
+  "memory.list": {
+    request: z
+      .object({
+        botId: UuidSchema,
+        query: z.string().trim().max(4_000).optional(),
+        limit: z.int().min(1).max(50).default(20),
+      })
+      .strict(),
+    response: z.object({
+      memories: z.array(
+        z.object({
+          id: UuidSchema,
+          botId: UuidSchema,
+          text: z.string().min(1).max(4_000),
+          at: IsoDateTimeUtcSchema,
+        }),
+      ),
+    }),
+  },
+  "memory.write": {
+    request: z
+      .object({
+        botId: UuidSchema,
+        text: z.string().trim().min(1).max(4_000),
+      })
+      .strict(),
+    response: z.object({
+      id: UuidSchema,
+      botId: UuidSchema,
+      text: z.string().min(1).max(4_000),
+      at: IsoDateTimeUtcSchema,
+    }),
+  },
+  "memory.delete": {
+    request: z
+      .object({
+        botId: UuidSchema,
+        memoryId: UuidSchema,
+      })
+      .strict(),
+    response: z.object({ deleted: z.literal(true) }),
+  },
+  /**
+   * D18 retention policy for memory notes and knowledge docs. Zero means
+   * "keep everything" (the default) — a broken stored value reads as zero
+   * so a corrupt setting can never widen deletion. Applied at host start
+   * and after every write.
+   */
+  "memory.retention.get": {
+    request: z.object({}).strict(),
+    response: z.object({
+      policy: z.object({
+        /** Days a memory note stays; 0 keeps it until deleted by hand. */
+        retentionDays: z.int().min(0),
+        /** Newest N memory notes kept per bot; 0 is unlimited. */
+        memoryMaxPerBot: z.int().min(0),
+        /** Newest N knowledge docs kept per bot; 0 is unlimited. */
+        knowledgeMaxPerBot: z.int().min(0),
+      }),
+    }),
+  },
+  "memory.retention.set": {
+    request: z.object({
+      policy: z.object({
+        retentionDays: z.int().min(0).max(36_500),
+        memoryMaxPerBot: z.int().min(0).max(100_000),
+        knowledgeMaxPerBot: z.int().min(0).max(10_000),
+      }),
+    }),
+    response: z.object({
+      policy: z.object({
+        retentionDays: z.int().min(0),
+        memoryMaxPerBot: z.int().min(0),
+        knowledgeMaxPerBot: z.int().min(0),
+      }),
+    }),
+  },
+  /**
+   * D18 knowledge documents (独立知识表): per-bot long-form text, separate
+   * from the 4k memory notes. list returns summaries (no text) so a full
+   * library stays under the 1 MiB message cap; search ranks windows by
+   * local TF-IDF cosine with an exact-phrase bonus and returns bounded
+   * snippets. Deletion and visibility are bot-scoped like memory.
+   */
+  "knowledge.list": {
+    request: z.object({ botId: UuidSchema }).strict(),
+    response: z.object({
+      docs: z.array(
+        z.object({
+          id: UuidSchema,
+          botId: UuidSchema,
+          title: NonEmptyStringSchema(TEXT_LIMITS.name),
+          size: z.int().min(1),
+          at: IsoDateTimeUtcSchema,
+        }),
+      ),
+    }),
+  },
+  "knowledge.write": {
+    request: z.object({
+      botId: UuidSchema,
+      title: z.string().trim().min(1).max(TEXT_LIMITS.name),
+      text: z.string().trim().min(1).max(TEXT_LIMITS.knowledgeText),
+    }).strict(),
+    response: z.object({
+      id: UuidSchema,
+      botId: UuidSchema,
+      title: NonEmptyStringSchema(TEXT_LIMITS.name),
+      size: z.int().min(1),
+      at: IsoDateTimeUtcSchema,
+    }),
+  },
+  "knowledge.delete": {
+    request: z
+      .object({
+        botId: UuidSchema,
+        docId: UuidSchema,
+      })
+      .strict(),
+    response: z.object({ deleted: z.literal(true) }),
+  },
+  "knowledge.search": {
+    request: z
+      .object({
+        botId: UuidSchema,
+        query: z.string().trim().min(1).max(2_000),
+        limit: z.int().min(1).max(10).default(5),
+      })
+      .strict(),
+    response: z.object({
+      hits: z.array(
+        z.object({
+          docId: UuidSchema,
+          title: NonEmptyStringSchema(TEXT_LIMITS.name),
+          /** Ranked similarity, capped at 1. Unranked (score 0) never returns. */
+          score: z.number().min(0).max(1),
+          snippet: z.string().min(1).max(400),
+          at: IsoDateTimeUtcSchema,
+        }),
+      ),
+    }),
+  },
+  /**
+   * Trusted desktop catalog. Registration always starts disabled.
+   * credentialRef is an opaque cred:<uuid> reference; these methods never
+   * resolve it or contact the connector. ToolPolicy.mcp is a separate gate.
+   */
+  "connector.list": {
+    request: z.object({}).strict(),
+    response: z.object({
+      connectors: z.array(
+        z.object({
+          id: UuidSchema,
+          name: NonEmptyStringSchema(TEXT_LIMITS.name),
+          enabled: z.boolean(),
+          credentialRef: z.string().nullable(),
+          endpoint: z.string().nullable(),
+          at: IsoDateTimeUtcSchema,
+          updatedAt: IsoDateTimeUtcSchema,
+        }),
+      ),
+    }),
+  },
+  "connector.register": {
+    request: z
+      .object({
+        name: z.string().trim().min(1).max(TEXT_LIMITS.name),
+        credentialRef: z.string().trim().min(1).max(TEXT_LIMITS.label).nullable().optional(),
+        // Loopback http(s) URL of the local service (D19); validated by the
+        // Host before storage, never contacted at registration time.
+        endpoint: z.string().trim().max(2048).nullable().optional(),
+      })
+      .strict(),
+    response: z.object({
+      id: UuidSchema,
+      name: NonEmptyStringSchema(TEXT_LIMITS.name),
+      enabled: z.literal(false),
+      credentialRef: z.string().nullable(),
+      endpoint: z.string().nullable(),
+      at: IsoDateTimeUtcSchema,
+      updatedAt: IsoDateTimeUtcSchema,
+    }),
+  },
+  "connector.enable": {
+    request: z.object({ id: UuidSchema }).strict(),
+    response: z.object({
+      id: UuidSchema,
+      name: NonEmptyStringSchema(TEXT_LIMITS.name),
+      enabled: z.literal(true),
+      credentialRef: z.string().nullable(),
+      endpoint: z.string().nullable(),
+      at: IsoDateTimeUtcSchema,
+      updatedAt: IsoDateTimeUtcSchema,
+    }),
+  },
+  "connector.disable": {
+    request: z.object({ id: UuidSchema }).strict(),
+    response: z.object({
+      id: UuidSchema,
+      name: NonEmptyStringSchema(TEXT_LIMITS.name),
+      enabled: z.literal(false),
+      credentialRef: z.string().nullable(),
+      endpoint: z.string().nullable(),
+      at: IsoDateTimeUtcSchema,
+      updatedAt: IsoDateTimeUtcSchema,
+    }),
+  },
+  /**
+   * D19: set or clear the loopback http(s) endpoint of a local connector.
+   * The Host validates the URL shape (http/https, loopback host only)
+   * before storage and never contacts the endpoint here.
+   */
+  "connector.setEndpoint": {
+    request: z.object({
+      id: UuidSchema,
+      endpoint: z.string().trim().max(2048).nullable(),
+    }).strict(),
+    response: z.object({
+      id: UuidSchema,
+      name: NonEmptyStringSchema(TEXT_LIMITS.name),
+      enabled: z.boolean(),
+      credentialRef: z.string().nullable(),
+      endpoint: z.string().nullable(),
+      at: IsoDateTimeUtcSchema,
+      updatedAt: IsoDateTimeUtcSchema,
+    }),
+  },
+  /**
+   * D28 co-edit sidecar: artifacts are the editable files of one bot's
+   * workspace directory, addressed by (botId, relativePath). list/read
+   * reconcile unrecorded workspace changes as "bot" versions, so the version
+   * trail covers bot writes that bypass every method call. text/html and
+   * binary media stay listed but refuse inline content (kind "blocked") —
+   * QA-14: user-facing surfaces never execute embedded scripts. Saves and
+   * reverts always append a version (author "user"); reverts never rewrite
+   * history. expectedChecksum on save is optimistic concurrency against a
+   * concurrent bot write (REVISION_CONFLICT).
+   */
+  "artifacts.list": {
+    request: z.object({ botId: UuidSchema }).strict(),
+    response: z.object({ artifacts: z.array(BotArtifactSchema) }),
+  },
+  "artifacts.read": {
+    request: z
+      .object({ botId: UuidSchema, path: RelativeArtifactPathSchema })
+      .strict(),
+    response: z.discriminatedUnion("kind", [
+      z.object({
+        kind: z.literal("text"),
+        mediaType: MediaTypeSchema,
+        checksum: BotArtifactSchema.shape.checksum,
+        content: z.string().max(MAX_ARTIFACT_CONTENT_BYTES),
+      }),
+      z.object({ kind: z.literal("blocked"), mediaType: MediaTypeSchema, reason: z.string().min(1).max(2_000) }),
+    ]),
+  },
+  "artifacts.save": {
+    request: z
+      .object({
+        botId: UuidSchema,
+        path: RelativeArtifactPathSchema,
+        content: z.string().max(MAX_ARTIFACT_CONTENT_BYTES),
+        /** sha256 of the version the edit started from; omit for blind saves. */
+        expectedChecksum: Sha256HexSchema.optional(),
+      })
+      .strict(),
+    response: z.object({ artifact: BotArtifactSchema, version: ArtifactVersionSchema }),
+  },
+  "artifacts.versions": {
+    request: z
+      .object({ botId: UuidSchema, path: RelativeArtifactPathSchema })
+      .strict(),
+    response: z.object({ versions: z.array(ArtifactVersionSchema) }),
+  },
+  "artifacts.versionContent": {
+    request: z
+      .object({ botId: UuidSchema, path: RelativeArtifactPathSchema, versionId: UuidSchema })
+      .strict(),
+    response: z.discriminatedUnion("kind", [
+      z.object({
+        kind: z.literal("text"),
+        mediaType: MediaTypeSchema,
+        content: z.string().max(MAX_ARTIFACT_CONTENT_BYTES),
+      }),
+      z.object({ kind: z.literal("blocked"), mediaType: MediaTypeSchema, reason: z.string().min(1).max(2_000) }),
+    ]),
+  },
+  "artifacts.revert": {
+    request: z
+      .object({ botId: UuidSchema, path: RelativeArtifactPathSchema, versionId: UuidSchema })
+      .strict(),
+    response: z.object({ artifact: BotArtifactSchema, version: ArtifactVersionSchema }),
+  },
+  /**
+   * D20 event automation (FR-17). A rule watches the persisted event stream
+   * for one event type (optionally scoped to a source workflow) and enqueues
+   * a FIRING for human review — nothing auto-starts. Protections: firings
+   * are unique per (rule, source event) so one event fires once; runs the
+   * review queue itself started never enqueue new firings (loop guard);
+   * events that accumulated before the host could evaluate them are
+   * enqueued with reason "missed" — visible, never silently replayed.
+   */
+  "trigger.list": {
+    request: z.object({}).strict(),
+    response: z.object({
+      rules: z.array(
+        z.object({
+          id: UuidSchema,
+          name: NonEmptyStringSchema(TEXT_LIMITS.name),
+          workflowId: UuidSchema,
+          eventType: z.enum(["run.failed", "run.completed"]),
+          filterWorkflowId: UuidSchema.nullable(),
+          enabled: z.boolean(),
+          at: IsoDateTimeUtcSchema,
+          updatedAt: IsoDateTimeUtcSchema,
+        }),
+      ),
+    }),
+  },
+  "trigger.save": {
+    request: z.object({
+      rule: z.object({
+        id: UuidSchema.optional(),
+        name: z.string().trim().min(1).max(TEXT_LIMITS.name),
+        workflowId: UuidSchema,
+        eventType: z.enum(["run.failed", "run.completed"]),
+        filterWorkflowId: UuidSchema.nullable().optional(),
+      }),
+    }),
+    response: z.object({
+      id: UuidSchema,
+      name: NonEmptyStringSchema(TEXT_LIMITS.name),
+      workflowId: UuidSchema,
+      eventType: z.enum(["run.failed", "run.completed"]),
+      filterWorkflowId: UuidSchema.nullable(),
+      enabled: z.boolean(),
+      at: IsoDateTimeUtcSchema,
+      updatedAt: IsoDateTimeUtcSchema,
+    }),
+  },
+  "trigger.enable": {
+    request: z.object({ id: UuidSchema }).strict(),
+    response: z.object({
+      id: UuidSchema,
+      name: NonEmptyStringSchema(TEXT_LIMITS.name),
+      workflowId: UuidSchema,
+      eventType: z.enum(["run.failed", "run.completed"]),
+      filterWorkflowId: UuidSchema.nullable(),
+      enabled: z.literal(true),
+      at: IsoDateTimeUtcSchema,
+      updatedAt: IsoDateTimeUtcSchema,
+    }),
+  },
+  "trigger.disable": {
+    request: z.object({ id: UuidSchema }).strict(),
+    response: z.object({
+      id: UuidSchema,
+      name: NonEmptyStringSchema(TEXT_LIMITS.name),
+      workflowId: UuidSchema,
+      eventType: z.enum(["run.failed", "run.completed"]),
+      filterWorkflowId: UuidSchema.nullable(),
+      enabled: z.literal(false),
+      at: IsoDateTimeUtcSchema,
+      updatedAt: IsoDateTimeUtcSchema,
+    }),
+  },
+  "trigger.delete": {
+    request: z.object({ id: UuidSchema }).strict(),
+    response: z.object({ deleted: z.literal(true) }),
+  },
+  "trigger.firing.list": {
+    request: z
+      .object({
+        status: z.enum(["pending", "approved", "dismissed"]).optional(),
+        limit: z.int().min(1).max(100).default(50),
+      })
+      .strict(),
+    response: z.object({
+      firings: z.array(
+        z.object({
+          id: UuidSchema,
+          ruleId: UuidSchema,
+          ruleName: NonEmptyStringSchema(TEXT_LIMITS.name),
+          workflowId: UuidSchema,
+          eventType: z.enum(["run.failed", "run.completed"]),
+          sourceRunId: UuidSchema.nullable(),
+          reason: z.enum(["event", "missed"]),
+          status: z.enum(["pending", "approved", "dismissed"]),
+          at: IsoDateTimeUtcSchema,
+          decidedAt: IsoDateTimeUtcSchema.nullable(),
+        }),
+      ),
+    }),
+  },
+  "trigger.firing.decide": {
+    request: z.object({
+      firingId: UuidSchema,
+      decision: z.enum(["start", "dismiss"]),
+    }).strict(),
+    response: z.object({
+      firing: z.object({
+        id: UuidSchema,
+        status: z.enum(["pending", "approved", "dismissed"]),
+        decidedAt: IsoDateTimeUtcSchema.nullable(),
+      }),
+      runId: UuidSchema.nullable(),
+    }),
   },
   "grant.create": {
     request: z.object({

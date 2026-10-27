@@ -15,6 +15,9 @@ export const APPLICATION_TOOL_NAMES = [
 ] as const;
 
 const CALL_TIMEOUT_MS = 660_000;
+const ASK_USER_TIMEOUT_MS = 31 * 60_000;
+// Local Stable Diffusion renders can take minutes on slow GPUs.
+const CONNECTOR_TIMEOUT_MS = 10 * 60_000;
 const STARTUP_TIMEOUT_MS = 30_000;
 const CODES = new Set([
   "INVALID_INPUT",
@@ -47,6 +50,8 @@ export interface ApplicationToolDefinition extends ToolSchema {
 }
 export interface ApplicationToolContext {
   readonly tools?: { register(definition: ApplicationToolDefinition): () => void };
+  /** Present on the Harness plugin context. Unit fixtures may omit it. */
+  on?(event: string, handler: (payload: unknown) => void): void;
 }
 
 class ApplicationToolError extends Error {
@@ -57,6 +62,10 @@ class ApplicationToolError extends Error {
 }
 function object(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function alreadyRegistered(error: unknown): boolean {
+  return error instanceof Error && error.message.includes("already registered");
 }
 
 function catalog(value: unknown): ToolSchema[] {
@@ -83,6 +92,86 @@ function catalog(value: unknown): ToolSchema[] {
     names.add(tool.name);
     return { name: tool.name, description: tool.description, parameters: tool.parameters };
   });
+}
+
+function connectorTools(value: unknown): ToolSchema[] {
+  if (!object(value) || !Array.isArray(value.tools) || value.tools.length !== 1) {
+    throw new Error("invalid catalog");
+  }
+  const tool: unknown = value.tools[0];
+  if (
+    !object(tool) ||
+    tool.name !== "connector_invoke" ||
+    typeof tool.description !== "string" ||
+    !object(tool.parameters) ||
+    tool.parameters.type !== "object"
+  ) {
+    throw new Error("invalid catalog");
+  }
+  return [
+    {
+      name: "connector_invoke",
+      description: tool.description,
+      parameters: tool.parameters,
+    },
+  ];
+}
+
+function askUserTool(value: unknown): ToolSchema {
+  if (
+    !object(value) ||
+    !object(value.tool) ||
+    value.tool.name !== "ask_user" ||
+    typeof value.tool.description !== "string" ||
+    !object(value.tool.parameters) ||
+    value.tool.parameters.type !== "object"
+  ) {
+    throw new Error("invalid catalog");
+  }
+  return {
+    name: "ask_user",
+    description: value.tool.description,
+    parameters: value.tool.parameters,
+  };
+}
+
+const MEMORY_TOOL_NAMES = ["memory_write", "memory_search", "knowledge_search"] as const;
+
+function memoryTools(value: unknown): ToolSchema[] {
+  if (!object(value) || !Array.isArray(value.tools) || value.tools.length !== MEMORY_TOOL_NAMES.length) {
+    throw new Error("invalid catalog");
+  }
+  const tools: unknown[] = value.tools;
+  return MEMORY_TOOL_NAMES.map((name) => {
+    const tool = tools.find((item) => object(item) && item.name === name);
+    if (
+      !object(tool) ||
+      typeof tool.description !== "string" ||
+      !object(tool.parameters) ||
+      tool.parameters.type !== "object"
+    ) {
+      throw new Error("invalid catalog");
+    }
+    return { name, description: tool.description, parameters: tool.parameters };
+  });
+}
+
+function webSearchTool(value: unknown): ToolSchema {
+  if (
+    !object(value) ||
+    !object(value.tool) ||
+    value.tool.name !== "web_search" ||
+    typeof value.tool.description !== "string" ||
+    !object(value.tool.parameters) ||
+    value.tool.parameters.type !== "object"
+  ) {
+    throw new Error("invalid catalog");
+  }
+  return {
+    name: "web_search",
+    description: value.tool.description,
+    parameters: value.tool.parameters,
+  };
 }
 
 /** Authenticated local transport never reflects server text, URLs, or tokens in errors. */
@@ -161,13 +250,32 @@ export async function applyApplicationTools(ctx: ApplicationToolContext): Promis
     )
       throw new Error("invalid application transport");
     const origin = url.origin;
+    const tools = ctx.tools;
     const startupSignal = AbortSignal.timeout(STARTUP_TIMEOUT_MS);
     const schemas = catalog(await request(origin, token, "/app-tools", startupSignal));
-    for (const schema of schemas) {
+    const askUser = askUserTool(
+      await request(origin, token, "/ask-user", AbortSignal.timeout(STARTUP_TIMEOUT_MS)),
+    );
+    const memory = memoryTools(
+      await request(origin, token, "/memory", AbortSignal.timeout(STARTUP_TIMEOUT_MS)),
+    );
+    const connectors = connectorTools(
+      await request(origin, token, "/connectors", AbortSignal.timeout(STARTUP_TIMEOUT_MS)),
+    );
+    const webSearch = webSearchTool(
+      await request(origin, token, "/web-search", AbortSignal.timeout(STARTUP_TIMEOUT_MS)),
+    );
+    const bindRemote = (
+      schema: ToolSchema,
+      path: string,
+      timeoutMs: number,
+      register: (definition: ApplicationToolDefinition) => () => void = (definition) =>
+        tools.register(definition),
+    ): void => {
       unregister.push(
-        ctx.tools.register({
+        register({
           ...schema,
-          timeoutMs: CALL_TIMEOUT_MS,
+          timeoutMs,
           output: {
             schema: {},
             render: (_args, value) => [{ type: "text", text: JSON.stringify(value) }],
@@ -182,11 +290,11 @@ export async function applyApplicationTools(ctx: ApplicationToolContext): Promis
             ) {
               throw new ApplicationToolError("INVALID_INPUT");
             }
-            const timeout = AbortSignal.timeout(CALL_TIMEOUT_MS);
+            const timeout = AbortSignal.timeout(timeoutMs);
             const signal =
               exec.signal === undefined ? timeout : AbortSignal.any([exec.signal, timeout]);
             try {
-              const payload = await request(origin, token, "/app-tools/call", signal, {
+              const payload = await request(origin, token, path, signal, {
                 sessionId,
                 callId: exec.callId,
                 tool: schema.name,
@@ -215,6 +323,35 @@ export async function applyApplicationTools(ctx: ApplicationToolContext): Promis
           },
         }),
       );
+    };
+    for (const schema of schemas) bindRemote(schema, "/app-tools/call", CALL_TIMEOUT_MS);
+    bindRemote(askUser, "/ask-user/call", ASK_USER_TIMEOUT_MS);
+    for (const schema of memory) bindRemote(schema, "/memory/call", CALL_TIMEOUT_MS);
+    for (const schema of connectors) bindRemote(schema, "/connectors/call", CONNECTOR_TIMEOUT_MS);
+    // Harness already publishes a global web_search. A second global name
+    // aborts plugin startup, so the chat tool is registered on each agent and
+    // shadows that built-in for the session.
+    try {
+      bindRemote(webSearch, "/web-search/call", CALL_TIMEOUT_MS);
+    } catch (error) {
+      if (!alreadyRegistered(error)) throw error;
+      ctx.on?.("agent/created", (payload: unknown) => {
+        if (!object(payload) || !object(payload.agent)) return;
+        const agentCtx = payload.agent.ctx;
+        if (!object(agentCtx) || !object(agentCtx.tools) || typeof agentCtx.tools.register !== "function") {
+          return;
+        }
+        const scoped = agentCtx.tools as {
+          register(definition: ApplicationToolDefinition): () => void;
+        };
+        try {
+          bindRemote(webSearch, "/web-search/call", CALL_TIMEOUT_MS, (definition) =>
+            scoped.register(definition),
+          );
+        } catch (shadowError) {
+          if (!alreadyRegistered(shadowError)) throw shadowError;
+        }
+      });
     }
     const ready = await request(origin, token, "/app-tools/ready", startupSignal, {
       tools: schemas.map((schema) => schema.name),

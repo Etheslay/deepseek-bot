@@ -14,7 +14,6 @@ import {
   GROK_BALL_SHAPES,
   GROK_BALL_STATE_FRAMES,
   contourPath,
-  projectEye,
   sampleContour,
   type GrokBallState,
 } from "../avatars/grok-ball-model.js";
@@ -32,12 +31,15 @@ function escapeAttribute(value: string): string {
   return value.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
 }
 
+/**
+ * Neutral (straight-ahead) eye placement. The animated ball projects its eyes
+ * with a gaze vector; the tray icon is a static identity glyph, so the two eyes
+ * sit at the shape's own eye line, half an eye spacing either side of centre.
+ */
 function eyeTransform(side: -1 | 1, definition: { eyeX?: number; eyeY: number; eyeSpacing: number; eyeScale?: number }): string {
-  const projected = projectEye({ x: 0, y: 0 }, side);
-  const x = 50 + (definition.eyeX ?? 0) + projected.x * (definition.eyeSpacing / 0.68);
-  const y = definition.eyeY + projected.y * (definition.eyeSpacing * 0.72);
+  const x = 50 + (definition.eyeX ?? 0) + (side * definition.eyeSpacing) / 2;
   const scale = definition.eyeScale ?? 1;
-  return `translate(${x.toFixed(2)} ${y.toFixed(2)}) scale(${scale} ${scale})`;
+  return `translate(${x.toFixed(2)} ${definition.eyeY.toFixed(2)}) scale(${scale} ${scale})`;
 }
 
 /**
