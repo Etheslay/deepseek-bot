@@ -40,6 +40,11 @@ export const d24Messages = {
   "d24.keyNotConfigured": { zh: "未配置", en: "Not configured" },
   "d24.messagesUnit": { zh: "条消息", en: "messages" },
   "d24.noBackupsYet": { zh: "还没有备份。", en: "No backups yet." },
+  "d24.permissionsHeading": {
+    zh: "工具授权（策略 / 已发授权 / 撤销）",
+    en: "Tool authorisation (policy / issued grants / revoke)",
+  },
+  "d24.permissionsSection": { zh: "权限", en: "Permissions" },
   "d24.restore": { zh: "恢复", en: "Restore" },
   "d24.restoreConfirm": {
     zh: "恢复会用这份备份覆盖当前数据（当前数据先自动暂存，恢复后应用重载数据并可能要求重新输入 Key）。继续？",

@@ -420,9 +420,9 @@ export function App(): JSX.Element {
   }, [groupMenu]);
 
   const [settingsOpen, setSettingsOpen] = useState(false);
-  /** D24 leftover: which settings nav section is active. */
+  /** Which settings nav section is active (D24). */
   const [settingsSection, setSettingsSection] = useState<
-    "general" | "computer" | "vault" | "usage" | "updates"
+    "general" | "permissions" | "computer" | "vault" | "usage" | "updates"
   >("general");
   const [backups, setBackups] = useState<
     import("../../shared/ipc-channels.js").BackupSummary[] | null
@@ -2237,6 +2237,7 @@ const logout = (): void => {
               {(
                 [
                   ["general", t("shell.general")],
+                  ["permissions", t("d24.permissionsSection")],
                   ["computer", t("shell.computer")],
                   ["vault", t("shell.vault")],
                   ["usage", t("shell.usageAndBilling")],
@@ -2260,6 +2261,7 @@ const logout = (): void => {
                   {
                     {
                       general: t("shell.general"),
+                      permissions: t("d24.permissionsSection"),
                       computer: t("shell.computer"),
                       vault: t("shell.vault"),
                       usage: t("shell.usageAndBilling"),
@@ -2327,8 +2329,6 @@ const logout = (): void => {
                     </button>
                   </div>
                 </div>
-                <div className="settings-section-title">{t("shell.computerAndPermissions")}</div>
-                <PermissionsPanel />
                 <div className="settings-section-title">{t("shell.apiAccessSection")}</div>
                 <div className="settings-card">
                   <div className="settings-row">
@@ -2451,6 +2451,17 @@ const logout = (): void => {
                     />
                   </div>
                 </div>
+                  </>
+                )}
+                {/* Authorisation is its own section: it is the part owners read
+                    most carefully, and burying it under 通用 made the policy
+                    rows compete with the account and appearance controls. */}
+                {settingsSection === "permissions" && (
+                  <>
+                    <div className="settings-section-title">
+                      {t("d24.permissionsHeading")}
+                    </div>
+                    <PermissionsPanel />
                   </>
                 )}
                 {settingsSection === "updates" && (
