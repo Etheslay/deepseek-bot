@@ -593,5 +593,13 @@ CREATE TABLE trigger_firings (
 CREATE INDEX trigger_firings_status ON trigger_firings(status, created_at);
 `,
   },
+  {
+    id: 14,
+    name: "0014-connectors-kind",
+    sql: /* sql */ `
+ALTER TABLE connectors ADD COLUMN kind TEXT NOT NULL DEFAULT 'sd-webui'
+  CHECK (kind IN ('sd-webui', 'mcp-http'));
+`,
+  },
 ];
 

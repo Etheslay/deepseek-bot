@@ -73,6 +73,8 @@ import {
   registerConnector,
   setConnectorEnabled,
   setConnectorEndpoint,
+  getBotMcpGrants,
+  setBotMcpGrant,
   updateBot,
   type BotPatch,
   type DataLayout,
@@ -81,6 +83,7 @@ import {
   revokePermissionGrant, listPermissionApprovals, listPermissionAudit,
 } from "@deepseek-bot/storage";
 import type { AgentPermissionService } from "./agent-permissions.js";
+import type { McpService } from "./mcp.js";
 import type { WorkspaceArtifacts } from "./artifacts.js";
 import { DEFAULT_MODEL_PROFILE_ID, SEARXNG_ENDPOINT_SETTING, backupDirFor, newBackupId } from "./host.js";
 import { chatSessionIdFor, type ChatManager } from "./chat.js";
@@ -106,6 +109,7 @@ export interface ChatSearchRecord {
 
 export interface HostContext {
   readonly permissions: AgentPermissionService;
+  readonly mcp: McpService;
   readonly db: OpenedDatabase;
   readonly engine: WorkflowEngine;
   readonly scheduler: LocalScheduler;
@@ -236,10 +240,18 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
     "permission.policy.set": (payload) => {
       const policy = setPermissionPolicy(db, payload);
       if (policy.mode === "deny") context.permissions.denyCapability(policy.capability);
+      if (policy.mode === "deny" && policy.capability === "mcp.call") context.mcp.invalidate({});
       return policy;
     },
     "permission.grant.list": (payload) => ({ grants: listPermissionGrants(db, { ...(payload.botId !== undefined ? { botId: payload.botId } : {}), includeInactive: payload.includeInactive, limit: payload.limit, generation: context.permissions.generation }) }),
-    "permission.grant.revoke": (payload) => ({ grant: revokePermissionGrant(db, payload.grantId) }),
+    "permission.grant.revoke": (payload) => {
+      const grant = revokePermissionGrant(db, payload.grantId);
+      if (grant.capability === "mcp.call" && grant.botId !== null) {
+        context.mcp.invalidate({ botId: grant.botId });
+        context.permissions.cancelMcp({ botId: grant.botId });
+      }
+      return { grant };
+    },
     "permission.approval.list": (payload) => ({ approvals: listPermissionApprovals(db, { ...(payload.botId !== undefined ? { botId: payload.botId } : {}), status: payload.status, limit: payload.limit }) }),
     "permission.approval.decide": (payload) => context.permissions.decide(payload),
     "permission.audit.list": (payload) => ({ records: listPermissionAudit(db, { ...(payload.botId !== undefined ? { botId: payload.botId } : {}), afterSequence: payload.afterSequence, limit: payload.limit }) }),
@@ -283,10 +295,20 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
         ...(p.avatar !== undefined ? { avatar: p.avatar } : {}),
         ...(p.groupId !== undefined ? { groupId: p.groupId } : {}),
       };
-      return updateBot(db, { id: payload.id, expectedRevision: payload.expectedRevision, patch });
+      const bot = updateBot(db, { id: payload.id, expectedRevision: payload.expectedRevision, patch });
+      if (p.toolPolicyId !== undefined) {
+        context.mcp.invalidate({ botId: bot.id });
+        context.permissions.cancelMcp({ botId: bot.id });
+      }
+      return bot;
     },
 
-    "bot.archive": (payload) => archiveBot(db, payload),
+    "bot.archive": (payload) => {
+      const bot = archiveBot(db, payload);
+      context.mcp.invalidate({ botId: payload.id });
+      context.permissions.cancelMcp({ botId: payload.id });
+      return bot;
+    },
 
     /**
      * D15 write layer (FR-12): one atomic batch — mint the group when the
@@ -360,6 +382,8 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
           throw invalid("batch member no longer exists", { botId });
         }
         archiveBotUnchecked(db, { id: botId });
+        context.mcp.invalidate({ botId });
+        context.permissions.cancelMcp({ botId });
         if (before.archivedAt === null) {
           revokedBotIds.push(botId);
         }
@@ -853,14 +877,19 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
       };
     },
 
-    // D19 contract first: the implementation follows in the dependent MCP PR.
-    "connector.mcp.discover": () => { throw new ToolRejectionError("RUNTIME_UNAVAILABLE", "MCP implementation is not installed"); },
-    "connector.mcp.grants.get": () => { throw new ToolRejectionError("RUNTIME_UNAVAILABLE", "MCP implementation is not installed"); },
-    "connector.mcp.grants.set": () => { throw new ToolRejectionError("RUNTIME_UNAVAILABLE", "MCP implementation is not installed"); },
+    "connector.mcp.discover": async (payload) => ({ tools: await context.mcp.discover(payload.id), at: now().toISOString() }),
+    "connector.mcp.grants.get": (payload) => ({ servers: getBotMcpGrants(db, payload.botId) }),
+    "connector.mcp.grants.set": (payload) => {
+      const servers = setBotMcpGrant(db, { botId: payload.botId, connectorId: payload.id, allowedTools: payload.allowedTools });
+      context.mcp.invalidate({ botId: payload.botId });
+      context.permissions.cancelMcp({ botId: payload.botId });
+      return { servers };
+    },
 
     "connector.list": () => ({
       connectors: listConnectors(db).map((row) => ({
         id: row.id,
+        kind: row.kind,
         name: row.name,
         enabled: row.enabled,
         credentialRef: row.credentialRef,
@@ -873,11 +902,13 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
     "connector.register": (payload) => {
       const row = registerConnector(db, {
         name: payload.name,
+        kind: payload.kind,
         ...(payload.credentialRef !== undefined ? { credentialRef: payload.credentialRef } : {}),
         ...(payload.endpoint !== undefined ? { endpoint: payload.endpoint } : {}),
       });
       return {
         id: row.id,
+        kind: row.kind,
         name: row.name,
         enabled: false as const,
         credentialRef: row.credentialRef,
@@ -891,6 +922,7 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
       const row = setConnectorEnabled(db, { id: payload.id, enabled: true });
       return {
         id: row.id,
+        kind: row.kind,
         name: row.name,
         enabled: true as const,
         credentialRef: row.credentialRef,
@@ -902,8 +934,11 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
 
     "connector.disable": (payload) => {
       const row = setConnectorEnabled(db, { id: payload.id, enabled: false });
+      context.mcp.invalidate({ connectorId: payload.id });
+      context.permissions.cancelMcp({ connectorId: payload.id });
       return {
         id: row.id,
+        kind: row.kind,
         name: row.name,
         enabled: false as const,
         credentialRef: row.credentialRef,
@@ -915,8 +950,11 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
 
     "connector.setEndpoint": (payload) => {
       const row = setConnectorEndpoint(db, { id: payload.id, endpoint: payload.endpoint });
+      context.mcp.invalidate({ connectorId: payload.id });
+      context.permissions.cancelMcp({ connectorId: payload.id });
       return {
         id: row.id,
+        kind: row.kind,
         name: row.name,
         enabled: row.enabled,
         credentialRef: row.credentialRef,

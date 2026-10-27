@@ -38,3 +38,4 @@ export * from "./repos/retention.js";
 export * from "./repos/triggers.js";
 export * from "./repos/connectors.js";
 export * from "./repos/grants.js";
+export * from "./repos/mcp-grants.js";

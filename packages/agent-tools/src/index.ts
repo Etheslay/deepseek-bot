@@ -50,3 +50,4 @@ export {
   type KnowledgeSearchHit,
   type KnowledgeStore,
 } from "./knowledge.js";
+export * from "./mcp.js";
