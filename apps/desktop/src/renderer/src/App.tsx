@@ -32,6 +32,7 @@ import {
   type Avatar as AvatarKind,
 } from "./features/avatars/avatar-meta.js";
 import { ChoiceCard, type ChoiceOption } from "./features/questions/choice-card.js";
+import { answerSeedCard } from "./features/questions/choice-answer.js";
 import {
   QuestionChatCards,
   type AnsweredQuestion,
@@ -1508,6 +1509,12 @@ const logout = (): void => {
               onPairQuote={(name, text) => setQuoteDraft({ name, text: text.slice(0, 60) })}
               onCancelQuote={() => setQuoteDraft(null)}
               onSend={(text, attachments) => sendUserMessage(selectedBot, text, attachments)}
+              onAnswerSeedCard={(botKey, msgId, text) =>
+                setChats((prev) => ({
+                  ...prev,
+                  [botKey]: answerSeedCard(prev[botKey] ?? [], msgId, text),
+                }))
+              }
               onAssistant={(t) =>
                 setChats((prev) => ({
                   ...prev,
@@ -2441,6 +2448,7 @@ function BotsPlaceholder({
   onOpenBot,
   onNotify,
   skillContext,
+  onAnswerSeedCard,
 }: {
   bots: UiBot[];
   groups: Group[];
@@ -2463,6 +2471,12 @@ function BotsPlaceholder({
   onNotify: (message: string) => void;
   /** Bound-skill context for a bot, composed at send time (D17). */
   skillContext: (botId: string) => string;
+  /**
+   * Persist a seed card's answer on the message itself. The answer cannot live
+   * in this component's state: the pane is keyed by the selected bot, so
+   * switching bots and coming back used to re-expand an answered card.
+   */
+  onAnswerSeedCard: (botKey: number, msgId: number, text: string) => void;
 }): JSX.Element {
   const service = useService();
   const [draft, setDraft] = useState("");
@@ -2470,7 +2484,6 @@ function BotsPlaceholder({
   const [detailOther, setDetailOther] = useState<number | null>(null);
   const [stream, setStream] = useState<StreamStateForBot | null>(null);
   const [failedText, setFailedText] = useState("");
-  const [answeredChoices, setAnsweredChoices] = useState<Record<number, string>>({});
   const [answeredQuestions, setAnsweredQuestions] = useState<AnsweredQuestionMap>({});
   const [clarify, setClarify] = useState<ClarifyTarget | null>(null);
   const [memoryOpen, setMemoryOpen] = useState(false);
@@ -2693,7 +2706,7 @@ function BotsPlaceholder({
     setClarify(null);
     setDraft("");
     if (target.kind === "seed") {
-      setAnsweredChoices((prev) => ({ ...prev, [target.msgId]: text }));
+      onAnswerSeedCard(me.key, target.msgId, text);
       onSend(text);
       setFailedText(text);
       startChatStream(text);
@@ -2758,7 +2771,7 @@ function BotsPlaceholder({
       inputRef.current?.focus();
       return;
     }
-    setAnsweredChoices((prev) => ({ ...prev, [msgId]: option.label }));
+    onAnswerSeedCard(me.key, msgId, option.label);
     onSend(option.label);
     setFailedText(option.label);
     startChatStream(option.label);
@@ -2851,9 +2864,7 @@ function BotsPlaceholder({
                 <MessageBubble
                   msg={{
                     ...m,
-                    choices: m.choices
-                      ? { ...m.choices, answered: m.choices.answered ?? answeredChoices[m.id] }
-                      : undefined,
+                    choices: m.choices,
                   }}
                   speaker={speaker}
                   accent={avatarColor(me.avatar)}
