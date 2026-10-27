@@ -13,12 +13,13 @@ afterEach(async () => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 
-async function setup() {
+async function setup(now?: () => Date) {
   const root = mkdtempSync(join(tmpdir(), "dsb-device-"));
   roots.push(root);
   const host = await createHost({
     dataRoot: root,
     resolveApiKey: async () => "unused",
+    ...(now !== undefined ? { now } : {}),
   });
   hosts.push(host);
   const bot = (await host.handleMethod("bot.create", {
@@ -48,6 +49,26 @@ async function pending(host: DeepSeekBotHost, botId: string): Promise<AppApprova
 
 async function enable(host: DeepSeekBotHost): Promise<void> {
   await host.handleMethod("permission.policy.set", { capability: "device.action", mode: "ask" });
+}
+
+async function records(host: DeepSeekBotHost, botId: string) {
+  const listed = (await host.handleMethod("device.action.list", { botId })) as {
+    records: Array<{ id: string; botId: string; action: string; at: string }>;
+  };
+  return listed.records;
+}
+
+async function decide(
+  host: DeepSeekBotHost,
+  approval: AppApproval,
+  decision: "approved" | "denied",
+): Promise<void> {
+  await host.handleMethod("permission.approval.decide", {
+    approvalId: approval.id,
+    expectedActionDigest: approval.actionDigest,
+    decision,
+    scope: "once",
+  });
 }
 
 describe("device action approval gate", () => {
@@ -233,5 +254,116 @@ describe("device action approval gate", () => {
     });
     await expect(secondCall).rejects.toMatchObject({ code: "UNAUTHORIZED_PATH" });
     expect(first.id).not.toBe(second.id);
+  });
+
+  it("persists one local record after one exact approval", async () => {
+    const { host, bot } = await setup();
+    await enable(host);
+    const call = host.handleMethod("device.action.request", { botId: bot.id, kind: "pointer" });
+    const approval = await pending(host, bot.id);
+    await decide(host, approval, "approved");
+    const result = (await call) as DeviceActionResult;
+    expect(Object.keys(result).sort()).toEqual(["at", "id"]);
+
+    const stored = await records(host, bot.id);
+    expect(stored).toEqual([
+      { id: result.id, botId: bot.id, action: "pointer", at: result.at },
+    ]);
+    expect(await records(host, bot.id)).toEqual(stored);
+  });
+
+  it("writes nothing when an approval is denied, disabled, reused, or the name is unknown", async () => {
+    const { host, bot } = await setup();
+    await enable(host);
+    await expect(
+      host.handleMethod("device.action.request", { botId: bot.id, kind: "click" }),
+    ).rejects.toMatchObject({ code: "INVALID_INPUT" });
+    await expect(
+      host.agentTools.call({ id: `chat:${bot.id}`, botId: bot.id }, "device_action", {
+        kind: "mouse",
+      }),
+    ).rejects.toMatchObject({ code: "INVALID_INPUT" });
+    const untouched = (await host.handleMethod("permission.approval.list", { botId: bot.id })) as {
+      approvals: AppApproval[];
+    };
+    expect(untouched.approvals.filter((item) => item.tool === "device_action")).toEqual([]);
+    expect(await records(host, bot.id)).toEqual([]);
+
+    const denied = host.handleMethod("device.action.request", { botId: bot.id, kind: "key" });
+    const denial = await pending(host, bot.id);
+    await decide(host, denial, "denied");
+    await expect(denied).rejects.toMatchObject({ code: "UNAUTHORIZED_PATH" });
+    expect(await records(host, bot.id)).toEqual([]);
+
+    const waiting = host.handleMethod("device.action.request", { botId: bot.id, kind: "pointer" });
+    await pending(host, bot.id);
+    await host.handleMethod("permission.policy.set", { capability: "device.action", mode: "deny" });
+    await expect(waiting).rejects.toMatchObject({ code: "UNAUTHORIZED_PATH" });
+    expect(await records(host, bot.id)).toEqual([]);
+
+    await enable(host);
+    const accepted = host.handleMethod("device.action.request", { botId: bot.id, kind: "key" });
+    const approval = await pending(host, bot.id);
+    await decide(host, approval, "approved");
+    const first = (await accepted) as DeviceActionResult;
+    await expect(decide(host, approval, "approved")).rejects.toMatchObject({
+      code: "INVALID_INPUT",
+    });
+    const again = host.handleMethod("device.action.request", { botId: bot.id, kind: "pointer" });
+    const second = await pending(host, bot.id);
+    await expect(
+      host.handleMethod("permission.approval.decide", {
+        approvalId: approval.id,
+        expectedActionDigest: approval.actionDigest,
+        decision: "approved",
+        scope: "once",
+      }),
+    ).rejects.toMatchObject({ code: "INVALID_INPUT" });
+    await decide(host, second, "denied");
+    await expect(again).rejects.toMatchObject({ code: "UNAUTHORIZED_PATH" });
+    expect(await records(host, bot.id)).toEqual([
+      { id: first.id, botId: bot.id, action: "key", at: first.at },
+    ]);
+  });
+
+  it("lists one bot's records newest first", async () => {
+    let current = Date.parse("2026-10-27T03:00:00.000Z");
+    const { host, bot } = await setup(() => new Date(current));
+    const other = (await host.handleMethod("bot.create", {
+      name: "other",
+      instructions: "device",
+      modelProfileId: "44444444-4444-4444-8444-444444444444",
+      workspaceId: "55555555-5555-4555-8555-555555555555",
+      toolPolicyId: "66666666-6666-4666-8666-666666666666",
+    })) as { id: string };
+    await enable(host);
+
+    const firstCall = host.handleMethod("device.action.request", {
+      botId: bot.id,
+      kind: "pointer",
+    });
+    await decide(host, await pending(host, bot.id), "approved");
+    const first = (await firstCall) as DeviceActionResult;
+
+    current += 1000;
+    const secondCall = host.handleMethod("device.action.request", { botId: bot.id, kind: "key" });
+    await decide(host, await pending(host, bot.id), "approved");
+    const second = (await secondCall) as DeviceActionResult;
+
+    current += 1000;
+    const otherCall = host.handleMethod("device.action.request", {
+      botId: other.id,
+      kind: "pointer",
+    });
+    await decide(host, await pending(host, other.id), "approved");
+    const hidden = (await otherCall) as DeviceActionResult;
+
+    expect(await records(host, bot.id)).toEqual([
+      { id: second.id, botId: bot.id, action: "key", at: "2026-10-27T03:00:01.000Z" },
+      { id: first.id, botId: bot.id, action: "pointer", at: "2026-10-27T03:00:00.000Z" },
+    ]);
+    expect(await records(host, other.id)).toEqual([
+      { id: hidden.id, botId: other.id, action: "pointer", at: "2026-10-27T03:00:02.000Z" },
+    ]);
   });
 });
