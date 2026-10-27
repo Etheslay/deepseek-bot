@@ -12,6 +12,7 @@ import type { BotDraft } from "../../services/desktop-service.js";
 import { ServiceError } from "../../services/desktop-service.js";
 import { useService } from "../../services/service-context.js";
 import { defaultAvatarFor, type Avatar } from "../avatars/avatar-meta.js";
+import { t } from "../../i18n.js";
 
 export type UiBot = {
   /** Stable numeric key for list rendering; contract id lives on `bot.id`. */
@@ -33,7 +34,29 @@ export type BotsOperationResult = {
   /** Key of the affected UiBot on success (create/duplicate). */
   key?: number;
   errorCode?: string;
+  /**
+   * The failure text as it actually arrived.
+   *
+   * `errorCode` on its own cannot be trusted across the IPC boundary: Electron
+   * serializes a rejection down to name/message/stack, so the host's structured
+   * `code` is gone by the time the renderer sees it and *every* failure — dead
+   * host, validation string, quota, timeout — used to be reported as
+   * INVALID_INPUT. Carrying the message is what lets a real cause reach the UI.
+   */
+  errorMessage?: string;
 };
+
+/** Code and message of a service failure, best effort. */
+function describeFailure(error: unknown): { errorCode: string; errorMessage: string } {
+  if (error instanceof ServiceError) {
+    return { errorCode: error.code, errorMessage: error.message };
+  }
+  const shaped = error as { code?: unknown } | null;
+  return {
+    errorCode: typeof shaped?.code === "string" ? shaped.code : "INVALID_INPUT",
+    errorMessage: error instanceof Error ? error.message : String(error),
+  };
+}
 
 export function useBots(defaultGroupKey: number) {
   const service = useService();
@@ -103,7 +126,7 @@ export function useBots(defaultGroupKey: number) {
       } catch (error) {
         return {
           ok: false,
-          errorCode: error instanceof ServiceError ? error.code : "INVALID_INPUT",
+          ...describeFailure(error),
         };
       }
     },
@@ -114,7 +137,7 @@ export function useBots(defaultGroupKey: number) {
     async (botId: string, patch: Partial<BotDraft>): Promise<BotsOperationResult> => {
       const target = bots.find((b) => b.bot.id === botId);
       if (!target) {
-        return { ok: false, errorCode: "INVALID_INPUT" };
+        return { ok: false, errorCode: "INVALID_INPUT", errorMessage: t("bots.botNotFound") };
       }
       try {
         const bot = await service.bots.update(botId, target.bot.revision, patch);
@@ -128,7 +151,7 @@ export function useBots(defaultGroupKey: number) {
         }
         return {
           ok: false,
-          errorCode: error instanceof ServiceError ? error.code : "INVALID_INPUT",
+          ...describeFailure(error),
         };
       }
     },
@@ -139,7 +162,7 @@ export function useBots(defaultGroupKey: number) {
     async (botId: string): Promise<BotsOperationResult> => {
       const target = bots.find((b) => b.bot.id === botId);
       if (!target) {
-        return { ok: false, errorCode: "INVALID_INPUT" };
+        return { ok: false, errorCode: "INVALID_INPUT", errorMessage: t("bots.botNotFound") };
       }
       try {
         const bot = await service.bots.archive(botId, target.bot.revision);
@@ -153,7 +176,7 @@ export function useBots(defaultGroupKey: number) {
         }
         return {
           ok: false,
-          errorCode: error instanceof ServiceError ? error.code : "INVALID_INPUT",
+          ...describeFailure(error),
         };
       }
     },
@@ -164,7 +187,7 @@ export function useBots(defaultGroupKey: number) {
     async (botId: string): Promise<BotsOperationResult> => {
       const target = bots.find((b) => b.bot.id === botId);
       if (!target) {
-        return { ok: false, errorCode: "INVALID_INPUT" };
+        return { ok: false, errorCode: "INVALID_INPUT", errorMessage: t("bots.botNotFound") };
       }
       try {
         const copy = await service.bots.duplicate(botId);
@@ -180,7 +203,7 @@ export function useBots(defaultGroupKey: number) {
       } catch (error) {
         return {
           ok: false,
-          errorCode: error instanceof ServiceError ? error.code : "INVALID_INPUT",
+          ...describeFailure(error),
         };
       }
     },

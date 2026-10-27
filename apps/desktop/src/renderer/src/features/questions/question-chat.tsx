@@ -2,10 +2,22 @@
  * Chat cards for a live ask_user question.
  * The open bot polls question.list and returns the choice through question.answer.
  * That answer is the tool result and a user chat row; it does not start another turn.
+ *
+ * One card, one answer: the first successful answer locks the card, and a
+ * request that vanishes from question.list without an answer renders as
+ * expired/cancelled with its rows disabled. The fallback row (D, forced to
+ * 以上都不是) opens a composer clarification instead of answering directly
+ * when the question allows free text — the typed text reaches the model
+ * through the same question.answer path.
  */
 import { useCallback, useEffect, useRef, useState, type JSX } from "react";
-import { METHOD_CONTRACTS } from "@deepseek-bot/contracts";
 import { type Notice, noticeText, t, useLanguage } from "../../i18n.js";
+import { METHOD_CONTRACTS } from "@deepseek-bot/contracts";
+import { ChoiceCard, type ChoiceOption } from "./choice-card.js";
+
+/** The Host never trusts the model's own label for the fallback option. */
+export const OTHER_OPTION_ID = "D";
+export const OTHER_OPTION_LABEL = t("questions.fallbackOption");
 
 type Question = {
   requestId: string;
@@ -15,19 +27,40 @@ type Question = {
   expiresAt: string;
 };
 
-type Answered = { requestId: string; question: string; text: string };
+export type AnsweredQuestion = { botId: string; question: string; text: string };
 
-export function QuestionChatCards({ botId }: { botId: string }): JSX.Element | null {
-  return <BotQuestionCards key={botId} botId={botId} />;
+export type QuestionChatCardsProps = {
+  botId: string;
+  /** requestId -> answered entry, lifted so composer-submitted clarifications land here too. */
+  answered: Record<string, AnsweredQuestion>;
+  onAnswered: (requestId: string, entry: AnsweredQuestion) => void;
+  /** Appends the answer as a local user bubble (no new chat turn). */
+  onUserBubble: (text: string) => void;
+  /** Fallback row clicked with free text allowed: focus the composer for the answer. */
+  onFallback: (requestId: string, question: string) => void;
+  /** requestId currently awaiting composer text; that card stays locked. */
+  clarifyRequestId: string | null;
+};
+
+export function QuestionChatCards(props: QuestionChatCardsProps): JSX.Element | null {
+  return <BotQuestionCards key={props.botId} {...props} />;
 }
 
-function BotQuestionCards({ botId }: { botId: string }): JSX.Element | null {
+function BotQuestionCards({
+  botId,
+  answered,
+  onAnswered,
+  onUserBubble,
+  onFallback,
+  clarifyRequestId,
+}: QuestionChatCardsProps): JSX.Element | null {
   const [questions, setQuestions] = useState<Question[] | null>(null);
-  const [answered, setAnswered] = useState<Answered[]>([]);
-  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [closed, setClosed] = useState<Record<string, true>>({});
   useLanguage();
   const [notice, setNotice] = useState<Notice | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  /** Last known payload per requestId; vanished questions render from it. */
+  const known = useRef<Map<string, Question>>(new Map());
   const active = useRef(true);
   const loadSequence = useRef(0);
 
@@ -36,7 +69,19 @@ function BotQuestionCards({ botId }: { botId: string }): JSX.Element | null {
     const response = await window.deepseekBot.host.call("question.list", { botId });
     const parsed = METHOD_CONTRACTS["question.list"].response.parse(response);
     if (!active.current || sequence !== loadSequence.current) return;
+    for (const question of parsed.questions) known.current.set(question.requestId, question);
     setQuestions(parsed.questions);
+    setClosed((current) => {
+      let changed = false;
+      const next = { ...current };
+      for (const id of known.current.keys()) {
+        if (!parsed.questions.some((question) => question.requestId === id) && !(id in next)) {
+          next[id] = true;
+          changed = true;
+        }
+      }
+      return changed ? next : current;
+    });
     setNotice((current) => (current?.key === "questions.readFailed" ? null : current));
   }, [botId]);
 
@@ -57,25 +102,23 @@ function BotQuestionCards({ botId }: { botId: string }): JSX.Element | null {
     };
   }, [load]);
 
-  const submit = (
+  const answer = (
     question: Question,
-    answer: { optionId: Question["options"][number]["id"] } | { text: string },
+    payload: { optionId: Question["options"][number]["id"] } | { text: string },
+    bubbleText: string,
   ): void => {
     setBusyId(question.requestId);
     void window.deepseekBot.host
-      .call("question.answer", { botId, requestId: question.requestId, ...answer })
+      .call("question.answer", { botId, requestId: question.requestId, ...payload })
       .then((response) => {
         const parsed = METHOD_CONTRACTS["question.answer"].response.parse(response);
         if (!active.current) return;
-        setAnswered((current) =>
-          current.some((item) => item.requestId === question.requestId)
-            ? current
-            : [
-                ...current,
-                { requestId: question.requestId, question: question.question, text: parsed.text },
-              ],
-        );
-        setNotice({ key: "shell.choiceSelected", params: [parsed.text] });
+        onAnswered(question.requestId, {
+          botId,
+          question: question.question,
+          text: parsed.text,
+        });
+        onUserBubble(bubbleText);
         return load();
       })
       .catch(() => {
@@ -86,66 +129,85 @@ function BotQuestionCards({ botId }: { botId: string }): JSX.Element | null {
       });
   };
 
+  const isClosed = (question: Question): boolean =>
+    closed[question.requestId] === true || Date.parse(question.expiresAt) <= Date.now();
+
   const pending = (questions ?? []).filter(
-    (question) => !answered.some((item) => item.requestId === question.requestId),
+    (question) => answered[question.requestId] === undefined,
   );
-  if (pending.length === 0 && answered.length === 0 && notice === null) return null;
+  const vanished = Object.keys(closed).filter(
+    (id) =>
+      answered[id] === undefined &&
+      !(questions ?? []).some((question) => question.requestId === id),
+  );
+  const answeredEntries = Object.entries(answered).filter(
+    ([, entry]) => entry.botId === botId,
+  );
+  if (
+    pending.length === 0 &&
+    vanished.length === 0 &&
+    answeredEntries.length === 0 &&
+    notice === null
+  )
+    return null;
 
   return (
     <div className="question-chat-cards">
-      {pending.map((question) => (
-        <div
-          key={question.requestId}
-          className="choice-card"
-          role="group"
-          aria-label={question.question}
-        >
-          <div className="choice-question">{question.question}</div>
-          <div className="choice-options">
-            {question.options.map((option) => (
-              <button
-                key={option.id}
-                type="button"
-                className="choice-option"
-                disabled={busyId === question.requestId}
-                onClick={() => submit(question, { optionId: option.id })}
-              >
-                <span className="choice-key">{option.id}</span>
-                <span>{option.label}</span>
-              </button>
-            ))}
-          </div>
-          {question.allowOther ? (
-            <div className="choice-options">
-              <span>{t("shell.choiceOther")}</span>
-              <input
-                value={drafts[question.requestId] ?? ""}
-                aria-label={t("shell.choiceOther")}
-                onChange={(event) =>
-                  setDrafts((current) => ({ ...current, [question.requestId]: event.target.value }))
+      {pending.map((question) => {
+        const rows: ChoiceOption[] = question.options
+          .filter((option) => option.id !== OTHER_OPTION_ID)
+          .map((option) => ({ id: option.id, label: option.label }));
+        const hasFallback =
+          question.options.some((option) => option.id === OTHER_OPTION_ID) || question.allowOther;
+        const clarify = clarifyRequestId === question.requestId;
+        return (
+          <ChoiceCard
+            key={question.requestId}
+            question={question.question}
+            options={rows}
+            fallback={hasFallback ? { id: OTHER_OPTION_ID, label: OTHER_OPTION_LABEL } : null}
+            disabled={clarify || busyId === question.requestId}
+            expired={isClosed(question)}
+            hint={clarify ? t("questions.explainBelowPlaceholder") : null}
+            onChoose={(option) => {
+              if (option.id === OTHER_OPTION_ID) {
+                if (question.allowOther) {
+                  onFallback(question.requestId, question.question);
+                } else {
+                  answer(question, { optionId: OTHER_OPTION_ID }, option.label);
                 }
-              />
-              <button
-                type="button"
-                className="choice-option"
-                disabled={busyId === question.requestId}
-                onClick={() => {
-                  const text = (drafts[question.requestId] ?? "").trim();
-                  if (text.length === 0) return;
-                  submit(question, { text });
-                }}
-              >
-                {t("questions.sendCustomAnswer")}
-              </button>
-            </div>
-          ) : null}
-        </div>
-      ))}
-      {answered.map((item) => (
-        <div key={item.requestId} className="choice-card" role="group" aria-label={item.question}>
-          <div className="choice-question">{item.question}</div>
-          <div className="choice-answered">{t("shell.choiceSelected", [item.text])}</div>
-        </div>
+                return;
+              }
+              answer(
+                question,
+                { optionId: option.id as Question["options"][number]["id"] },
+                option.label,
+              );
+            }}
+          />
+        );
+      })}
+      {vanished.map((id) => {
+        const knownQuestion = known.current.get(id);
+        return (
+          <ChoiceCard
+            key={id}
+            question={knownQuestion?.question ?? id}
+            options={(knownQuestion?.options ?? []).map((option) => ({
+              id: option.id,
+              label: option.id === OTHER_OPTION_ID ? OTHER_OPTION_LABEL : option.label,
+            }))}
+            expired
+          />
+        );
+      })}
+      {answeredEntries.map(([requestId, entry]) => (
+        <ChoiceCard
+          key={requestId}
+          question={entry.question}
+          options={[]}
+          answered={entry.text}
+        />
       ))}
       {notice !== null ? <p className="sys-line">{noticeText(notice)}</p> : null}
     </div>

@@ -12,7 +12,6 @@ import {
 import { createPortal } from "react-dom";
 import { useBots, type UiBot } from "./features/bots/use-bots.js";
 import { PermissionChatCards } from "./features/permissions/permission-chat.js";
-import { QuestionChatCards } from "./features/questions/question-chat.js";
 import { SearchResultCards } from "./features/search/search-results.js";
 import { MemoryPanel } from "./features/memory/memory-panel.js";
 import { SearchSettings } from "./features/search/search-settings.js";
@@ -24,15 +23,15 @@ import { nextBotName } from "./features/bots/bot-names.js";
 import { CustomSelect } from "./components/custom-select.js";
 import type { BotDraft } from "./services/desktop-service.js";
 import { useService } from "./services/service-context.jsx";
+import { METHOD_CONTRACTS } from "@deepseek-bot/contracts";
 import {
-  applyCancelled,
-  applyDelta,
-  applyFailure,
-  applyTool,
   emptyStream,
   failureMessage,
-  type StreamState,
 } from "./features/chat/chat-reducer.js";
+import {
+  runChatStream,
+  type StreamStateForBot,
+} from "./features/chat/stream-runner.js";
 import type { StreamHandle } from "./services/desktop-service.js";
 import { Avatar as AvatarView } from "./features/avatars/avatar.js";
 import { AvatarPicker } from "./features/avatars/avatar-picker.js";
@@ -42,6 +41,11 @@ import {
   bubbleInk,
   type Avatar as AvatarKind,
 } from "./features/avatars/avatar-meta.js";
+import { ChoiceCard, type ChoiceOption } from "./features/questions/choice-card.js";
+import {
+  QuestionChatCards,
+  type AnsweredQuestion,
+} from "./features/questions/question-chat.js";
 import { WorkflowEditor } from "./features/workflow-editor/workflow-editor.js";
 import { RunMonitor } from "./features/run-monitor/run-monitor.js";
 import { CanvasSidecar } from "./features/canvas/canvas-sidecar.js";
@@ -87,6 +91,13 @@ import {
   saveTemplate,
   type BotTemplate,
 } from "./features/templates/bot-templates.js";
+import {
+  applySkill,
+  deleteSkill,
+  listSkills,
+  upsertSkill,
+  type Skill,
+} from "./features/skills/skill-store.js";
 import { BotSkillsPicker } from "./features/skills/bot-skills-picker.js";
 import { SkillsPanel } from "./features/skills/skills-panel.js";
 import {
@@ -158,6 +169,18 @@ type Msg = {
 };
 
 type ChatState = Record<number, Msg[]>;
+
+/**
+ * A choice card waiting for the composer to supply its free-text answer
+ * (seed-card "其他" and model-clarification "D / 以上都不是" both route here).
+ * `forKey` scopes the pending answer to one chat so switching bots neither
+ * fires it into the wrong thread nor loses it.
+ */
+type ClarifyTarget =
+  | { forKey: number; kind: "seed"; msgId: number }
+  | { forKey: number; kind: "ask"; requestId: string; question: string };
+
+type AnsweredQuestionMap = Record<string, AnsweredQuestion>;
 
 
 type MenuState = { x: number; y: number; botKey: number };
@@ -2372,6 +2395,7 @@ function MessageBubble({
   mentions,
   onMentionClick,
   onChoice,
+  lockedChoiceId,
   onReact,
   onQuote,
   onCopy,
@@ -2381,7 +2405,9 @@ function MessageBubble({
   accent: string;
   mentions?: MentionTable;
   onMentionClick?: (botKey: number) => void;
-  onChoice?: (msgId: number, optionLabel: string, other: boolean) => void;
+  onChoice?: (msgId: number, option: ChoiceOption) => void;
+  /** Msg id whose card is waiting for a composer clarification. */
+  lockedChoiceId?: number | null;
   onReact: (msgId: number, emoji: Emoji) => void;
   onQuote: (msg: Msg) => void;
   onCopy: (text: string) => void;
@@ -2478,36 +2504,17 @@ function MessageBubble({
             />
           )}
           {msg.choices && (
-            <div className="choice-card" role="group" aria-label={msg.choices.question}>
-              <div className="choice-question">{msg.choices.question}</div>
-              {msg.choices.answered ? (
-                <div className="choice-answered">{t("shell.choiceSelected", [msg.choices.answered])}</div>
-              ) : (
-                <div className="choice-options">
-                  {msg.choices.options.map((option) => (
-                    <button
-                      key={option.id}
-                      type="button"
-                      className="choice-option"
-                      onClick={() => onChoice?.(msg.id, option.label, false)}
-                    >
-                      <span className="choice-key">{option.id}</span>
-                      <span>{option.label}</span>
-                    </button>
-                  ))}
-                  {msg.choices.other && (
-                    <button
-                      type="button"
-                      className="choice-option choice-other"
-                      onClick={() => onChoice?.(msg.id, "", true)}
-                    >
-                      <span className="choice-key">✎</span>
-                      <span>{t("shell.choiceOther")}</span>
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
+            <ChoiceCard
+              question={msg.choices.question}
+              options={msg.choices.options}
+              fallback={msg.choices.other ? { id: "✎", label: t("shell.choiceOther") } : null}
+              answered={msg.choices.answered}
+              disabled={lockedChoiceId === msg.id}
+              hint={
+                lockedChoiceId === msg.id ? t("questions.explainBelowPlaceholder") : null
+              }
+              onChoose={(option) => onChoice?.(msg.id, option)}
+            />
           )}
           {!isUser && EMOJIS.some((e) => (msg.reactions[e] ?? 0) > 0) && (
             <div className="reaction-chips">
@@ -2664,10 +2671,15 @@ function BotsPlaceholder({
   const [draft, setDraft] = useState("");
   const [plusOpen, setPlusOpen] = useState(false);
   const [detailOther, setDetailOther] = useState<number | null>(null);
-  const [stream, setStream] = useState<(StreamState & { forKey: number }) | null>(null);
+  const [stream, setStream] = useState<StreamStateForBot | null>(null);
   const [failedText, setFailedText] = useState("");
   const [answeredChoices, setAnsweredChoices] = useState<Record<number, string>>({});
+  const [answeredQuestions, setAnsweredQuestions] = useState<AnsweredQuestionMap>({});
+  const [clarify, setClarify] = useState<ClarifyTarget | null>(null);
+  const [memoryOpen, setMemoryOpen] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<AttachmentDraft[]>([]);
+  const [skills, setSkills] = useState<Skill[]>(() => listSkills(window.localStorage));
+  const [skillMenuOpen, setSkillMenuOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const streamRef = useRef<StreamHandle | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
@@ -2678,20 +2690,40 @@ function BotsPlaceholder({
   const mentionTable = useMemo<MentionTable>(() => {
     const table: MentionTable = new Map();
     for (const bot of bots) {
-      table.set(bot.bot.name, { botKey: bot.key, color: avatarColor(bot.avatar) });
+      table.set(bot.bot.name, { botKey: bot.key, color: avatarColor(bot.avatar), shape: bot.avatar.kind === "grok" ? bot.avatar.shape : "circle" });
     }
     return table;
   }, [bots]);
 
-  const handleChoice = (msgId: number, optionLabel: string, other: boolean): void => {
-    if (other) {
-      inputRef.current?.focus();
-      return;
-    }
-    setAnsweredChoices((prev) => ({ ...prev, [msgId]: optionLabel }));
-    onSend(t("shell.myChoice", [optionLabel]));
+  const applySkillToDraft = (skill: Skill): void => {
+    setDraft((prev) => applySkill(skill, prev));
+    setSkillMenuOpen(false);
   };
 
+  const saveDraftAsSkill = (): void => {
+    const prompt = draft.trim();
+    if (prompt.length === 0) {
+      onNotify(t("skills.saveNeedsContent"));
+      return;
+    }
+    const name = t("skills.appliedLabel", [skills.length + 1]);
+    const result = upsertSkill(window.localStorage, { name, prompt });
+    if (result.ok) {
+      setSkills(listSkills(window.localStorage));
+      onNotify(t("skills.savedVersioned", [result.skill.name, result.skill.version]));
+    } else {
+      onNotify(result.reason === "limit" ? t("skills.limitReachedShort") : t("skills.emptyContent"));
+    }
+    setSkillMenuOpen(false);
+  };
+
+  const removeSkill = (id: string): void => {
+    setSkills(deleteSkill(window.localStorage, id));
+  };
+
+  /* The old local-only handleChoice from the skills branch is deliberately not
+     taken: this branch answers choice cards through the shared chat stream
+     (see the handleChoice below), so keeping both would shadow it. */
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
   }, [msgs.length]);
@@ -2785,6 +2817,7 @@ function BotsPlaceholder({
   }
 
   const others = bots.filter((b) => b.key !== me.key);
+  const clarifyActive = clarify !== null && clarify.forKey === me.key;
   const pairPeers = Array.from(
     new Set(
       msgs.flatMap((message) => (message.notice ? [message.notice.otherKey] : [])),
@@ -2826,9 +2859,79 @@ function BotsPlaceholder({
     }
   };
 
+  /**
+   * The one stream starter for the composer, the failure retry and the choice
+   * cards (FR-3): cancels any in-flight turn, resets the stream state and
+   * wires cancel/failure/assistant-bubble transitions identically everywhere.
+   */
+  const startChatStream = (text: string): void => {
+    if (streamRef.current) {
+      streamRef.current.cancel();
+    }
+    const forKey = me.key;
+    setStream({ ...emptyStream(), forKey });
+    onBotStatus(me.bot.id, "running");
+    streamRef.current = runChatStream({
+      stream: service.chat.stream,
+      botId: me.bot.id,
+      text: withSkillContext(skillContext, me.bot.id, text),
+      forKey,
+      update: setStream,
+      onAssistant,
+      onSettled: (result) => {
+        const settled = result.cancelled || result.failure !== null;
+        onBotStatus(me.bot.id, "idle");
+        if (!settled) {
+          onReplyCompleted(me.bot.id, me.bot.name);
+        }
+      },
+    });
+  };
+
+  /**
+   * The composer owes a choice card its free-text answer. Seed cards send the
+   * text like any user message (owner decision Q3); ask_user cards submit it
+   * through question.answer — the waiting model turn continues with it, so no
+   * new stream may start. Failures restore the draft for another try.
+   */
+  const answerClarify = (target: ClarifyTarget, text: string): void => {
+    setClarify(null);
+    setDraft("");
+    if (target.kind === "seed") {
+      setAnsweredChoices((prev) => ({ ...prev, [target.msgId]: text }));
+      onSend(text);
+      setFailedText(text);
+      startChatStream(text);
+      return;
+    }
+    void window.deepseekBot.host
+      .call("question.answer", { botId: me.bot.id, requestId: target.requestId, text })
+      .then((response) => {
+        const parsed = METHOD_CONTRACTS["question.answer"].response.parse(response);
+        setAnsweredQuestions((prev) => ({
+          ...prev,
+          [target.requestId]: {
+            botId: me.bot.id,
+            question: target.question,
+            text: parsed.text,
+          },
+        }));
+        onSend(parsed.text);
+      })
+      .catch(() => {
+        setClarify(target);
+        setDraft(text);
+        onNotify(t("questions.answerRetryFailed"));
+      });
+  };
+
   const send = (): void => {
     const text = draft.trim();
     if (!text && pendingFiles.length === 0) {
+      return;
+    }
+    if (clarify !== null && clarify.forKey === me.key && text) {
+      answerClarify(clarify, text);
       return;
     }
     const outgoing: NonNullable<Msg["attachments"]> = pendingFiles.map((f) => ({
@@ -2841,47 +2944,7 @@ function BotsPlaceholder({
     setPendingFiles([]);
     setFailedText(text);
     setDraft("");
-    if (streamRef.current) {
-      streamRef.current.cancel();
-    }
-    const forKey = me.key;
-    setStream({ ...emptyStream(), forKey });
-    let acc = "";
-    const handle = service.chat.stream(me.bot.id, withSkillContext(skillContext, me.bot.id, text), {
-      onDelta: (chunk) => {
-        acc += chunk;
-        setStream((prev) =>
-          prev && prev.forKey === forKey ? { ...applyDelta(prev, chunk), forKey } : prev,
-        );
-      },
-      onTool: (tool) => {
-        setStream((prev) =>
-          prev && prev.forKey === forKey ? { ...applyTool(prev, tool), forKey } : prev,
-        );
-      },
-    });
-    streamRef.current = handle;
-    onBotStatus(me.bot.id, "running");
-    void handle.finish().then((result) => {
-      onBotStatus(me.bot.id, "idle");
-      if (!result.cancelled && !result.failure) {
-        onReplyCompleted(me.bot.id, me.bot.name);
-      }
-      streamRef.current = null;
-      setStream((prev) => {
-        if (!prev || prev.forKey !== forKey) {
-          return prev;
-        }
-        if (result.cancelled) {
-          return { ...applyCancelled(prev), forKey };
-        }
-        if (result.failure) {
-          return { ...applyFailure(prev, result.failure), forKey };
-        }
-        onAssistant(acc);
-        return null;
-      });
-    });
+    startChatStream(text);
   };
 
   const retryStream = (): void => {
@@ -2889,45 +2952,21 @@ function BotsPlaceholder({
       const text = failedText;
       setFailedText("");
       onSend(text);
-      const forKey = me.key;
-      setStream({ ...emptyStream(), forKey });
-      let acc = "";
-      const handle = service.chat.stream(me.bot.id, withSkillContext(skillContext, me.bot.id, text), {
-        onDelta: (chunk) => {
-          acc += chunk;
-          setStream((prev) =>
-            prev && prev.forKey === forKey ? { ...applyDelta(prev, chunk), forKey } : prev,
-          );
-        },
-        onTool: (tool) => {
-          setStream((prev) =>
-            prev && prev.forKey === forKey ? { ...applyTool(prev, tool), forKey } : prev,
-          );
-        },
-      });
-      streamRef.current = handle;
-      onBotStatus(me.bot.id, "running");
-      void handle.finish().then((result) => {
-        onBotStatus(me.bot.id, "idle");
-        if (!result.cancelled && !result.failure) {
-          onReplyCompleted(me.bot.id, me.bot.name);
-        }
-        streamRef.current = null;
-        setStream((prev) => {
-          if (!prev || prev.forKey !== forKey) {
-            return prev;
-          }
-          if (result.cancelled) {
-            return { ...applyCancelled(prev), forKey };
-          }
-          if (result.failure) {
-            return { ...applyFailure(prev, result.failure), forKey };
-          }
-          onAssistant(acc);
-          return null;
-        });
-      });
+      startChatStream(text);
     }
+  };
+
+  /** Card rows answer with their own label — no prefix, plain text (FR-1). */
+  const handleChoice = (msgId: number, option: ChoiceOption): void => {
+    if (option.id === "✎") {
+      setClarify({ forKey: me.key, kind: "seed", msgId });
+      inputRef.current?.focus();
+      return;
+    }
+    setAnsweredChoices((prev) => ({ ...prev, [msgId]: option.label }));
+    onSend(option.label);
+    setFailedText(option.label);
+    startChatStream(option.label);
   };
 
   return (
@@ -3026,6 +3065,9 @@ function BotsPlaceholder({
                   mentions={mentionTable}
                   onMentionClick={onOpenBot}
                   onChoice={handleChoice}
+                  lockedChoiceId={
+                    clarify?.kind === "seed" && clarify.forKey === me.key ? clarify.msgId : null
+                  }
                   onReact={onReact}
                   onQuote={onQuote}
                   onCopy={onCopy}
@@ -3087,9 +3129,22 @@ function BotsPlaceholder({
             )}
           </>
         )}
-        <QuestionChatCards botId={me.bot.id} />
+        <QuestionChatCards
+          botId={me.bot.id}
+          answered={answeredQuestions}
+          onAnswered={(requestId, entry) =>
+            setAnsweredQuestions((prev) => ({ ...prev, [requestId]: entry }))
+          }
+          onUserBubble={onSend}
+          onFallback={(requestId, question) => {
+            setClarify({ forKey: me.key, kind: "ask", requestId, question });
+            inputRef.current?.focus();
+          }}
+          clarifyRequestId={
+            clarify?.kind === "ask" && clarify.forKey === me.key ? clarify.requestId : null
+          }
+        />
         <SearchResultCards botId={me.bot.id} />
-        <MemoryPanel botId={me.bot.id} />
         <PermissionChatCards
           botId={me.bot.id}
           onPendingCount={(count) => onApprovalPending(me.bot.id, me.bot.name, count)}
@@ -3125,6 +3180,19 @@ function BotsPlaceholder({
           </button>
         </div>
       )}
+      {clarifyActive && (
+        <div className="quote-chip" role="status">
+          <span>{t("questions.explainPlaceholder")}</span>
+          <button
+            type="button"
+            className="quote-cancel"
+            aria-label={t("questions.cancelExplain")}
+            onClick={() => setClarify(null)}
+          >
+            ×
+          </button>
+        </div>
+      )}
       <input
         ref={fileInputRef}
         type="file"
@@ -3139,6 +3207,58 @@ function BotsPlaceholder({
       />
       <div className="composer">
         <div className="composer-menu-wrap">
+          <button
+            type="button"
+            className="composer-plus composer-skill"
+            aria-label={t("skills.menuLabel")}
+            title={t("skills.dialogTitle")}
+            onClick={() => setSkillMenuOpen((v) => !v)}
+          >
+            ⚡
+          </button>
+          {skillMenuOpen && (
+            <>
+              <div className="menu-overlay" onClick={() => setSkillMenuOpen(false)} />
+              <div className="composer-menu skills-menu" role="menu" aria-label={t("skills.menuLabel")}>
+                {skills.length === 0 && (
+                  <div className="menu-item skills-empty">{t("skills.emptyHint")}</div>
+                )}
+                {skills.map((skill) => (
+                  <div className="skill-row" key={skill.id}>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="menu-item skill-apply"
+                      title={t("skills.applyAria", [skill.name, skill.version])}
+                      onClick={() => applySkillToDraft(skill)}
+                    >
+                      <span className="skill-name">{skill.name}</span>
+                      <span className="skill-version">v{skill.version}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="skill-remove"
+                      aria-label={t("skills.removeAria", [skill.name])}
+                      onClick={() => removeSkill(skill.id)}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+                <div className="menu-sep" />
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="menu-item"
+                  disabled={draft.trim().length === 0}
+                  onClick={saveDraftAsSkill}
+                >
+                  <MenuIcon d="M5 4h9l5 5v11H5zM14 4v5h5" />
+                  {t("skills.saveCurrentAria")}
+                </button>
+              </div>
+            </>
+          )}
           <button
             type="button"
             className="composer-plus"
@@ -3163,6 +3283,18 @@ function BotsPlaceholder({
                 >
                   <MenuIcon d="M21 12.5 12.5 21a5 5 0 0 1-7-7l8-8a3.5 3.5 0 0 1 5 5l-8 8a1.8 1.8 0 0 1-2.5-2.5L15 4.5" />
                   {t("shell.addAttachment")}
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="menu-item"
+                  onClick={() => {
+                    setPlusOpen(false);
+                    setMemoryOpen(true);
+                  }}
+                >
+                  <MenuIcon d="M7 3.5h10a1 1 0 0 1 1 1V20l-6-3.8-6 3.8V4.5a1 1 0 0 1 1-1Z" />
+                  {t("memory.dialogTitle")}
                 </button>
                 <div className="menu-sep" />
                 <div className="menu-sub-wrap">
@@ -3207,7 +3339,7 @@ function BotsPlaceholder({
         <input
           ref={inputRef}
           className="composer-input"
-          placeholder={t("shell.messageBot", [me.bot.name])}
+          placeholder={clarifyActive ? t("questions.realIntentPlaceholder") : t("shell.messageBot", [me.bot.name])}
           value={draft}
           maxLength={200}
           aria-label={t("shell.messageBot", [me.bot.name])}
@@ -3234,7 +3366,9 @@ function BotsPlaceholder({
           ↑
         </button>
       </div>
-
+      {memoryOpen && (
+        <MemoryPanel botId={me.bot.id} onClose={() => setMemoryOpen(false)} />
+      )}
     </div>
   );
 }

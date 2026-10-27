@@ -4,6 +4,9 @@
  * list/import/search/delete through trusted knowledge methods; the
  * retention policy (保留策略) edits the shared memory.retention settings
  * key. All text is rendered as text, never HTML.
+ *
+ * Management lives behind the composer "+" menu as a modal — the chat flow
+ * itself stays clean; the bot reads and writes memory through its tools.
  */
 import { useCallback, useEffect, useRef, useState, type JSX } from "react";
 import { METHOD_CONTRACTS } from "@deepseek-bot/contracts";
@@ -46,13 +49,27 @@ function importNotice(code: "format" | "size" | "empty" | "encoding" | "read"): 
   return { key: "memory.fileUnreadable" };
 }
 
-export function MemoryPanel({ botId }: { botId: string }): JSX.Element {
+export function MemoryPanel({ botId, onClose }: { botId: string; onClose: () => void }): JSX.Element {
   return (
-    <section className="memory-panel" aria-label={t("memory.memorySectionAria")}>
-      <BotMemory key={botId} botId={botId} />
-      <KnowledgeSection key={`k-${botId}`} botId={botId} />
-      <RetentionControls />
-    </section>
+    <div className="modal-backdrop" onClick={onClose}>
+      <section
+        className="modal memory-modal"
+        aria-label={t("memory.dialogTitle")}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <header className="modal-head">
+          <h3>{t("memory.dialogTitle")}</h3>
+          <button type="button" className="modal-close" aria-label={t("shell.close")} onClick={onClose}>
+            ×
+          </button>
+        </header>
+        <div className="memory-body">
+          <BotMemory key={botId} botId={botId} />
+          <KnowledgeSection key={`k-${botId}`} botId={botId} />
+          <RetentionControls />
+        </div>
+      </section>
+    </div>
   );
 }
 
@@ -129,27 +146,38 @@ function BotMemory({ botId }: { botId: string }): JSX.Element {
   }
 
   return (
-    <div>
-      <div>
+    <div className="memory-section">
+      <div className="memory-section-title">{t("memory.memorySectionAria")}</div>
+      <div className="memory-row">
         <input
+          className="memory-input"
           aria-label={t("memory.memoryContent")}
+          placeholder={t("memory.notePlaceholder")}
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
         />
-        <button type="button" onClick={() => void save()}>
+        <button type="button" className="memory-btn" onClick={() => void save()}>
           {t("memory.saveMemory")}
         </button>
       </div>
-      <input
-        aria-label={t("permissions.memoryRead")}
-        value={query}
-        onChange={(event) => setQuery(event.target.value)}
-      />
-      {notice !== null ? <div role="status">{noticeText(notice)}</div> : null}
+      <div className="memory-row">
+        <input
+          className="memory-input"
+          aria-label={t("permissions.memoryRead")}
+          placeholder={t("permissions.memoryRead")}
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+        />
+      </div>
+      {notice !== null ? (
+        <div className="memory-notice" role="status">
+          {noticeText(notice)}
+        </div>
+      ) : null}
       {(memories ?? []).map((memory) => (
-        <div key={memory.id}>
-          <div>{memory.text}</div>
-          <button type="button" onClick={() => void remove(memory.id)}>
+        <div className="memory-item" key={memory.id}>
+          <span className="memory-item-text">{memory.text}</span>
+          <button type="button" className="memory-btn" onClick={() => void remove(memory.id)}>
             {t("shell.delete")}
           </button>
         </div>
@@ -248,34 +276,48 @@ function KnowledgeSection({ botId }: { botId: string }): JSX.Element {
   }
 
   return (
-    <div>
-      <div>
-        <button type="button" onClick={() => void importFile()}>
+    <div className="memory-section">
+      <div className="memory-section-title">{t("memory.knowledgeTitle")}</div>
+      <div className="memory-row">
+        <button type="button" className="memory-btn" onClick={() => void importFile()}>
           {t("main.importKnowledge")}
         </button>
         <input
+          className="memory-input"
           aria-label={t("memory.searchKnowledgeField")}
+          placeholder={t("memory.searchKnowledgeField")}
           value={query}
           onChange={(event) => setQuery(event.target.value)}
         />
-        <button type="button" onClick={() => void search()}>
+        <button type="button" className="memory-btn" onClick={() => void search()}>
           {t("memory.searchKnowledgeButton")}
         </button>
       </div>
-      {notice !== null ? <div role="status">{noticeText(notice)}</div> : null}
+      {notice !== null ? (
+        <div className="memory-notice" role="status">
+          {noticeText(notice)}
+        </div>
+      ) : null}
       {(hits ?? []).map((hit) => (
-        <div key={`${hit.docId}:${hit.at}:${hit.snippet}`}>
-          <div>{hit.title}</div>
-          <div>{hit.snippet}</div>
+        <div className="memory-item" key={`${hit.docId}:${hit.at}:${hit.snippet}`}>
+          <span className="memory-item-text">
+            {hit.title}
+            <span className="memory-item-sub">{hit.snippet}</span>
+          </span>
         </div>
       ))}
-      {hits !== null && hits.length === 0 ? <div role="status">{t("memory.noKnowledgeMatches")}</div> : null}
+      {hits !== null && hits.length === 0 ? (
+        <div className="memory-notice" role="status">
+          {t("memory.noKnowledgeMatches")}
+        </div>
+      ) : null}
       {(docs ?? []).map((doc) => (
-        <div key={doc.id}>
-          <div>
-            {t("memory.knowledgeDocMeta", [doc.title, doc.size])}
-          </div>
-          <button type="button" onClick={() => void remove(doc.id)}>
+        <div className="memory-item" key={doc.id}>
+          <span className="memory-item-text">
+            {doc.title}
+            <span className="memory-item-sub">{t("memory.charCount", [doc.size])}</span>
+          </span>
+          <button type="button" className="memory-btn" onClick={() => void remove(doc.id)}>
             {t("shell.delete")}
           </button>
         </div>
@@ -331,27 +373,37 @@ function RetentionControls(): JSX.Element {
   }
 
   return (
-    <div>
-      <div>{t("memory.retentionPolicyHint")}</div>
-      <input
-        aria-label={t("memory.memoryRetentionDays")}
-        value={policy.retentionDays}
-        onChange={(event) => update("retentionDays", event.target.value)}
-      />
-      <input
-        aria-label={t("memory.perBotMemoryLimit")}
-        value={policy.memoryMaxPerBot}
-        onChange={(event) => update("memoryMaxPerBot", event.target.value)}
-      />
-      <input
-        aria-label={t("memory.perBotKnowledgeLimit")}
-        value={policy.knowledgeMaxPerBot}
-        onChange={(event) => update("knowledgeMaxPerBot", event.target.value)}
-      />
-      <button type="button" onClick={() => void save()}>
-        {t("memory.savePolicy")}
-      </button>
-      {notice !== null ? <div role="status">{noticeText(notice)}</div> : null}
+    <div className="memory-section">
+      <div className="memory-section-title">{t("memory.retentionPolicy")}</div>
+      <div className="memory-policy-hint">{t("memory.retentionHint")}</div>
+      <div className="memory-row">
+        <input
+          className="memory-input"
+          aria-label={t("memory.memoryRetentionDays")}
+          value={policy.retentionDays}
+          onChange={(event) => update("retentionDays", event.target.value)}
+        />
+        <input
+          className="memory-input"
+          aria-label={t("memory.perBotMemoryLimit")}
+          value={policy.memoryMaxPerBot}
+          onChange={(event) => update("memoryMaxPerBot", event.target.value)}
+        />
+        <input
+          className="memory-input"
+          aria-label={t("memory.perBotKnowledgeLimit")}
+          value={policy.knowledgeMaxPerBot}
+          onChange={(event) => update("knowledgeMaxPerBot", event.target.value)}
+        />
+        <button type="button" className="memory-btn" onClick={() => void save()}>
+          {t("memory.savePolicy")}
+        </button>
+      </div>
+      {notice !== null ? (
+        <div className="memory-notice" role="status">
+          {noticeText(notice)}
+        </div>
+      ) : null}
     </div>
   );
 }

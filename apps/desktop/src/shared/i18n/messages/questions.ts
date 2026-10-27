@@ -3,6 +3,13 @@ import type { Message } from "../types.js";
 
 export const questionsMessages = {
   "questions.answerFailed": { zh: "回答发送失败", en: "Failed to send the answer" },
+  "questions.answerRetryFailed": { zh: "回答发送失败，请重试或取消本次说明", en: "Could not send the answer. Retry or cancel this explanation." },
+  "questions.cancelExplain": { zh: "取消回答选项卡", en: "Cancel answering the choice card" },
+  "questions.expiredHint": { zh: "该问题已过期或已取消，可直接输入补充。", en: "This question expired or was cancelled — just type a reply." },
+  "questions.explainBelowPlaceholder": { zh: "请在下方输入框用一句话说明你的想法。", en: "Explain in one sentence in the input below." },
+  "questions.explainPlaceholder": { zh: "正在回答选项卡，请用一句话说明", en: "Answering a choice card — explain in one sentence" },
+  "questions.fallbackOption": { zh: "以上都不是", en: "None of these" },
   "questions.readFailed": { zh: "提问读取失败", en: "Failed to read questions" },
+  "questions.realIntentPlaceholder": { zh: "请用一句话说明真实意图", en: "Explain what you actually mean in one sentence" },
   "questions.sendCustomAnswer": { zh: "发送其他回答", en: "Send custom answer" },
 } satisfies Record<string, Message>;

@@ -4,6 +4,7 @@ import type { Message } from "../types.js";
 export const botsMessages = {
   "bots.advancedSettings": { zh: "高级设置", en: "Advanced settings" },
   "bots.botName": { zh: "机器人名称", en: "Bot name" },
+  "bots.botNotFound": { zh: "找不到这个 Bot", en: "That bot could not be found" },
   "bots.custom": { zh: "自定义", en: "Custom" },
   "bots.customTone": { zh: "自定义语气", en: "Custom tone" },
   "bots.customToneInputPlaceholder": { zh: "输入你的自定义语气", en: "Enter your custom tone" },
@@ -16,6 +17,7 @@ export const botsMessages = {
   "bots.roleDescription": { zh: "角色说明", en: "Role description" },
   "bots.saveConflictReloaded": { zh: "保存冲突：机器人已被其他窗口修改，已刷新为最新数据。", en: "Save conflict: the Bot was modified in another window; the form now shows the latest data." },
   "bots.saveFailed": { zh: "保存失败（{0}）", en: "Save failed ({0})" },
+  "bots.saveFailedDetail": { zh: "保存失败（{0}）{1}", en: "Could not save ({0}) {1}" },
   "bots.toneAdorkable": { zh: "呆萌", en: "Adorkable" },
   "bots.toneCalm": { zh: "冷静", en: "Calm" },
   "bots.toneCoquettish": { zh: "撒娇", en: "Coquettish" },

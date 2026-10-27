@@ -189,7 +189,14 @@ export function bindAskUserTool(
   return {
     name: "ask_user",
     description:
-      "Ask the user one question with 2-4 choices and optionally other text. Waits for their answer; does not grant permission or approve any action.",
+      "Ask the user one clarifying question with 2-4 choices and optionally other text. " +
+      "Waits for their answer; does not grant permission or approve any action. " +
+      "Options are your concrete guesses at what the user is trying to say: infer them " +
+      "from the current conversation, keep them specific, mutually exclusive and directly " +
+      "clickable, and make A-C likely to already contain the user's real intent — never " +
+      "offer generic filler. Always include option D as the catch-all: the Host displays " +
+      "D as 以上都不是 and sends its answer as free text, so D needs no meaningful label " +
+      "of its own. Set allowOther=true so a D choice can carry the user's own wording.",
     inputSchema: AskUserInputSchema,
     handler: (params, context) => coordinator.ask(params, context),
   };

@@ -96,6 +96,7 @@ import {
 } from "@deepseek-bot/storage";
 import {
   ToolRejectionError,
+  type AskUserRequest,
   type ToolGateway,
   type UserQuestionControls,
 } from "@deepseek-bot/agent-tools";
@@ -134,6 +135,31 @@ export interface HostContext {
   readonly searchResults: {
     list(botId: string): ChatSearchRecord[];
   };
+}
+
+/** The Host never renders or persists the model's own label for the fallback option. */
+const ASK_USER_OTHER_ID = "D";
+const ASK_USER_OTHER_LABEL = "以上都不是";
+
+function displayAskUserOption(option: AskUserRequest["options"][number]): {
+  id: AskUserRequest["options"][number]["id"];
+  label: string;
+} {
+  return option.id === ASK_USER_OTHER_ID
+    ? { id: option.id, label: ASK_USER_OTHER_LABEL }
+    : option;
+}
+
+/**
+ * Assistant-side chat row for one ask_user round trip: the question as the
+ * user saw it (D forced), persisted when the answer arrives so a restart
+ * replays a coherent "bot asked / user answered" context for the model.
+ */
+function formatAskedQuestion(request: AskUserRequest): string {
+  const lines = request.options.map(
+    (option) => `${displayAskUserOption(option).id}. ${displayAskUserOption(option).label}`,
+  );
+  return `【向用户提问】${request.question}\n${lines.join("\n")}`;
 }
 
 function grantResponse(row: GrantRow): {
@@ -644,7 +670,7 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
         questions: context.userQuestions.listPending(chatSessionIdFor(bot.id)).map((request) => ({
           requestId: request.requestId,
           question: request.question,
-          options: request.options.map((option) => ({ id: option.id, label: option.label })),
+          options: request.options.map(displayAskUserOption),
           allowOther: request.allowOther,
           expiresAt: request.expiresAt,
         })),
@@ -653,11 +679,17 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
 
     "question.answer": (payload) => {
       const bot = requireLiveBot(db, payload.botId);
+      const callerId = chatSessionIdFor(bot.id);
+      // Snapshot the pending question before answering so the assistant-side
+      // question row lands right before the answer row (FR-6 persistence).
+      const pending = context.userQuestions
+        .listPending(callerId)
+        .find((request) => request.requestId === payload.requestId);
       let result;
       try {
         result = context.userQuestions.answer(
           payload.requestId,
-          chatSessionIdFor(bot.id),
+          callerId,
           "optionId" in payload ? { optionId: payload.optionId } : { text: payload.text },
         );
       } catch (error) {
@@ -670,9 +702,17 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
         }
         throw error;
       }
+      if (pending !== undefined) {
+        appendChatMessage(db, {
+          botId: bot.id,
+          sessionId: callerId,
+          role: "assistant",
+          text: formatAskedQuestion(pending),
+        });
+      }
       const message = appendChatMessage(db, {
         botId: bot.id,
-        sessionId: chatSessionIdFor(bot.id),
+        sessionId: callerId,
         role: "user",
         text: result.text,
       });
@@ -885,6 +925,16 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
       context.permissions.cancelMcp({ botId: payload.botId });
       return { servers };
     },
+
+    // Contract-first D21 surface. The dependent implementation replaces these guards.
+    "screen.status": () => { throw new ToolRejectionError("RUNTIME_UNAVAILABLE", "screen sensing is not installed"); },
+    "screen.windows.list": () => { throw new ToolRejectionError("RUNTIME_UNAVAILABLE", "screen sensing is not installed"); },
+    "screen.target.set": () => { throw new ToolRejectionError("RUNTIME_UNAVAILABLE", "screen sensing is not installed"); },
+    "screen.request": () => { throw new ToolRejectionError("RUNTIME_UNAVAILABLE", "screen sensing is not installed"); },
+    "screen.cancel": () => { throw new ToolRejectionError("RUNTIME_UNAVAILABLE", "screen sensing is not installed"); },
+    "screen.results.list": () => { throw new ToolRejectionError("RUNTIME_UNAVAILABLE", "screen sensing is not installed"); },
+    "screen.result.read": () => { throw new ToolRejectionError("RUNTIME_UNAVAILABLE", "screen sensing is not installed"); },
+    "screen.result.delete": () => { throw new ToolRejectionError("RUNTIME_UNAVAILABLE", "screen sensing is not installed"); },
 
     "connector.list": () => ({
       connectors: listConnectors(db).map((row) => ({

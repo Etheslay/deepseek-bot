@@ -2,6 +2,8 @@
 import type { Message } from "../types.js";
 
 export const memoryMessages = {
+  "memory.charCount": { zh: "{0} 字", en: "{0} chars" },
+  "memory.dialogTitle": { zh: "记忆与知识", en: "Memory and knowledge" },
   "memory.fileNoBody": { zh: "文件没有可导入的正文", en: "File has no importable text" },
   "memory.fileNotUtf8": { zh: "文件不是 UTF-8 文本", en: "File is not UTF-8 text" },
   "memory.fileTooLarge": { zh: "文件超过 256 KiB，或正文超过 100000 字", en: "File exceeds 256 KiB or body exceeds 100000 chars" },
@@ -14,6 +16,7 @@ export const memoryMessages = {
   "memory.knowledgeImported": { zh: "已导入知识", en: "Knowledge imported" },
   "memory.knowledgeImportFailed": { zh: "知识导入失败", en: "Failed to import knowledge" },
   "memory.knowledgeSearchFailed": { zh: "知识检索失败", en: "Failed to search knowledge" },
+  "memory.knowledgeTitle": { zh: "知识库", en: "Knowledge base" },
   "memory.memoryContent": { zh: "记忆内容", en: "Memory content" },
   "memory.memoryDeleted": { zh: "已删除记忆", en: "Memory deleted" },
   "memory.memoryDeleteFailed": { zh: "记忆删除失败", en: "Failed to delete memory" },
@@ -23,11 +26,14 @@ export const memoryMessages = {
   "memory.memorySaveFailed": { zh: "记忆保存失败", en: "Failed to save memory" },
   "memory.memorySectionAria": { zh: "记忆", en: "Memory" },
   "memory.noKnowledgeMatches": { zh: "没有匹配的知识", en: "No matching knowledge" },
+  "memory.notePlaceholder": { zh: "给这个 bot 记一条笔记", en: "Jot a note for this bot" },
   "memory.perBotKnowledgeLimit": { zh: "每bot知识上限", en: "Per-bot knowledge limit" },
   "memory.perBotMemoryLimit": { zh: "每bot记忆上限", en: "Per-bot memory limit" },
   "memory.policyLoadFailed": { zh: "保留策略读取失败", en: "Failed to load retention policy" },
   "memory.policySaved": { zh: "已保存保留策略", en: "Retention policy saved" },
   "memory.policySaveFailed": { zh: "保留策略保存失败", en: "Failed to save retention policy" },
+  "memory.retentionHint": { zh: "0 表示不限制；超限或过期会在保存后清理。", en: "0 means unlimited. Over the limit or expired entries are cleaned up after saving." },
+  "memory.retentionPolicy": { zh: "保留策略", en: "Retention policy" },
   "memory.retentionPolicyHint": { zh: "保留策略（0 表示不限制；超限或过期会在保存后清理）", en: "Retention policy (0 means unlimited; over-limit or expired items are pruned after save)" },
   "memory.saveMemory": { zh: "保存记忆", en: "Save Memory" },
   "memory.savePolicy": { zh: "保存策略", en: "Save Policy" },

@@ -5971,21 +5971,14 @@ select option {
   font-weight: 500;
 }
 
-/* 3. user bubble: tinted with the current bot's colour (SPRINTS §6 #8),
-   Grok-style radius. `--bot-color` is written per conversation by the chat
-   pane; when it is absent the graphite default is kept untouched. The mix
-   stays low (22%) so text contrast survives both themes; the border carries
-   the hue more visibly without changing the fill's readability. */
+/* 3. user bubble: painted with the bot's exact colour, no transparency
+   (owner request 2026-10-26). `--bot-color` / `--bot-ink` are written per
+   conversation by the chat pane; the ink is the auto-contrast text colour for
+   that exact fill. The earlier 22% mix washed every bot out to the same grey. */
 .msg-row.user .msg-bubble {
-  background: color-mix(
-      in srgb,
-      var(--bot-color, var(--grok-user-bubble)) 22%,
-      var(--grok-user-bubble)
-    )
-    !important;
-  border: 1px solid
-    color-mix(in srgb, var(--bot-color, var(--grok-user-bubble)) 38%, transparent);
-  color: var(--text) !important;
+  background: var(--bot-color, var(--grok-user-bubble)) !important;
+  border: 1px solid transparent;
+  color: var(--bot-ink, var(--text)) !important;
   border-radius: 22px;
   padding: 10px 16px;
   font-size: 0.95rem;
@@ -6300,55 +6293,27 @@ select option {
 
 /* --- choice card (A/B/C/D) --- */
 
-/* Choice card: elevated surface, letter badges, hover lift + arrow. */
-@keyframes choiceIn {
-  from {
-    opacity: 0;
-    transform: translateY(5px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
+/* Choice card: minimal list look (owner reference 2026-10-26) — plain rows
+   that only gain a soft rounded highlight on hover/selection, neutral letter
+   chips, no borders, no arrows, no lift, no entrance animation. */
 .choice-card {
   margin-top: 10px;
-  max-width: 440px;
-  padding: 14px;
-  border-radius: 18px;
-  border: 1px solid rgba(127, 127, 127, 0.18);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0) 48%),
-    var(--panel);
-  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.24);
-  animation: choiceIn 0.22s ease-out both;
+  max-width: 460px;
+  padding: 14px 12px 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(127, 127, 127, 0.12);
+  background: var(--panel);
 }
 
 [data-theme="light"] .choice-card {
-  border-color: rgba(15, 23, 42, 0.08);
-  background: linear-gradient(180deg, #ffffff, rgba(255, 255, 255, 0.72)), var(--panel);
-  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.1);
+  border-color: rgba(15, 23, 42, 0.06);
+  background: #ffffff;
 }
 
 .choice-question {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 2px 2px 12px;
-  font-size: 0.88rem;
-  font-weight: 650;
-  letter-spacing: 0.01em;
-}
-
-.choice-question::before {
-  content: "";
-  flex: none;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--mention-color, #6ea8ff);
-  box-shadow: 0 0 0 4px rgba(110, 168, 255, 0.16);
+  margin: 2px 6px 10px;
+  font-size: 0.9rem;
+  font-weight: 700;
 }
 
 .permission-params {
@@ -6365,7 +6330,7 @@ select option {
 .choice-options {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
 }
 
 .choice-option {
@@ -6373,90 +6338,49 @@ select option {
   align-items: center;
   gap: 12px;
   width: 100%;
-  padding: 11px 12px;
+  padding: 10px 12px;
   text-align: left;
-  border-radius: 14px;
-  border: 1px solid rgba(127, 127, 127, 0.2);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0));
+  border-radius: 12px;
+  border: 1px solid transparent;
+  background: transparent;
   color: inherit;
   font: inherit;
-  font-size: 0.86rem;
+  font-size: 0.88rem;
   cursor: pointer;
-  transition:
-    transform 0.16s ease,
-    border-color 0.16s ease,
-    background 0.16s ease,
-    box-shadow 0.16s ease;
+  transition: background 0.14s ease;
 }
 
-[data-theme="light"] .choice-option {
-  border-color: rgba(15, 23, 42, 0.09);
-  background: #ffffff;
+.choice-option:hover,
+.choice-option:focus-visible {
+  background: rgba(127, 127, 127, 0.14);
+  outline: none;
 }
 
-.choice-option:hover {
-  transform: translateY(-1px);
-  border-color: var(--mention-color, #6ea8ff);
-  background: linear-gradient(180deg, rgba(110, 168, 255, 0.16), rgba(110, 168, 255, 0.05));
-  box-shadow:
-    0 10px 22px rgba(0, 0, 0, 0.18),
-    inset 0 0 0 1px rgba(110, 168, 255, 0.22);
-}
-
-[data-theme="light"] .choice-option:hover {
-  background: linear-gradient(180deg, rgba(37, 99, 235, 0.1), rgba(37, 99, 235, 0.03));
-  box-shadow:
-    0 10px 20px rgba(15, 23, 42, 0.1),
-    inset 0 0 0 1px rgba(37, 99, 235, 0.2);
+[data-theme="light"] .choice-option:hover,
+[data-theme="light"] .choice-option:focus-visible {
+  background: rgba(15, 23, 42, 0.06);
 }
 
 .choice-option:active {
-  transform: translateY(0) scale(0.995);
-}
-
-.choice-option:focus-visible {
-  outline: 2px solid var(--mention-color, #6ea8ff);
-  outline-offset: 2px;
-}
-
-.choice-option::after {
-  content: "→";
-  margin-left: auto;
-  font-size: 0.95rem;
-  color: var(--mention-color, #6ea8ff);
-  opacity: 0;
-  transform: translateX(-5px);
-  transition:
-    opacity 0.16s ease,
-    transform 0.16s ease;
-}
-
-.choice-option:hover::after,
-.choice-option:focus-visible::after {
-  opacity: 1;
-  transform: translateX(0);
+  background: rgba(127, 127, 127, 0.2);
 }
 
 .choice-key {
   flex: none;
-  width: 26px;
-  height: 26px;
+  width: 24px;
+  height: 24px;
   display: grid;
   place-items: center;
-  border-radius: 9px;
-  border: 1px solid rgba(110, 168, 255, 0.3);
-  background: rgba(110, 168, 255, 0.14);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
-  color: var(--mention-color, #6ea8ff);
+  border-radius: 8px;
+  background: rgba(127, 127, 127, 0.18);
+  color: var(--muted);
   font-size: 0.74rem;
   font-weight: 700;
-  letter-spacing: 0.02em;
 }
 
 [data-theme="light"] .choice-key {
-  border-color: rgba(37, 99, 235, 0.22);
-  background: rgba(37, 99, 235, 0.08);
-  color: #2563eb;
+  background: rgba(15, 23, 42, 0.07);
+  color: #475569;
 }
 
 .choice-other .choice-key {
@@ -6469,10 +6393,13 @@ select option {
   gap: 8px;
   padding: 8px 12px;
   border-radius: 12px;
-  border: 1px dashed rgba(127, 127, 127, 0.3);
-  background: rgba(127, 127, 127, 0.1);
-  font-size: 0.82rem;
+  background: rgba(127, 127, 127, 0.12);
+  font-size: 0.84rem;
   color: var(--muted);
+}
+
+[data-theme="light"] .choice-answered {
+  background: rgba(15, 23, 42, 0.05);
 }
 
 .choice-answered::before {
@@ -6790,10 +6717,6 @@ select option {
 /* accent variable applies to a few signature surfaces */
 .send-btn:not(:disabled) {
   background: var(--accent, #ffffff);
-}
-
-.choice-option:hover {
-  border-color: var(--accent, #6ea8ff);
 }
 
 .gs-item.active,
@@ -7223,6 +7146,251 @@ select:focus-visible {
     width: min(340px, 42vw);
   }
 }
+
+/* ------------------------------------------------------------
+   Carried over from feature/choice-card-answer during the merge with
+   develop: memory modal, skills composer menu, choice-card answer
+   states and the search-result cards.
+   ------------------------------------------------------------ */
+
+.choice-answered-text {
+  max-width: 360px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.choice-option:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.choice-option:disabled:focus-visible {
+  background: transparent;
+}
+
+.choice-note {
+  margin: 10px 2px 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.memory-modal {
+  width: 620px;
+}
+
+.memory-body {
+  padding: 0 1.25rem 1.1rem;
+}
+
+.memory-section {
+  padding: 0.7rem 0;
+}
+
+.memory-section + .memory-section {
+  border-top: 1px solid var(--border);
+}
+
+.memory-section-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin-bottom: 0.55rem;
+}
+
+.memory-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.memory-row + .memory-row {
+  margin-top: 0.5rem;
+}
+
+.memory-input {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-size: 0.88rem;
+  color: var(--text);
+  background: var(--input-bg);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0.42rem 0.7rem;
+}
+
+.memory-input::placeholder {
+  color: var(--muted);
+}
+
+.memory-input:focus-visible {
+  outline: 2px solid #8ab4ff;
+  outline-offset: 1px;
+}
+
+.memory-btn {
+  flex: none;
+  font: inherit;
+  font-size: 0.82rem;
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.34rem 0.9rem;
+  cursor: pointer;
+}
+
+.memory-btn:hover {
+  background: var(--item-hover);
+}
+
+.memory-btn:focus-visible {
+  outline: 2px solid #8ab4ff;
+  outline-offset: 1px;
+}
+
+.memory-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  padding: 0.45rem 0.7rem;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.memory-item-text {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+  overflow-wrap: anywhere;
+}
+
+.memory-item-sub {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.memory-notice {
+  color: var(--muted);
+  font-size: 0.8rem;
+  margin-top: 0.5rem;
+}
+
+.memory-policy-hint {
+  color: var(--muted);
+  font-size: 0.8rem;
+  margin-bottom: 0.55rem;
+}
+
+.search-result-cards {
+  margin: 10px auto 4px;
+  max-width: 440px;
+  display: grid;
+  gap: 8px;
+}
+
+.search-result-cards > section {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 10px 12px;
+  font-size: 0.85rem;
+}
+
+.search-result-cards section > div:first-child {
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.search-result-cards section > div + div {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.search-result-cards a {
+  color: var(--mention-color, #6ea8ff);
+  overflow-wrap: anywhere;
+}
+
+.search-result-cards [role="status"] {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.skills-toolbar .ghost-btn {
+  position: static;
+  right: auto;
+  top: auto;
+  transform: none;
+}
+
+.composer-skill {
+  font-size: 0.9rem;
+}
+
+.skills-menu {
+  min-width: 240px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.skills-empty {
+  color: var(--muted);
+  font-size: 0.78rem;
+  cursor: default;
+}
+
+.skill-row {
+  display: flex;
+  align-items: stretch;
+}
+
+.skill-apply {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.skill-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skill-version {
+  font-size: 0.66rem;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 1px 5px;
+}
+
+.skill-remove {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.95rem;
+  padding: 0 8px;
+}
+
+.skill-remove:hover {
+  color: var(--text);
+}
+
+.menu-item:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
 
 /* ---------- D22: system integration (notification + Chrome import settings) ---------- */
 
