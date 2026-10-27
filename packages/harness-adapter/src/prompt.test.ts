@@ -13,6 +13,7 @@ function bot(overrides: Partial<Bot> = {}): Bot {
     modelProfileId: randomUUID(),
     workspaceId: randomUUID(),
     toolPolicyId: randomUUID(),
+    role: "standard",
     archivedAt: null,
     ...overrides,
   };

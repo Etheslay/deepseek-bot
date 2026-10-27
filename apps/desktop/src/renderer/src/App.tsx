@@ -12,6 +12,7 @@ import {
 import { createPortal } from "react-dom";
 import { useBots, type UiBot } from "./features/bots/use-bots.js";
 import { PermissionChatCards } from "./features/permissions/permission-chat.js";
+import { TaskFeedCards } from "./features/chat/task-feed.js";
 import { SearchResultCards } from "./features/search/search-results.js";
 import { MemoryPanel } from "./features/memory/memory-panel.js";
 import { SearchSettings } from "./features/search/search-settings.js";
@@ -1216,6 +1217,11 @@ const logout = (): void => {
             <BlobMark />
           )}
           {selectedBotName}
+          {selectedBotEntry?.bot.role === "coordinator" && (
+            <span className="coord-badge" title={t("shell.coordinatorBadgeTitle")}>
+              {t("shell.coordinatorBadge")}
+            </span>
+          )}
         </span>
         {selectedBotEntry !== undefined && (
           <button
@@ -1599,7 +1605,12 @@ const logout = (): void => {
                     <span className="tab-label">
                       <span className="tab-title">
                         {b.bot.name}
-                        {b.unread && <span className="unread-dot" aria-label={t("shell.unread")} />}
+                {b.bot.role === "coordinator" && (
+                  <span className="coord-badge" title={t("shell.coordinatorBadgeTitle")}>
+                    {t("shell.coordinatorBadge")}
+                  </span>
+                )}
+                {b.unread && <span className="unread-dot" aria-label={t("shell.unread")} />}
                       </span>
 
                     </span>
@@ -2072,6 +2083,7 @@ const logout = (): void => {
                         modelProfileId: editingBot.bot.modelProfileId,
                         workspaceId: editingBot.bot.workspaceId,
                         toolPolicyId: editingBot.bot.toolPolicyId,
+                        role: editingBot.bot.role,
                       },
                     }
                   : {})}
@@ -3219,6 +3231,7 @@ function BotsPlaceholder({
           botId={me.bot.id}
           onPendingCount={(count) => onApprovalPending(me.bot.id, me.bot.name, count)}
         />
+        <TaskFeedCards botId={me.bot.id} bots={bots} onOpenBot={onOpenBot} />
       </div>
       {pendingFiles.length > 0 && (
         <div className="attach-chips" aria-label={t("shell.pendingAttachments")}>

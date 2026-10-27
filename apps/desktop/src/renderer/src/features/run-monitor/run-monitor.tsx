@@ -10,8 +10,9 @@
  * persistence or scheduling.
  */
 import { useCallback, useEffect, useState, type JSX } from "react";
-import type { AssistantDelta, Run } from "@deepseek-bot/contracts";
+import type { AssistantDelta, Run, Task } from "@deepseek-bot/contracts";
 import { useService } from "../../services/service-context.js";
+import { useBots } from "../bots/use-bots.js";
 import { ServiceError } from "../../services/desktop-service.js";
 import {
   applySubscribeResult,
@@ -25,13 +26,17 @@ import { RunList } from "./run-list/run-list.js";
 import { RunDetail } from "./run-detail/run-detail.js";
 import { RunHistory } from "./history/run-history.js";
 import { ApprovalInboxItem } from "./approvals/approval-card.js";
+import { TaskList, taskStatusLabel } from "./tasks/task-list.js";
 import { t } from "../../i18n.js";
 
 type SnapshotData = Awaited<ReturnType<ReturnType<typeof useService>["runs"]["snapshot"]>>;
 
+const TASK_REFRESH_MS = 4_000;
+
 export function RunMonitor(props: { onClose: () => void }): JSX.Element {
   const desktop = useService();
   const runs = desktop.runs;
+  const bots = useBots(0);
 
   const [runList, setRunList] = useState<Run[]>([]);
   const [inbox, setInbox] = useState<ApprovalBaseline[]>([]);
@@ -39,8 +44,10 @@ export function RunMonitor(props: { onClose: () => void }): JSX.Element {
   const [snapshot, setSnapshot] = useState<SnapshotData | null>(null);
   const [stream, setStream] = useState<EventStreamState | null>(null);
   const [transient, setTransient] = useState<AssistantDelta[]>([]);
-  const [tab, setTab] = useState<"monitor" | "history">("monitor");
+  const [tab, setTab] = useState<"monitor" | "history" | "tasks">("monitor");
   const [notice, setNotice] = useState<string | null>(null);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [cancelBusyId, setCancelBusyId] = useState<string | null>(null);
 
   useEffect(() => {
     if (notice === null) {
@@ -100,6 +107,46 @@ export function RunMonitor(props: { onClose: () => void }): JSX.Element {
       await refreshList();
     })();
   }, [refreshList]);
+
+  // v0.5 任务页签: pull task.list on a light interval while the tab is
+  // visible (the host pushes no task events to the renderer yet).
+  const refreshTasks = useCallback(async (): Promise<void> => {
+    try {
+      const page = await desktop.tasks.list({ limit: 100 });
+      setTasks(page.tasks);
+    } catch {
+      setTasks([]);
+    }
+  }, [desktop]);
+
+  useEffect(() => {
+    if (tab !== "tasks") {
+      return;
+    }
+    void refreshTasks();
+    const timer = setInterval(() => void refreshTasks(), TASK_REFRESH_MS);
+    return () => clearInterval(timer);
+  }, [tab, refreshTasks]);
+
+  const onCancelTask = useCallback(
+    async (taskId: string): Promise<void> => {
+      setCancelBusyId(taskId);
+      try {
+        const task = await desktop.tasks.cancel(taskId);
+        setNotice(
+          task.status === "cancelled"
+            ? t("tasks.cancelledNotice")
+            : t("tasks.movedToNotice", [taskStatusLabel(task.status)]),
+        );
+        await refreshTasks();
+      } catch (error) {
+        handleError(error, t("tasks.cancelFailed"));
+      } finally {
+        setCancelBusyId(null);
+      }
+    },
+    [desktop, refreshTasks],
+  );
 
   useEffect(() => {
     if (runList.length > 0 && selectedRunId === null) {
@@ -265,8 +312,46 @@ export function RunMonitor(props: { onClose: () => void }): JSX.Element {
           )}
         </aside>
         <main className="rm-main" aria-live="polite">
-          {view === null ? (
-            <div className="rm-empty">{t("runs.loadingRun")}</div>
+        {tab === "tasks" ? (
+          <>
+            <div className="rm-tabs" role="tablist" aria-label={t("runs.monitorViewAria")}>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={false}
+                className="rm-tab"
+                onClick={() => setTab("monitor")}
+              >
+                {t("runs.tabMonitor")}
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={false}
+                className="rm-tab"
+                onClick={() => setTab("history")}
+              >
+                {t("runs.history")}
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected
+                className="rm-tab active"
+                onClick={() => setTab("tasks")}
+              >
+                {t("tasks.tabLabel")}
+              </button>
+            </div>
+            <TaskList
+              tasks={tasks}
+              bots={bots.bots.map((bot) => bot.bot)}
+              onCancel={(taskId) => void onCancelTask(taskId)}
+              cancelBusyId={cancelBusyId}
+            />
+          </>
+        ) : view === null ? (
+          <div className="rm-empty">{t("runs.loadingRun")}</div>
           ) : (
             <>
               <div className="rm-tabs" role="tablist" aria-label={t("runs.detailsView")}>
@@ -287,6 +372,15 @@ export function RunMonitor(props: { onClose: () => void }): JSX.Element {
                   onClick={() => setTab("history")}
                 >
                   {t("runs.history")}
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={false}
+                  className="rm-tab"
+                  onClick={() => setTab("tasks")}
+                >
+                  {t("tasks.tabLabel")}
                 </button>
               </div>
               {tab === "monitor" ? (

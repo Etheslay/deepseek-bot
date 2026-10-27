@@ -601,5 +601,54 @@ ALTER TABLE connectors ADD COLUMN kind TEXT NOT NULL DEFAULT 'sd-webui'
   CHECK (kind IN ('sd-webui', 'mcp-http'));
 `,
   },
+  {
+    // v0.7 manager orchestration (TASK_MANAGER_ORCHESTRATION.md): the
+    // coordinator `role` on bots, the dispatched-task records with their
+    // relay-chain coordinates (T7), the delivery events with the same
+    // dedup semantics as the runs event log (whose table stays run-scoped
+    // by its runs foreign key), and the meta marker on chat messages that
+    // flags dispatch instructions and delivery notices to the renderer.
+    id: 15,
+    name: "0015-manager-orchestration-tasks",
+    sql: /* sql */ `
+ALTER TABLE bots ADD COLUMN role TEXT NOT NULL DEFAULT 'standard'
+  CHECK (role IN ('standard', 'coordinator'));
+
+ALTER TABLE chat_messages ADD COLUMN meta_json TEXT;
+
+CREATE TABLE tasks (
+  id TEXT PRIMARY KEY,
+  from_bot_id TEXT NOT NULL REFERENCES bots(id),
+  to_bot_id TEXT NOT NULL REFERENCES bots(id),
+  instruction TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (status IN (
+    'queued', 'running', 'done', 'failed', 'cancelled', 'skipped', 'interrupted')),
+  result_summary TEXT,
+  root_task_id TEXT NOT NULL,
+  chain_index INTEGER NOT NULL CHECK (chain_index >= 0),
+  chain_total INTEGER NOT NULL CHECK (chain_total >= 1),
+  authorization_json TEXT,
+  created_at TEXT NOT NULL,
+  started_at TEXT,
+  finished_at TEXT,
+  worker_message_ids TEXT NOT NULL DEFAULT '[]'
+);
+CREATE INDEX tasks_to_status ON tasks(to_bot_id, status);
+CREATE INDEX tasks_from_status ON tasks(from_bot_id, status);
+CREATE INDEX tasks_root ON tasks(root_task_id, chain_index);
+
+CREATE TABLE task_events (
+  event_id TEXT PRIMARY KEY,
+  task_id TEXT NOT NULL REFERENCES tasks(id),
+  sequence INTEGER NOT NULL CHECK (sequence >= 0),
+  timestamp TEXT NOT NULL,
+  type TEXT NOT NULL,
+  payload_json TEXT NOT NULL,
+  UNIQUE (task_id, sequence)
+);
+CREATE INDEX task_events_task_sequence ON task_events(task_id, sequence);
+`,
+  },
+
 ];
 
