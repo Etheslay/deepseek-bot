@@ -4,7 +4,14 @@
   "private": true,
   "type": "module",
   "description": "App-owned selected-window capture and offline OCR backend",
-  "exports": { ".": "./src/index.ts" },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "node scripts/build-resources.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --coverage"
+  },
   "dependencies": {
     "tesseract.js": "7.0.0",
     "tesseract.js-core": "7.0.0",
