@@ -192,6 +192,31 @@ function memoryTools(value: unknown): ToolSchema[] {
   });
 }
 
+/** Zero tools hides screen_capture. One tool must be exactly that name. */
+function screenTools(value: unknown): ToolSchema[] {
+  if (!object(value) || !Array.isArray(value.tools) || value.tools.length > 1) {
+    throw new Error("invalid catalog");
+  }
+  if (value.tools.length === 0) return [];
+  const tool: unknown = value.tools[0];
+  if (
+    !object(tool) ||
+    tool.name !== "screen_capture" ||
+    typeof tool.description !== "string" ||
+    !object(tool.parameters) ||
+    tool.parameters.type !== "object"
+  ) {
+    throw new Error("invalid catalog");
+  }
+  return [
+    {
+      name: "screen_capture",
+      description: tool.description,
+      parameters: tool.parameters,
+    },
+  ];
+}
+
 function webSearchTool(value: unknown): ToolSchema {
   if (
     !object(value) ||
@@ -302,6 +327,14 @@ export async function applyApplicationTools(ctx: ApplicationToolContext): Promis
     const webSearch = webSearchTool(
       await request(origin, token, "/web-search", AbortSignal.timeout(STARTUP_TIMEOUT_MS)),
     );
+    let screen: ToolSchema[] = [];
+    try {
+      screen = screenTools(
+        await request(origin, token, "/screen", AbortSignal.timeout(STARTUP_TIMEOUT_MS)),
+      );
+    } catch {
+      // Optional. A host that has not published the route still loads the other tools.
+    }
     let mcp: ToolSchema[] = [];
     try {
       mcp = mcpTools(
@@ -410,6 +443,7 @@ export async function applyApplicationTools(ctx: ApplicationToolContext): Promis
         }
       });
     }
+    for (const schema of screen) bindRemote(schema, "/screen/call", CALL_TIMEOUT_MS);
     const mcpStart = unregister.length;
     try {
       for (const schema of mcp) bindRemote(schema, "/mcp/call", CALL_TIMEOUT_MS);

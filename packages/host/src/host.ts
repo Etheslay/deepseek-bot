@@ -17,9 +17,11 @@
  * holds the replaced database); the caller restarts the process.
  */
 import { randomUUID } from "node:crypto";
+import { createRequire } from "node:module";
 import { existsSync, mkdirSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createScreenBackend, type ScreenBackend } from "@deepseek-bot/exec-daemon";
 import { methodContract, type Method, type ToolPolicy } from "@deepseek-bot/contracts";
 import {
   DshSdkExecutor,
@@ -32,7 +34,14 @@ import {
 } from "@deepseek-bot/harness-adapter";
 import { ChatManager } from "./chat.js";
 import { createWorkspaceArtifacts } from "./artifacts.js";
-import { EngineError, NodeExecutionError, WorkflowEngine, LocalScheduler, evaluateToolAction, type ScheduleMissNotice } from "@deepseek-bot/runtime";
+import {
+  EngineError,
+  NodeExecutionError,
+  WorkflowEngine,
+  LocalScheduler,
+  evaluateToolAction,
+  type ScheduleMissNotice,
+} from "@deepseek-bot/runtime";
 import {
   appendChatMessage,
   ensureDataLayout,
@@ -53,7 +62,16 @@ import {
 } from "@deepseek-bot/storage";
 import { buildHandlers, type ChatSearchRecord, type HostContext } from "./handlers.js";
 import { AgentPermissionService } from "./agent-permissions.js";
-import { AskUserCoordinator, JsonlAuditSink, ToolGateway, ToolRegistry, bindAskUserTool, bindReadTools, bindWriteTools, type UserQuestionControls } from "@deepseek-bot/agent-tools";
+import {
+  AskUserCoordinator,
+  JsonlAuditSink,
+  ToolGateway,
+  ToolRegistry,
+  bindAskUserTool,
+  bindReadTools,
+  bindWriteTools,
+  type UserQuestionControls,
+} from "@deepseek-bot/agent-tools";
 import {
   ToolRejectionError,
   WebSearchService,
@@ -62,6 +80,7 @@ import {
   McpInvokeInputSchema,
   bindKnowledgeTools,
   bindMemoryTools,
+  bindScreenCaptureTool,
   bindWebSearchTool,
   type ToolCaller,
   type ToolNetworkPermissions,
@@ -69,6 +88,7 @@ import {
   type WebSearchResult,
 } from "@deepseek-bot/agent-tools";
 import { startApplicationToolServer } from "./app-tool-channel.js";
+import { createScreenService, unavailableScreenBackend, type ScreenService } from "./screen.js";
 import { evaluateTriggerRules } from "./triggers.js";
 import { invokeConnector } from "./connectors.js";
 import { McpService } from "./mcp.js";
@@ -98,6 +118,14 @@ export interface HostOptions {
   readonly webSearch?: WebSearchOptions;
   /** D20 trigger evaluation interval (default 5s). */
   readonly triggers?: { readonly intervalMs?: number };
+  /**
+   * Screen backend seam. Production on Windows uses the bundled OCR helper.
+   * Other platforms stay unavailable and do not spawn a process.
+   */
+  readonly screen?: {
+    readonly backend: ScreenBackend;
+    readonly supported?: boolean;
+  };
 }
 
 export interface DeepSeekBotHost {
@@ -108,7 +136,11 @@ export interface DeepSeekBotHost {
   readonly bridge: RunningApprovalBridge;
   readonly bootGeneration: number;
   /** Runs still recovered at startup (host restart before run completion). */
-  readonly recoveredRuns: ReadonlyArray<{ runId: string; interruptedNodeRuns: number; expiredApprovals: number }>;
+  readonly recoveredRuns: ReadonlyArray<{
+    runId: string;
+    interruptedNodeRuns: number;
+    expiredApprovals: number;
+  }>;
   /**
    * Execute one CONTRACTS §3 method. The payload is validated against the
    * method contract; the response is validated before returning. Errors are
@@ -119,6 +151,8 @@ export interface DeepSeekBotHost {
   /** D15 agent tool gateway (read + write layers; every call audited). */
   readonly agentTools: ToolGateway;
   readonly mcp: McpService;
+  /** In-process screen target, lock, and local artifacts. Desktop uses the contract methods. */
+  readonly screen: ScreenService;
   /** Trusted in-process human controls. Never registered as model capabilities. */
   readonly userQuestions: UserQuestionControls;
   /**
@@ -200,10 +234,12 @@ function seedDefaults(db: OpenedDatabase, layout: DataLayout): void {
     ["$.network.mode", "allow", "allowed"],
     ["$.shell.mode", "approval", "approval-required"],
   ] as const) {
-    db.raw.prepare(
-      "UPDATE tool_policies SET policy_json = json_set(policy_json, ?, ?), revision = ?, updated_at = ? " +
-      "WHERE id = ? AND CASE WHEN json_valid(policy_json) THEN json_extract(policy_json, ?) END = ?;",
-    ).run(path, current, randomUUID(), now, DEFAULT_TOOL_POLICY_ID, path, legacy);
+    db.raw
+      .prepare(
+        "UPDATE tool_policies SET policy_json = json_set(policy_json, ?, ?), revision = ?, updated_at = ? " +
+          "WHERE id = ? AND CASE WHEN json_valid(policy_json) THEN json_extract(policy_json, ?) END = ?;",
+      )
+      .run(path, current, randomUUID(), now, DEFAULT_TOOL_POLICY_ID, path, legacy);
   }
 }
 export async function createHost(options: HostOptions): Promise<DeepSeekBotHost> {
@@ -226,6 +262,15 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
   const mcp = new McpService(db, layout.connectorOutputs);
   const patches = writeProfilePatches(layout.harnessHome);
   const now = options.now ?? (() => new Date());
+  const screenChoice = resolveScreenBackend(options);
+  const screen = createScreenService({
+    root: layout.screenOutputs,
+    db,
+    permissions,
+    now,
+    backend: screenChoice.backend,
+    supported: screenChoice.supported,
+  });
 
   // The executor and the bridge reference each other (child env ← bridge
   // address; bridge asks → executor session registry), so the bridge handle
@@ -233,40 +278,41 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
   const bridgeRef: { current?: RunningApprovalBridge } = {};
   const sessionRegistry = new SessionRegistry();
   const executorOptions: DshSdkExecutorOptions = {
-      ...(options.dshBin !== undefined ? { dshBin: options.dshBin } : {}),
-      dshHome: layout.harnessHome,
-      patches: [patches.telemetryPatchPath, patches.bridgePatchPath],
-      childEnv: (parent) => ({
-        ...parent,
-        ...(options.childEnv !== undefined ? options.childEnv(parent) : {}),
-        ...(bridgeRef.current !== undefined
-          ? {
-              DSB_BRIDGE_URL: bridgeRef.current.url,
-              DSB_BRIDGE_TOKEN: bridgeRef.current.token,
-            }
-          : {}),
-      }),
-      ...(options.provider !== undefined ? { provider: options.provider } : {}),
-      resolveBotInputs: async (bot) => {
-        const profile = getModelProfile(db, bot.modelProfileId);
-        if (profile === undefined) {
-          throw new Error(`model profile '${bot.modelProfileId}' not found`);
-        }
-        const workspace = getWorkspace(db, bot.workspaceId);
-        if (workspace === undefined) {
-          throw new Error(`workspace '${bot.workspaceId}' not found`);
-        }
-        return {
-          profile,
-          workspacePath: workspace.canonicalPath,
-          apiKey: await options.resolveApiKey(profile.credentialRef),
-        };
-      },
+    ...(options.dshBin !== undefined ? { dshBin: options.dshBin } : {}),
+    dshHome: layout.harnessHome,
+    patches: [patches.telemetryPatchPath, patches.bridgePatchPath],
+    childEnv: (parent) => ({
+      ...parent,
+      ...(options.childEnv !== undefined ? options.childEnv(parent) : {}),
+      ...(bridgeRef.current !== undefined
+        ? {
+            DSB_BRIDGE_URL: bridgeRef.current.url,
+            DSB_BRIDGE_TOKEN: bridgeRef.current.token,
+          }
+        : {}),
+    }),
+    ...(options.provider !== undefined ? { provider: options.provider } : {}),
+    resolveBotInputs: async (bot) => {
+      const profile = getModelProfile(db, bot.modelProfileId);
+      if (profile === undefined) {
+        throw new Error(`model profile '${bot.modelProfileId}' not found`);
+      }
+      const workspace = getWorkspace(db, bot.workspaceId);
+      if (workspace === undefined) {
+        throw new Error(`workspace '${bot.workspaceId}' not found`);
+      }
+      return {
+        profile,
+        workspacePath: workspace.canonicalPath,
+        apiKey: await options.resolveApiKey(profile.credentialRef),
+      };
+    },
   };
   const executor = new DshSdkExecutor(executorOptions, { sessionRegistry });
   const packagedBridge = fileURLToPath(new URL("./harness-bridge/", import.meta.url));
   const bridgePackageDir = existsSync(join(packagedBridge, "package.json"))
-    ? packagedBridge : fileURLToPath(new URL("../../harness-bridge/", import.meta.url));
+    ? packagedBridge
+    : fileURLToPath(new URL("../../harness-bridge/", import.meta.url));
   const chat = new ChatManager(executorOptions, {
     prepareProfile: () => prepareAppToolProfile({ dshHome: layout.harnessHome, bridgePackageDir }),
     openTurn: (sessionId, caller, signal) => {
@@ -312,17 +358,14 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
   // scanning the persisted stream on an interval.
   const bootAt = now();
   evaluateTriggerRules(db, { bootAt });
-  const triggerTimer = setInterval(
-    () => {
-      try {
-        evaluateTriggerRules(db, { bootAt });
-      } catch {
-        // A failed scan retries on the next tick; the cursor only advances
-        // after a successful pass, so nothing is skipped.
-      }
-    },
-    options.triggers?.intervalMs ?? 5_000,
-  );
+  const triggerTimer = setInterval(() => {
+    try {
+      evaluateTriggerRules(db, { bootAt });
+    } catch {
+      // A failed scan retries on the next tick; the cursor only advances
+      // after a successful pass, so nothing is skipped.
+    }
+  }, options.triggers?.intervalMs ?? 5_000);
   triggerTimer.unref?.();
 
   let closed = false;
@@ -337,6 +380,7 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
     resolveApiKey: options.resolveApiKey,
     permissions,
     mcp,
+    screen,
     chat,
     userQuestions: questions,
     webSearch: {
@@ -378,46 +422,49 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
       });
     }
     const contract = methodContract(method);
-      const parsed = contract.request.safeParse(payload ?? {});
-      if (!parsed.success) {
-        throw new EngineError({
-          code: "INVALID_INPUT",
-          message: `request payload for '${method}' is invalid`,
-          details: {
-            issues: parsed.error.issues.map((issue) => ({
-              path: issue.path.join("."),
-              message: issue.message,
-            })),
-          },
-          retryable: false,
-        });
-      }
-      // The mapped handler table is precise per method; the dynamic dispatch
-      // goes through the contract-validated payload, and the response is
-      // re-validated below before returning.
-      const handler = handlers[method] as (
-        payload: unknown,
-        call: { readonly requestId?: string },
-      ) => unknown;
-      const result = await handler(parsed.data, {
-        ...(requestId !== undefined ? { requestId } : {}),
+    const parsed = contract.request.safeParse(payload ?? {});
+    if (!parsed.success) {
+      throw new EngineError({
+        code: "INVALID_INPUT",
+        message: `request payload for '${method}' is invalid`,
+        details: {
+          issues: parsed.error.issues.map((issue) => ({
+            path: issue.path.join("."),
+            message: issue.message,
+          })),
+        },
+        retryable: false,
       });
-      if (method === "data.restore") permissions.close();
-      const validated = contract.response.safeParse(result);
-      if (!validated.success) {
-        throw new EngineError({
-          code: "INVALID_INPUT",
-          message: `response for '${method}' violated its contract (internal error)`,
-          details: {
-            issues: validated.error.issues.map((issue) => ({
-              path: issue.path.join("."),
-              message: issue.message,
-            })),
-          },
-          retryable: false,
-        });
-      }
-      return validated.data;
+    }
+    // The mapped handler table is precise per method; the dynamic dispatch
+    // goes through the contract-validated payload, and the response is
+    // re-validated below before returning.
+    const handler = handlers[method] as (
+      payload: unknown,
+      call: { readonly requestId?: string },
+    ) => unknown;
+    const result = await handler(parsed.data, {
+      ...(requestId !== undefined ? { requestId } : {}),
+    });
+    if (method === "data.restore") {
+      screen.close();
+      permissions.close();
+    }
+    const validated = contract.response.safeParse(result);
+    if (!validated.success) {
+      throw new EngineError({
+        code: "INVALID_INPUT",
+        message: `response for '${method}' violated its contract (internal error)`,
+        details: {
+          issues: validated.error.issues.map((issue) => ({
+            path: issue.path.join("."),
+            message: issue.message,
+          })),
+        },
+        retryable: false,
+      });
+    }
+    return validated.data;
   };
 
   const agentRegistry = new ToolRegistry();
@@ -450,7 +497,12 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
     }),
     ...bindConnectorTools({
       invoke(connectorId, action, params) {
-        return invokeConnector(db, layout.connectorOutputs, { connectorId, action, params }, { now });
+        return invokeConnector(
+          db,
+          layout.connectorOutputs,
+          { connectorId, action, params },
+          { now },
+        );
       },
     }),
     bindMcpTool((input, context) => mcp.invoke(input, context)),
@@ -463,6 +515,7 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
         return searchKnowledge(db, { botId, query, limit });
       },
     }),
+    bindScreenCaptureTool(screen),
   ]) {
     agentRegistry.register(capability);
   }
@@ -471,6 +524,18 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
     audit: new JsonlAuditSink(join(layout.logs, "agent-tools-audit.jsonl")),
     grants: {
       async check(tool, caller, params, options) {
+        if (tool === "screen_capture") {
+          const mode = (params as { mode?: unknown }).mode;
+          if (mode !== "image" && mode !== "ocr") {
+            return {
+              allowed: false,
+              code: "INVALID_INPUT",
+              reason: "screen capture mode is invalid",
+              decision: "denied",
+            };
+          }
+          return screen.authorize(caller, mode, options);
+        }
         const input = tool === "mcp_call" ? McpInvokeInputSchema.parse(params) : undefined;
         if (input) mcp.check(input, caller);
         const authorization = await permissions.check(tool, caller, params, options);
@@ -491,6 +556,8 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
   const applicationTools = await startApplicationToolServer(agentTools, {
     networkPermissions: chatNetworkPermissions,
     mcp,
+    screenCatalog: (caller) =>
+      screen.visible(caller.botId) ? agentTools.capabilities.schemas(["screen_capture"]) : [],
   });
 
   return {
@@ -503,6 +570,7 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
     recoveredRuns,
     agentTools,
     mcp,
+    screen,
     userQuestions: {
       listPending: (callerId) => questions.listPending(callerId),
       answer: (requestId, callerId, answer) => questions.answer(requestId, callerId, answer),
@@ -516,6 +584,7 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
     async shutdown(): Promise<void> {
       if (closed) return;
       closed = true;
+      screen.close();
       permissions.close();
       mcp.close();
       questions.close();
@@ -532,6 +601,29 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
         }
       }
     },
+  };
+}
+
+function resolveScreenBackend(options: HostOptions): {
+  backend: ScreenBackend;
+  supported: boolean;
+} {
+  if (options.screen !== undefined) {
+    return {
+      backend: options.screen.backend,
+      supported: options.screen.supported ?? true,
+    };
+  }
+  if (process.platform !== "win32") {
+    return { backend: unavailableScreenBackend(), supported: false };
+  }
+  const require = createRequire(import.meta.url);
+  const entry = require.resolve("@deepseek-bot/exec-daemon");
+  return {
+    backend: createScreenBackend({
+      resourcesDirectory: join(dirname(entry), "..", "dist", "ocr"),
+    }),
+    supported: true,
   };
 }
 
@@ -622,9 +714,14 @@ function authorizeChatSearch(
     undefined,
     { policy, workspace: getWorkspace(db, bot.workspaceId), artifactsRoot: undefined },
   );
-  if (decision.effect === "allow") return Promise.resolve({ approvalId: null, resource: decision.resource });
+  if (decision.effect === "allow")
+    return Promise.resolve({ approvalId: null, resource: decision.resource });
   if (decision.effect === "deny") {
-    throw new NodeExecutionError({ code: decision.code, message: decision.message, retryable: false });
+    throw new NodeExecutionError({
+      code: decision.code,
+      message: decision.message,
+      retryable: false,
+    });
   }
   throw new NodeExecutionError({
     code: "APPROVAL_REQUIRED",
@@ -642,10 +739,3 @@ export function backupDirFor(layout: DataLayout, backupId: string): string {
 export function newBackupId(): string {
   return randomUUID();
 }
-
-
-
-
-
-
-

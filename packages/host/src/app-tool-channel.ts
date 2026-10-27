@@ -89,6 +89,10 @@ export interface ApplicationToolChannelOptions {
   /** Bound only for web_search. Eight-tool and ask_user calls omit it. */
   readonly networkPermissions?: (caller: ToolCaller) => ToolNetworkPermissions | undefined;
   readonly mcp?: McpService;
+  /** Empty unless this turn's bot is allowed to see screen_capture. */
+  readonly screenCatalog?: (
+    caller: ToolCaller,
+  ) => ReadonlyArray<{ name: string; description: string; parameters: Record<string, unknown> }>;
 }
 
 export async function startApplicationToolServer(
@@ -115,8 +119,9 @@ export async function startApplicationToolServer(
   server.requestTimeout = 12 * 60_000;
   server.timeout = 0;
   function mcpCatalog(turn: TurnState) {
-    return turn.mcpCatalog ??= mcp?.catalog(turn.caller, turn.controller.signal)
-      ?? Promise.resolve({ tools: [], warnings: [] });
+    return (turn.mcpCatalog ??=
+      mcp?.catalog(turn.caller, turn.controller.signal) ??
+      Promise.resolve({ tools: [], warnings: [] }));
   }
   async function handle(request: IncomingMessage, response: ServerResponse): Promise<void> {
     const header = request.headers.authorization;
@@ -153,9 +158,20 @@ export async function startApplicationToolServer(
       send(response, 200, { tools: connectorSchemas });
       return;
     }
+    if (request.method === "GET" && request.url === "/screen") {
+      send(response, 200, { tools: options.screenCatalog?.(turn.caller) ?? [] });
+      return;
+    }
     if (request.method === "GET" && request.url === "/mcp") {
       const catalog = await mcpCatalog(turn);
-      send(response, 200, { tools: catalog.tools.map(({ name, description, parameters }) => ({ name, description, parameters })), warnings: catalog.warnings });
+      send(response, 200, {
+        tools: catalog.tools.map(({ name, description, parameters }) => ({
+          name,
+          description,
+          parameters,
+        })),
+        warnings: catalog.warnings,
+      });
       return;
     }
     if (
@@ -166,6 +182,7 @@ export async function startApplicationToolServer(
         request.url !== "/web-search/call" &&
         request.url !== "/memory/call" &&
         request.url !== "/connectors/call" &&
+        request.url !== "/screen/call" &&
         request.url !== "/mcp/call")
     ) {
       send(response, 404, failure("INVALID_INPUT", "unknown application tool route"));
@@ -203,9 +220,10 @@ export async function startApplicationToolServer(
       send(response, 403, failure("UNAUTHORIZED_PATH", "application tool session mismatch"));
       return;
     }
-    const mcpEntry = request.url === "/mcp/call"
-      ? (await mcpCatalog(turn)).tools.find((tool) => tool.name === parsed.tool)
-      : undefined;
+    const mcpEntry =
+      request.url === "/mcp/call"
+        ? (await mcpCatalog(turn)).tools.find((tool) => tool.name === parsed.tool)
+        : undefined;
     const toolAllowed =
       request.url === "/ask-user/call"
         ? parsed.tool === "ask_user"
@@ -217,9 +235,11 @@ export async function startApplicationToolServer(
               parsed.tool === "knowledge_search"
             : request.url === "/mcp/call"
               ? true // Unknown aliases still enter gateway validation and audit.
-            : request.url === "/connectors/call"
-              ? parsed.tool === "connector_invoke"
-              : (APPLICATION_TOOLS as readonly string[]).includes(parsed.tool);
+              : request.url === "/connectors/call"
+                ? parsed.tool === "connector_invoke"
+                : request.url === "/screen/call"
+                  ? parsed.tool === "screen_capture"
+                  : (APPLICATION_TOOLS as readonly string[]).includes(parsed.tool);
     if (!toolAllowed) {
       send(response, 400, failure("INVALID_INPUT", "tool is not available in chat"));
       return;
@@ -247,7 +267,9 @@ export async function startApplicationToolServer(
         .call(
           turn.caller,
           request.url === "/mcp/call" ? "mcp_call" : parsed.tool,
-          request.url === "/mcp/call" ? { ...mcpEntry?.invocation, arguments: parsed.params } : parsed.params,
+          request.url === "/mcp/call"
+            ? { ...mcpEntry?.invocation, arguments: parsed.params }
+            : parsed.params,
           networkPermissions === undefined
             ? { signal: controller.signal }
             : { signal: controller.signal, networkPermissions },
@@ -309,12 +331,18 @@ export async function startApplicationToolServer(
         calls: new Map(),
         detach: () => options.signal.removeEventListener("abort", abort),
       };
-      const releaseMcp = () => { void state.mcpCatalog?.then((catalog) => mcp?.release(catalog.tools)).catch(() => undefined); };
+      const releaseMcp = () => {
+        void state.mcpCatalog
+          ?.then((catalog) => mcp?.release(catalog.tools))
+          .catch(() => undefined);
+      };
       controller.signal.addEventListener("abort", releaseMcp, { once: true });
       turns.set(token, state);
       return {
         env: { DSB_APP_TOOLS_URL: url, DSB_APP_TOOLS_TOKEN: token },
-        async prepare(): Promise<void> { await mcpCatalog(state); },
+        async prepare(): Promise<void> {
+          await mcpCatalog(state);
+        },
         waitReady(timeoutMs = 15_000): Promise<void> {
           return new Promise<void>((resolve, reject) => {
             const finish = (error?: ToolRejectionError) => {
