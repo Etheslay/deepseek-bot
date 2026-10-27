@@ -106,6 +106,7 @@ import {
 import type { AgentPermissionService } from "./agent-permissions.js";
 import type { McpService } from "./mcp.js";
 import type { ScreenService } from "./screen.js";
+import type { DeviceActionService } from "./device.js";
 import type { WorkspaceArtifacts } from "./artifacts.js";
 import {
   DEFAULT_MODEL_PROFILE_ID,
@@ -135,6 +136,7 @@ export interface HostContext {
   readonly permissions: AgentPermissionService;
   readonly mcp: McpService;
   readonly screen: ScreenService;
+  readonly device: DeviceActionService;
   readonly db: OpenedDatabase;
   readonly engine: WorkflowEngine;
   readonly scheduler: LocalScheduler;
@@ -326,6 +328,7 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
       if (policy.mode === "deny") context.permissions.denyCapability(policy.capability);
       if (policy.mode === "deny" && policy.capability === "mcp.call") context.mcp.invalidate({});
       if (policy.capability === "screen.capture") context.screen.invalidate();
+      if (policy.capability === "device.action") context.device.invalidate();
       return policy;
     },
     "permission.grant.list": (payload) => ({
@@ -1217,6 +1220,7 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
     "screen.results.list": (payload) => context.screen.listResults(payload.botId),
     "screen.result.read": (payload) => context.screen.readResult(payload.botId, payload.id),
     "screen.result.delete": (payload) => context.screen.deleteResult(payload.botId, payload.id),
+    "device.action.request": (payload) => context.device.request(payload.botId, payload.kind),
 
     "connector.list": () => ({
       connectors: listConnectors(db).map((row) => ({

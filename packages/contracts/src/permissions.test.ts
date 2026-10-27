@@ -44,8 +44,10 @@ describe("permission schemas", () => {
     expect(defaultPermissionMode("memory.write")).toBe("ask");
     expect(defaultPermissionMode("app.create_bot")).toBe("ask");
     expect(defaultPermissionMode("screen.capture")).toBe("deny");
+    expect(defaultPermissionMode("device.action")).toBe("deny");
     expect(requiresPerActionApproval("app.start_run")).toBe(true);
-    for (const capability of ["app.start_run", "exec.shell", "screen.capture"]) {
+    expect(requiresPerActionApproval("device.action")).toBe(true);
+    for (const capability of ["app.start_run", "exec.shell", "screen.capture", "device.action"]) {
       expect(CapabilityPolicySchema.safeParse({ capability, mode: "allow" }).success).toBe(false);
     }
     expect(
@@ -53,6 +55,12 @@ describe("permission schemas", () => {
     ).toBe(false);
     expect(
       CapabilityPolicySchema.safeParse({ capability: "screen.capture", mode: "ask" }).success,
+    ).toBe(true);
+    expect(
+      CapabilityPolicySchema.safeParse({ capability: "device.action", mode: "ask" }).success,
+    ).toBe(true);
+    expect(
+      CapabilityPolicySchema.safeParse({ capability: "device.action", mode: "deny" }).success,
     ).toBe(true);
     expect(CapabilityPolicySchema.safeParse({ capability: "unknown", mode: "allow" }).success).toBe(
       false,

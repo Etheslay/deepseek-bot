@@ -11,6 +11,7 @@ const POLICIES = [
   { capability: "app.start_run", mode: "ask" },
   { capability: "exec.shell", mode: "ask" },
   { capability: "screen.capture", mode: "deny" },
+  { capability: "device.action", mode: "deny" },
 ];
 
 const GRANT = {
@@ -197,6 +198,7 @@ describe("permissions settings panel", () => {
       expect(controlByLabel(container, "app.start_run").disabled).toBe(true);
     });
     expect(await optionIds(container, "screen.capture")).toEqual(["ask", "deny"]);
+    expect(await optionIds(container, "device.action")).toEqual(["ask", "deny"]);
     expect(await optionIds(container, "exec.shell")).toEqual(["ask", "deny"]);
     expect(await optionIds(container, "app.create_group")).toEqual(["allow", "ask", "deny"]);
 

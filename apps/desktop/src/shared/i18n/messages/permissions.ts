@@ -49,6 +49,7 @@ export const permissionsMessages = {
   "permissions.scopeOnce": { zh: "本次", en: "Once" },
   "permissions.scopePermanent": { zh: "永久", en: "Permanent" },
   "permissions.screenAndWindowAwareness": { zh: "屏幕与窗口感知", en: "Screen and window awareness" },
+  "permissions.deviceAction": { zh: "设备动作", en: "Device action" },
   "permissions.sessionGrant": { zh: "本会话 {0} 次、{1} 小时", en: "This session: {0} uses, {1} hours" },
   "permissions.startRun": { zh: "启动运行", en: "Start run" },
   "permissions.updateBot": { zh: "修改 bot", en: "Modify Bot" },
