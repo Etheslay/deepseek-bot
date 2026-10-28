@@ -125,6 +125,7 @@ import {
 } from "./voice.js";
 import { TaskDispatcher } from "./task-dispatcher.js";
 import { ChatNativeGate } from "./chat-gate.js";
+import { writeAutomationNotice } from "./automation-notices.js";
 import { evaluateTriggerRules } from "./triggers.js";
 import { invokeConnector } from "./connectors.js";
 import { McpService } from "./mcp.js";
@@ -574,7 +575,22 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
       // after a successful pass, so nothing is skipped.
     }
     try {
-      evaluateEventRules(db, engine);
+      evaluateEventRules(db, engine, {
+        onRuleOutcome: (notice) => {
+          writeAutomationNotice(
+            db,
+            {
+              ruleId: notice.ruleId,
+              botId: notice.botId,
+              ruleName: notice.ruleName,
+              outcome: notice.outcome,
+              runId: notice.runId,
+              reason: notice.reason,
+            },
+            uiLocale.current,
+          );
+        },
+      });
     } catch {
       // A failed rule keeps its cursor and is retried on the next tick.
     }
