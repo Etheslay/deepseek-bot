@@ -18,6 +18,7 @@ import { MemoryPanel } from "./features/memory/memory-panel.js";
 import { SearchSettings } from "./features/search/search-settings.js";
 import { ConnectorSettings } from "./features/connectors/connector-settings.js";
 import { AutomationPanel } from "./features/automation/automation-panel.js";
+import { EventRuleSettings } from "./features/event-rules/event-rule-settings.js";
 import { PermissionsPanel } from "./features/permissions/permissions-panel.js";
 import { ScreenSettings } from "./features/screen/screen-settings.js";
 import { BotForm } from "./features/bots/bot-form.js";
@@ -2418,6 +2419,8 @@ const logout = (): void => {
                 <SearchSettings />
                 <ConnectorSettings />
                 <AutomationPanel />
+                {/* Per-bot eventRule state, pending review, and history. */}
+                <EventRuleSettings />
                 <div className="settings-section-title">{t("shell.skillsSection")}</div>
                 <div className="settings-card">
                   <SkillsPanel
