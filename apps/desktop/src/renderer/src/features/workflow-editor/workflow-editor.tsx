@@ -10,7 +10,7 @@ import type { WorkflowNodePatch } from "./workflow-reducer.js";
 import { EdgeKeyDialog, WorkflowCanvas } from "./canvas/workflow-canvas.js";
 import { InspectorPanel } from "./inspector/node-inspector.js";
 import { ValidationPanel } from "./validation/validation-panel.js";
-import { ExportDialog, ImportDialog } from "./template/template-io.js";
+import { ExportDialog, ImportDialog, TemplateLibraryDialog } from "./template/template-io.js";
 import { t } from "../../i18n.js";
 
 export function WorkflowEditor(props: { onClose: () => void }): JSX.Element {
@@ -85,6 +85,12 @@ export function WorkflowEditor(props: { onClose: () => void }): JSX.Element {
           </button>
           <button type="button" className="ghost-btn" onClick={editor.openExport}>
             {t("skills.export")}
+          </button>
+          <button type="button" className="ghost-btn" onClick={editor.saveAsTemplate}>
+            {t("workflow.saveAsTemplate")}
+          </button>
+          <button type="button" className="ghost-btn" onClick={editor.openTemplates}>
+            {t("workflow.templateLibrary")}
           </button>
         </span>
       </header>
@@ -206,6 +212,15 @@ export function WorkflowEditor(props: { onClose: () => void }): JSX.Element {
             await navigator.clipboard.writeText(text);
           }}
           onClose={editor.closeExport}
+        />
+      )}
+
+      {editor.templatesOpen && (
+        <TemplateLibraryDialog
+          templates={editor.templates}
+          onApply={editor.applyTemplate}
+          onDelete={editor.removeTemplate}
+          onClose={editor.closeTemplates}
         />
       )}
 

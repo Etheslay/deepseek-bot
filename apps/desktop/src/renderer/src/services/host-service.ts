@@ -333,6 +333,17 @@ export function createHostService(bridge: HostBridge): DesktopService {
         }
       },
     },
+    // D25-second-half Ctrl+K retrieval: one Host query over every persisted
+    // corpus; responses are validated against the frozen contract before the
+    // overlay sees them.
+    search: {
+      global: async (query) => {
+        const response = METHOD_CONTRACTS["search.global"].response.parse(
+          await bridge.host.call("search.global", { query, limit: 20 }),
+        );
+        return response.results;
+      },
+    },
     // v0.5 manager orchestration: dispatched tasks are host-backed from day
     // one (the fixture store only exists for offline UI development).
     tasks: {

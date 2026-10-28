@@ -191,12 +191,21 @@ export function bindAskUserTool(
     description:
       "Ask the user one clarifying question with 2-4 choices and optionally other text. " +
       "Waits for their answer; does not grant permission or approve any action. " +
-      "Options are your concrete guesses at what the user is trying to say: infer them " +
-      "from the current conversation, keep them specific, mutually exclusive and directly " +
-      "clickable, and make A-C likely to already contain the user's real intent — never " +
-      "offer generic filler. Always include option D as the catch-all: the Host displays " +
-      "D as 以上都不是 and sends its answer as free text, so D needs no meaningful label " +
-      "of its own. Set allowOther=true so a D choice can carry the user's own wording.",
+      "Use this tool only in two situations: (1) the user's intent is genuinely " +
+      "ambiguous and the answer would change what you do next; (2) at the very start " +
+      "of a conversation, when the bot's role or purpose is not yet defined, to let " +
+      "the user pick a concrete direction (for example: manage a GitHub repository, " +
+      "design, drawing). Never use it for small talk, for anything the user has " +
+      "already answered, or as a polite confirmation. After each answer act on it " +
+      "directly; ask again only when the answer itself opens a real fork. At most 3 " +
+      "ask_user calls succeed per turn — further calls are rejected, so spend them " +
+      "carefully. Options are your concrete guesses at what the user is trying to " +
+      "say: infer them from the current conversation, keep them specific, mutually " +
+      "exclusive and directly clickable, and make A-C likely to already contain the " +
+      "user's real intent — never offer generic filler. Always include option D as " +
+      "the catch-all: the Host displays D as 以上都不是 and sends its answer as free " +
+      "text, so D needs no meaningful label of its own. Set allowOther=true so a D " +
+      "choice can carry the user's own wording.",
     inputSchema: AskUserInputSchema,
     handler: (params, context) => coordinator.ask(params, context),
   };

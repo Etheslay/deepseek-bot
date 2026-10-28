@@ -86,7 +86,11 @@ import {
   loadPrimitiveModes,
   setPrimitiveMode,
 } from "./features/chat/primitive-mode.js";
-import { buildSearchIndex, type SearchItem } from "./features/search/search-core.js";
+import {
+  buildSearchIndex,
+  remoteHitsToItems,
+  type SearchItem,
+} from "./features/search/search-core.js";
 import {
   ACCENT_PRESETS,
   loadSettings,
@@ -1331,20 +1335,26 @@ const logout = (): void => {
   const searchIndex = useMemo<SearchItem[]>(() => {
     const messages: {
       botKey: number;
+      botId: string;
       botName: string;
       text: string;
       time: number;
     }[] = [];
     for (const [botKey, list] of Object.entries(chats)) {
-      const botName =
-        bots.find((b) => b.key === Number(botKey))?.bot.name ?? "Bot";
+      const entry = bots.find((b) => b.key === Number(botKey));
+      // An orphan chat (bot archived/deleted) has no uuid to navigate by and
+      // stays out of the index.
+      if (entry === undefined) {
+        continue;
+      }
       for (const msg of list) {
         if (msg.system || msg.notice) {
           continue;
         }
         messages.push({
           botKey: Number(botKey),
-          botName,
+          botId: entry.bot.id,
+          botName: entry.bot.name,
           text: msg.text,
           time: msg.time,
         });
@@ -1353,6 +1363,7 @@ const logout = (): void => {
     return buildSearchIndex({
       bots: bots.map((b) => ({
         key: b.key,
+        id: b.bot.id,
         name: b.bot.name,
         group: groupLabel(groups.find((g) => g.key === b.group)),
       })),
@@ -1384,14 +1395,32 @@ const logout = (): void => {
   }, [bots, groups, chats]);
 
   const onSearchSelect = (item: SearchItem): void => {
-    if (item.kind === "bot" || item.kind === "message") {
-      const botKey = item.botKey;
-      const target = bots.find((b) => b.key === botKey);
-      if (botKey !== undefined && target) {
-        setSelectedBot(botKey);
+    // Host hits carry the bot uuid; local items still navigate by bot key.
+    if (item.kind === "bot" || item.kind === "message" || item.kind === "artifact") {
+      const target =
+        (item.botId !== undefined
+          ? bots.find((b) => b.bot.id === item.botId)
+          : undefined) ?? bots.find((b) => b.key === item.botKey);
+      if (target) {
+        setSelectedBot(target.key);
         setQuoteDraft(null);
         openThread(target);
+        if (item.kind === "artifact" && item.path !== undefined && item.botId !== undefined) {
+          setCanvas({
+            botKey: target.key,
+            botId: target.bot.id,
+            botName: target.bot.name,
+            path: item.path,
+          });
+        }
       }
+      return;
+    }
+    // D25 host workflow hits: the editor has no external selection state, so
+    // opening the view is the honest navigation (known boundary, TASK doc §4).
+    if (item.kind === "workflow") {
+      setMonitorOpen(false);
+      setWorkflowOpen(true);
       return;
     }
     if (item.action === "settings") {
@@ -2873,6 +2902,7 @@ const logout = (): void => {
         items={searchIndex}
         onSelect={onSearchSelect}
         onClose={() => setSearchOpen(false)}
+        queryHost={(query) => desktop.search.global(query).then(remoteHitsToItems)}
       />
     </div>
   );

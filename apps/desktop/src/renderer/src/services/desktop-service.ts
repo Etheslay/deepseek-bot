@@ -62,6 +62,20 @@ export type ChatHistoryRow = {
   at: string;
 };
 
+/**
+ * One D25 Host retrieval hit (search.global): display metadata only — message
+ * bodies appear solely as bounded snippets and artifact hits carry the
+ * workspace-relative path, never an absolute path or content.
+ */
+export type GlobalSearchHitView = {
+  kind: "bot" | "workflow" | "message" | "artifact";
+  id: string;
+  botId: string | null;
+  title: string;
+  snippet: string | null;
+  at: string | null;
+};
+
 export type ToolStatus = {
   toolName: string;
   state: "requested" | "running" | "succeeded" | "failed";
@@ -223,6 +237,15 @@ export interface DesktopService {
       relativePath: string,
       versionId: string,
     ): Promise<{ artifact: BotArtifact; version: ArtifactVersion }>;
+  };
+  /**
+   * D25-second-half Host retrieval for the Ctrl+K overlay. One literal
+   * substring fans out over bot names, workflow names, every persisted chat
+   * message (bounded snippets) and artifact paths across all bots. The search
+   * grants nothing: opening a hit routes through the existing per-bot methods.
+   */
+  search: {
+    global(query: string): Promise<GlobalSearchHitView[]>;
   };
   /** Workflow editor API (D07); fixture-backed, no execution/persistence. */
   workflows: WorkflowServiceApi;

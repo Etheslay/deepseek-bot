@@ -1,6 +1,9 @@
 // @vitest-environment jsdom
 /**
- * Settings navigation grouping: same six sections, now readable as three groups.
+ * Settings navigation: a flat list of the six sections.
+ *
+ * An earlier pass grouped them under three small uppercase labels; the labels
+ * were visual noise, so this pins the flat list — six items, no group text.
  */
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -10,7 +13,10 @@ import { setLanguagePreference } from "../../src/renderer/src/i18n.js";
 
 const roots: Root[] = [];
 
-async function mount(active: (typeof SETTINGS_SECTION_KEYS)[number], onSelect = vi.fn()): Promise<HTMLElement> {
+async function mount(
+  active: (typeof SETTINGS_SECTION_KEYS)[number],
+  onSelect = vi.fn(),
+): Promise<HTMLElement> {
   const host = document.createElement("div");
   document.body.append(host);
   const root = createRoot(host);
@@ -35,18 +41,21 @@ afterEach(() => {
 });
 
 describe("SettingsNav", () => {
-  it("shows the six sections once, spread over three groups", async () => {
+  it("is one flat list of the six sections, in reading order", async () => {
     const host = await mount("general");
-    expect(host.querySelectorAll(".settings-nav-item")).toHaveLength(SETTINGS_SECTION_KEYS.length);
-    expect(host.querySelectorAll(".settings-nav-group")).toHaveLength(3);
-    const labels = [...host.querySelectorAll(".settings-nav-group-label")].map((node) => node.textContent);
-    expect(labels).toEqual(["基础", "权限与数据", "用量与系统"]);
+    const items = [...host.querySelectorAll(".settings-nav-item")].map((node) => node.textContent);
+    expect(items).toEqual(["通用", "电脑", "权限", "保险库", "用量与账单", "更新"]);
+    expect(items).toHaveLength(SETTINGS_SECTION_KEYS.length);
   });
 
-  it("keeps the sections in reading order", async () => {
+  it("renders no group labels or wrappers", async () => {
     const host = await mount("general");
-    const keys = [...host.querySelectorAll(".settings-nav-item")].map((node) => node.textContent);
-    expect(keys).toEqual(["通用", "电脑", "权限", "保险库", "用量与账单", "更新"]);
+    expect(host.querySelectorAll(".settings-nav-group").length).toBe(0);
+    expect(host.querySelectorAll(".settings-nav-group-label").length).toBe(0);
+    /* every item is a direct child of the nav, nothing in between */
+    const nav = host.querySelector(".settings-nav");
+    const childTags = [...(nav?.children ?? [])].map((node) => node.tagName);
+    expect(childTags.every((tag) => tag === "BUTTON")).toBe(true);
   });
 
   it("marks the active section for assistive tech", async () => {
@@ -70,8 +79,8 @@ describe("SettingsNav", () => {
   it("follows the language switch", async () => {
     setLanguagePreference("en");
     const host = await mount("general");
-    const labels = [...host.querySelectorAll(".settings-nav-group-label")].map((node) => node.textContent);
-    expect(labels).toEqual(["Basics", "Access & data", "Usage & system"]);
+    const items = [...host.querySelectorAll(".settings-nav-item")].map((node) => node.textContent);
+    expect(items).toEqual(["General", "Computer", "Permissions", "Vault", "Usage & Billing", "Updates"]);
     setLanguagePreference("zh");
   });
 });
