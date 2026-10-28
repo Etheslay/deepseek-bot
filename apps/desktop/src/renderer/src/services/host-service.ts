@@ -253,11 +253,15 @@ export function createHostService(bridge: HostBridge): DesktopService {
         }
         return imported;
       },
-      stream: (botId, text, handlers) => {
+      stream: (botId, text, handlers, options) => {
         let cancelled = false;
         const sessionId = `chat:${botId}`;
+        const skills = options?.skills;
         const done = bridge.host
-          .call("chat.send", { botId, text })
+          .call(
+            "chat.send",
+            skills !== undefined && skills.length > 0 ? { botId, text, skills } : { botId, text },
+          )
           .then((response) => {
             const reply = (response as { text: string }).text;
             if (!cancelled) {

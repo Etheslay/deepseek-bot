@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Bot } from "@deepseek-bot/contracts";
+import type { Bot, ChatSkillInjection } from "@deepseek-bot/contracts";
 import { createHostService } from "../../src/renderer/src/services/host-service.js";
 
 const bot = {
@@ -145,6 +145,35 @@ describe("host-backed chat", () => {
     expect(result.failure).toBeNull();
     expect(deltas.join("")).toBe("hello world");
     expect(calls[0]).toMatchObject({ method: "chat.send", payload: { botId: "bot-1", text: "hi" } });
+  });
+
+  it("forwards saved skills beside the user text", async () => {
+    const { bridge, calls } = makeBridge({
+      "chat.send": () => ({
+        sessionId: "chat:x",
+        messageId: "m",
+        text: "ok",
+        at: "2026-01-01T00:00:00.000Z",
+      }),
+    });
+    const service = createHostService(bridge);
+    const skill: ChatSkillInjection = {
+      name: "周报",
+      version: 1,
+      instructions: "三段",
+      capabilities: ["fs.read"],
+    };
+    const handle = service.chat.stream(
+      "bot-1",
+      "你好",
+      { onDelta: () => undefined, onTool: () => undefined },
+      { skills: [skill] },
+    );
+    await handle.finish();
+    expect(calls[0]).toMatchObject({
+      method: "chat.send",
+      payload: { botId: "bot-1", text: "你好", skills: [skill] },
+    });
   });
 
   it("surfaces host failures as chat failures", async () => {

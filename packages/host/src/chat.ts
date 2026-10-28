@@ -15,7 +15,7 @@
  * registered in the workflow engine's D08 session registry.
  */
 import { randomUUID } from "node:crypto";
-import type { Bot } from "@deepseek-bot/contracts";
+import type { Bot, CapabilityId, ChatSkillInjection } from "@deepseek-bot/contracts";
 import { EngineError } from "@deepseek-bot/runtime";
 import {
   HarnessAttempt,
@@ -29,6 +29,7 @@ import {
 import type { ToolCaller } from "@deepseek-bot/agent-tools";
 import type { ApplicationToolTurn } from "./app-tool-channel.js";
 import type { UiLocale } from "./host.js";
+import { composeSkillBlock, skillCapabilityAllowlist } from "./skill-injection.js";
 
 export function chatSessionIdFor(botId: string): string {
   return `chat:${botId}`;
@@ -67,7 +68,12 @@ interface ChatSession {
 
 export interface ChatToolWiring {
   prepareProfile(): void;
-  openTurn(sessionId: string, caller: ToolCaller, signal: AbortSignal): ApplicationToolTurn;
+  openTurn(
+    sessionId: string,
+    caller: ToolCaller,
+    signal: AbortSignal,
+    skillCapabilities?: readonly CapabilityId[],
+  ): ApplicationToolTurn;
 }
 
 /** Cancelling a turn must not wait for a desktop credential RPC to return. */
@@ -119,6 +125,7 @@ export class ChatManager {
     bot: Bot,
     text: string,
     history: ReadonlyArray<ChatHistoryEntry> = [],
+    skills: readonly ChatSkillInjection[] = [],
   ): Promise<TurnOutcome & { sessionId: string }> {
     if (this.closed)
       throw new EngineError({
@@ -221,6 +228,7 @@ export class ChatManager {
         sessionId,
         { id: chatSessionIdFor(bot.id), botId: bot.id, sessionId: chatSessionIdFor(bot.id) },
         controller.signal,
+        skillCapabilityAllowlist(skills),
       );
       await whileActive(turn.prepare?.() ?? Promise.resolve(), controller.signal);
       const baseOptions = this.buildOptions(inputs);
@@ -235,7 +243,7 @@ export class ChatManager {
           : {}),
       });
       await turn.waitReady();
-      const prompt = this.composePrompt(bot, text, history);
+      const prompt = this.composePrompt(bot, text, history, skills);
       const outcome = await attempt.runTurn(sessionId, prompt, controller.signal, observeEvent);
       session.lastSessionId = sessionId;
       return { ...outcome, sessionId };
@@ -296,10 +304,19 @@ export class ChatManager {
     this.sessions.clear();
   }
 
-  private composePrompt(bot: Bot, text: string, history: ReadonlyArray<ChatHistoryEntry>): string {
+  private composePrompt(
+    bot: Bot,
+    text: string,
+    history: ReadonlyArray<ChatHistoryEntry>,
+    skills: readonly ChatSkillInjection[],
+  ): string {
     const parts: string[] = [];
     if (bot.instructions.trim().length > 0) {
       parts.push(bot.instructions.trim());
+    }
+    const skillBlock = composeSkillBlock(skills);
+    if (skillBlock.length > 0) {
+      parts.push(skillBlock);
     }
     if (history.length > 0) {
       const lines = history.map(

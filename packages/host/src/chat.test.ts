@@ -290,6 +290,85 @@ describe("chat runtime", () => {
     expect(settled.active).toBe(false);
   });
 
+  it("injects saved skills into the prompt and keeps them out of the user row", async () => {
+    const { host, botId } = await hostWithBot("echo-model");
+    const sent = (await host.handleMethod("chat.send", {
+      botId,
+      text: "你好",
+      skills: [{ name: "周报", version: 2, instructions: "只写三段。", capabilities: [] }],
+    })) as { text: string };
+    expect(sent.text).toContain("### 周报（v2）");
+    expect(sent.text).toContain("只写三段。");
+    expect(sent.text).toContain("[用户消息]\n你好");
+    const history = (await host.handleMethod("chat.history", { botId })) as {
+      messages: Array<{ role: string; text: string }>;
+    };
+    expect(history.messages[0]).toMatchObject({ role: "user", text: "你好" });
+    expect(history.messages[0]?.text).not.toContain("只写三段");
+  });
+
+  it("rejects a skill capability that is not a capability id", async () => {
+    const { host, botId } = await hostWithBot();
+    await expect(
+      host.handleMethod("chat.send", {
+        botId,
+        text: "你好",
+        skills: [{ name: "周报", version: 1, instructions: "只写三段。", capabilities: ["read"] }],
+      }),
+    ).rejects.toMatchObject({ code: "INVALID_INPUT" });
+    const history = (await host.handleMethod("chat.history", { botId })) as { messages: unknown[] };
+    expect(history.messages).toEqual([]);
+  });
+
+  it("blocks a tool the injected skill did not declare before opening an approval", async () => {
+    const { host, botId } = await hostWithBot("app-tool");
+    const sent = (await host.handleMethod("chat.send", {
+      botId,
+      text: "建组",
+      skills: [{ name: "只读", version: 1, instructions: "不要创建。", capabilities: ["app.read"] }],
+    })) as { text: string };
+    expect(sent.text).toContain("UNAUTHORIZED_PATH");
+    expect(await host.handleMethod("permission.approval.list", { botId })).toEqual({
+      approvals: [],
+    });
+    expect(await host.handleMethod("group.list", {})).toEqual({ groups: [] });
+  });
+
+  it("still requires approval when the skill declares that capability", async () => {
+    const { host, botId } = await hostWithBot("app-tool");
+    const sent = host.handleMethod("chat.send", {
+      botId,
+      text: "建组",
+      skills: [
+        {
+          name: "建组",
+          version: 1,
+          instructions: "可以创建分组。",
+          capabilities: ["app.create_group"],
+        },
+      ],
+    });
+    let approvals: AppApproval[] = [];
+    await vi.waitFor(async () => {
+      ({ approvals } = (await host.handleMethod("permission.approval.list", { botId })) as {
+        approvals: AppApproval[];
+      });
+      expect(approvals).toHaveLength(1);
+    });
+    const approval = approvals[0]!;
+    expect(approval.capabilities).toContain("app.create_group");
+    await host.handleMethod("permission.approval.decide", {
+      approvalId: approval.id,
+      expectedActionDigest: approval.actionDigest,
+      decision: "approved",
+      scope: "once",
+    });
+    await sent;
+    expect(((await host.handleMethod("group.list", {})) as { groups: unknown[] }).groups).toHaveLength(
+      1,
+    );
+  });
+
   it("rejects unknown bots and reports cancel state", async () => {
     const { host } = await hostWithBot();
     await expect(

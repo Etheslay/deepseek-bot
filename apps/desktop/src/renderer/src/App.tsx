@@ -122,9 +122,9 @@ import {
 import { BotSkillsPicker } from "./features/skills/bot-skills-picker.js";
 import { SkillsPanel } from "./features/skills/skills-panel.js";
 import {
-  buildSkillContext,
   loadSkills,
   setBotSkills,
+  skillsForInjection,
   type SkillLibrary,
 } from "./features/skills/skills.js";
 
@@ -141,19 +141,6 @@ function groupLabel(group: Group | undefined): string {
     return t("shell.ungrouped");
   }
   return group.name;
-}
-
-/**
- * Prepend the bot's bound-skill context to an outgoing turn. The bubble keeps
- * the user's own text; only the text handed to the chat runtime grows.
- */
-function withSkillContext(
-  build: (botId: string) => string,
-  botId: string,
-  text: string,
-): string {
-  const block = build(botId);
-  return block.length > 0 ? `${block}\n\n${text}` : text;
 }
 
 const EMOJIS = ["👍", "👎", "❤️", "😂", "🎉"] as const;
@@ -2027,7 +2014,7 @@ const logout = (): void => {
                   path: relativePath,
                 });
               }}
-              skillContext={(botId) => buildSkillContext(botId, skillLibrary)}
+              skillContext={(botId) => skillsForInjection(botId, skillLibrary)}
               onOpenBot={(botKey) => {
                 const target = bots.find((b) => b.key === botKey);
                 if (target) {
@@ -3283,8 +3270,8 @@ function BotsPlaceholder({
   onReplyCompleted: (botId: string, botName: string) => void;
   /** D22: pending approvals change the tray status and may notify. */
   onApprovalPending: (botId: string, botName: string, count: number) => void;
-  /** Bound-skill context for a bot, composed at send time (D17). */
-  skillContext: (botId: string) => string;
+  /** Bound skills for this bot, sent to the Host with the turn (D17). */
+  skillContext: (botId: string) => ReturnType<typeof skillsForInjection>;
   /**
    * Persist a seed card's answer on the message itself. The answer cannot live
    * in this component's state: the pane is keyed by the selected bot, so
@@ -3501,6 +3488,19 @@ function BotsPlaceholder({
    * wires cancel/failure/assistant-bubble transitions identically everywhere.
    */
   const startChatStream = (text: string): void => {
+    const injected = skillContext(me.bot.id);
+    if (!injected.ok) {
+      onNotify(
+        injected.reason === "unknown-capability"
+          ? t("skills.unknownCapability", [injected.skill, injected.capability])
+          : injected.reason === "too-many-capabilities"
+            ? t("skills.tooManyCapabilities", [injected.skill])
+            : injected.reason === "too-many-skills"
+              ? t("skills.tooManySkills", [injected.skill])
+              : t("skills.injectionRejected", [injected.skill]),
+      );
+      return;
+    }
     if (streamRef.current) {
       streamRef.current.cancel();
     }
@@ -3510,7 +3510,8 @@ function BotsPlaceholder({
     const started = runChatStream({
       stream: service.chat.stream,
       botId: me.bot.id,
-      text: withSkillContext(skillContext, me.bot.id, text),
+      text,
+      skills: injected.skills,
       forKey,
       update: setStream,
       onAssistant,

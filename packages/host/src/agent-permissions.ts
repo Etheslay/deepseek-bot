@@ -61,6 +61,28 @@ const CAPABILITIES: Readonly<Record<string, readonly CapabilityId[]>> = {
   import_attachment: ["fs.write"],
   read: ["fs.read"],
 };
+
+/** Capability ids a gateway tool consumes. Unknown tools return undefined (fail closed). */
+export function capabilitiesConsumedBy(
+  tool: string,
+  params: unknown,
+): readonly CapabilityId[] | undefined {
+  const mapped = Object.hasOwn(CAPABILITIES, tool) ? CAPABILITIES[tool] : undefined;
+  if (mapped === undefined) return undefined;
+  const capabilities = [...mapped];
+  if (
+    tool === "create_bots_batch" &&
+    params !== null &&
+    typeof params === "object" &&
+    !Array.isArray(params) &&
+    "newGroup" in params &&
+    (params as { newGroup?: unknown }).newGroup !== undefined
+  ) {
+    capabilities.push("app.create_group");
+  }
+  return capabilities;
+}
+
 function digest(call: Omit<PermissionCall, "actionDigest">): string {
   return createHash("sha256").update(stableStringify(call)).digest("hex");
 }
@@ -90,7 +112,7 @@ export class AgentPermissionService implements GrantCheckpoint {
       return { allowed: false, code: "RUNTIME_UNAVAILABLE", reason: "permission host is closed" };
     if (options.signal?.aborted)
       return { allowed: false, code: "CANCELLED", reason: "tool call was cancelled" };
-    const mapped = Object.hasOwn(CAPABILITIES, tool) ? CAPABILITIES[tool] : undefined;
+    const mapped = capabilitiesConsumedBy(tool, params);
     if (
       mapped === undefined ||
       typeof caller.id !== "string" ||
@@ -111,8 +133,6 @@ export class AgentPermissionService implements GrantCheckpoint {
     }
     const capabilities = [...mapped];
     const validatedParams = structuredClone(params) as Record<string, unknown>;
-    if (tool === "create_bots_batch" && validatedParams.newGroup !== undefined)
-      capabilities.push("app.create_group");
     const base = {
       invocationId: randomUUID(),
       callerId: caller.id,
