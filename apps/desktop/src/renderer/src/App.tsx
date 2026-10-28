@@ -55,6 +55,7 @@ import { RunMonitor } from "./features/run-monitor/run-monitor.js";
 import { CanvasSidecar } from "./features/canvas/canvas-sidecar.js";
 import { ChatMarkdown } from "./features/chat/chat-markdown.js";
 import { ThinkingLine } from "./features/chat/thinking-line.js";
+import { exportConversation } from "./features/chat/export-conversation.js";
 import type { MentionTable } from "./features/chat/mentions.js";
 import {
   attachmentAccept,
@@ -175,6 +176,8 @@ type Msg = {
   } | undefined;
   /** System notices (e.g. blocked cross-group requests) render as a centered muted line. */
   system?: boolean;
+  /** G6: the message re-enters the thread as 重新生成 / 编辑后重发, weakly labelled. */
+  meta?: "regenerate" | "edited_resend";
 };
 
 type ChatState = Record<number, Msg[]>;
@@ -841,6 +844,10 @@ export function App(): JSX.Element {
   const openEditBotModal = (bot: UiBot) => {
     setEditingBot(bot);
     setAvatar(bot.avatar);
+    // The edit dialog carries the same group row as create, pre-set to the
+    // bot's current bucket, so moving a bot between groups is one visit here
+    // instead of a sidebar drag.
+    setModalGroup(bot.group);
     setModalOpen(true);
   };
 
@@ -850,6 +857,7 @@ export function App(): JSX.Element {
     if (editingBot) {
       const result = await updateBotEntity(editingBot.bot.id, draft);
       if (result.ok) {
+        setUi(editingBot.key, { group: modalGroup });
         setModalOpen(false);
         setToast(t("shell.saved"));
       }
@@ -970,6 +978,7 @@ export function App(): JSX.Element {
     botKey: number,
     text: string,
     attachments?: Msg["attachments"],
+    meta?: Msg["meta"],
   ): void => {
     const trimmed = text.trim();
     if (!trimmed && !(attachments && attachments.length > 0)) {
@@ -991,6 +1000,7 @@ export function App(): JSX.Element {
             time: Date.now(),
             system: false,
             attachments: attachments && attachments.length > 0 ? attachments : undefined,
+            ...(meta !== undefined ? { meta } : {}),
           },
         ],
       };
@@ -1406,6 +1416,30 @@ const logout = (): void => {
               stroke="currentColor"
               strokeWidth="1.6"
               strokeLinecap="round"
+            />
+          </svg>
+        </button>
+        <button
+          type="button"
+          className="top-icon-btn"
+          aria-label={t("shell.exportConversation")}
+          title={t("shell.exportConversation")}
+          onClick={() => {
+            if (selectedBotEntry === undefined) return;
+            exportConversation(
+              selectedBotEntry.bot.name,
+              chats[selectedBotEntry.key] ?? [],
+            );
+          }}
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path
+              d="M12 4v10m0 0 4-4m-4 4-4-4M5 19h14"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
             />
           </svg>
         </button>
@@ -2184,18 +2218,16 @@ const logout = (): void => {
                 }
                 avatarSlot={<AvatarPicker value={avatar} onChange={setAvatar} theme={theme} />}
                 groupSlot={
-                  !editingBot && (
-                    <div className="group-pick compact">
-                      <span>{t("shell.group")}</span>
-                      <CustomSelect
-                        value={modalGroup}
-                        options={groups.map((g) => ({ value: g.key, label: groupLabel(g) }))}
-                        onChange={(v) => setModalGroup(Number(v))}
-                        ariaLabel={t("shell.group")}
-                        disabled={groups.length === 0}
-                      />
-                    </div>
-                  )
+                  <div className="group-pick compact">
+                    <span>{t("shell.group")}</span>
+                    <CustomSelect
+                      value={modalGroup}
+                      options={groups.map((g) => ({ value: g.key, label: groupLabel(g) }))}
+                      onChange={(v) => setModalGroup(Number(v))}
+                      ariaLabel={t("shell.group")}
+                      disabled={groups.length === 0}
+                    />
+                  </div>
                 }
                 skillsSlot={
                   editingBot ? (
@@ -2745,7 +2777,6 @@ const logout = (): void => {
 
 function MessageBubble({
   msg,
-  speaker,
   accent,
   mentions,
   onMentionClick,
@@ -2754,9 +2785,12 @@ function MessageBubble({
   onReact,
   onQuote,
   onCopy,
+  canRegenerate,
+  onRegenerate,
+  canEditResend,
+  onEditResend,
 }: {
   msg: Msg;
-  speaker: UiBot | null;
   accent: string;
   mentions?: MentionTable;
   onMentionClick?: (botKey: number) => void;
@@ -2766,6 +2800,12 @@ function MessageBubble({
   onReact: (msgId: number, emoji: Emoji) => void;
   onQuote: (msg: Msg) => void;
   onCopy: (text: string) => void;
+  /** G6: only the latest assistant reply offers 重新生成. */
+  canRegenerate?: boolean;
+  onRegenerate?: () => void;
+  /** G6: only the latest user message offers 编辑重发 (prefills the composer). */
+  canEditResend?: boolean;
+  onEditResend?: (text: string) => void;
 }): JSX.Element {
   const isUser = msg.from === "user";
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -2807,21 +2847,16 @@ function MessageBubble({
 
   return (
     <div className={"msg-row" + (isUser ? " user" : " bot")}>
-      {!isUser && speaker && (
-        <AvatarView avatar={speaker.avatar} variant="inline" size={34} />
-      )}
       <div className="hover-wrap">
-        {!isUser && speaker ? (
-          <div className="sender-line">
-            <span className="sender-name" style={{ color: avatarColor(speaker.avatar) }}>
-              {speaker.bot.name}
-            </span>
-          </div>
-        ) : null}
         <div
           className={"msg-bubble" + (isUser ? " user" : "")}
           style={isUser ? { background: accent, color: readableTextColor(accent) } : undefined}
         >
+          {msg.meta !== undefined && (
+            <span className="msg-meta">
+              {msg.meta === "regenerate" ? t("chat.regeneratedMark") : t("chat.editedResendMark")}
+            </span>
+          )}
           {msg.quote && (
             <div className="msg-quote">
               {t("shell.quotedMessage", [msg.quote.name, msg.quote.text])}
@@ -2967,6 +3002,45 @@ function MessageBubble({
             />
           </svg>
         </button>
+        {!isUser && canRegenerate === true && onRegenerate !== undefined && (
+          <button
+            type="button"
+            className="msg-icon-btn"
+            data-action="regenerate"
+            title={t("shell.regenerateTitle")}
+            onClick={onRegenerate}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                d="M20 12a8 8 0 1 1-2.34-5.66M20 4v4h-4"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </button>
+        )}
+        {isUser && canEditResend === true && onEditResend !== undefined && (
+          <button
+            type="button"
+            className="msg-icon-btn"
+            data-action="edit-resend"
+            title={t("shell.editResendTitle")}
+            onClick={() => onEditResend(msg.text)}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                d="m4 20 1.2-4.2L16.4 4.6a2 2 0 0 1 2.8 0l.2.2a2 2 0 0 1 0 2.8L8.2 18.8 4 20Z"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </button>
+        )}
       </div>
     </div>
   );
@@ -3007,7 +3081,7 @@ function BotsPlaceholder({
   onQuote: (msg: Msg) => void;
   onPairQuote: (name: string, text: string) => void;
   onCancelQuote: () => void;
-  onSend: (text: string, attachments?: Msg["attachments"]) => void;
+  onSend: (text: string, attachments?: Msg["attachments"], meta?: Msg["meta"]) => void;
   onReact: (msgId: number, emoji: Emoji) => void;
   onTalkTo: (otherKey: number) => void;
   onCopy: (text: string) => void;
@@ -3034,12 +3108,6 @@ function BotsPlaceholder({
   const [plusOpen, setPlusOpen] = useState(false);
   const [detailOther, setDetailOther] = useState<number | null>(null);
   const [stream, setStream] = useState<StreamStateForBot | null>(null);
-  /**
-   * The user's own request for the running turn: the thinking line derives its
-   * copy from it. Kept beside `stream` because `StreamState` is a pure model the
-   * reducer tests pin.
-   */
-  const [streamRequest, setStreamRequest] = useState<string>("");
   const [failedText, setFailedText] = useState("");
   const [answeredQuestions, setAnsweredQuestions] = useState<AnsweredQuestionMap>({});
   const [clarify, setClarify] = useState<ClarifyTarget | null>(null);
@@ -3047,6 +3115,8 @@ function BotsPlaceholder({
   const [pendingFiles, setPendingFiles] = useState<AttachmentDraft[]>([]);
   const [skills, setSkills] = useState<Skill[]>(() => listSkills(window.localStorage));
   const [skillMenuOpen, setSkillMenuOpen] = useState(false);
+  /** G6: a pending 编辑重发 labels the next sent user bubble. */
+  const [pendingMeta, setPendingMeta] = useState<Msg["meta"] | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const streamRef = useRef<StreamHandle | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
@@ -3061,7 +3131,6 @@ function BotsPlaceholder({
     }
     return table;
   }, [bots]);
-
   const applySkillToDraft = (skill: Skill): void => {
     setDraft((prev) => applySkill(skill, prev));
     setSkillMenuOpen(false);
@@ -3236,7 +3305,6 @@ function BotsPlaceholder({
       streamRef.current.cancel();
     }
     const forKey = me.key;
-    setStreamRequest(text);
     setStream({ ...emptyStream(), forKey });
     onBotStatus(me.bot.id, "running");
     const started = runChatStream({
@@ -3314,11 +3382,30 @@ function BotsPlaceholder({
       kind: classifyAttachment(f.mime, f.name),
       ...(f.dataUrl !== undefined ? { dataUrl: f.dataUrl } : {}),
     }));
-    onSend(text, outgoing.length > 0 ? outgoing : undefined);
+    onSend(text, outgoing.length > 0 ? outgoing : undefined, pendingMeta ?? undefined);
+    setPendingMeta(null);
     setPendingFiles([]);
     setFailedText(text);
     setDraft("");
     startChatStream(text);
+  };
+
+  /** G6: 重新生成 — re-ask the latest user question as a new labelled turn. */
+  const regenerate = (): void => {
+    const lastUser = [...msgs].reverse().find((m) => m.from === "user" && !m.system);
+    if (lastUser === undefined) {
+      return;
+    }
+    onSend(lastUser.text, undefined, "regenerate");
+    setFailedText(lastUser.text);
+    startChatStream(lastUser.text);
+  };
+
+  /** G6: 编辑重发 — prefill the composer; the next send carries the label. */
+  const editResend = (text: string): void => {
+    setPendingMeta("edited_resend");
+    setDraft(text);
+    inputRef.current?.focus();
   };
 
   const retryStream = (): void => {
@@ -3342,6 +3429,11 @@ function BotsPlaceholder({
     setFailedText(option.label);
     startChatStream(option.label);
   };
+
+  // G6: only the newest user question may regenerate and only the newest user
+  // message may be edited-resent — older ones stay historical record.
+  const lastBotMsgId = [...msgs].reverse().find((m) => m.from === "bot" && !m.system)?.id;
+  const lastUserMsgId = [...msgs].reverse().find((m) => m.from === "user" && !m.system)?.id;
 
   return (
     <div
@@ -3368,8 +3460,6 @@ function BotsPlaceholder({
             !m.system &&
             !m.notice &&
             (!prev || prev.system || m.time - prev.time > 5 * 60 * 1000);
-          const speaker =
-            m.from === "bot" ? bots.find((b) => b.key === (m.speakerKey ?? me.key)) ?? me : null;
           return (
             <Fragment key={m.id}>
               {showTime && <div className="chat-time">{formatChatTime(m.time)}</div>}
@@ -3432,7 +3522,6 @@ function BotsPlaceholder({
                     ...m,
                     choices: m.choices,
                   }}
-                  speaker={speaker}
                   accent={avatarColor(me.avatar)}
                   mentions={mentionTable}
                   onMentionClick={onOpenBot}
@@ -3443,6 +3532,10 @@ function BotsPlaceholder({
                   onReact={onReact}
                   onQuote={onQuote}
                   onCopy={onCopy}
+                  canRegenerate={m.id === lastBotMsgId}
+                  onRegenerate={regenerate}
+                  canEditResend={m.id === lastUserMsgId}
+                  onEditResend={editResend}
                 />
               )}
             </Fragment>
@@ -3468,21 +3561,35 @@ function BotsPlaceholder({
             ))}
             {(stream.text || (!stream.failure && !stream.cancelled)) && (
               <div className="msg-row bot streaming">
-                <div className="hover-wrap">
-                  <div className="msg-bubble">
-                    {stream.text || <ThinkingLine request={streamRequest} />}
-                    {!stream.failure && !stream.cancelled && (
-                      <button
-                        type="button"
-                        className="stream-cancel"
-                        title={t("shell.cancel")}
-                        onClick={() => streamRef.current?.cancel()}
-                      >
-                        {t("shell.cancel")}
-                      </button>
-                    )}
+                {stream.text ? (
+                  <div className="hover-wrap">
+                    <div className="msg-bubble">
+                      {stream.text}
+                      {!stream.failure && !stream.cancelled && (
+                        <button
+                          type="button"
+                          className="stream-cancel"
+                          title={t("shell.cancel")}
+                          onClick={() => streamRef.current?.cancel()}
+                        >
+                          {t("shell.cancel")}
+                        </button>
+                      )}
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  <div className="stream-pending">
+                    <ThinkingLine botId={me.bot.id} avatar={me.avatar} />
+                    <button
+                      type="button"
+                      className="stream-cancel"
+                      title={t("shell.cancel")}
+                      onClick={() => streamRef.current?.cancel()}
+                    >
+                      {t("shell.cancel")}
+                    </button>
+                  </div>
+                )}
               </div>
             )}
             {stream.failure && (

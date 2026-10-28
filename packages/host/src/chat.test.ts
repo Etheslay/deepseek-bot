@@ -259,6 +259,37 @@ describe("chat runtime", () => {
     expect(history.messages.map((m) => m.role)).toEqual(["user", "assistant", "user", "assistant"]);
   });
 
+  it("reports live turn progress from real harness events", async () => {
+    const { host, botId } = await hostWithBot("slow-tool");
+    const idle = (await host.handleMethod("chat.status", { botId })) as { active: boolean };
+    expect(idle.active).toBe(false);
+    const sent = host.handleMethod("chat.send", { botId, text: "write hello.txt" });
+    // Poll until the turn's tool stage shows up — the fake harness holds the
+    // tool/call for 400ms, so the stage is observable, not raced.
+    const sawTool = await new Promise<boolean>((resolve) => {
+      const started = Date.now();
+      const timer = setInterval(() => {
+        void host
+          .handleMethod("chat.status", { botId })
+          .then((status) => {
+            const view = status as { active: boolean; stage: string; toolName?: string };
+            if (view.stage === "tool" && view.toolName === "write") {
+              clearInterval(timer);
+              resolve(true);
+            } else if (Date.now() - started > 3_000) {
+              clearInterval(timer);
+              resolve(false);
+            }
+          })
+          .catch(() => undefined);
+      }, 25);
+    });
+    expect(sawTool).toBe(true);
+    expect((await sent) as unknown).toBeDefined();
+    const settled = (await host.handleMethod("chat.status", { botId })) as { active: boolean };
+    expect(settled.active).toBe(false);
+  });
+
   it("rejects unknown bots and reports cancel state", async () => {
     const { host } = await hostWithBot();
     await expect(

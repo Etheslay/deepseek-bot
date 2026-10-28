@@ -212,6 +212,26 @@ async function handleLine(line) {
         status("running");
         return;
       }
+      if (scenario === "slow-tool") {
+        // Lingers between tool/call and tool/result so live progress polls
+        // can observe the tool stage deterministically.
+        sessionEvent({ type: "agent/inbox/spliced", data: { inserted: [{ id: messageId }] } });
+        sessionEvent({
+          type: "tool/call",
+          data: { callId: "call-1", name: "write", arguments: { path: "hello.txt" } },
+        });
+        await new Promise((resolve) => setTimeout(resolve, 400));
+        sessionEvent({
+          type: "tool/result",
+          data: {
+            callId: "call-1",
+            isError: false,
+            meta: { operation: "write", path: "hello.txt" },
+          },
+        });
+        emitTurnCompletion(messageId, "fake final response");
+        return;
+      }
       const text =
         scenario === "echo-model"
           ? `model=${initializeParams.model} provider=${initializeParams.provider} cwd=${initializeParams.cwd}\n${lastPrompt}`

@@ -399,6 +399,14 @@ export function RunMonitor(props: { onClose: () => void }): JSX.Element {
                 <RunHistory
                   view={view}
                   onOpenRun={(runId) => void openRun(runId)}
+                  onResume={async (runId) => {
+                    // G14: interrupted runs resume into a new run (run.resume);
+                    // the monitor jumps to it so the recovery is visible.
+                    const next = await runs.resume(runId);
+                    setNotice(t("runs.resumedNotice", [next.id.slice(0, 8)]));
+                    void openRun(next.id);
+                    return next;
+                  }}
                 />
               )}
             </>

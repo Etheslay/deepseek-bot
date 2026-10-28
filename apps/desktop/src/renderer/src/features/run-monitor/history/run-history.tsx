@@ -2,9 +2,11 @@
  * Run history tab (D09 brief §2.1 history/, FR-07): the immutable workflow
  * version snapshot, bot snapshots, artifacts with checksums, and the Harness
  * sessionId entry per node attempt. Interrupted runs show the interruption
- * reason and a pointer to the recovery run (`resumedFromRunId`).
+ * reason, a pointer to the recovery run (`resumedFromRunId`) and, since G14,
+ * the 恢复运行 entry: a two-step confirm that resumes into a new run.
  */
-import type { JSX } from "react";
+import { useState, type JSX } from "react";
+import type { Run } from "@deepseek-bot/contracts";
 import type { RunView } from "../events/run-view.js";
 import { runStatusLabel } from "../run-list/run-list.js";
 import { formatFullDateTime, t } from "../../../i18n.js";
@@ -16,11 +18,35 @@ function formatBytes(size: number): string {
 export function RunHistory(props: {
   view: RunView;
   onOpenRun: (runId: string) => void;
+  /** run.resume for interrupted runs; omitted when the surface is read-only. */
+  onResume?: (runId: string) => Promise<Run>;
 }): JSX.Element {
   const { view, onOpenRun } = props;
   const run = view.run;
   const snapshot = run.workflowSnapshot;
   const resumedFrom = run.resumedFromRunId;
+  // Two-step confirm (PRD §5): resuming replays in-flight nodes, so the
+  // button first states the consequence and only the second click resumes.
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const resume = (): void => {
+    if (props.onResume === undefined) return;
+    setBusy(true);
+    setError(null);
+    props
+      .onResume(run.id)
+      .then((next) => {
+        setConfirming(false);
+        onOpenRun(next.id);
+      })
+      .catch((err: unknown) => {
+        const message = err instanceof Error ? err.message : String(err);
+        setError(`${t("runs.resumeFailed")}：${message}`);
+      })
+      .finally(() => setBusy(false));
+  };
 
   return (
     <div className="rm-history">
@@ -129,6 +155,34 @@ export function RunHistory(props: {
               {t("runs.interruptReason")}{view.interruptedReason ?? t("runs.hostProcessExited")}{t("runs.resumeNote")}
             </p>
           )}
+          {view.status === "interrupted" && props.onResume !== undefined && (
+            confirming ? (
+              <div className="rm-resume-confirm">
+                <p className="rm-sub">{t("runs.resumeConfirmNote")}</p>
+                <button
+                  type="button"
+                  className="primary-btn"
+                  disabled={busy}
+                  onClick={resume}
+                >
+                  {t("runs.resumeConfirm")}
+                </button>
+                <button
+                  type="button"
+                  className="ghost-btn"
+                  disabled={busy}
+                  onClick={() => setConfirming(false)}
+                >
+                  {t("shell.cancel")}
+                </button>
+              </div>
+            ) : (
+              <button type="button" className="pill-btn" onClick={() => setConfirming(true)}>
+                {t("runs.resumeAction")}
+              </button>
+            )
+          )}
+          {error !== null && <p className="form-error" role="alert">{error}</p>}
           {resumedFrom !== undefined && (
             <p className="rm-sub">
               {t("runs.resumedFrom")}

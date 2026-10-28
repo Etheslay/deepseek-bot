@@ -818,6 +818,10 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
       return { cancelled };
     },
 
+    // Polled by the renderer's pending status line; stages are real harness
+    // events only (see ChatManager.status).
+    "chat.status": (payload) => chat.status(payload.botId),
+
     /**
      * v0.5 manager orchestration. task.dispatch is the gateway-internal
      * surface for the dispatch_task tool: the dispatcher re-checks the
