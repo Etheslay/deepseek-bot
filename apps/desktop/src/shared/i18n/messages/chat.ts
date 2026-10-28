@@ -7,6 +7,10 @@ export const chatMessages = {
   "chat.artifactPreview": { zh: "产物预览", en: "Artifact preview" },
   "chat.authFailed": { zh: "认证失败，请检查 API 配置。", en: "Authentication failed; please check the API configuration." },
   "chat.awaitingApproval": { zh: "等待审批", en: "Awaiting approval" },
+  "chat.budgetExhausted": {
+    zh: "账户余额不足或额度已用尽，重试不会有结果。请到 DeepSeek 开放平台充值后再发送。",
+    en: "The account balance or quota is exhausted, so retrying will not help. Top up on the DeepSeek platform, then send again.",
+  },
   "chat.cancelled": { zh: "已取消。", en: "Cancelled." },
   "chat.codeLabel": { zh: "代码", en: "Code" },
   "chat.collapseHistory": { zh: "收起历史", en: "Hide history" },

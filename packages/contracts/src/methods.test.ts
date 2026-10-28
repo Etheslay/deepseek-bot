@@ -27,9 +27,11 @@ describe("method whitelist", () => {
   it("defines a contract for every whitelisted method and nothing else", () => {
     const contractMethods = Object.keys(METHOD_CONTRACTS).sort();
     expect(contractMethods).toEqual([...METHODS].sort());
-    // develop (with the voice backend, PR #113) is 115; this slice adds
-    // search.global.
-    expect(METHODS).toHaveLength(118);
+    const contractMethods = Object.keys(METHOD_CONTRACTS).sort();
+    expect(contractMethods).toEqual([...METHODS].sort());
+    // develop (with voice, search.global and usage.summary) is 117; this
+    // slice adds voice.config.get/set.
+    expect(METHODS).toHaveLength(119);
   });
 
   it("covers every method group from CONTRACTS §3", () => {
@@ -61,6 +63,7 @@ describe("method whitelist", () => {
       "task",
       "tool",
       "trigger",
+      "usage",
       "voice",
       "workflow",
     ]);

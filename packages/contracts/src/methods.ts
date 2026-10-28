@@ -55,6 +55,7 @@ import { CapabilityIdSchema, PERMISSION_METHODS } from "./permissions.js";
 import { SCREEN_METHODS } from "./screen.js";
 import { DEVICE_METHODS } from "./device.js";
 import { VOICE_METHODS } from "./voice.js";
+import { USAGE_METHODS } from "./usage.js";
 
 export const MAX_MESSAGE_BYTES = 1_048_576;
 
@@ -234,6 +235,7 @@ export const METHODS = [
   "voice.speak",
   "voice.config.get",
   "voice.config.set",
+  "usage.summary",
 ] as const;
 
 export type Method = (typeof METHODS)[number];
@@ -1574,6 +1576,7 @@ export const METHOD_CONTRACTS = {
   ...SCREEN_METHODS,
   ...DEVICE_METHODS,
   ...VOICE_METHODS,
+  ...USAGE_METHODS,
 } as const satisfies Record<
   Method,
   { request: z.ZodType; response: z.ZodType }

@@ -1168,10 +1168,25 @@ body {
   flex: 0 0 200px;
   display: flex;
   flex-direction: column;
-  gap: 0.2rem;
+  gap: 0.55rem;
   padding: 1rem 0.6rem;
   background: var(--sidebar);
   border-right: 1px solid var(--border);
+}
+
+/* grouped nav: each group is a label plus its items, a step apart */
+.settings-nav-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.settings-nav-group-label {
+  padding: 0 0.6rem 0.15rem;
+  color: var(--muted);
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
 .settings-nav-item {
@@ -7545,9 +7560,12 @@ select:focus-visible {
   margin: 0;
   padding: 0;
   overflow: hidden;
-  border: 1px solid #4a4a52;
+  border: 1px solid #55555e;
   border-radius: 999px;
-  background: #000;
+  /* Off reads as a dark gray track in BOTH themes: the previous black track
+     made the dark knob disappear, and the light-theme override that forced a
+     gray track made on and off indistinguishable. */
+  background: #3f3f47;
   color: transparent;
   font-size: 0;
   line-height: 0;
@@ -7563,28 +7581,30 @@ select:focus-visible {
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  background: #111;
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.42);
+  background: #f2f2f6;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
   transform: none;
   transition: left 140ms ease, background-color 140ms ease, box-shadow 140ms ease;
 }
 
 .settings-switch.on,
 .notify-bot > .notify-mute-switch.on {
-  background: #fff;
-  border-color: #fff;
+  /* On is blue in both themes, so the state is told apart by hue, not by
+     whether the card happens to be white. */
+  background: #2f7de0;
+  border-color: #2f7de0;
 }
 
 .settings-switch.on .settings-switch-knob,
 .notify-bot > .notify-mute-switch.on .notify-mute-knob {
   left: calc(100% - 20px - 3px);
   background: #fff;
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.16), 0 1px 2px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
 }
 
 .settings-switch:focus-visible,
 .notify-bot > .notify-mute-switch:focus-visible {
-  outline: 2px solid #fff;
+  outline: 2px solid #2f7de0;
   outline-offset: 2px;
 }
 
@@ -7595,7 +7615,7 @@ select:focus-visible {
 
 .settings-switch.on:hover,
 .notify-bot > .notify-mute-switch.on:hover {
-  border-color: #fff;
+  border-color: #5b9be8;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -7605,37 +7625,19 @@ select:focus-visible {
   }
 }
 
-/* Light settings cards are white. A white track vanishes, and a pale gray
-   track fades into the page. Both states use a solid mid gray with a dark
-   border. The knob still slides: dark and left when off, white and right
-   when on. */
+/* Light theme keeps the same two hues as dark - a dark gray track when off,
+   blue when on - and both sit clearly on a white card, so there is no longer a
+   per-state override. That override is what had made on and off look identical
+   in light mode. The only light-theme touch is a faint outer ring, so the dark
+   track reads as a control rather than a hole punched in the card. */
 [data-theme="light"] .settings-switch,
-[data-theme="light"] .notify-bot > .notify-mute-switch,
+[data-theme="light"] .notify-bot > .notify-mute-switch {
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.08);
+}
+
 [data-theme="light"] .settings-switch.on,
-[data-theme="light"] .notify-bot > .notify-mute-switch.on,
-[data-theme="light"] .settings-switch:hover,
-[data-theme="light"] .notify-bot > .notify-mute-switch:hover,
-[data-theme="light"] .settings-switch.on:hover,
-[data-theme="light"] .notify-bot > .notify-mute-switch.on:hover {
-  background: #9a9aa4;
-  border-color: #2a2a32;
-}
-
-[data-theme="light"] .settings-switch .settings-switch-knob,
-[data-theme="light"] .notify-bot > .notify-mute-switch .notify-mute-knob {
-  background: #1b1b1f;
-  box-shadow: none;
-}
-
-[data-theme="light"] .settings-switch.on .settings-switch-knob,
-[data-theme="light"] .notify-bot > .notify-mute-switch.on .notify-mute-knob {
-  background: #fff;
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.22), 0 1px 2px rgba(0, 0, 0, 0.28);
-}
-
-[data-theme="light"] .settings-switch:focus-visible,
-[data-theme="light"] .notify-bot > .notify-mute-switch:focus-visible {
-  outline-color: #1b1b1f;
+[data-theme="light"] .notify-bot > .notify-mute-switch.on {
+  box-shadow: 0 0 0 1px rgba(47, 125, 224, 0.18);
 }
 
 .notify-bot-list,
@@ -8394,4 +8396,255 @@ select:focus-visible {
 
 .task-hop {
   border: none !important;
+}
+
+/* ============================================================
+   Settings → 用量与账单: token totals, daily trend, model table, share ring
+   ============================================================ */
+
+.usage-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  padding-top: 0.6rem;
+}
+
+.usage-controls {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+.usage-range {
+  display: inline-flex;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--panel);
+}
+
+.usage-chip {
+  font: inherit;
+  font-size: 0.76rem;
+  padding: 3px 12px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.usage-chip:hover:not(:disabled) {
+  color: var(--text);
+}
+
+.usage-chip.active {
+  background: var(--item-hover);
+  color: var(--text);
+}
+
+.usage-chip:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.usage-cards {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.usage-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0.6rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--raised);
+  min-width: 0;
+}
+
+.usage-card-value {
+  font-size: 1.25rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.usage-card-label {
+  color: var(--muted);
+  font-size: 0.76rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.usage-note,
+.usage-error {
+  font-size: 0.76rem;
+  color: var(--muted);
+}
+
+.usage-error {
+  color: #f87171;
+}
+
+.usage-empty {
+  color: var(--muted);
+  font-size: 0.85rem;
+  padding: 0.6rem 0;
+}
+
+.usage-chart-card,
+.usage-table-card {
+  padding: 0.6rem 0.9rem 0.5rem;
+}
+
+/* the ring sits beside the model table so the card does not grow tall */
+.usage-table-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.4rem 1rem;
+}
+
+.usage-table-card > .usage-table {
+  grid-column: 1;
+}
+
+.usage-table-card > .usage-share-wrap {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+@media (max-width: 720px) {
+  .usage-table-card {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .usage-table-card > .usage-share-wrap {
+    grid-column: 1;
+    grid-row: 2;
+  }
+}
+
+.usage-legend {
+  display: inline-flex;
+  gap: 0.9rem;
+  font-size: 0.74rem;
+  color: var(--muted);
+}
+
+.usage-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.usage-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  margin-right: 6px;
+}
+
+.usage-dot-input {
+  background: #6ea8ff;
+}
+
+.usage-dot-output {
+  background: #7fdbca;
+}
+
+.usage-trend {
+  width: 100%;
+  height: 120px;
+  margin-top: 0.35rem;
+  overflow: visible;
+}
+
+.usage-axis {
+  stroke: var(--border);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.usage-line {
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.usage-line-input {
+  stroke: #6ea8ff;
+}
+
+.usage-line-output {
+  stroke: #7fdbca;
+}
+
+.usage-axis-labels {
+  display: flex;
+  justify-content: space-between;
+  color: var(--muted);
+  font-size: 0.7rem;
+}
+
+.usage-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+
+.usage-table th {
+  text-align: left;
+  color: var(--muted);
+  font-weight: 500;
+  font-size: 0.74rem;
+  padding: 2px 6px;
+  border-bottom: 1px solid var(--border);
+}
+
+.usage-table td {
+  padding: 5px 6px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 45%, transparent);
+  white-space: nowrap;
+}
+
+.usage-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.usage-share-wrap {
+  display: flex;
+  justify-content: center;
+  padding: 0.5rem 0 0.2rem;
+}
+
+.usage-ring {
+  width: 130px;
+  height: 130px;
+}
+
+.usage-ring-total {
+  fill: var(--text);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.usage-ring-unit {
+  fill: var(--muted);
+  font-size: 9px;
+}
+
+@media (max-width: 1180px) {
+  .usage-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
