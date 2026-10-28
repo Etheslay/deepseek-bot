@@ -408,6 +408,18 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
   const bridgePackageDir = existsSync(join(packagedBridge, "package.json"))
     ? packagedBridge
     : fileURLToPath(new URL("../../harness-bridge/", import.meta.url));
+  // G2: stage the approval bridge into the pinned "sdk" profile once at
+  // startup. Chat turns staged it lazily and workflow runs never did, so the
+  // profile mounted the dsb-approval-bridge row without the package and the
+  // pinned harness reported "entry did not activate" — no approval channel.
+  // The copy-based install is idempotent; a failure keeps the previous
+  // lazy-staging behavior and is recorded in the local diagnostics.
+  try {
+    prepareAppToolProfile({ dshHome: layout.harnessHome, bridgePackageDir });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    process.stderr.write(`[host] approval bridge staging failed: ${message}\n`);
+  }
   // UI language for Host-authored copy (dispatcher notices, chat turn errors,
   // canvas conflicts, ask_user labels): seeded from the settings KV (the
   // desktop pushes the resolved preference via settings.update) and mutable

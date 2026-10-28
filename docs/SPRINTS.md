@@ -97,7 +97,8 @@
 | D17 技能与模板 | **渲染层已交付**。技能注入与能力强制见下一行。工作流模板与 Host 持久化仍未做 | `feature/skills-templates` → `292c3b8`、PR #48 `2ecb2f9` | [D17-report](reports/D17-report.md) |
 | D17 技能注入与能力强制 | **切片交付**：已保存的技能随 `chat.send` 交给 Host 注入本轮；声明的能力 id 由工具网关在授权前限制。技能库仍在渲染层 localStorage。工作流模板未做。自审未填 | `feature/d17-skill-injection` | [D17-skill-injection-report](reports/D17-skill-injection-report.md) |
 | D27 本地语音后端 | **已交付（PR #113）**：`voice.status` / `voice.transcribe` / `voice.speak`（协议 0.9），whisper.cpp 本地转写 + Windows SAPI 播报，剪辑不落盘不外发；麦克风采集/断句/播放接线与真实模型分发归后续 | `feature/voice-local-backend-8c21` → PR #113 `6ecd1b3` | [D27-voice-backend-report](reports/D27-voice-backend-report.md) |
-| D27 语音配置持久化 | 后端切片已实现待合并：`voice.config.get` / `voice.config.set` 受信方法，whisper 路径写入 settings KV 即时生效、重启恢复（环境变量只是启动种子）；桌面设置页可据此接线 | `feature/voice-config-kv-c4d2` | [D27-voice-config-report](reports/D27-voice-config-report.md) |
+| D27 语音配置持久化 | **已交付（PR #118）**：`voice.config.get` / `voice.config.set` 受信方法，whisper 路径写入 settings KV 即时生效、重启恢复（环境变量只是启动种子）；桌面设置页可据此接线 | `feature/voice-config-kv-c4d2` → PR #118 `94bc05d` | [D27-voice-config-report](reports/D27-voice-config-report.md) |
+| G2 审批桥激活 | 后端切片已实现待合并：Host 启动时把 harness-bridge 幂等装入钉扎 sdk profile，工作流与聊天全部启动路径可解析插件行，消除 `entry did not activate`；真实 Harness 告警消失归真机复核 | `feature/g2-bridge-staging-e8f4` | [G2-bridge-activation-report](reports/G2-bridge-activation-report.md) |
 | D25 host 检索 | 后端切片已实现待合并：`search.global` 受信方法（跨 bot 消息/产物/工作流/bot 名，字面子串、有界摘要）；渲染层接线归桌面后续 | `feature/d25-host-search-5f3a` | [D25-host-search-report](reports/D25-host-search-report.md) |
 | D18 记忆写入 / 检索 / 删除 | 已交付 | `feature/memory-knowledge` → PR #57 `7de305b` | [D18-memory-report](reports/D18-memory-report.md) |
 | D18 知识导入（.txt/.md，16 KiB 上限） | 已交付 | `feature/knowledge-import` → PR #59 `9805b6a` | [D18-knowledge-import-report](reports/D18-knowledge-import-report.md) |
