@@ -1,6 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { NodeExecutionError } from "@deepseek-bot/runtime";
-import type { AuthorizedAction, NodePermissionHandle, ToolActionRequest } from "@deepseek-bot/runtime";
+import type {
+  AuthorizedAction,
+  NodePermissionHandle,
+  ToolActionRequest,
+} from "@deepseek-bot/runtime";
 import {
   decide,
   startApprovalBridgeServer,
@@ -33,7 +37,11 @@ function stubGate(resolveWith: StubGate["resolveWith"] = "allow"): StubGate {
       if (resolveWith === "throw-unexpected") {
         throw new Error("gate exploded");
       }
-      return { approvalId: null, actionDigest: "digest", resource: "resource" } satisfies AuthorizedAction;
+      return {
+        approvalId: null,
+        actionDigest: "digest",
+        resource: "resource",
+      } satisfies AuthorizedAction;
     },
   };
   return { handle, actions, resolveWith };
@@ -78,7 +86,9 @@ describe("decide", () => {
 
   it("fails closed on unknown sessions, unmapped tools and malformed asks", async () => {
     const gate = stubGate();
-    expect((await decide(writeAsk, registryWith("other-session", gate))).outcome).toBe("unavailable");
+    expect((await decide(writeAsk, registryWith("other-session", gate))).outcome).toBe(
+      "unavailable",
+    );
     expect(
       (await decide({ ...writeAsk, toolName: "mystery_tool" }, registryWith("session-1", gate)))
         .outcome,
@@ -98,6 +108,10 @@ describe("decide", () => {
 
 describe("startApprovalBridgeServer", () => {
   let bridge: RunningApprovalBridge | undefined;
+  afterEach(async () => {
+    await bridge?.close();
+    bridge = undefined;
+  });
 
   async function started(gate: StubGate, sessionId = "session-1"): Promise<RunningApprovalBridge> {
     bridge = await startApprovalBridgeServer({ sessions: registryWith(sessionId, gate) });
@@ -108,6 +122,7 @@ describe("startApprovalBridgeServer", () => {
     const gate = stubGate();
     bridge = await started(gate);
     expect(bridge.url.startsWith("http://127.0.0.1:")).toBe(true);
+    expect(Number(new URL(bridge.url).port)).toBeGreaterThanOrEqual(49152);
     const response = await fetch(`${bridge.url}/approval-requests`, {
       method: "POST",
       headers: { authorization: `Bearer ${bridge.token}`, "content-type": "application/json" },

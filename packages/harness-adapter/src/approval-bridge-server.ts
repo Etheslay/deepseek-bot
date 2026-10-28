@@ -21,6 +21,7 @@ import { randomUUID, timingSafeEqual } from "node:crypto";
 import { NodeExecutionError } from "@deepseek-bot/runtime";
 import type { SessionGateResolver } from "./dsh-executor.js";
 import { mapHarnessToolCall } from "./tool-mapping.js";
+import { listenOnPrivateHttpPort } from "./loopback.js";
 
 /** Outcome vocabulary of the upstream approval seam. */
 export type BridgeOutcome = "allowed-once" | "rejected" | "cancelled" | "unavailable";
@@ -67,8 +68,7 @@ export function startApprovalBridgeServer(
   });
 
   return new Promise((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(0, "127.0.0.1", () => {
+    void listenOnPrivateHttpPort(server).then(() => {
       const address = server.address();
       if (address === null || typeof address === "string") {
         reject(new Error("approval bridge server did not bind a port"));
@@ -83,7 +83,7 @@ export function startApprovalBridgeServer(
             server.close(() => resolveClose());
           }),
       });
-    });
+    }, reject);
   });
 }
 
@@ -157,11 +157,7 @@ export async function decide(
   sessions: SessionGateResolver,
 ): Promise<ApprovalBridgeDecision> {
   const { sessionId, toolName, callId } = bridgeRequest;
-  if (
-    typeof sessionId !== "string" ||
-    typeof toolName !== "string" ||
-    typeof callId !== "string"
-  ) {
+  if (typeof sessionId !== "string" || typeof toolName !== "string" || typeof callId !== "string") {
     return { outcome: "unavailable", reason: "ask is missing sessionId, toolName or callId" };
   }
   const registered = sessions(sessionId);
