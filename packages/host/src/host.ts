@@ -461,8 +461,24 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
       nativeGate: (input) =>
         new ChatNativeGate({
           permissions,
-          network: (caller, action) =>
-            chatNetworkPermissions(caller).authorize(action),
+          network: (caller, action) => {
+            if (action.kind !== "network.request" || action.url === undefined) {
+              return Promise.reject(
+                new NodeExecutionError({
+                  code: "INVALID_INPUT",
+                  message: "chat network ask is missing a url",
+                  retryable: false,
+                }),
+              );
+            }
+            return chatNetworkPermissions(caller).authorize({
+              kind: "network.request",
+              callId: action.callId,
+              toolName: action.toolName,
+              url: action.url,
+              arguments: action.arguments as Readonly<Record<string, unknown>>,
+            }) as Promise<{ approvalId: string | null; resource: string }>;
+          },
           botId: input.botId,
           sessionId: input.sessionId,
           signal: input.signal,

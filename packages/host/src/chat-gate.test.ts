@@ -209,7 +209,6 @@ describe("ChatNativeGate", () => {
         arguments: {},
       }),
     ).rejects.toBeInstanceOf(NodeExecutionError);
-    const controller = new AbortController();
     const next = gate.authorize({
       kind: "file.read",
       callId: "call-8",

@@ -76,8 +76,21 @@ export class ChatNativeGate {
           commandParams(action),
           action,
         );
-      case "network.request":
-        return this.options.network(this.caller, action);
+      case "network.request": {
+        const forwarded = await this.options.network(this.caller, action);
+        return {
+          approvalId: forwarded.approvalId,
+          actionDigest: computeActionDigest({
+            runId: this.options.sessionId,
+            nodeRunId: this.options.sessionId,
+            kind: action.kind,
+            toolName: action.toolName,
+            resource: resourceOf(action),
+            args: action.arguments,
+          }),
+          resource: forwarded.resource,
+        };
+      }
       case "mcp.call":
         return this.checkCapability(
           "mcp_call",
