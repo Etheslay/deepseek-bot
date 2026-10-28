@@ -27,7 +27,7 @@
 
 ## 3. 实现方案
 
-### 3.1 存储（迁移 `0022-chat-summaries`）
+### 3.1 存储（迁移 `0023-chat-summaries`）
 
 ```sql
 CREATE TABLE chat_summaries (

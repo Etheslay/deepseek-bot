@@ -105,6 +105,29 @@ export function recordUsage(db: OpenedDatabase, input: UsageEventInput): void {
     );
 }
 
+/** The context meter's numerator: the most recent turn's usage for one bot. */
+export function getLatestUsageForBot(
+  db: OpenedDatabase,
+  botId: string,
+): { inputTokens: number; source: "harness" | "estimated"; occurredAt: string } | undefined {
+  const row = db.raw
+    .prepare(
+      "SELECT input_tokens, source, occurred_at FROM usage_events " +
+        "WHERE bot_id = ? ORDER BY occurred_at DESC, rowid DESC LIMIT 1;",
+    )
+    .get(botId) as
+    | { input_tokens: number; source: string; occurred_at: string }
+    | undefined;
+  if (row === undefined) {
+    return undefined;
+  }
+  return {
+    inputTokens: row.input_tokens,
+    source: row.source === "harness" ? "harness" : "estimated",
+    occurredAt: row.occurred_at,
+  };
+}
+
 interface SqlAggregateRow {
   key: string | null;
   name: string | null;
