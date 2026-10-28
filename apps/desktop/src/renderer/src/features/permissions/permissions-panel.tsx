@@ -137,8 +137,8 @@ export function PermissionsPanel() {
         return (
           <div className="settings-row" key={policy.capability}>
             <span>{capabilityLabel(policy.capability)}</span>
-            {/* A native <select> cannot drop the Windows blue selection wash, so
-                this uses the app's own list, styled like the choice card. */}
+            {/* A native select cannot drop the Windows blue selection wash, so
+                this uses the shared CustomSelect list. */}
             <CustomSelect
               value={policy.mode}
               options={choices.map((mode) => ({ value: mode, label: t(MODE_LABEL_KEYS[mode]) }))}

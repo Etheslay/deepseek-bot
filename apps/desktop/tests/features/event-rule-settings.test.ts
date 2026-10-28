@@ -136,17 +136,22 @@ async function renderPanel(): Promise<HTMLDivElement> {
   return container;
 }
 
-function selectByLabel(container: ParentNode, label: string): HTMLSelectElement {
+function selectByLabel(container: ParentNode, label: string): HTMLButtonElement {
   const select = container.querySelector(`[aria-label="${label}"]`);
-  if (!(select instanceof HTMLSelectElement)) throw new Error(`missing select ${label}`);
+  if (!(select instanceof HTMLButtonElement)) throw new Error(`missing select ${label}`);
   return select;
 }
 
-async function choose(select: HTMLSelectElement, value: string): Promise<void> {
+async function choose(container: ParentNode, label: string, value: string): Promise<void> {
   await act(async () => {
-    const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")?.set;
-    setter?.call(select, value);
-    select.dispatchEvent(new Event("change", { bubbles: true }));
+    selectByLabel(container, label).dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  });
+  const option = document.querySelector<HTMLButtonElement>(
+    `.custom-select-item[data-value="${value}"]`,
+  );
+  if (!(option instanceof HTMLButtonElement)) throw new Error(`missing option ${value} on ${label}`);
+  await act(async () => {
+    option.dispatchEvent(new MouseEvent("click", { bubbles: true }));
   });
 }
 
@@ -394,7 +399,7 @@ describe("event rule settings", () => {
     await vi.waitFor(() => {
       expect(selectByLabel(container, "机器人").disabled).toBe(false);
     });
-    await choose(selectByLabel(container, "机器人"), BOT_B);
+    await choose(container, "机器人", BOT_B);
     await vi.waitFor(() => {
       expect(container.textContent).toContain("Beta 规则");
     });

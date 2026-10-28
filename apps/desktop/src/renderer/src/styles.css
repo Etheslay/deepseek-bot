@@ -24,6 +24,13 @@
   --shadow-2: 0 12px 34px rgba(0, 0, 0, 0.45);
   --shadow-3: 0 14px 44px rgba(0, 0, 0, 0.55);
   --shadow-4: 0 18px 60px rgba(0, 0, 0, 0.5);
+  /* Dropdown option states. Same black/white pair as the per-bot mute switch. */
+  --dropdown-hover-bg: #000;
+  --dropdown-hover-fg: #fff;
+  --dropdown-hover-border: #4a4a52;
+  --dropdown-selected-bg: #fff;
+  --dropdown-selected-fg: #000;
+  --dropdown-focus: #fff;
 }
 
 :root[data-theme="light"] {
@@ -46,6 +53,13 @@
   --shadow-2: 0 12px 34px rgba(30, 30, 45, 0.13);
   --shadow-3: 0 14px 44px rgba(30, 30, 45, 0.15);
   --shadow-4: 0 18px 60px rgba(30, 30, 45, 0.18);
+  /* Swap the pair so a chosen row stays visible on a white menu. */
+  --dropdown-hover-bg: #fff;
+  --dropdown-hover-fg: #000;
+  --dropdown-hover-border: #000;
+  --dropdown-selected-bg: #000;
+  --dropdown-selected-fg: #fff;
+  --dropdown-focus: #000;
 }
 
 * {
@@ -2224,7 +2238,7 @@ body {
   border-color: #2dd4bf;
 }
 
-/* native dropdown lists follow the active theme */
+/* Closed-list colours. Chosen and hovered options are dropdown-option-selection. */
 select option {
   background-color: var(--input-bg);
   color: var(--text);
@@ -2507,17 +2521,8 @@ select option {
   text-align: left;
 }
 
-.custom-select-item:hover {
-  background: var(--item-hover);
-}
-
-.custom-select-item.current {
-  background: var(--item-active);
-  color: var(--text);
-}
-
 .custom-select-item .menu-check {
-  color: var(--muted);
+  color: currentColor;
 }
 
 .avatar-minimal {
@@ -6976,54 +6981,100 @@ button.msg-attachment-file {
   font-weight: 600;
 }
 
-/* ---------- dropdowns: the selection matches the A/B/C/D choice card ----------
-   Two complaints in one place. The open list marked its current entry with a
-   tinted highlight, and focusing a trigger left a bright #8ab4ff ring behind
-   after the menu closed. The selected entry now wears the same neutral wash the
-   choice card uses for a chosen option — rgba(127,127,127,.14), and
-   rgba(15,23,42,.06) on the light theme — and the focus cue is a border colour
-   change, so nothing glows. Covers the custom selects and the native ones in
-   the permissions panel. */
-.custom-select-item.current,
-select option:checked {
-  background: rgba(127, 127, 127, 0.14);
-  color: var(--text);
+/* ---------- dropdown-option-selection ----------
+   One treatment for every dropdown option that can look chosen, hovered, or
+   focused: the custom listbox, a native <option>, and text selection inside
+   either. Colours come only from --dropdown-*, the same black/white pair as
+   the per-bot mute switch. A chosen row is the solid "on" colour and wins
+   over hover. A hovered row is the solid "off" colour. Focus is a monochrome
+   ring, never the system blue. Native <option> rules repeat the fill with an
+   inset shadow because Chromium paints its popup highlight under author
+   backgrounds; Windows' native popup ignores option CSS, which is why the
+   remaining controls use CustomSelect. */
+select,
+.custom-select-menu {
+  accent-color: var(--dropdown-selected-bg);
 }
 
-[data-theme="light"] .custom-select-item.current,
-[data-theme="light"] select option:checked {
-  background: rgba(15, 23, 42, 0.06);
-}
-
-/* Hover sits one step below the selection so the current entry still reads as
-   the current one while the pointer is elsewhere in the list. */
-.custom-select-item:hover {
-  background: rgba(127, 127, 127, 0.1);
-}
-
-[data-theme="light"] .custom-select-item:hover {
-  background: rgba(15, 23, 42, 0.04);
-}
-
-.custom-select-trigger:focus-visible,
-.custom-select-item:focus-visible,
-select:focus-visible {
+.custom-select-item:hover,
+.custom-select-item:focus,
+select option:hover,
+select option:focus,
+select option:active {
+  background-color: var(--dropdown-hover-bg);
+  color: var(--dropdown-hover-fg);
+  box-shadow: inset 0 0 0 1px var(--dropdown-hover-border);
   outline: none;
 }
 
+select option:hover,
+select option:focus,
+select option:active {
+  background-color: var(--dropdown-hover-bg) !important;
+  background-image: linear-gradient(var(--dropdown-hover-bg), var(--dropdown-hover-bg)) !important;
+  box-shadow: inset 0 0 0 100px var(--dropdown-hover-bg) !important;
+  color: var(--dropdown-hover-fg) !important;
+}
+
+.custom-select-item:focus-visible {
+  outline: 2px solid var(--dropdown-focus);
+  outline-offset: -2px;
+}
+
+.custom-select-item.current,
+.custom-select-item[aria-selected="true"],
+.custom-select-item.current:hover,
+.custom-select-item.current:focus,
+.custom-select-item.current:focus-visible,
+.custom-select-item[aria-selected="true"]:hover,
+.custom-select-item[aria-selected="true"]:focus,
+.custom-select-item[aria-selected="true"]:focus-visible,
+select option:checked,
+select option:checked:hover,
+select option:checked:focus,
+select option:checked:active {
+  background-color: var(--dropdown-selected-bg);
+  background-image: none;
+  color: var(--dropdown-selected-fg);
+  box-shadow: none;
+}
+
+select option:checked,
+select option:checked:hover,
+select option:checked:focus,
+select option:checked:active {
+  background-color: var(--dropdown-selected-bg) !important;
+  background-image: linear-gradient(
+    var(--dropdown-selected-bg),
+    var(--dropdown-selected-bg)
+  ) !important;
+  box-shadow: inset 0 0 0 100px var(--dropdown-selected-bg) !important;
+  color: var(--dropdown-selected-fg) !important;
+}
+
+.custom-select-item.current:focus-visible,
+.custom-select-item[aria-selected="true"]:focus-visible {
+  outline: 2px solid var(--dropdown-selected-fg);
+  outline-offset: -2px;
+}
+
+.custom-select-item::selection,
+select option::selection {
+  background: var(--dropdown-focus);
+  color: var(--dropdown-selected-fg);
+}
+
+.custom-select-item.current::selection,
+.custom-select-item[aria-selected="true"]::selection,
+select option:checked::selection {
+  background: var(--dropdown-selected-fg);
+  color: var(--dropdown-selected-bg);
+}
+
 .custom-select-trigger:focus-visible,
 select:focus-visible {
+  outline: none;
   border-color: var(--muted);
-}
-
-/* Keyboard navigation inside the open list still needs a visible cursor, but a
-   neutral one: the same wash the pointer gets. */
-.custom-select-item:focus-visible {
-  background: rgba(127, 127, 127, 0.14);
-}
-
-[data-theme="light"] .custom-select-item:focus-visible {
-  background: rgba(15, 23, 42, 0.06);
 }
 
 /* ---------- D28 产物画布共编侧车 ---------- */
