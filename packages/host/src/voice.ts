@@ -26,7 +26,6 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-  VOICE_MAX_AUDIO_BASE64_CHARS,
   VOICE_MAX_CLIP_BYTES,
   VOICE_MAX_CLIP_SECONDS,
   VOICE_SAMPLE_RATE,
