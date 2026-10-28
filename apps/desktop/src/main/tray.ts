@@ -35,6 +35,15 @@ export function createTrayController(deps: {
   const tray = new Tray(deps.defaultIcon());
   let state: TraySyncPayload | null = null;
   let disposed = false;
+  /**
+   * Serialised form of the last payload actually applied. The renderer pushes a
+   * sync whenever any of its tray inputs change identity, which happens far more
+   * often than the tray's contents change - each push rebuilt the whole menu,
+   * re-set the icon and the tooltip, and (when the shell had refused the icon in
+   * the first place) logged two warnings per push, about once a second. Equal
+   * payloads are now dropped instead.
+   */
+  let appliedKey: string | null = null;
 
   const strings = () => ({
     show: tr("d22.trayShow"),
@@ -59,11 +68,17 @@ export function createTrayController(deps: {
     return image.isEmpty() ? null : image;
   };
 
-  const apply = (): void => {
+  const apply = (force = false): void => {
     if (disposed) {
       return;
     }
-    const rows = buildTrayMenu(state ?? { activeBotId: null, bots: [] }, strings());
+    const next = state ?? { activeBotId: null, bots: [] };
+    const key = JSON.stringify(next);
+    if (!force && key === appliedKey) {
+      return;
+    }
+    appliedKey = key;
+    const rows = buildTrayMenu(next, strings());
     const template: MenuItemConstructorOptions[] = rows.map((row) => {
       if (row.type === "separator") {
         return { type: "separator" as const };
@@ -86,7 +101,7 @@ export function createTrayController(deps: {
     const icon = state === null ? null : trayIconFor(state);
     const image = iconFromDataUrl(icon);
     tray.setImage(image ?? deps.defaultIcon());
-    tray.setToolTip(trayTooltip(state ?? { activeBotId: null, bots: [] }, deps.appName, strings()));
+    tray.setToolTip(trayTooltip(next, deps.appName, strings()));
   };
 
   const handle = (action: TrayMenuAction): void => {
@@ -128,7 +143,9 @@ export function createTrayController(deps: {
     win?.focus();
   });
 
-  const offLanguageChange = onMainLanguageChange(apply);
+  // A language change rewrites every label while the payload is unchanged, so
+  // it has to bypass the dedupe below.
+  const offLanguageChange = onMainLanguageChange(() => apply(true));
   apply();
 
   return {
