@@ -13,7 +13,12 @@ import {
   setEventRuleEnabled,
   setEventRuleReview,
 } from "@deepseek-bot/storage";
-import { approveEventRuleReview, denyEventRuleReview, evaluateEventRules } from "./event-rules.js";
+import {
+  approveEventRuleReview,
+  denyEventRuleReview,
+  evaluateEventRules,
+  type EventRuleNotice,
+} from "./event-rules.js";
 import { WorkflowEngine } from "./engine.js";
 import {
   botNode,
@@ -80,6 +85,44 @@ function seedEvent(
 }
 
 describe("local event rules", () => {
+  it("emits one notice per started/skipped outcome and survives a throwing hook", () => {
+    const { db, engine, botId, workflowId } = setup();
+    const notices: EventRuleNotice[] = [];
+    const rule = saveEventRule(db, {
+      botId,
+      name: "通知规则",
+      workflowId,
+      eventType: "run.failed",
+    });
+    setEventRuleEnabled(db, { id: rule.id, botId, enabled: true });
+    seedEvent(db, botId, randomUUID(), "run.failed");
+    const fired = evaluateEventRules(db, engine, { onRuleOutcome: (n) => notices.push(n) });
+    expect(fired.started).toBe(1);
+    expect(notices).toHaveLength(1);
+    expect(notices[0]).toMatchObject({
+      ruleId: rule.id,
+      botId,
+      ruleName: "通知规则",
+      outcome: "started",
+    });
+    expect(notices[0]?.runId).not.toBeNull();
+
+    // A throwing notice sink must never break the evaluation.
+    seedEvent(db, botId, randomUUID(), "run.failed");
+    const throwing = evaluateEventRules(db, engine, {
+      onRuleOutcome: () => {
+        throw new Error("notice sink blew up");
+      },
+    });
+    expect(throwing.started).toBe(1);
+
+    setEventRuleEnabled(db, { id: rule.id, botId, enabled: false });
+    seedEvent(db, botId, randomUUID(), "run.failed");
+    const skippedPass = evaluateEventRules(db, engine, { onRuleOutcome: (n) => notices.push(n) });
+    expect(skippedPass.skipped).toBe(1);
+    expect(notices[1]).toMatchObject({ outcome: "skipped", reason: "rule disabled" });
+    db.close();
+  });
   it("starts one run for one matching local event and ignores an earlier event", () => {
     const { db, engine, botId, workflowId } = setup();
     const earlier = randomUUID();

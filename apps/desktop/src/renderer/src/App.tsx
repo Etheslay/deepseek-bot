@@ -18,6 +18,7 @@ import { MemoryPanel } from "./features/memory/memory-panel.js";
 import { SearchSettings } from "./features/search/search-settings.js";
 import { ConnectorSettings } from "./features/connectors/connector-settings.js";
 import { AutomationPanel } from "./features/automation/automation-panel.js";
+import { ChatAutomationNotice } from "./features/automation/chat-automation-notice.js";
 import { EventRuleSettings } from "./features/event-rules/event-rule-settings.js";
 import { PermissionsPanel } from "./features/permissions/permissions-panel.js";
 import { ScreenSettings } from "./features/screen/screen-settings.js";
@@ -1709,6 +1710,9 @@ const logout = (): void => {
             </span>
           )}
         </div>
+        {/* Only the bot list scrolls: the identity block above and the account
+            row below stay put no matter how many bots are added. */}
+        <div className="sidebar-scroll">
         {groups.map((g) => {
           const members = bots.filter((b) => b.group === g.key);
           return (
@@ -1864,6 +1868,7 @@ const logout = (): void => {
             </div>
           );
         })}
+        </div>
         {updateStatus?.available && (
           <button
             type="button"
@@ -2040,6 +2045,10 @@ const logout = (): void => {
                   botName: bot.bot.name,
                   path: relativePath,
                 });
+              }}
+              onOpenAutomation={() => {
+                setSettingsOpen(true);
+                setSettingsSection("general");
               }}
               skillContext={(botId) => skillsForInjection(botId, skillLibrary)}
               onOpenBot={(botKey) => {
@@ -3258,6 +3267,7 @@ function BotsPlaceholder({
   onTogglePrimitive,
   deepThinking,
   onToggleDeepThinking,
+  onOpenAutomation,
 }: {
   bots: UiBot[];
   groups: Group[];
@@ -3299,6 +3309,8 @@ function BotsPlaceholder({
   /** Deep thinking (G5): the bot's model profile, toggled from the composer. */
   deepThinking: boolean;
   onToggleDeepThinking: () => void;
+  /** D20': jump from the chat automation notice to the settings panel. */
+  onOpenAutomation: () => void;
 }): JSX.Element {
   const service = useService();
   const [draft, setDraft] = useState("");
@@ -3726,6 +3738,7 @@ function BotsPlaceholder({
       <p className="sys-line" aria-live="polite">
         {t("shell.staticPlaceholderNotice")}
       </p>
+      <ChatAutomationNotice botId={me.bot.id} onOpenAutomation={onOpenAutomation} />
       <div className="chat" ref={listRef}>
         {msgs.map((m, index) => {
           const prev = msgs[index - 1];

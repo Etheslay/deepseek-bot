@@ -492,6 +492,15 @@ export const ChatMessageMetaSchema = z.discriminatedUnion("kind", [
       resultSummary: z.string().max(2_000).optional(),
     })
     .strict(),
+  z
+    .object({
+      kind: z.literal("automation"),
+      ruleId: UuidSchema,
+      outcome: z.enum(["started", "skipped", "review", "enabled", "disabled", "deleted"]),
+      runId: UuidSchema.nullable(),
+      reason: z.string().max(200).optional(),
+    })
+    .strict(),
 ]);
 
 export type ChatMessageMeta = z.infer<typeof ChatMessageMetaSchema>;
