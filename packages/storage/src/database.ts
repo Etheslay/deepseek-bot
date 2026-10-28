@@ -774,6 +774,29 @@ ALTER TABLE connectors_mcp RENAME TO connectors;
 CREATE INDEX connectors_created ON connectors(created_at);
 `,
   },
+  {
+    // Token usage accounting. One row per model turn that reported usage (or
+    // whose usage had to be estimated), so the settings page can total it and
+    // draw a trend without reading every message. bot_id is nullable because a
+    // turn may finish after its bot was deleted; the row is kept for totals.
+    id: 21,
+    name: "0021-usage-events",
+    sql: /* sql */ `
+CREATE TABLE usage_events (
+  id TEXT PRIMARY KEY,
+  bot_id TEXT REFERENCES bots(id),
+  model TEXT,
+  session_id TEXT,
+  occurred_at TEXT NOT NULL,
+  input_tokens INTEGER NOT NULL CHECK (input_tokens >= 0),
+  output_tokens INTEGER NOT NULL CHECK (output_tokens >= 0),
+  cached_input_tokens INTEGER NOT NULL DEFAULT 0 CHECK (cached_input_tokens >= 0),
+  source TEXT NOT NULL CHECK (source IN ('harness', 'estimated'))
+);
+CREATE INDEX usage_events_time ON usage_events(occurred_at);
+CREATE INDEX usage_events_bot_time ON usage_events(bot_id, occurred_at);
+`,
+  },
 
 ];
 

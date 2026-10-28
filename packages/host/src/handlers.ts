@@ -127,6 +127,7 @@ import {
 import { chatSessionIdFor, type ChatManager } from "./chat.js";
 import type { AttachmentIngress } from "./workspace-attachments.js";
 import { KNOWN_CAPABILITIES, policyKey, readPolicy, type PolicyLevel } from "./permissions.js";
+import { buildUsageSummary } from "./usage-summary.js";
 import { type TaskDispatcher } from "./task-dispatcher.js";
 import { createGrant, listGrants, revokeGrant, type GrantRow } from "@deepseek-bot/storage";
 import {
@@ -1519,5 +1520,14 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
         tasks: countTasks(db),
       },
     }),
+
+    /* Token usage accounting (v0.10). Read-only: rows are written by the chat
+       turn hook in host.ts, never by a renderer request. */
+    "usage.summary": (payload) =>
+      buildUsageSummary(db, {
+        ...(payload.botId !== undefined ? { botId: payload.botId } : {}),
+        ...(payload.days !== undefined ? { days: payload.days } : {}),
+        now: () => new Date(),
+      }),
   };
 }

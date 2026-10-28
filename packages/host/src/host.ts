@@ -71,6 +71,7 @@ import {
   incrementBootGeneration,
   listTasks,
   openDatabase,
+  recordUsage,
   type DataLayout,
   type OpenedDatabase,
 } from "@deepseek-bot/storage";
@@ -422,6 +423,24 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
       },
     },
     () => uiLocale.current,
+    (usage) => {
+      /* best-effort: a usage write must never break the reply path */
+      try {
+        recordUsage(db, {
+          id: randomUUID(),
+          botId: usage.botId,
+          model: usage.model,
+          sessionId: usage.sessionId,
+          occurredAt: new Date().toISOString(),
+          inputTokens: usage.inputTokens,
+          outputTokens: usage.outputTokens,
+          cachedInputTokens: usage.cachedInputTokens,
+          source: usage.estimated ? "estimated" : "harness",
+        });
+      } catch {
+        /* usage accounting is best-effort */
+      }
+    },
   );
   // v0.5 manager orchestration: dispatched-task queue + executor. The audit
   // sink is shared with the tool gateway so relay hops (which bypass the

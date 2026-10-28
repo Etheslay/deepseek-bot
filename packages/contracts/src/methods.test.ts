@@ -30,7 +30,7 @@ describe("method whitelist", () => {
     // develop is 112 (chat.attach, connector.setCommand, device.action.input
     // and device.action.input.list plus the attachment.begin/append/commit
     // closure); the voice backend adds voice.status/transcribe/speak.
-    expect(METHODS).toHaveLength(115);
+    expect(METHODS).toHaveLength(116);
   });
 
   it("covers every method group from CONTRACTS §3", () => {
@@ -62,6 +62,7 @@ describe("method whitelist", () => {
       "task",
       "tool",
       "trigger",
+      "usage",
       "voice",
       "workflow",
     ]);

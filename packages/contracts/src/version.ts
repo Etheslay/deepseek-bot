@@ -30,9 +30,12 @@
 // D17 adds optional chat.send skills inside 0.8. No protocol bump.
 // v0.9 adds the local voice backend (voice.transcribe, voice.speak,
 // voice.status); prior senders stay accepted.
-export const CONTRACT_VERSION = "0.9" as const;
+// v0.10 adds token usage accounting (usage.summary). Additive only: the method
+// is new, existing methods keep their semantics, and workflow documents are
+// unchanged, so 0.1–0.9 senders stay accepted.
+export const CONTRACT_VERSION = "0.10" as const;
 export const PROTOCOL_VERSION = CONTRACT_VERSION;
-/** Workflow documents did not change in v0.3–v0.9; keep the document version. */
+/** Workflow documents did not change in v0.3–v0.10; keep the document version. */
 export const WORKFLOW_SCHEMA_VERSION = "0.1" as const;
 
 export const SUPPORTED_PROTOCOL_VERSIONS: readonly string[] = [
@@ -44,6 +47,7 @@ export const SUPPORTED_PROTOCOL_VERSIONS: readonly string[] = [
   "0.6",
   "0.7",
   "0.8",
+  "0.9",
   PROTOCOL_VERSION,
 ];
 

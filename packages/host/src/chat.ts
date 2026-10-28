@@ -30,6 +30,7 @@ import type { ToolCaller } from "@deepseek-bot/agent-tools";
 import type { ApplicationToolTurn } from "./app-tool-channel.js";
 import type { UiLocale } from "./host.js";
 import { composeSkillBlock, skillCapabilityAllowlist } from "./skill-injection.js";
+import { TurnUsageAccumulator, type TurnUsage } from "./usage-capture.js";
 
 export function chatSessionIdFor(botId: string): string {
   return `chat:${botId}`;
@@ -114,6 +115,10 @@ export class ChatManager {
     private readonly tools: ChatToolWiring,
     /** Live UI language for Host-authored turn errors (settings.update { ui.locale }). */
     private readonly locale: () => UiLocale = () => "zh",
+    /** Receives the token usage of every finished turn (usage.summary source). */
+    private readonly onTurnUsage:
+      | ((usage: TurnUsage & { estimated: boolean; botId: string; sessionId: string }) => void)
+      | undefined = undefined,
   ) {}
 
   /** Live sessions (diagnostics / tests). */
@@ -160,7 +165,10 @@ export class ChatManager {
      * ("thinking"), a `tool/call` names the tool now executing, a
      * `tool/result` hands control back to the model ("thinking" again).
      */
+    const turnUsage = new TurnUsageAccumulator();
     const observeEvent = (event: SessionEventEnvelope): void => {
+      /* usage rides on its own frames, independent of progress state */
+      turnUsage.observe(event);
       const current = session.progress;
       if (current === null) {
         return;
@@ -246,6 +254,19 @@ export class ChatManager {
       const prompt = this.composePrompt(bot, text, history, skills);
       const outcome = await attempt.runTurn(sessionId, prompt, controller.signal, observeEvent);
       session.lastSessionId = sessionId;
+      /*
+       * Accounting must never fail a turn: a usage write error is swallowed so
+       * the reply the user is waiting for still reaches them.
+       */
+      try {
+        this.onTurnUsage?.({
+          ...turnUsage.finish(prompt, outcome.finalResponse),
+          botId: bot.id,
+          sessionId,
+        });
+      } catch {
+        /* usage accounting is best-effort */
+      }
       return { ...outcome, sessionId };
     } finally {
       controller.abort();
