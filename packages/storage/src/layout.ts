@@ -28,6 +28,8 @@ export interface DataLayout {
   readonly connectorOutputs: string;
   /** Selected-window captures and OCR (D21); not part of the metadata backup. */
   readonly screenOutputs: string;
+  /** Performed pointer and key actions (D21); not part of the metadata backup. */
+  readonly deviceOutputs: string;
 }
 
 /**
@@ -43,9 +45,7 @@ export function resolveDataRoot(options?: { appDataDir?: string }): string {
   }
   const appData = resolvePlatformAppData();
   if (appData === undefined) {
-    throw invalidInput(
-      "cannot resolve the application data directory; pass appDataDir explicitly",
-    );
+    throw invalidInput("cannot resolve the application data directory; pass appDataDir explicitly");
   }
   return normalizeRoot(path.join(appData, DATA_ROOT_DIR_NAME));
 }
@@ -61,9 +61,7 @@ function resolvePlatformAppData(): string | undefined {
   }
   if (process.platform === "linux") {
     const xdg = process.env["XDG_DATA_HOME"];
-    return xdg !== undefined && xdg !== ""
-      ? xdg
-      : path.join(osHomeDir(), ".local", "share");
+    return xdg !== undefined && xdg !== "" ? xdg : path.join(osHomeDir(), ".local", "share");
   }
   return undefined;
 }
@@ -98,6 +96,7 @@ export function ensureDataLayout(root: string): DataLayout {
     credentials: path.join(root, "credentials"),
     connectorOutputs: path.join(root, "connector-outputs"),
     screenOutputs: path.join(root, "screen-outputs"),
+    deviceOutputs: path.join(root, "device-outputs"),
   };
   try {
     const stat = fs.statSync(layout.root);
@@ -121,6 +120,7 @@ export function ensureDataLayout(root: string): DataLayout {
     layout.credentials,
     layout.connectorOutputs,
     layout.screenOutputs,
+    layout.deviceOutputs,
   ]) {
     try {
       fs.mkdirSync(dir, { recursive: true });

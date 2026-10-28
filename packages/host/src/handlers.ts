@@ -109,6 +109,7 @@ import type { AgentPermissionService } from "./agent-permissions.js";
 import type { McpService } from "./mcp.js";
 import type { ScreenService } from "./screen.js";
 import type { DeviceActionService } from "./device.js";
+import type { DeviceInputService } from "./device-input.js";
 import type { WorkspaceArtifacts } from "./artifacts.js";
 import {
   DEFAULT_MODEL_PROFILE_ID,
@@ -142,6 +143,7 @@ export interface HostContext {
   readonly mcp: McpService;
   readonly screen: ScreenService;
   readonly device: DeviceActionService;
+  readonly deviceInput: DeviceInputService;
   readonly db: OpenedDatabase;
   readonly engine: WorkflowEngine;
   readonly scheduler: LocalScheduler;
@@ -199,7 +201,9 @@ function displayAskUserOption(
  * user saw it (D forced), persisted when the answer arrives so a restart
  * replays a coherent "bot asked / user answered" context for the model.
  */
-const ASKED_QUESTION_FRAMING: Readonly<Record<UiLocale, (question: string, lines: string) => string>> = {
+const ASKED_QUESTION_FRAMING: Readonly<
+  Record<UiLocale, (question: string, lines: string) => string>
+> = {
   zh: (question, lines) => `【向用户提问】${question}\n${lines}`,
   en: (question, lines) => `[Asked the user] ${question}\n${lines}`,
 };
@@ -352,7 +356,10 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
       if (policy.mode === "deny") context.permissions.denyCapability(policy.capability);
       if (policy.mode === "deny" && policy.capability === "mcp.call") context.mcp.invalidate({});
       if (policy.capability === "screen.capture") context.screen.invalidate();
-      if (policy.capability === "device.action") context.device.invalidate();
+      if (policy.capability === "device.action") {
+        context.device.invalidate();
+        context.deviceInput.invalidate();
+      }
       return policy;
     },
     "permission.grant.list": (payload) => ({
@@ -856,7 +863,9 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
         questions: context.userQuestions.listPending(chatSessionIdFor(bot.id)).map((request) => ({
           requestId: request.requestId,
           question: request.question,
-          options: request.options.map((option) => displayAskUserOption(option, context.locale.current)),
+          options: request.options.map((option) =>
+            displayAskUserOption(option, context.locale.current),
+          ),
           allowOther: request.allowOther,
           expiresAt: request.expiresAt,
         })),
@@ -1278,6 +1287,8 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
         })),
       };
     },
+    "device.action.input": (payload) => context.deviceInput.input(payload.botId, payload.input),
+    "device.action.input.list": (payload) => context.deviceInput.list(payload.botId, payload.limit),
 
     "connector.list": () => ({
       connectors: listConnectors(db).map((row) => ({

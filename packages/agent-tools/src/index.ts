@@ -62,6 +62,7 @@ export {
   type DeviceActionResult,
   type DeviceActionStore,
 } from "./device.js";
+export { bindDeviceInputTool, type DeviceInputStore } from "./device-input.js";
 export {
   bindTaskTools,
   DispatchTaskInputSchema,

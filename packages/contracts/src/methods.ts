@@ -186,6 +186,8 @@ export const METHODS = [
   "screen.result.delete",
   "device.action.request",
   "device.action.list",
+  "device.action.input",
+  "device.action.input.list",
 ] as const;
 
 export type Method = (typeof METHODS)[number];
