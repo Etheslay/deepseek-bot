@@ -7526,7 +7526,8 @@ select:focus-visible {
 
 /* Sliding settings toggles, including per-bot mute. The track width is fixed
    so a label cannot grow the pill. The knob only slides inside the frame.
-   White track = on. Black track = off. */
+   On is a white track with a white knob. Off is a black track with a dark knob.
+   A black knob on the white track reads as off, so the on knob stays white. */
 .settings-switch,
 .notify-bot > .notify-mute-switch {
   appearance: none;
@@ -7562,9 +7563,10 @@ select:focus-visible {
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  background: #fff;
+  background: #111;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.42);
   transform: none;
-  transition: left 140ms ease, background-color 140ms ease;
+  transition: left 140ms ease, background-color 140ms ease, box-shadow 140ms ease;
 }
 
 .settings-switch.on,
@@ -7576,7 +7578,8 @@ select:focus-visible {
 .settings-switch.on .settings-switch-knob,
 .notify-bot > .notify-mute-switch.on .notify-mute-knob {
   left: calc(100% - 20px - 3px);
-  background: #141416;
+  background: #fff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.16), 0 1px 2px rgba(0, 0, 0, 0.4);
 }
 
 .settings-switch:focus-visible,
@@ -7600,6 +7603,39 @@ select:focus-visible {
   .notify-bot > .notify-mute-switch .notify-mute-knob {
     transition: none;
   }
+}
+
+/* Light settings cards are white. A white track vanishes, and a pale gray
+   track fades into the page. Both states use a solid mid gray with a dark
+   border. The knob still slides: dark and left when off, white and right
+   when on. */
+[data-theme="light"] .settings-switch,
+[data-theme="light"] .notify-bot > .notify-mute-switch,
+[data-theme="light"] .settings-switch.on,
+[data-theme="light"] .notify-bot > .notify-mute-switch.on,
+[data-theme="light"] .settings-switch:hover,
+[data-theme="light"] .notify-bot > .notify-mute-switch:hover,
+[data-theme="light"] .settings-switch.on:hover,
+[data-theme="light"] .notify-bot > .notify-mute-switch.on:hover {
+  background: #9a9aa4;
+  border-color: #2a2a32;
+}
+
+[data-theme="light"] .settings-switch .settings-switch-knob,
+[data-theme="light"] .notify-bot > .notify-mute-switch .notify-mute-knob {
+  background: #1b1b1f;
+  box-shadow: none;
+}
+
+[data-theme="light"] .settings-switch.on .settings-switch-knob,
+[data-theme="light"] .notify-bot > .notify-mute-switch.on .notify-mute-knob {
+  background: #fff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.22), 0 1px 2px rgba(0, 0, 0, 0.28);
+}
+
+[data-theme="light"] .settings-switch:focus-visible,
+[data-theme="light"] .notify-bot > .notify-mute-switch:focus-visible {
+  outline-color: #1b1b1f;
 }
 
 .notify-bot-list,
