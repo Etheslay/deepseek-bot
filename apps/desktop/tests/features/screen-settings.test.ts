@@ -126,9 +126,9 @@ function button(container: ParentNode, label: string): HTMLButtonElement {
   return found;
 }
 
-function selectByLabel(container: ParentNode, label: string): HTMLSelectElement {
+function selectByLabel(container: ParentNode, label: string): HTMLButtonElement {
   const select = container.querySelector(`[aria-label="${label}"]`);
-  if (!(select instanceof HTMLSelectElement)) throw new Error(`missing select ${label}`);
+  if (!(select instanceof HTMLButtonElement)) throw new Error(`missing select ${label}`);
   return select;
 }
 
@@ -138,11 +138,23 @@ async function click(container: ParentNode, label: string): Promise<void> {
   });
 }
 
-async function choose(select: HTMLSelectElement, value: string): Promise<void> {
+async function choose(container: ParentNode, label: string, value: string): Promise<void> {
+  let option = document.querySelector<HTMLButtonElement>(
+    `.custom-select-item[data-value="${value}"]`,
+  );
+  if (option === null) {
+    await act(async () => {
+      selectByLabel(container, label).dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    option = document.querySelector<HTMLButtonElement>(
+      `.custom-select-item[data-value="${value}"]`,
+    );
+  }
+  if (!(option instanceof HTMLButtonElement))
+    throw new Error(`missing option ${value} on ${label}`);
+  const chosen = option;
   await act(async () => {
-    const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")?.set;
-    setter?.call(select, value);
-    select.dispatchEvent(new Event("change", { bubbles: true }));
+    chosen.dispatchEvent(new MouseEvent("click", { bubbles: true }));
   });
 }
 
@@ -254,9 +266,18 @@ describe("screen settings panel", () => {
     await vi.waitFor(() => {
       expect(container.textContent).toContain("已刷新窗口列表");
     });
-    expect(container.querySelector("b")).toBeNull();
-    expect(container.textContent).toContain("Notes <b>secret</b>");
-    await choose(selectByLabel(container, "目标窗口"), WINDOW_A);
+    await act(async () => {
+      selectByLabel(container, "目标窗口").dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+    });
+    const title = document.querySelector<HTMLElement>(
+      `.custom-select-item[data-value="${WINDOW_A}"]`,
+    );
+    expect(title).not.toBeNull();
+    expect(title?.textContent).toBe("Notes <b>secret</b>");
+    expect(title?.querySelector("b")).toBeNull();
+    await choose(container, "目标窗口", WINDOW_A);
     await vi.waitFor(() => {
       expect(calls).toContainEqual({
         method: "screen.target.set",
@@ -398,7 +419,7 @@ describe("screen settings panel", () => {
       expect(button(container, "查看").disabled).toBe(false);
     });
     await click(container, "查看");
-    await choose(selectByLabel(container, "采集目标"), BOT_B);
+    await choose(container, "采集目标", BOT_B);
     await act(async () => {
       read.resolve({
         result: screenResult(),
@@ -443,13 +464,21 @@ describe("screen settings panel", () => {
     });
     await click(container, "刷新窗口");
     await vi.waitFor(() => {
-      expect(selectByLabel(container, "目标窗口").options.length).toBeGreaterThan(2);
+      expect(container.textContent).toContain("已刷新窗口列表");
+    });
+    await act(async () => {
+      selectByLabel(container, "目标窗口").dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+    });
+    await vi.waitFor(() => {
+      expect(document.querySelectorAll(".custom-select-item").length).toBeGreaterThan(2);
     });
     await click(container, "截图");
     await vi.waitFor(() => {
       expect(calls.some((call) => call.method === "screen.request")).toBe(true);
     });
-    await choose(selectByLabel(container, "目标窗口"), WINDOW_B);
+    await choose(container, "目标窗口", WINDOW_B);
     await act(async () => {
       capture.resolve(screenResult({ mode: "image", hasOcr: false, text: undefined }));
       await Promise.resolve();

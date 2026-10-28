@@ -15,6 +15,7 @@ import {
   type ScreenStatus,
   type ScreenWindow,
 } from "@deepseek-bot/contracts";
+import { CustomSelect } from "../../components/custom-select.js";
 import { noticeText, t, useLanguage, type Notice } from "../../i18n.js";
 import { SettingsSwitch } from "../system/notifications-panel.js";
 import { approvalChoices, approvalDecision } from "../permissions/permission-chat.js";
@@ -80,19 +81,13 @@ export function ScreenSettings(): JSX.Element {
           <>
             <div className="settings-row">
               <span>{t("screen.botLabel")}</span>
-              <select
-                className="settings-select"
-                aria-label={t("screen.botLabel")}
+              <CustomSelect
                 value={botId}
+                options={bots.map((bot) => ({ value: bot.id, label: bot.name }))}
+                ariaLabel={t("screen.botLabel")}
                 disabled={bots.length === 0}
-                onChange={(event) => setBotId(event.target.value)}
-              >
-                {bots.map((bot) => (
-                  <option key={bot.id} value={bot.id}>
-                    {bot.name}
-                  </option>
-                ))}
-              </select>
+                onChange={setBotId}
+              />
             </div>
             {bots.length === 0 ? <p role="status">{t("screen.noBots")}</p> : null}
             {botId !== "" ? <ScreenBotPanel key={botId} botId={botId} /> : null}
@@ -431,22 +426,19 @@ function ScreenBotPanel(props: { botId: string }): JSX.Element {
       <div className="settings-row">
         <span>{t("screen.windowLabel")}</span>
         <span className="key-input-wrap">
-          <select
-            className="settings-select"
-            aria-label={t("screen.windowLabel")}
+          <CustomSelect
             value={status?.target?.id ?? ""}
+            options={[
+              { value: "", label: t("screen.noWindow") },
+              ...windowOptions(windows, status?.target ?? null).map((item) => ({
+                value: item.id,
+                label: item.title,
+              })),
+            ]}
+            ariaLabel={t("screen.windowLabel")}
             disabled={status === null || !status.supported || capturing || acting}
-            onChange={(event) =>
-              chooseWindow(event.target.value === "" ? null : event.target.value)
-            }
-          >
-            <option value="">{t("screen.noWindow")}</option>
-            {windowOptions(windows, status?.target ?? null).map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.title}
-              </option>
-            ))}
-          </select>
+            onChange={(next) => chooseWindow(next === "" ? null : next)}
+          />
           <button
             type="button"
             className="pill-btn"
