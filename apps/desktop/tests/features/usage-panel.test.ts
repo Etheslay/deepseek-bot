@@ -145,4 +145,29 @@ describe("UsagePanel", () => {
     const chips = [...host.querySelectorAll<HTMLButtonElement>(".usage-chip")];
     expect(chips.find((chip) => chip.textContent === "当前 bot")?.disabled).toBe(true);
   });
+
+  it("keeps the chart and share sections on screen when there is no data", async () => {
+    installBridge(
+      summary({
+        totals: { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0, turns: 0, estimated: false },
+        byModel: [],
+        byDay: [],
+        byBot: [],
+      }),
+    );
+    const host = await mount("bot-1");
+    /* a page whose sections vanish reads as "the feature is missing" */
+    expect(host.querySelector(".usage-chart-card")).not.toBeNull();
+    expect(host.querySelector(".usage-pie-card")).not.toBeNull();
+    expect(host.querySelector(".usage-table-card")).not.toBeNull();
+    expect(host.querySelectorAll(".usage-chart-empty").length).toBe(2);
+  });
+
+  it("draws a date axis and a grid once there is a series", async () => {
+    installBridge(summary());
+    const host = await mount("bot-1");
+    expect(host.querySelectorAll(".usage-grid").length).toBeGreaterThanOrEqual(4);
+    expect(host.querySelectorAll(".usage-axis-label").length).toBeGreaterThanOrEqual(2);
+    expect(host.querySelector(".usage-legend-list li")).not.toBeNull();
+  });
 });

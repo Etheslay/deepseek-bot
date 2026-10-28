@@ -8648,3 +8648,168 @@ select:focus-visible {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* ============================================================
+   Usage page charts, v2
+   The first pass drew a 300x100 sparkline and a 130px ring squeezed beside the
+   table. This draws the two charts at reading size: a full-width trend with a
+   dashed grid and date axis, and a ring with its own legend rows (share,
+   absolute amount), then the table on its own underneath.
+   ============================================================ */
+
+.usage-chart-card {
+  padding: 10px 12px 8px;
+}
+
+.usage-trend {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin-top: 6px;
+  overflow: visible;
+}
+
+.usage-grid {
+  stroke: var(--border);
+  stroke-opacity: 0.45;
+  stroke-width: 1;
+  stroke-dasharray: 3 5;
+  vector-effect: non-scaling-stroke;
+}
+
+.usage-axis {
+  stroke: var(--border);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.usage-axis-label {
+  fill: var(--muted);
+  font-size: 11px;
+}
+
+.usage-line {
+  fill: none;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.usage-line-input {
+  stroke: #6ea8ff;
+}
+
+.usage-line-output {
+  stroke: #7fdbca;
+}
+
+.usage-point {
+  stroke: none;
+  fill: currentColor;
+}
+
+.usage-point.usage-line-input {
+  color: #6ea8ff;
+}
+
+.usage-point.usage-line-output {
+  color: #7fdbca;
+}
+
+.usage-pie-card {
+  padding: 14px 18px;
+}
+
+.usage-share {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 26px;
+  align-items: center;
+}
+
+.usage-share .usage-ring {
+  width: 100%;
+  max-width: 220px;
+  height: auto;
+}
+
+.usage-legend-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.usage-legend-list li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  column-gap: 8px;
+  align-items: baseline;
+  padding: 9px 2px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 45%, transparent);
+}
+
+.usage-legend-list li:last-child {
+  border-bottom: none;
+}
+
+.usage-legend-list .usage-dot {
+  grid-column: 1;
+  margin-right: 0;
+  align-self: center;
+}
+
+.usage-legend-name {
+  grid-column: 2;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.86rem;
+}
+
+.usage-legend-pct {
+  grid-column: 3;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.86rem;
+}
+
+.usage-legend-value {
+  grid-column: 2 / span 2;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* the table no longer shares its card with the ring */
+.usage-table-card {
+  display: block;
+}
+
+@media (max-width: 900px) {
+  .usage-share {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+    justify-items: center;
+  }
+
+  .usage-legend-list {
+    width: 100%;
+  }
+}
+
+/* four stat cards sit in one row from 720px up (the reference layout) */
+@media (min-width: 720px) {
+  .usage-cards {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+/* kept on screen with a placeholder rather than hiding the whole section */
+.usage-chart-empty {
+  color: var(--muted);
+  font-size: 0.82rem;
+  padding: 22px 2px;
+  text-align: center;
+}
