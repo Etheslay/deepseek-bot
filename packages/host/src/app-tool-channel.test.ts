@@ -47,8 +47,12 @@ async function setup(now?: () => Date) {
       headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
     });
-  const call = (tool: string, params: unknown = {}, callId: string = randomUUID(), physicalId = sessionId) =>
-    request("/app-tools/call", { sessionId: physicalId, callId, tool, params });
+  const call = (
+    tool: string,
+    params: unknown = {},
+    callId: string = randomUUID(),
+    physicalId = sessionId,
+  ) => request("/app-tools/call", { sessionId: physicalId, callId, tool, params });
   return { host, server, turn, controller, request, call, bot, sessionId };
 }
 async function pending(host: DeepSeekBotHost): Promise<AppApproval> {
@@ -72,7 +76,8 @@ async function approve(host: DeepSeekBotHost, approval: AppApproval, scope = "on
 }
 describe("authenticated chat application tool channel", () => {
   it("exports precisely the eleven application schemas and proves plugin readiness", async () => {
-    const { request, turn } = await setup();
+    const { request, turn, server } = await setup();
+    expect(Number(new URL(server.url).port)).toBeGreaterThanOrEqual(49152);
     const response = await request("/app-tools");
     const { tools } = (await response.json()) as {
       tools: Array<{ name: string; parameters: unknown }>;

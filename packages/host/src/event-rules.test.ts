@@ -6,6 +6,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
+import { fileURLToPath } from "node:url";
 import { afterAll, describe, expect, it } from "vitest";
 import { evaluateEventRules } from "@deepseek-bot/runtime";
 import { createHost, DEFAULT_MODEL_PROFILE_ID, type DeepSeekBotHost } from "./host.js";
@@ -26,6 +27,10 @@ async function makeHost(): Promise<DeepSeekBotHost> {
   roots.push(root);
   const host = await createHost({
     dataRoot: root,
+    dshBin: fileURLToPath(
+      new URL("../../harness-adapter/src/testing/fake-harness.mjs", import.meta.url),
+    ),
+    childEnv: (env) => ({ ...env, FAKE_SCENARIO: "ok" }),
     resolveApiKey: async () => "sk-test-not-used",
     triggers: { intervalMs: 3_600_000 },
   });
@@ -33,8 +38,13 @@ async function makeHost(): Promise<DeepSeekBotHost> {
   return host;
 }
 
-async function seedWorkflow(host: DeepSeekBotHost, name: string): Promise<{ workflowId: string; botId: string }> {
-  const policy = host.db.raw.prepare("SELECT id FROM tool_policies LIMIT 1;").get() as { id: string };
+async function seedWorkflow(
+  host: DeepSeekBotHost,
+  name: string,
+): Promise<{ workflowId: string; botId: string }> {
+  const policy = host.db.raw.prepare("SELECT id FROM tool_policies LIMIT 1;").get() as {
+    id: string;
+  };
   const ws = host.db.raw.prepare("SELECT id FROM workspaces LIMIT 1;").get() as { id: string };
   const bot = (await host.handleMethod("bot.create", {
     name: `${name}-bot`,
@@ -173,13 +183,19 @@ describe("eventRule host methods", () => {
         )
         .run(eventId, runId, at);
     }
-    expect(evaluateEventRules(host.db, host.engine)).toMatchObject({ started: 0, pending: 2, skipped: 0 });
+    expect(evaluateEventRules(host.db, host.engine)).toMatchObject({
+      started: 0,
+      pending: 2,
+      skipped: 0,
+    });
     const listed = (await host.handleMethod("eventRule.review.list", { botId: owned.botId })) as {
       items: Array<{ id: string; eventId: string; status: string }>;
     };
     expect(listed.items).toHaveLength(2);
     expect(listed.items.every((item) => item.status === "pending")).toBe(true);
-    const otherList = (await host.handleMethod("eventRule.review.list", { botId: other.botId })) as {
+    const otherList = (await host.handleMethod("eventRule.review.list", {
+      botId: other.botId,
+    })) as {
       items: unknown[];
     };
     expect(otherList.items).toEqual([]);
@@ -193,22 +209,27 @@ describe("eventRule host methods", () => {
     })) as { status: string; runId: string; eventId: string };
     expect(approved.status).toBe("approved");
     expect(approved.runId).toEqual(expect.any(String));
-    expect(
-      (host.db.raw.prepare("SELECT COUNT(*) AS n FROM runs;").get() as { n: number }).n,
-    ).toBe(runsBefore + 1);
+    expect((host.db.raw.prepare("SELECT COUNT(*) AS n FROM runs;").get() as { n: number }).n).toBe(
+      runsBefore + 1,
+    );
     await expect(
-      host.handleMethod("eventRule.review.approve", { botId: owned.botId, id: listed.items[0]!.id }),
+      host.handleMethod("eventRule.review.approve", {
+        botId: owned.botId,
+        id: listed.items[0]!.id,
+      }),
     ).rejects.toMatchObject({ code: "INVALID_INPUT" });
-    expect(
-      (host.db.raw.prepare("SELECT COUNT(*) AS n FROM runs;").get() as { n: number }).n,
-    ).toBe(runsBefore + 1);
+    expect((host.db.raw.prepare("SELECT COUNT(*) AS n FROM runs;").get() as { n: number }).n).toBe(
+      runsBefore + 1,
+    );
 
     const denied = (await host.handleMethod("eventRule.review.deny", {
       botId: owned.botId,
       id: listed.items[1]!.id,
     })) as { status: string; runId: null; eventId: string };
     expect(denied).toMatchObject({ status: "denied", runId: null });
-    const remaining = (await host.handleMethod("eventRule.review.list", { botId: owned.botId })) as {
+    const remaining = (await host.handleMethod("eventRule.review.list", {
+      botId: owned.botId,
+    })) as {
       items: unknown[];
     };
     expect(remaining.items).toEqual([]);
@@ -260,7 +281,9 @@ describe("eventRule host methods", () => {
       states: Array<{ ruleId: string; botId: string; state: string; at: string }>;
     };
     expect(listed.states.map((row) => row.state)).toEqual(["review", "disabled", "enabled"]);
-    expect(listed.states.every((row) => row.ruleId === saved.id && row.botId === owned.botId)).toBe(true);
+    expect(listed.states.every((row) => row.ruleId === saved.id && row.botId === owned.botId)).toBe(
+      true,
+    );
     expect(listed.states.every((row) => row.at.length > 0)).toBe(true);
     const hidden = (await host.handleMethod("eventRule.state.list", { botId: other.botId })) as {
       states: unknown[];

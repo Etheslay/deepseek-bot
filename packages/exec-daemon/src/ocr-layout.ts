@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import layout from "./ocr-layout.json" with { type: "json" };
 
 export interface OcrLayout {
   pins: Record<string, string>;
@@ -9,8 +9,7 @@ export interface OcrLayout {
 }
 
 export function readOcrLayout(): OcrLayout {
-  const parsed = JSON.parse(
-    readFileSync(new URL("./ocr-layout.json", import.meta.url), "utf8"),
-  ) as OcrLayout;
-  return parsed;
+  // Static import lets the Host bundle retain the pinned layout without
+  // looking for an exec-daemon source file beside its distributed main.js.
+  return layout;
 }

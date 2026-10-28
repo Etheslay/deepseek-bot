@@ -3,7 +3,8 @@ import { lstat, mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { build } from "esbuild";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { createScreenBackend } from "./backend.js";
 import { MAX_OCR_TEXT_CHARS, MAX_PNG_BYTES } from "./limits.js";
@@ -116,6 +117,51 @@ describe("offline OCR resources", () => {
     expect(text).toContain("测试");
     expect(text.includes("\0")).toBe(false);
   }, 120_000);
+
+  it("recognizes offline when resources are shipped inside an ESM application", async () => {
+    const resourcesDirectory = await buildResources();
+    await writeFile(
+      path.join(resourcesDirectory, "..", "package.json"),
+      JSON.stringify({ type: "module" }),
+    );
+    const backend = createScreenBackend({ resourcesDirectory });
+    try {
+      const fixture = fileURLToPath(
+        new URL("../fixtures/synthetic-bilingual.png", import.meta.url),
+      );
+      const text = await backend.recognize(fixture, new AbortController().signal);
+      expect(text.toUpperCase()).toContain("HELLO");
+      expect(text).toContain("测试");
+    } finally {
+      backend.close();
+    }
+  }, 30_000);
+
+  it("runs the bundled backend without looking for source layout files", async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), "dsb-bundled-ocr-"));
+    scratch.push(directory);
+    const bundle = path.join(directory, "backend.mjs");
+    await build({
+      entryPoints: [path.join(packageRoot, "src/index.ts")],
+      outfile: bundle,
+      bundle: true,
+      platform: "node",
+      format: "esm",
+      target: "node24",
+      logLevel: "silent",
+    });
+    const fixture = fileURLToPath(new URL("../fixtures/synthetic-bilingual.png", import.meta.url));
+    const program = `import {createScreenBackend} from ${JSON.stringify(pathToFileURL(bundle).href)}; const backend=createScreenBackend({resourcesDirectory:process.argv[1]}); try {console.log(await backend.recognize(process.argv[2],new AbortController().signal));} finally {backend.close();}`;
+    const { stdout } = await exec(process.execPath, [
+      "--input-type=module",
+      "-e",
+      program,
+      built,
+      fixture,
+    ]);
+    expect(stdout.toUpperCase()).toContain("HELLO");
+    expect(stdout).toContain("测试");
+  }, 30_000);
 });
 
 async function buildResources(retain = false): Promise<string> {
@@ -140,6 +186,12 @@ async function linkImage(): Promise<string> {
   const target = path.join(directory, "target.png");
   const link = path.join(directory, "link.png");
   await writeFile(target, ONE_PIXEL);
-  await symlink(target, link);
+  // Windows file symlinks require Developer Mode/admin rights. A junction at
+  // the same input path exercises the same link rejection without skipping it.
+  await symlink(
+    process.platform === "win32" ? directory : target,
+    link,
+    process.platform === "win32" ? "junction" : "file",
+  );
   return link;
 }

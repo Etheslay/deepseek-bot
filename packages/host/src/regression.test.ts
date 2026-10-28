@@ -4,7 +4,7 @@
  * and QA-09 (host crash → recovery → resume carrying succeeded work).
  * Real-API legs of these scenarios run in the key-dependent QA campaign.
  */
-import { mkdirSync, mkdtempSync, readdirSync, readlinkSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -68,7 +68,10 @@ async function waitFor(
   }
 }
 
-function seedRefs(db: DeepSeekBotHost["db"], workspacePath: string): {
+function seedRefs(
+  db: DeepSeekBotHost["db"],
+  workspacePath: string,
+): {
   profileId: string;
   workspaceId: string;
   toolPolicyId: string;
@@ -121,7 +124,11 @@ async function started(
     dataRoot: root,
     resolveApiKey: async () => "test-key",
     dshBin: fakeHarness,
-    childEnv: (env) => ({ ...env, FAKE_SCENARIO: scenario }),
+    childEnv: (env) => ({
+      ...env,
+      FAKE_SCENARIO: scenario,
+      FAKE_RECORD_DIR: join(root, "fake-record"),
+    }),
   });
   hosts.push(host);
   return { host, refs: seedRefs(host.db, workspace) };
@@ -138,6 +145,45 @@ async function makeBot(host: DeepSeekBotHost, refs: ReturnType<typeof seedRefs>,
 }
 
 describe("D12 regression (fake harness, real orchestration)", () => {
+  it("releases a running workflow's owned process before shutdown returns", async () => {
+    const root = makeRoot();
+    const workspace = join(root, "workspace");
+    mkdirSync(workspace);
+    const { host, refs } = await started(root, workspace, "hang");
+    const bot = await makeBot(host, refs, "shutdown fixture");
+    const workflow = (await host.handleMethod("workflow.save", {
+      workflow: {
+        name: "shutdown",
+        schemaVersion: "0.1",
+        nodes: [
+          { id: "n1", type: "bot", botId: bot.id, instructionTemplate: "hang", inputBindings: [] },
+        ],
+        edges: [],
+      },
+    })) as { id: string; revision: string };
+    await host.handleMethod("run.start", {
+      workflowId: workflow.id,
+      expectedRevision: workflow.revision,
+      idempotencyKey: randomUUID(),
+    });
+    try {
+      await waitFor(() => {
+        try {
+          return readFileSync(join(root, "fake-record", "fake-harness.jsonl"), "utf8").includes(
+            '"session/prompt"',
+          );
+        } catch {
+          return false;
+        }
+      });
+      await host.shutdown();
+      if (process.platform === "linux") expect(processesUnder(root)).toEqual([]);
+      // Windows refuses this while any owned child holds the workspace cwd.
+      expect(() => rmSync(workspace, { recursive: true, force: true })).not.toThrow();
+    } finally {
+      await host.engine.abandonInflight();
+    }
+  });
   it("QA-05: three bots run sequentially and on independent branches with tracked outputs", async () => {
     const root = makeRoot();
     const workspace = join(root, "workspace");
@@ -154,9 +200,30 @@ describe("D12 regression (fake harness, real orchestration)", () => {
         name: "三机器人工作流",
         schemaVersion: "0.1",
         nodes: [
-          { id: "n1", type: "bot", botId: botA.id, instructionTemplate: "第一步。", inputBindings: [], retryPolicy: { maxRetries: 0 } },
-          { id: "n2", type: "bot", botId: botB.id, instructionTemplate: "基于 {{input.draft}} 继续。", inputBindings: [{ inputKey: "draft", required: true }], retryPolicy: { maxRetries: 0 } },
-          { id: "n3", type: "bot", botId: botC.id, instructionTemplate: "独立分支。", inputBindings: [], retryPolicy: { maxRetries: 0 } },
+          {
+            id: "n1",
+            type: "bot",
+            botId: botA.id,
+            instructionTemplate: "第一步。",
+            inputBindings: [],
+            retryPolicy: { maxRetries: 0 },
+          },
+          {
+            id: "n2",
+            type: "bot",
+            botId: botB.id,
+            instructionTemplate: "基于 {{input.draft}} 继续。",
+            inputBindings: [{ inputKey: "draft", required: true }],
+            retryPolicy: { maxRetries: 0 },
+          },
+          {
+            id: "n3",
+            type: "bot",
+            botId: botC.id,
+            instructionTemplate: "独立分支。",
+            inputBindings: [],
+            retryPolicy: { maxRetries: 0 },
+          },
         ],
         edges: [{ fromNodeId: "n1", outputKey: "response", toNodeId: "n2", inputKey: "draft" }],
         limits: { maxConcurrentNodes: 2 },
@@ -198,8 +265,22 @@ describe("D12 regression (fake harness, real orchestration)", () => {
           name: "两步工作流",
           schemaVersion: "0.1",
           nodes: [
-            { id: "n1", type: "bot", botId: bot.id, instructionTemplate: "先做。", inputBindings: [], retryPolicy: { maxRetries: 0 } },
-            { id: "n2", type: "bot", botId: bot.id, instructionTemplate: "后做。", inputBindings: [], retryPolicy: { maxRetries: 0 } },
+            {
+              id: "n1",
+              type: "bot",
+              botId: bot.id,
+              instructionTemplate: "先做。",
+              inputBindings: [],
+              retryPolicy: { maxRetries: 0 },
+            },
+            {
+              id: "n2",
+              type: "bot",
+              botId: bot.id,
+              instructionTemplate: "后做。",
+              inputBindings: [],
+              retryPolicy: { maxRetries: 0 },
+            },
           ],
           edges: [{ fromNodeId: "n1", outputKey: "response", toNodeId: "n2", inputKey: "draft" }],
           limits: { maxConcurrentNodes: 1 },
