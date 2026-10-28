@@ -11,7 +11,6 @@
  */
 import type { ChatMessageMeta } from "@deepseek-bot/contracts";
 import { appendChatMessage, type OpenedDatabase } from "@deepseek-bot/storage";
-import type { EventRuleNotice } from "@deepseek-bot/runtime";
 import { chatSessionIdFor } from "./chat.js";
 import type { UiLocale } from "./host.js";
 
