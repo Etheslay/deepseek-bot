@@ -20,8 +20,20 @@ import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { createScreenBackend, type ScreenBackend } from "@deepseek-bot/exec-daemon";
-import { methodContract, type Method, type Task, type ToolPolicy } from "@deepseek-bot/contracts";
+import {
+  createDeviceInputBackend,
+  createScreenBackend,
+  unavailableDeviceInputBackend,
+  type DeviceInputBackend,
+  type ScreenBackend,
+} from "@deepseek-bot/exec-daemon";
+import {
+  DeviceInputSchema,
+  methodContract,
+  type Method,
+  type Task,
+  type ToolPolicy,
+} from "@deepseek-bot/contracts";
 import {
   DshSdkExecutor,
   SessionRegistry,
@@ -85,6 +97,7 @@ import {
   bindMemoryTools,
   bindScreenCaptureTool,
   bindDeviceActionTool,
+  bindDeviceInputTool,
   bindWebSearchTool,
   type ToolCaller,
   type ToolNetworkPermissions,
@@ -94,6 +107,7 @@ import {
 import { startApplicationToolServer } from "./app-tool-channel.js";
 import { createScreenService, unavailableScreenBackend, type ScreenService } from "./screen.js";
 import { createDeviceActionService } from "./device.js";
+import { createDeviceInputService } from "./device-input.js";
 import { TaskDispatcher } from "./task-dispatcher.js";
 import { evaluateTriggerRules } from "./triggers.js";
 import { invokeConnector } from "./connectors.js";
@@ -140,6 +154,13 @@ export interface HostOptions {
   readonly screen?: {
     readonly backend: ScreenBackend;
     readonly supported?: boolean;
+  };
+  /**
+   * Device-input backend seam. Production on Windows uses the bundled helper.
+   * Other platforms stay unavailable and do not spawn a process.
+   */
+  readonly deviceInput?: {
+    readonly backend: DeviceInputBackend;
   };
 }
 
@@ -296,6 +317,14 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
     supported: screenChoice.supported,
   });
   const device = createDeviceActionService({ db, permissions, now });
+  const deviceInputBackend = resolveDeviceInputBackend(options);
+  const deviceInput = createDeviceInputService({
+    root: layout.deviceOutputs,
+    db,
+    permissions,
+    now,
+    backend: deviceInputBackend,
+  });
 
   // The executor and the bridge reference each other (child env ← bridge
   // address; bridge asks → executor session registry), so the bridge handle
@@ -349,7 +378,8 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
   const chat = new ChatManager(
     executorOptions,
     {
-      prepareProfile: () => prepareAppToolProfile({ dshHome: layout.harnessHome, bridgePackageDir }),
+      prepareProfile: () =>
+        prepareAppToolProfile({ dshHome: layout.harnessHome, bridgePackageDir }),
       openTurn: (sessionId, caller, signal) => {
         return applicationTools.openTurn({ sessionId, caller, signal });
       },
@@ -446,6 +476,7 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
     mcp,
     screen,
     device,
+    deviceInput,
     chat,
     userQuestions: questions,
     webSearch: {
@@ -516,6 +547,7 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
     if (method === "data.restore") {
       screen.close();
       device.close();
+      deviceInput.close();
       permissions.close();
     }
     const validated = contract.response.safeParse(result);
@@ -585,6 +617,7 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
     }),
     bindScreenCaptureTool(screen),
     bindDeviceActionTool(device),
+    bindDeviceInputTool(deviceInput),
     // v0.5 manager orchestration (T4/T3): coordinator workflow saving and
     // dispatched-task tools. Role rules live inside the task tool layer;
     // the dispatcher re-checks them authoritatively.
@@ -655,6 +688,18 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
           }
           return device.authorize(caller, kind, options);
         }
+        if (tool === "device_input") {
+          const parsed = DeviceInputSchema.safeParse(params);
+          if (!parsed.success) {
+            return {
+              allowed: false,
+              code: "INVALID_INPUT",
+              reason: "device input is invalid",
+              decision: "denied",
+            };
+          }
+          return deviceInput.authorize(caller, parsed.data, options);
+        }
         const input = tool === "mcp_call" ? McpInvokeInputSchema.parse(params) : undefined;
         if (input) mcp.check(input, caller);
         const authorization = await permissions.check(tool, caller, params, options);
@@ -707,6 +752,7 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
       clearInterval(triggerTimer);
       screen.close();
       device.close();
+      deviceInput.close();
       permissions.close();
       mcp.close();
       questions.close();
@@ -756,6 +802,21 @@ function resolveScreenBackend(options: HostOptions): {
     }),
     supported: true,
   };
+}
+
+function resolveDeviceInputBackend(options: HostOptions): DeviceInputBackend {
+  if (options.deviceInput !== undefined) return options.deviceInput.backend;
+  if (process.platform !== "win32") return unavailableDeviceInputBackend();
+  const modulePath = fileURLToPath(import.meta.url);
+  const bundled = basename(modulePath) === "main.js";
+  const assets = bundled
+    ? join(dirname(modulePath), "screen-assets")
+    : join(dirname(modulePath), "..", "..", "exec-daemon");
+  return createDeviceInputBackend({
+    helperScriptPath: bundled
+      ? join(assets, "win32-input.ps1")
+      : join(assets, "assets", "win32-input.ps1"),
+  });
 }
 
 function restoreSearchEndpoint(search: WebSearchService, saved: unknown): void {

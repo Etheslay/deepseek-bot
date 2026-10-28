@@ -86,6 +86,8 @@ MCP 实际调用使用独立能力 `mcp.call`，默认 `ask`，禁止全局 `all
 | screen.result.delete | v0.6：`{botId: UUID, id: UUID}` → `{deleted: true}` | 仅删除该 bot 的清单产物，不能按任意路径删除 |
 | device.action.request | v0.7：`{botId: UUID, kind: pointer\|key}` → `{id: UUID, at: UTC ISO}` | 设备动作批准闸门。`device.action` 默认 deny，只能 ask 或 deny，且只接受一次精确审批。接受结果只有 id 和时间。不接收坐标、按键名、命令或路径。未知 `kind` 在审批前拒绝 |
 | device.action.list | v0.7：`{botId: UUID, limit?: 1–100}` → `{records: {id, botId, action: pointer\|key, at}[]}` | 一次精确审批通过后写入的本地记录。按该 bot 从新到旧列出，默认 50，最多 100。另一个 bot 看不到。拒绝、策略不是 ask、同一张审批再用，都不在此列表。不移动鼠标、不发送按键 |
+| device.action.input | v0.7：`{botId: UUID, input: pointer\|key}` → `{id: UUID, at: UTC ISO, kind: pointer\|key}` | 一次精确仅本次审批后执行一次输入。pointer 为 move 或 click，button 为 left/right/middle，x/y 为 0–8192 的整数。key 为允许列表中的一个名字，action 只能是 tap，并带 shift/ctrl/alt 布尔值。不接受命令、路径、自由文本或 Windows 键。响应没有坐标和路径。当前系统没有输入辅助进程时，在审批前拒绝 |
+| device.action.input.list | v0.7：`{botId: UUID, limit?: 1–100}` → `{records: {id, botId, at, input}[]}` | 已执行输入的本地产物索引，按该 bot 从新到旧，默认 50，最多 100。不含文件系统路径。拒绝、未执行、另一个 bot 的产物都不在此列表 |
 | memory.list / write / delete | v0.3 人类查看、写入和删除当前 bot 的记忆 | 只作用于 payload.botId；空查询返回最近记录，默认 20、最多 50；删除未命中返回 INVALID_INPUT，不暴露其他 bot 的记录 |
 | memory.retention.get / set | v0.3 保留策略（记忆 + 知识共用）：retentionDays / memoryMaxPerBot / knowledgeMaxPerBot | 0 = 不限制（默认）；损坏值按 0 读——损坏的设置只会让清理变保守；Host 启动与每次写入后执行清扫 |
 | knowledge.list / write / delete | v0.3 当前 bot 的独立知识文档（迁移 `0010-knowledge-docs`） | 正文上限 100000 字（独立于 4000 字记忆）；list 只回摘要（不回正文，1 MiB 消息上限安全）；删除 bot 域隔离同记忆 |
@@ -150,7 +152,9 @@ NodeRun：`pending → running ↔ waiting_approval → succeeded / failed / can
 
 ## D21 设备动作批准闸门
 
-`device.action` 默认 deny。只能改为 ask，或保持 deny，不能 allow，也不接受会话或永久授权。`device.action.request` 请求 `{botId, kind: pointer|key}`，响应只有 `{id, at}`。一次请求对应一次精确 `actionDigest` 的仅本次审批。拒绝、策略不是 ask，或同一张审批用第二次，都不返回接受结果。模型工具 `device_action` 只接受 `kind`，可信 bot 身份由 Host 绑定。动作名只有 `pointer` 和 `key`；其他名字在创建审批前拒绝。一次接受会在本机数据库留下一条记录：id、bot id、动作名、时间。`device.action.list` 按该 bot 从新到旧列出这些记录，默认 50，最多 100。拒绝、策略不是 ask、同一张审批再用，都不写入。记录随元数据备份。本片不包含坐标、按键名、鼠标移动、击键或 exec daemon 调用。协议仍为 0.7，旧发送方仍被接受。
+`device.action` 默认 deny。只能改为 ask，或保持 deny，不能 allow，也不接受会话或永久授权。`device.action.request` 请求 `{botId, kind: pointer|key}`，响应只有 `{id, at}`。一次请求对应一次精确 `actionDigest` 的仅本次审批。拒绝、策略不是 ask，或同一张审批用第二次，都不返回接受结果。模型工具 `device_action` 只接受 `kind`，可信 bot 身份由 Host 绑定。动作名只有 `pointer` 和 `key`；其他名字在创建审批前拒绝。一次接受会在本机数据库留下一条记录：id、bot id、动作名、时间。`device.action.list` 按该 bot 从新到旧列出这些记录，默认 50，最多 100。拒绝、策略不是 ask、同一张审批再用，都不写入。记录随元数据备份。这条请求路径不包含坐标、按键名、鼠标移动、击键或 exec daemon 调用。协议仍为 0.7，旧发送方仍被接受。
+
+`device.action.input` 是同一能力上的真实输入路径。请求带 `botId` 和一份有界 `input`：指针是 `move` 或 `click`，按钮是 `left`、`right` 或 `middle`，坐标是 0–8192 的整数；按键是允许列表中的一个名字，动作只能是 `tap`，并显式带上 `shift`、`ctrl`、`alt`。不接受命令、路径、自由文本、按住不放，或 Windows 键。审批摘要覆盖整份 input。范围只能是 once。通过后 Host 调用 exec daemon 的固定参数数组，不经过 shell 命令字符串。成功后的响应只有 `{id, at, kind}`。本机 `device-outputs/<botId>/` 留下对应 JSON 和清单，`device.action.input.list` 按该 bot 从新到旧列出，默认 50，最多 100，不含路径。拒绝、策略不是 ask、同一张审批再用、未知按键，或辅助进程不可用，都不执行，也不留下成功产物。产物不进入元数据备份。模型工具 `device_input` 走同一闸门，不进入聊天应用工具目录。
 
 ## 8. 库导出文件（协议面之外）
 

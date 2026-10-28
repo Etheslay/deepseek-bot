@@ -22,6 +22,9 @@ it("ships screen helpers and starts a copied Host without the exec-daemon worksp
   expect(
     await readFile(join(distribution, "screen-assets", "win32-capture.ps1"), "utf8"),
   ).toContain("PrintWindow");
+  expect(
+    await readFile(join(distribution, "screen-assets", "win32-input.ps1"), "utf8"),
+  ).toContain("SendInput");
   const manifest = JSON.parse(
     await readFile(join(distribution, "screen-assets", "ocr", "manifest.json"), "utf8"),
   ) as { pins: Record<string, string> };

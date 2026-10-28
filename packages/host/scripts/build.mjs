@@ -28,6 +28,10 @@ await cp(
   new URL("../../exec-daemon/assets/win32-capture.ps1", import.meta.url),
   join(distribution, "screen-assets", "win32-capture.ps1"),
 );
+await cp(
+  new URL("../../exec-daemon/assets/win32-input.ps1", import.meta.url),
+  join(distribution, "screen-assets", "win32-input.ps1"),
+);
 await writeFile(join(distribution, "package.json"), JSON.stringify({ type: "module" }));
 
 // Ship the app-owned plugin as a dependency-free module beside the Host.
