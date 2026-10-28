@@ -232,6 +232,8 @@ export const METHODS = [
   "voice.status",
   "voice.transcribe",
   "voice.speak",
+  "voice.config.get",
+  "voice.config.set",
 ] as const;
 
 export type Method = (typeof METHODS)[number];

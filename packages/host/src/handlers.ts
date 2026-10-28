@@ -119,6 +119,8 @@ import {
   DEFAULT_MODEL_PROFILE_ID,
   SEARXNG_ENDPOINT_SETTING,
   UI_LOCALE_SETTING,
+  VOICE_WHISPER_BIN_SETTING,
+  VOICE_WHISPER_MODEL_SETTING,
   asUiLocale,
   backupDirFor,
   newBackupId,
@@ -1357,6 +1359,14 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
     "voice.status": () => context.voice.status(),
     "voice.transcribe": (payload) => context.voice.transcribe(payload.audioBase64),
     "voice.speak": (payload) => context.voice.speak(payload.text),
+
+    "voice.config.get": () => context.voice.config(),
+    "voice.config.set": (payload) => {
+      context.voice.setConfig(payload);
+      setSetting(db, VOICE_WHISPER_BIN_SETTING, payload.whisperBin);
+      setSetting(db, VOICE_WHISPER_MODEL_SETTING, payload.whisperModel);
+      return context.voice.config();
+    },
 
     "connector.list": () => ({
       connectors: listConnectors(db).map((row) => connectorPayload(row)),

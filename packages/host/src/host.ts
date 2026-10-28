@@ -248,6 +248,9 @@ export const DEFAULT_MODEL_PROFILE_ID = "44444444-4444-4444-8444-444444444444";
  */
 export const REASONER_MODEL_PROFILE_ID = "8d5a5e30-0000-4000-8000-000000000005";
 export const SEARXNG_ENDPOINT_SETTING = "searxng.endpoint";
+/** Settings KV keys for the D27 local whisper configuration (desktop-settable, live-applied). */
+export const VOICE_WHISPER_BIN_SETTING = "voice.whisper.bin";
+export const VOICE_WHISPER_MODEL_SETTING = "voice.whisper.model";
 /** Settings KV key the desktop pushes its resolved UI language into (zh/en). */
 export const UI_LOCALE_SETTING = "ui.locale";
 export type UiLocale = "zh" | "en";
@@ -357,6 +360,11 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
     backend: deviceInputBackend,
   });
   const voice = createVoiceService(options.voice ?? {});
+  restoreVoiceConfig(
+    voice,
+    getSettingRaw(db, VOICE_WHISPER_BIN_SETTING),
+    getSettingRaw(db, VOICE_WHISPER_MODEL_SETTING),
+  );
 
   // The executor and the bridge reference each other (child env ← bridge
   // address; bridge asks → executor session registry), so the bridge handle
@@ -903,6 +911,22 @@ function resolveDeviceInputBackend(options: HostOptions): DeviceInputBackend {
       ? join(assets, "win32-input.ps1")
       : join(assets, "assets", "win32-input.ps1"),
   });
+}
+
+/**
+ * The settings KV is authoritative when the key exists: a string overrides
+ * the environment seed, null or garbage clears (voice.status stays honest).
+ * An absent key keeps the environment-seeded boot default.
+ */
+function restoreVoiceConfig(voice: VoiceService, savedBin: unknown, savedModel: unknown): void {
+  if (savedBin !== undefined) {
+    const bin = typeof savedBin === "string" && savedBin.length > 0 ? savedBin : null;
+    voice.setConfig({ ...voice.config(), whisperBin: bin });
+  }
+  if (savedModel !== undefined) {
+    const model = typeof savedModel === "string" && savedModel.length > 0 ? savedModel : null;
+    voice.setConfig({ ...voice.config(), whisperModel: model });
+  }
 }
 
 function restoreSearchEndpoint(search: WebSearchService, saved: unknown): void {

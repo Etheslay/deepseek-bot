@@ -45,6 +45,10 @@ export type VoiceSpeakRunner = (text: string, signal: AbortSignal) => Promise<vo
 
 export interface VoiceService {
   status(): VoiceStatus;
+  /** Current local whisper configuration (null = not set). */
+  config(): { whisperBin: string | null; whisperModel: string | null };
+  /** Apply a new configuration live; null clears. The KV persistence lives in the caller. */
+  setConfig(next: { whisperBin: string | null; whisperModel: string | null }): void;
   transcribe(audioBase64: string): Promise<VoiceTranscription>;
   speak(text: string): Promise<VoiceSpeakResult>;
   close(): void;
@@ -141,6 +145,10 @@ function decodeClipAudio(audioBase64: string): Buffer {
 export function createVoiceService(options: VoiceServiceOptions = {}): VoiceService {
   const transcribeTimeoutMs = options.transcribeTimeoutMs ?? VOICE_TRANSCRIBE_TIMEOUT_MS;
   const speakTimeoutMs = options.speakTimeoutMs ?? VOICE_SPEAK_TIMEOUT_MS;
+  // Mutable local configuration: the environment seeds the boot default and
+  // voice.config.set overrides it live (the caller persists the KV).
+  let whisperBin = options.whisperBin;
+  let whisperModel = options.whisperModel;
   let closed = false;
   const active = new Set<AbortController>();
   // One local voice at a time; the queue keeps the machine from stacking
@@ -158,16 +166,16 @@ export function createVoiceService(options: VoiceServiceOptions = {}): VoiceServ
   }
 
   function transcribeStatus(): VoiceStatus["transcribe"] {
-    if (options.whisperBin === undefined || options.whisperBin.length === 0) {
+    if (whisperBin === undefined || whisperBin.length === 0) {
       return { available: false, reason: "whisper.cpp binary is not configured" };
     }
-    if (options.whisperModel === undefined || options.whisperModel.length === 0) {
+    if (whisperModel === undefined || whisperModel.length === 0) {
       return { available: false, reason: "whisper.cpp model is not configured" };
     }
-    if (!existsSync(options.whisperBin)) {
+    if (!existsSync(whisperBin)) {
       return { available: false, reason: "whisper.cpp binary was not found" };
     }
-    if (!existsSync(options.whisperModel)) {
+    if (!existsSync(whisperModel)) {
       return { available: false, reason: "whisper.cpp model was not found" };
     }
     return { available: true, reason: null };
@@ -183,8 +191,8 @@ export function createVoiceService(options: VoiceServiceOptions = {}): VoiceServ
   /** The real whisper.cpp run: fixed argument array, no shell, output captured. */
   async function runWhisperProcess(wavPath: string, signal: AbortSignal): Promise<string> {
     const child = spawn(
-      options.whisperBin!,
-      ["-m", options.whisperModel!, "-f", wavPath, "-nt", "-np"],
+      whisperBin!,
+      ["-m", whisperModel!, "-f", wavPath, "-nt", "-np"],
       { stdio: ["ignore", "pipe", "pipe"], windowsHide: true },
     );
     const stop = (): void => {
@@ -330,6 +338,13 @@ export function createVoiceService(options: VoiceServiceOptions = {}): VoiceServ
   return {
     status() {
       return { transcribe: transcribeStatus(), speak: speakStatus() };
+    },
+    config() {
+      return { whisperBin: whisperBin ?? null, whisperModel: whisperModel ?? null };
+    },
+    setConfig(next) {
+      whisperBin = next.whisperBin ?? undefined;
+      whisperModel = next.whisperModel ?? undefined;
     },
     transcribe,
     speak,

@@ -29,7 +29,7 @@ describe("method whitelist", () => {
     expect(contractMethods).toEqual([...METHODS].sort());
     // develop (with the voice backend, PR #113) is 115; this slice adds
     // search.global.
-    expect(METHODS).toHaveLength(116);
+    expect(METHODS).toHaveLength(118);
   });
 
   it("covers every method group from CONTRACTS §3", () => {

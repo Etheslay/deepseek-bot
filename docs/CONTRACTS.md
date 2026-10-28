@@ -96,6 +96,7 @@ MCP 实际调用使用独立能力 `mcp.call`，默认 `ask`，禁止全局 `all
 | voice.status | v0.9：`{}` → `{transcribe: {available, reason\|null}, speak: {available, reason\|null}}` | 仅受信桌面；只汇报本机可用性（whisper.cpp 二进制/模型是否已配置且存在、SAPI 是否在 Windows），不启动任何进程 |
 | voice.transcribe | v0.9：`{audioBase64: string≤900000}` → `{text: string≤4000, seconds: 0–20}` | 用用户自备的 whisper.cpp 把一段 16 kHz 单声道 16-bit PCM WAV 剪辑转成文本。全本地：无网络、无模型调用、无云端转写。临时音频文件在运行结束后删除，不进备份；格式、时长（≤20 秒）或大小不符拒绝且不落盘。不产生模型工具 |
 | voice.speak | v0.9：`{text: string≤2000}` → `{spoken: true}` | 用 Windows SAPI 把一段文本朗读出声。Host 调用固定参数的 PowerShell 脚本（文本以 base64 传入，不经 shell 字符串拼接），120 秒超时终止；非 Windows 拒绝。不产生模型工具 |
+| voice.config.get / set | D27 收尾（仅受信桌面；不提升协议版本）：get `{}` → `{whisperBin: string≤1024\|null, whisperModel: string≤1024\|null}`；set 同形状请求并回显存储值 | 本地 whisper 路径的配置面：set 即时生效并写入 settings KV（`voice.whisper.bin` / `voice.whisper.model`），重启后恢复；KV 存在即为权威（null/垃圾值清除，环境变量只是启动种子）；路径只是本地用户选择，模型不可读写；status 按当前值如实报告可用性 |
 | memory.list / write / delete | v0.3 人类查看、写入和删除当前 bot 的记忆 | 只作用于 payload.botId；空查询返回最近记录，默认 20、最多 50；删除未命中返回 INVALID_INPUT，不暴露其他 bot 的记录 |
 | memory.retention.get / set | v0.3 保留策略（记忆 + 知识共用）：retentionDays / memoryMaxPerBot / knowledgeMaxPerBot | 0 = 不限制（默认）；损坏值按 0 读——损坏的设置只会让清理变保守；Host 启动与每次写入后执行清扫 |
 | knowledge.list / write / delete | v0.3 当前 bot 的独立知识文档（迁移 `0010-knowledge-docs`） | 正文上限 100000 字（独立于 4000 字记忆）；list 只回摘要（不回正文，1 MiB 消息上限安全）；删除 bot 域隔离同记忆 |
