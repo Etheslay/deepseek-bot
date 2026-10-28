@@ -56,14 +56,4 @@ export const permissionsMessages = {
   "permissions.updateWorkflow": { zh: "修改工作流", en: "Modify workflow" },
   "permissions.webSearch": { zh: "联网搜索", en: "Web search" },
   "permissions.writeWorkspaceFiles": { zh: "写入工作目录文件", en: "Write workspace files" },
-  "permissions.chatGrantTitle": {
-    zh: "给这个 bot 授予一项能力",
-    en: "Grant one capability to this bot",
-  },
-  "permissions.chatGrantCapability": { zh: "选择能力", en: "Choose a capability" },
-  "permissions.chatGrantSession": { zh: "本会话授予", en: "Grant for this session" },
-  "permissions.chatGrantPermanent": { zh: "永久授予", en: "Grant permanently" },
-  "permissions.chatGrantIssued": { zh: "已授予：{0}", en: "Granted: {0}" },
-  "permissions.chatGrantFailed": { zh: "授予失败", en: "Grant failed" },
-  "permissions.chatGrantLoadFailed": { zh: "授权记录读取失败", en: "Failed to load grants" },
 } satisfies Record<string, Message>;

@@ -85,6 +85,8 @@
 - D 选项的显示文案由 Host 强制为 `以上都不是`（不信任模型给的 D label，保证一致性）；
 - 选 D 后卡片不直接结束：聚焦输入框并提示用户用一句话说明真实意图，说明文本作为最终答案回传模型（`allowOther` 语义）。
 
+**触发约束（2026-10-28 增补，负责人裁决）：** `ask_user` 只允许两类场景——(1) 用户意图确实模糊、答案会改变下一步行动时的主动澄清；(2) 会话开局 bot 角色或用途未定时，让用户点选一个具体方向（如"连 GitHub 仓库 / 设计 / 绘画"这类具体选项，与开局命名/定位相关）。禁止闲聊确认、重复追问用户已回答的内容；每次拿到答案直接行动，仅当答案本身出现真实分叉才允许再问。硬上限：同一回合最多 3 次 `ask_user` 成功调用，第 4 次被 Host 应用工具通道以 429 `RATE_LIMITED` 拒绝（回合继续，模型应改为直接作答）；同一 callId 重放返回已记录结果、不重复计数。上限实现于 `packages/host/src/app-tool-channel.ts`（`MAX_ASK_USER_PER_TURN`），触发场景写于工具描述（`packages/agent-tools/src/ask-user.ts`）。
+
 **等待/取消/过期：** `AskUserCoordinator` 已有 30 分钟超时与取消语义（`packages/agent-tools/src/ask-user.ts`，`WAIT_TIMEOUT_MS`、`expiresAt`、`cancel`）。卡片需呈现过期/取消态（选项禁用 + 一行过期提示），不得停留在可点击状态。
 
 ### FR-5 一卡一答与“其他，我说明”

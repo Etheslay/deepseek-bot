@@ -124,6 +124,7 @@ import {
   type VoiceTranscribeRunner,
 } from "./voice.js";
 import { TaskDispatcher } from "./task-dispatcher.js";
+import { ChatNativeGate } from "./chat-gate.js";
 import { evaluateTriggerRules } from "./triggers.js";
 import { invokeConnector } from "./connectors.js";
 import { McpService } from "./mcp.js";
@@ -221,6 +222,10 @@ export interface DeepSeekBotHost {
   readonly screen: ScreenService;
   /** D27 local voice backend (whisper.cpp transcription + Windows SAPI speech). */
   readonly voice: VoiceService;
+  /** G2/G3: the D08 bridge session registry (diagnostics; chat turns register here). */
+  readonly sessions: SessionRegistry;
+  /** The D16 checkpoint instance backing the gateway and the chat native gate (diagnostics/tests). */
+  readonly permissions: AgentPermissionService;
   /** Trusted in-process human controls. Never registered as model capabilities. */
   readonly userQuestions: UserQuestionControls;
   /**
@@ -249,6 +254,9 @@ export const DEFAULT_MODEL_PROFILE_ID = "44444444-4444-4444-8444-444444444444";
  */
 export const REASONER_MODEL_PROFILE_ID = "8d5a5e30-0000-4000-8000-000000000005";
 export const SEARXNG_ENDPOINT_SETTING = "searxng.endpoint";
+/** Settings KV keys for the D27 local whisper configuration (desktop-settable, live-applied). */
+export const VOICE_WHISPER_BIN_SETTING = "voice.whisper.bin";
+export const VOICE_WHISPER_MODEL_SETTING = "voice.whisper.model";
 /** Settings KV key the desktop pushes its resolved UI language into (zh/en). */
 export const UI_LOCALE_SETTING = "ui.locale";
 export type UiLocale = "zh" | "en";
@@ -358,6 +366,11 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
     backend: deviceInputBackend,
   });
   const voice = createVoiceService(options.voice ?? {});
+  restoreVoiceConfig(
+    voice,
+    getSettingRaw(db, VOICE_WHISPER_BIN_SETTING),
+    getSettingRaw(db, VOICE_WHISPER_MODEL_SETTING),
+  );
 
   // The executor and the bridge reference each other (child env ← bridge
   // address; bridge asks → executor session registry), so the bridge handle
@@ -400,6 +413,18 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
   const bridgePackageDir = existsSync(join(packagedBridge, "package.json"))
     ? packagedBridge
     : fileURLToPath(new URL("../../harness-bridge/", import.meta.url));
+  // G2: stage the approval bridge into the pinned "sdk" profile once at
+  // startup. Chat turns staged it lazily and workflow runs never did, so the
+  // profile mounted the dsb-approval-bridge row without the package and the
+  // pinned harness reported "entry did not activate" — no approval channel.
+  // The copy-based install is idempotent; a failure keeps the previous
+  // lazy-staging behavior and is recorded in the local diagnostics.
+  try {
+    prepareAppToolProfile({ dshHome: layout.harnessHome, bridgePackageDir });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    process.stderr.write(`[host] approval bridge staging failed: ${message}\n`);
+  }
   // UI language for Host-authored copy (dispatcher notices, chat turn errors,
   // canvas conflicts, ask_user labels): seeded from the settings KV (the
   // desktop pushes the resolved preference via settings.update) and mutable
@@ -421,6 +446,43 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
           ...(skillCapabilities !== undefined ? { skillCapabilities } : {}),
         });
       },
+      // G3: native harness tool calls in a chat turn route through the D16
+      // checkpoint (fs/exec capabilities, chat D08 network seam, mcp.call);
+      // ask mints the same AppApproval card the app tools use.
+      bridgeRegistration: {
+        register: (sessionId, permissions) =>
+          sessionRegistry.register(sessionId, {
+            runId: sessionId,
+            nodeRunId: sessionId,
+            permissions,
+          }),
+        unregister: (sessionId) => sessionRegistry.unregister(sessionId),
+      },
+      nativeGate: (input) =>
+        new ChatNativeGate({
+          permissions,
+          network: (caller, action) => {
+            if (action.kind !== "network.request" || action.url === undefined) {
+              return Promise.reject(
+                new NodeExecutionError({
+                  code: "INVALID_INPUT",
+                  message: "chat network ask is missing a url",
+                  retryable: false,
+                }),
+              );
+            }
+            return chatNetworkPermissions(caller).authorize({
+              kind: "network.request",
+              callId: action.callId,
+              toolName: action.toolName,
+              url: action.url,
+              arguments: action.arguments as Readonly<Record<string, unknown>>,
+            }) as Promise<{ approvalId: string | null; resource: string }>;
+          },
+          botId: input.botId,
+          sessionId: input.sessionId,
+          signal: input.signal,
+        }),
     },
     () => uiLocale.current,
     (usage) => {
@@ -839,6 +901,8 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
     mcp,
     screen,
     voice,
+    sessions: sessionRegistry,
+    permissions,
     userQuestions: {
       listPending: (callerId) => questions.listPending(callerId),
       answer: (requestId, callerId, answer) => questions.answer(requestId, callerId, answer),
@@ -922,6 +986,22 @@ function resolveDeviceInputBackend(options: HostOptions): DeviceInputBackend {
       ? join(assets, "win32-input.ps1")
       : join(assets, "assets", "win32-input.ps1"),
   });
+}
+
+/**
+ * The settings KV is authoritative when the key exists: a string overrides
+ * the environment seed, null or garbage clears (voice.status stays honest).
+ * An absent key keeps the environment-seeded boot default.
+ */
+function restoreVoiceConfig(voice: VoiceService, savedBin: unknown, savedModel: unknown): void {
+  if (savedBin !== undefined) {
+    const bin = typeof savedBin === "string" && savedBin.length > 0 ? savedBin : null;
+    voice.setConfig({ ...voice.config(), whisperBin: bin });
+  }
+  if (savedModel !== undefined) {
+    const model = typeof savedModel === "string" && savedModel.length > 0 ? savedModel : null;
+    voice.setConfig({ ...voice.config(), whisperModel: model });
+  }
 }
 
 function restoreSearchEndpoint(search: WebSearchService, saved: unknown): void {
