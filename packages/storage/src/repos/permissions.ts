@@ -8,6 +8,7 @@ import {
   AppApprovalSchema,
   PermissionAuditSchema,
   PermissionDecisionRequestSchema,
+  PermissionGrantIssueRequestSchema,
   defaultPermissionMode,
   requiresPerActionApproval,
   type CapabilityId,
@@ -205,6 +206,81 @@ export function revokePermissionGrant(db: OpenedDatabase, id: string): Permissio
       grant.botId,
     );
     return result;
+  });
+}
+
+const CHAT_GRANT_USES = 5;
+const CHAT_GRANT_MINUTES = 120;
+
+/**
+ * Issue one session or permanent grant for one bot. Session identity, use
+ * count and TTL follow the existing approval-card defaults. A still-usable
+ * grant for the same bot, capability, scope and session is returned as-is.
+ */
+export function issuePermissionGrant(
+  db: OpenedDatabase,
+  input: {
+    botId: string;
+    capability: CapabilityId;
+    scope: "session" | "permanent";
+    sessionId: string | null;
+  },
+  generation: number,
+): PermissionGrant {
+  const request = validate(PermissionGrantIssueRequestSchema, {
+    botId: input.botId,
+    capability: input.capability,
+    scope: input.scope,
+  });
+  const boundGeneration = validate(z.int().nonnegative(), generation);
+  if (request.scope === "session") validate(z.string().min(1).max(200), input.sessionId);
+  else if (input.sessionId !== null) throw invalidInput("permanent grants cannot carry a session");
+  return runInTransaction(db.raw, () => {
+    if (!activeBot(db, request.botId)) throw invalidInput("permission actor is not active");
+    const mode = listPermissionPolicies(db).find(
+      (policy) => policy.capability === request.capability,
+    )!.mode;
+    if (mode === "deny") throw invalidInput("capability policy denies this action");
+    if (mode !== "ask") throw invalidInput("capability policy does not ask for a grant");
+    const sessionId = request.scope === "session" ? input.sessionId : null;
+    const existing = allGrants(db).find(
+      (grant) =>
+        grant.capability === request.capability &&
+        grant.botId === request.botId &&
+        grant.scope === request.scope &&
+        grant.sessionId === sessionId &&
+        usable(db, grant, boundGeneration),
+    );
+    if (existing !== undefined) return existing;
+    const grant = writeGrant(db, {
+      id: randomUUID(),
+      capability: request.capability,
+      botId: request.botId,
+      mode: "allow",
+      scope: request.scope,
+      sessionId,
+      generation: request.scope === "permanent" ? null : boundGeneration,
+      approvalId: null,
+      maxUses: request.scope === "permanent" ? null : CHAT_GRANT_USES,
+      uses: 0,
+      expiresAt:
+        request.scope === "permanent"
+          ? null
+          : new Date(db.now().getTime() + CHAT_GRANT_MINUTES * 60_000).toISOString(),
+      createdAt: now(db),
+      revokedAt: null,
+    });
+    audit(
+      db,
+      "grant.issued",
+      "human",
+      undefined,
+      [grant.id],
+      null,
+      [grant.capability],
+      grant.botId,
+    );
+    return grant;
   });
 }
 export function getPermissionApproval(db: OpenedDatabase, id: string): AppApproval | undefined {

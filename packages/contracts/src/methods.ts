@@ -171,6 +171,7 @@ export const METHODS = [
   "permission.policy.set",
   "permission.grant.list",
   "permission.grant.revoke",
+  "permission.grant.issue",
   "permission.approval.list",
   "permission.approval.decide",
   "permission.audit.list",
