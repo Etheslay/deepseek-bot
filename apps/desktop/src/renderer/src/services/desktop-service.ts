@@ -83,7 +83,10 @@ export type StreamOptions = {
   /** Deterministic knobs for UI states and tests; fixture-only. */
   chunkDelayMs?: number;
   chunkCount?: number;
-  simulateFailure?: Extract<ErrorCode, "RATE_LIMITED" | "AUTH_FAILED" | "MODEL_UNAVAILABLE">;
+  simulateFailure?: Extract<
+    ErrorCode,
+    "RATE_LIMITED" | "AUTH_FAILED" | "MODEL_UNAVAILABLE" | "BUDGET_EXCEEDED"
+  >;
   /** Saved skills for this turn. The host injects them; the fixture ignores them. */
   skills?: readonly ChatSkillInjection[];
 };

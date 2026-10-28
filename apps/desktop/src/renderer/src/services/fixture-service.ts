@@ -462,7 +462,10 @@ export function createFixtureService(): DesktopService {
                   message:
                     simulateFailure === "RATE_LIMITED"
                       ? t("chat.rateLimited")
-                      : t("chat.requestFailed"),
+                      : simulateFailure === "BUDGET_EXCEEDED"
+                        ? t("chat.budgetExhausted")
+                        : t("chat.requestFailed"),
+                  /* only a rate limit is worth retrying; out of credit is not */
                   retryable: simulateFailure === "RATE_LIMITED",
                 },
               });
