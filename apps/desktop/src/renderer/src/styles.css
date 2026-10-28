@@ -6599,6 +6599,20 @@ select option {
   object-fit: contain;
 }
 
+.msg-attachment-open {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+button.msg-attachment-file {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
 .msg-attachment-file {
   display: inline-flex;
   align-items: center;

@@ -120,6 +120,7 @@ import {
   type UiLocale,
 } from "./host.js";
 import { chatSessionIdFor, type ChatManager } from "./chat.js";
+import type { AttachmentIngress } from "./workspace-attachments.js";
 import { KNOWN_CAPABILITIES, policyKey, readPolicy, type PolicyLevel } from "./permissions.js";
 import { type TaskDispatcher } from "./task-dispatcher.js";
 import { createGrant, listGrants, revokeGrant, type GrantRow } from "@deepseek-bot/storage";
@@ -168,6 +169,8 @@ export interface HostContext {
   };
   /** v0.5 manager orchestration: dispatched-task queue + executor. */
   readonly tasks: TaskDispatcher;
+  /** D26: stage a chat attachment, then import it through the tool gateway. */
+  readonly attachments: AttachmentIngress;
   /**
    * Live UI language holder (settings.update { ui.locale }). Delivery notices,
    * handoff framing and the ask_user fallback label come out in this language.
@@ -808,6 +811,22 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
         at: row.createdAt,
       })),
     }),
+
+    "chat.attach": async (payload) => {
+      try {
+        return await context.attachments.accept(payload);
+      } catch (error) {
+        if (error instanceof EngineError) throw error;
+        if (error instanceof ToolRejectionError) {
+          throw new EngineError({
+            code: error.code,
+            message: error.message,
+            retryable: false,
+          });
+        }
+        throw error;
+      }
+    },
 
     "chat.cancel": (payload) => {
       const cancelled = chat.cancel(payload.sessionId);

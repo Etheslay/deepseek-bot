@@ -45,6 +45,12 @@ src/renderer/src/services/
 - **安全边界**：路径经 `RelativeArtifactPathSchema` + realpath 夹紧，写不越工作区；内联读/写上限 768 KiB（超限显式拒绝，文件仍可列与回看版本）；text/html 与二进制不进编辑器、不内联渲染（QA-14）；Markdown 预览走 D14 本地安全渲染链。
 - **并发**：save 携带编辑基准 `expectedChecksum`，文件已被 bot 改动时返回 `REVISION_CONFLICT`，UI 提示重新加载而非静默覆盖。
 
+## 聊天附件（D26）
+
+- 选中的文件（文本、图片、二进制，最大 2 MiB）经 `service.chat.importAttachment` 分块调用 `chat.attach`。真实 Host 在 `fs.write` 为 ask 时等待审批，通过后才写入工作区 `attachments/`。夹具服务只写入内存工作区，不模拟审批。
+- 发给模型的文本只含工作区路径，不再拼接文件正文。卡片点击打开已有的产物侧车。文本可预览；HTML 与二进制仍按 QA-14 拦截。图片缩略图留在卡片上。
+- bot 用模型工具 `read` 读取工作区文件。默认 bot 共用一个工作区目录，读授权通过后可以看到该目录里的附件。
+
 ## 设置（FR-01 前端）
 
 - API Key **只写不读**：password 输入、保存后占位符仅显示“已配置（输入新值覆盖）”，明文永不回显；真实加密存储由 D04/D08 接线。

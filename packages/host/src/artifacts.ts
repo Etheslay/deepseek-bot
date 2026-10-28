@@ -163,7 +163,7 @@ export function coeditVersionsRoot(artifactsRoot: string): string {
  * `root`. Returns the resolved path plus a flag telling whether the target
  * already exists (and is a regular file, not a symlink/reparse point).
  */
-function resolveInsideWorkspace(
+export function resolveInsideWorkspace(
   root: string,
   relativePath: string,
 ): { absolute: string; exists: boolean } {
