@@ -145,4 +145,45 @@ describe("UsagePanel", () => {
     const chips = [...host.querySelectorAll<HTMLButtonElement>(".usage-chip")];
     expect(chips.find((chip) => chip.textContent === "当前 bot")?.disabled).toBe(true);
   });
+
+  it("keeps the chart and share sections on screen when there is no data", async () => {
+    installBridge(
+      summary({
+        totals: { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0, turns: 0, estimated: false },
+        byModel: [],
+        byDay: [],
+        byBot: [],
+      }),
+    );
+    const host = await mount("bot-1");
+    /* a page whose sections vanish reads as "the feature is missing" */
+    expect(host.querySelector(".usage-chart-card")).not.toBeNull();
+    expect(host.querySelector(".usage-pie-card")).not.toBeNull();
+    expect(host.querySelector(".usage-table-card")).not.toBeNull();
+    expect(host.querySelectorAll(".usage-chart-empty").length).toBe(2);
+  });
+
+  it("draws a date axis and a grid once there is a series", async () => {
+    installBridge(summary());
+    const host = await mount("bot-1");
+    expect(host.querySelectorAll(".usage-grid").length).toBeGreaterThanOrEqual(4);
+    expect(host.querySelectorAll(".usage-axis-label").length).toBeGreaterThanOrEqual(2);
+    expect(host.querySelector(".usage-legend-list li")).not.toBeNull();
+  });
 });
+
+  it("colours every series through a themeable class, not an inline hex", async () => {
+    installBridge(summary());
+    const host = await mount("bot-1");
+    /* the trend swatches are fixed to input/output; the data dots carry a series */
+    const dots = [
+      ...host.querySelectorAll<HTMLElement>(".usage-legend-list .usage-dot, .usage-table .usage-dot"),
+    ];
+    expect(dots.length).toBeGreaterThan(0);
+    const series = dots.map((dot) => [...dot.classList].find((name) => name.startsWith("usage-series-")));
+    /* well formed: usage-series-1..6, never the concatenation trap usage-series-01 */
+    expect(series.every((name) => /^usage-series-[1-6]$/.test(name ?? ""))).toBe(true);
+    expect(host.querySelectorAll(".usage-arc").length).toBeGreaterThan(0);
+    /* inline colours would beat the light-theme palette */
+    expect(dots[0]?.getAttribute("style")).toBeNull();
+  });

@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { MISFIRE_POLICY } from "@deepseek-bot/contracts";
+import { MISFIRE_POLICY, WORKFLOW_SCHEMA_VERSION } from "@deepseek-bot/contracts";
 import {
   DEFAULT_MODEL_PROFILE_ID,
   REASONER_MODEL_PROFILE_ID,
@@ -296,6 +296,80 @@ describe("createHost", () => {
       },
     })) as { accepted: boolean; errorCode?: string };
     expect(imported).toMatchObject({ accepted: false, errorCode: "DATA_VERSION_UNSUPPORTED" });
+  });
+
+  it("strips smuggled policy fields from workflow templates (G11' acceptance)", async () => {
+    await started();
+    const bot = (await host.handleMethod("bot.create", {
+      name: "模板机器人",
+      instructions: "x",
+      modelProfileId: refs.profileId,
+      workspaceId: refs.workspaceId,
+      toolPolicyId: refs.toolPolicyId,
+    })) as { id: string; toolPolicyId: string };
+
+    // A tampered template tries to smuggle per-node permission grants through
+    // both entry points. Each parses through the frozen schema, which strips
+    // unknown keys — a workflow node keeps no policy of its own, so the
+    // referenced bot's CURRENT toolPolicyId governs at run time.
+    const smuggle = {
+      toolPolicyId: randomUUID(),
+      permissions: { shell: "allow" },
+      allowedTools: ["exec.shell"],
+    };
+    const node = () => ({
+      id: "n1",
+      type: "bot",
+      botId: bot.id,
+      instructionTemplate: "x",
+      inputBindings: [],
+      retryPolicy: { maxRetries: 0 },
+      ...smuggle,
+    });
+
+    const imported = (await host.handleMethod("workflow.import", {
+      template: {
+        schemaVersion: WORKFLOW_SCHEMA_VERSION,
+        workflow: {
+          name: "越权模板",
+          schemaVersion: WORKFLOW_SCHEMA_VERSION,
+          nodes: [node()],
+          edges: [],
+          limits: { maxConcurrentNodes: 1 },
+        },
+      },
+    })) as { accepted: boolean };
+    expect(imported.accepted).toBe(true);
+
+    const saved = (await host.handleMethod("workflow.save", {
+      workflow: {
+        name: "越权草稿",
+        schemaVersion: WORKFLOW_SCHEMA_VERSION,
+        nodes: [node()],
+        edges: [],
+        limits: { maxConcurrentNodes: 1 },
+      },
+    })) as { id: string; nodes: Array<Record<string, unknown>> };
+    expect(saved.nodes[0]).toBeDefined();
+    expect(saved.nodes[0]).not.toHaveProperty("toolPolicyId");
+    expect(saved.nodes[0]).not.toHaveProperty("permissions");
+    expect(saved.nodes[0]).not.toHaveProperty("allowedTools");
+
+    const listed = (await host.handleMethod("workflow.list", {})) as {
+      workflows: Array<{ id: string; name: string; revision: string }>;
+    };
+    const fromTemplate = listed.workflows.find((entry) => entry.name === "越权模板");
+    expect(fromTemplate).toBeDefined();
+    const exported = (await host.handleMethod("workflow.export", {
+      id: fromTemplate?.id ?? "",
+      expectedRevision: fromTemplate?.revision ?? "",
+    })) as { workflow: { nodes: Array<Record<string, unknown>> } };
+    expect(exported.workflow.nodes[0]).not.toHaveProperty("toolPolicyId");
+    expect(exported.workflow.nodes[0]).not.toHaveProperty("permissions");
+    expect(exported.workflow.nodes[0]).not.toHaveProperty("allowedTools");
+
+    // The bot's own policy is untouched and remains the only authority.
+    expect(bot.toolPolicyId).toBe(refs.toolPolicyId);
   });
 
   it("schedules, describes and backs up through the method surface", async () => {

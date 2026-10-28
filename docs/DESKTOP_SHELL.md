@@ -130,7 +130,7 @@ preload 暴露面：`deepseekBot.{getAppInfo, window.*, settings.saveKey, update
 
 - 侧边栏没有固定页面：只包含用户自建的分组与 Bot（初始一个「未分组」，右键组名可删除——组内有 Bot 时需先移出），以及右上 ＋ 创建 Bot、左下角账户按钮进设置。点击窗口 × 即隐藏到托盘。
 - 主界面即选中 Bot 的会话：问候语为首条消息，消息流 + 贴底输入条（左 ＋ 菜单 / 右麦克风占位与发送钮）；无选中时显示创建引导空状态。头部胶囊显示当前 Bot 名。
-- 设置弹窗：点击左下角账户按钮进入。分类「通用」可用（电脑 / 保险库 / 用量与账单 / 更新为占位禁用）；实现账户改名字、退出登录（占位）、主题深色/浅色切换、强调色、**界面语言（D22）**、**通知设置（D22）**、**Chrome 数据导入（D22）**、本地用量与检查更新（D24）；其余项标「后续提供」。
+- 设置弹窗：点击左下角账户按钮进入。分区为 通用 / 电脑 / 权限 / 保险库 / 用量与账单 / 更新 六项（三组导航，`features/settings/settings-nav.tsx`），均已可用——含本地用量与检查更新（D24，更新通道见下文「应用内更新」）；账户改名字、退出登录（占位）、主题深色/浅色切换、强调色、**界面语言（D22）**、**通知设置（D22）**、**Chrome 数据导入（D22）**；其余项标「后续提供」。
 - 会话内占位交互（全部仅存内存，重启即清空，不涉及后端）：
   - 创建 Bot 弹窗：名称、形状、颜色；新 Bot 默认归入「未分组」。
   - Bot 分组：创建分组（Bot 右键 → 移至 → 创建分组）、移至分组、**拖拽换组**（头像拖拽影像 + 目标分组虚线高亮 + 空组放置提示）、**分组折叠/展开**（点组名收起，箭头指示）。
@@ -152,7 +152,7 @@ preload 暴露面：`deepseekBot.{getAppInfo, window.*, settings.saveKey, update
 - 「退出登录」「复制对话 ID」为占位（未接入账号系统）；真实账号体系见待办。
 - 不接 Harness、不调用 DeepSeek API、无数据库；真实机器人 CRUD、会话、工作流、运行属于 D03–D09。
 - CI 不构建 GUI；桌面打包证据来自本地运行（见 D02 报告）。
-- 安装包未签名（`signAndEditExecutable: false`），安装器/应用 exe 资源为默认 Electron 元数据，SmartScreen 会提示；不提供自动更新（无更新服务器）。
+- 安装包未签名（`signAndEditExecutable: false`），安装器/应用 exe 资源为默认 Electron 元数据，SmartScreen 会提示。应用内更新通道已接入（D24，见下文「应用内更新」）；首个 GitHub Release 发布前，每次检查都软着陆为失败原因，不误报成功。
 - 安装版应用 UI 状态仍是会话内存；卸载保留的 `%APPDATA%\DeepSeekBot` 数据根在 D12 接线 storage 前尚无 UI 数据写入。
 
 ## 打包（D11）
@@ -162,6 +162,20 @@ preload 暴露面：`deepseekBot.{getAppInfo, window.*, settings.saveKey, update
 - `THIRD_PARTY_NOTICES.md` 经 `extraResources` 随包，安装后在 `<安装目录>\resources\` 可见。
 - 产品打包 CI：`.github/workflows/package.yml`（`workflow_dispatch` + push tag `v*`，windows-latest，Node 24，Corepack），产出安装包 + blockmap + `SHA256SUMS.txt` artifact；CI 只证明可构建，不替代干净机安装试验。
 - 打包/安装/升级/卸载的验收边界与证据见 [D11 报告](reports/D11-report.md)。
+
+## 应用内更新（D24）
+
+实现为 `electron-updater` 对 GitHub Releases 的检查（`apps/desktop/src/main/updates.ts`）。更新源在 `electron-builder.yml`：`publish: { provider: github, owner: Etheslay, repo: deepseek-bot }`。打包与 CI 永不自动发布（`--publish never` 为默认）；通道只在首个附带 `latest.yml` 元数据的 GitHub Release 发布后才开始命中。
+
+行为链（各项与代码一一对应）：
+
+1. **启动静默检查**：主进程启动时静默 `checkUpdates()` 一次（`src/main/index.ts`），渲染层就绪后再经 `bridge.updates.check()` 查询一次（`App.tsx`）；两层都吞错软着陆，不弹窗、不打断启动。
+2. **手动检查**：设置 → 更新 分区随时可手动检查；状态标签如实显示「发现新版本 / 暂无可用更新 / 失败原因」，预览壳（无 updates 桥）显示"需要桌面壳"类提示。
+3. **左下角徽标**：仅当检查结果 `available` 时出现在侧栏底部（账户按钮上方），标题含新版本号；点击徽标即开始下载，期间显示下载中状态。
+4. **下载并安装**：`autoDownload = false`——永不后台自动下载，只有用户点击徽标才 `downloadUpdate()`；下载完成立即 `quitAndInstall()`（NSIS assisted：退出应用并运行安装器）。`autoInstallOnAppQuit = true` 兜底：安装器未立即接管时，应用下次退出时安装。
+5. **软着陆**：无 Release、离线或 `latest.yml` 404 时，`checkForUpdates()` 返回错误字符串；徽标不出现，设置分区如实显示失败原因，绝不误报"已是最新"。
+
+IPC 通道为白名单中的 `updates:check` / `updates:downloadInstall`（见上文 IPC 白名单表）。发布侧的配套检查单见 [RELEASE.md](RELEASE.md) §4。
 
 ## 待完成（后端 / 持久化，后续任务实现）
 

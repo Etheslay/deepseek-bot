@@ -774,6 +774,12 @@ export function createFixtureService(): DesktopService {
     workflows: createFixtureWorkflowService(),
     runs: createFixtureRunService(),
     tasks: createFixtureTaskService(),
+
+    // The fixture chat is renderer-local only, so there is no Host corpus to
+    // query; the overlay degrades to its local index without a failure notice.
+    search: {
+      global: () => Promise.resolve([]),
+    },
   };
 
   return service;

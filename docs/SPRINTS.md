@@ -98,7 +98,8 @@
 | D17 技能注入与能力强制 | **切片交付**：已保存的技能随 `chat.send` 交给 Host 注入本轮；声明的能力 id 由工具网关在授权前限制。技能库仍在渲染层 localStorage。工作流模板未做。自审未填 | `feature/d17-skill-injection` | [D17-skill-injection-report](reports/D17-skill-injection-report.md) |
 | D27 本地语音后端 | **已交付（PR #113）**：`voice.status` / `voice.transcribe` / `voice.speak`（协议 0.9），whisper.cpp 本地转写 + Windows SAPI 播报，剪辑不落盘不外发；麦克风采集/断句/播放接线与真实模型分发归后续 | `feature/voice-local-backend-8c21` → PR #113 `6ecd1b3` | [D27-voice-backend-report](reports/D27-voice-backend-report.md) |
 | D27 语音配置持久化 | **已交付（PR #118）**：`voice.config.get` / `voice.config.set` 受信方法，whisper 路径写入 settings KV 即时生效、重启恢复（环境变量只是启动种子）；桌面设置页可据此接线 | `feature/voice-config-kv-c4d2` → PR #118 `94bc05d` | [D27-voice-config-report](reports/D27-voice-config-report.md) |
-| G2 审批桥激活 | 后端切片已实现待合并：Host 启动时把 harness-bridge 幂等装入钉扎 sdk profile，工作流与聊天全部启动路径可解析插件行，消除 `entry did not activate`；真实 Harness 告警消失归真机复核 | `feature/g2-bridge-staging-e8f4` | [G2-bridge-activation-report](reports/G2-bridge-activation-report.md) |
+| G2 审批桥激活 | **已交付（PR #123）**：Host 启动时把 harness-bridge 幂等装入钉扎 sdk profile，工作流与聊天全部启动路径可解析插件行，消除 `entry did not activate`；真实 Harness 告警消失归真机复核 | `feature/g2-bridge-staging-e8f4` → PR #123 `968aa0b` | [G2-bridge-activation-report](reports/G2-bridge-activation-report.md) |
+| G3 原生聊天 D08 审批（后端） | 后端切片已实现待合并：ChatNativeGate 把桥转来的原生工具审批路由到 D16 检查点（fs/exec 能力 + 聊天网络缝 + mcp.call），ask 落既有 AppApproval 卡面（10 分钟 TTL、一次决定）；桌面渲染复用现链路，真实 Harness 端到端归 G4/真机 | `feature/g3-chat-native-approvals-9d4b` | [G3-chat-native-approvals-report](reports/G3-chat-native-approvals-report.md) |
 | D25 host 检索 | 后端切片已实现待合并：`search.global` 受信方法（跨 bot 消息/产物/工作流/bot 名，字面子串、有界摘要）；渲染层接线归桌面后续 | `feature/d25-host-search-5f3a` | [D25-host-search-report](reports/D25-host-search-report.md) |
 | D18 记忆写入 / 检索 / 删除 | 已交付 | `feature/memory-knowledge` → PR #57 `7de305b` | [D18-memory-report](reports/D18-memory-report.md) |
 | D18 知识导入（.txt/.md，16 KiB 上限） | 已交付 | `feature/knowledge-import` → PR #59 `9805b6a` | [D18-knowledge-import-report](reports/D18-knowledge-import-report.md) |
@@ -183,23 +184,23 @@
 | 区域 | 占位 / 未实现 | 现状 | 去向 |
 | --- | --- | --- | --- |
 | 聊天 | 用户气泡颜色 | **已实现**：气泡按当前会话 bot 着色（D14 交付时未做，由 `fix/chat-user-bubble-bot-color` 补齐） | ~~D14~~ 已完成，见 [D14-report §5](reports/D14-report.md) |
-| 聊天 | 回复仍是"（占位回复）"夹具数据；横幅标注"静态占位" | 真实链路只接了运行监控，chat.* 仍夹具 | [Renderer↔Host 映射](RENDERER_HOST_MAPPING.md) 方案 D→B（待两负责人拍板，挂冲刺队列） |
-| 聊天 | ＋ 菜单"添加附件" | 点击仅提示占位 | **D26**：附件经网关进工作区 |
-| 聊天 | 麦克风按钮 | 占位 | 候选（STT 方案未定，不入 v0.2 承诺） |
-| 顶栏 | 搜索圆钮 | 未实现 | **D25** 全局搜索（Ctrl+K） |
-| 顶栏 | 最近会话 / 产物 popover | 夹具数据 | 同上，随 Renderer↔Host 方案真实化 |
-| 设置 | 分类"电脑 / 保险库 / 用量与账单 / 更新" | 占位禁用 | **D24**：数据备份恢复（data.* 契约已备）、本地用量统计、应用内更新 |
-| 设置 | 强调色 / 语言 / 硬件加速 / 通知 | 强调色、语言、通知已实现 | **D24**（强调色、持久化）+ **D22**（语言切换、通知设置、托盘、Chrome 书签导入）；硬件加速仍为「后续提供」 |
-| 设置 | API Key 保存 / 测试连接 | 夹具内存实现 | 同上，随 Renderer↔Host 方案真实化（safeStorage 通道 D12 已备） |
-| 设置 | 全部设置项不持久化 | 重启即失 | **D24**：写本地存储 |
+| 聊天 | 回复仍是"（占位回复）"夹具数据；横幅标注"静态占位" | **已实现**：chat.send/history/cancel 真实链路（D30 + PR #97/#103），夹具仅存于离线演示模式 | ~~Renderer↔Host 映射~~ 聊天部分已落地；剩余界面态见 **GAP_AUDIT G1'** |
+| 聊天 | ＋ 菜单"添加附件" | **已实现**（D26）：`attachment.begin/append/commit` 上传进工作区 + 模型工具 `read_workspace_file`（PR #106/#111） | ~~D26~~ 已完成，见 [GAP_AUDIT](GAP_AUDIT.md) §1.1 G8 |
+| 聊天 | 麦克风按钮 | 占位仍在渲染层；后端已备（`voice.status/transcribe/speak`，whisper.cpp+SAPI 全本地，PR #113） | **D27'** 语音桌面 UI，见 [GAP_AUDIT](GAP_AUDIT.md) §5 |
+| 顶栏 | 搜索圆钮 | **部分实现**：Ctrl+K 浮层已有但只过滤渲染层本地索引；Host `search.global` 已合入（PR #117）而浮层尚未调用（渲染层 grep 零命中） | **D25 后半（G10'）**，见 [GAP_AUDIT](GAP_AUDIT.md) §2 |
+| 顶栏 | 最近会话 / 产物 popover | 会话部分已读真实数据（PR #103 stored-session）；产物 popover 本次刷新未逐项复核 | 同 [GAP_AUDIT](GAP_AUDIT.md) G1'/G10 |
+| 设置 | 分类"电脑 / 保险库 / 用量与账单 / 更新" | **已实现**（D24）：备份/恢复/保险库（PR #78）、用量统计（PR #119）、应用内更新（`main/updates.ts`） | ~~D24~~ 已完成 |
+| 设置 | 强调色 / 语言 / 硬件加速 / 通知 | **已实现**：强调色+持久化（D24）、语言/通知/托盘/Chrome 导入（D22，PR #75）、硬件加速（`b57d46b`） | ~~D24~~/~~D22~~ 已完成 |
+| 设置 | API Key 保存 / 测试连接 | 本次刷新未逐项复核；保险库 safeStorage 通道已备（PR #78） | 真实 Key 全链验收挂 [GAP_AUDIT](GAP_AUDIT.md) G4（未验证） |
+| 设置 | 全部设置项不持久化 | **已实现**（D24）：`deepseek-bot.settings.v2` 写本地存储 | ~~D24~~ 已完成 |
 | 侧栏 | 账户"退出登录" | 占位（无账号体系） | 维持占位（边界：不引入账户体系），D26 改为"本地资料"卡片 |
-| 全局 | bot / 分组 / 会话状态持久化 | 界面态重启即失 | Renderer↔Host 方案 B（ui.* 会话服务）+ D24 |
+| 全局 | bot / 分组 / 会话状态持久化 | **部分实现**：bot/分组/会话历史随 Host SQLite 持久化、`chat.history` 回放已接（PR #97/#103）；侧栏排列/选中态等界面态仍重启即失 | **GAP_AUDIT G1'**（拍板 #1 记录 ui.* 清单后开工） |
 
 ## 8. 待拍板事项
 
 | # | 事项 | 需要 | 状态 |
 | --- | --- | --- | --- |
-| 1 | Renderer↔Host 真实数据接线方案（A/B/C/D 或组合） | 两负责人按 [映射提案](RENDERER_HOST_MAPPING.md) §3 达成一致 | 待拍板（提案推荐 D→B 两步） |
+| 1 | Renderer↔Host 真实数据接线方案（A/B/C/D 或组合） | 两负责人按 [映射提案](RENDERER_HOST_MAPPING.md) §3 达成一致 | 待拍板——D 步与聊天/历史 B 步已事实上线（PR #97/#103）；剩余 **ui.\*** 清单阻塞 G1' 界面态持久化（见 [GAP_AUDIT](GAP_AUDIT.md) §7.1） |
 | 2 | mono-shape 头像线与 develop 头像线（PR #18/#19）的分叉合并策略 | Destinyian 定基准 | **已定案（2026-10-27）：develop 头像线为基准，`feature/mono-shape` 作废并删除。** 该分支相对 develop 只有一个提交 `e74e570`（fix(desktop): let the mono avatar use any rounded shape），它改的 `MinimalAvatar` / `shapeIndex` / `{kind:"minimal"}` 已随 B-AVATAR-02 的头像重做全部移除（现网 0 命中），合并只会复活死类型。其意图（mono 换形状）至今仍未实现，但更前置的是：契约 `AvatarSchema` 只有 `shape` + `color`、没有 `kind`，mono 属渲染层 UI-only 值，**无法持久化**，重启后头像按 bot id 派生。若将来要黑白头像可留存，需要的是契约加字段（另立小 PR），不是给 mono 加形状 |
 
 ## 9. 对标缺口盘点（Grok Bot · GitHub 分发 · 本地优先）
@@ -213,12 +214,14 @@
 
 ### 9.1 可提前进 v0.2 的快赢
 
+**四项已全部完成（2026-10-28 对 develop `81a0924` 核实，逐项证据见 [GAP_AUDIT](GAP_AUDIT.md) §1.1）**：
+
 | 项 | 说明 | 建议落点 |
 | --- | --- | --- |
-| 深度思考开关 | DeepSeek reasoner 按会话切换（仅改 modelProfile，不破契约） | 并入冲刺三的小任务 |
-| 重新生成 / 编辑重发 | 聊天标配 | 并入 D14 聊天体验 |
-| 对话导出 | 导出 Markdown / 图片到本地文件 | 并入 D24 设置与更新 |
-| 附件理解闭环 | bot 经 read 工具真正读取附件内容并回答（不只上传） | D26 验收扩充 |
+| 深度思考开关 | DeepSeek reasoner 按会话切换（仅改 modelProfile，不破契约） | ~~并入冲刺三~~ **已完成（PR #73）** |
+| 重新生成 / 编辑重发 | 聊天标配 | ~~并入 D14~~ **已完成（PR #97，gap-batch1）** |
+| 对话导出 | 导出 Markdown / 图片到本地文件 | ~~并入 D24~~ **已完成（PR #97，Markdown 导出）** |
+| 附件理解闭环 | bot 经 read 工具真正读取附件内容并回答（不只上传） | ~~D26 验收扩充~~ **已完成（PR #106/#111，`read_workspace_file`）** |
 
 ### 9.2 v0.3 候选池（需方案评审，全部守住消费红线）
 

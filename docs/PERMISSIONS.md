@@ -92,7 +92,7 @@ sequenceDiagram
 
 授权卡字段固定：能力列表、作用域（本次/会话/永久）、次数上限、过期时间、申请理由。当前聊天卡片列出该 bot 的 pending 审批：申请理由用工具名，能力用中文名。本会话按契约默认 5 次、2 小时；永久不限次数。`app.start_run` / `exec.shell` / `screen.capture` / `mcp.call` / `device.action` 以及没有 sessionId 的审批不提供更长授权。决定调用 `permission.approval.decide`，并带回精确 `actionDigest`。
 
-同一张聊天区域还可以给当前 bot 授予或撤销一项能力，不必先等一次工具调用。授予走受信方法 `permission.grant.issue`，一次只接受一个能力，scope 只能是 `session` 或 `permanent`。会话授权的 `sessionId` 由 Host 写成 `chat:<botId>`，与该 bot 聊天工具的受信调用方一致，并绑定当前 Host 代次、默认 5 次和 120 分钟；调用方不能自带会话、次数或期限。Host 重启时既有逻辑撤销旧的 once/session 授权。永久授权不带会话、次数或期限。同一 bot、能力、作用域和会话上仍有效的授权被再次授予时，返回原来那一条，不延长到期时间，也不把次数清零。策略不是「每次询问」时拒绝发放：拒绝优先，始终允许也不再叠一条授权。`app.start_run` / `exec.shell` / `screen.capture` / `device.action` / `mcp.call` 不能从这里取得会话或永久授权。聊天里的撤销调用已有 `permission.grant.revoke`，只列出这个 bot 尚未撤销的授权。发放和撤销之后，下一次工具调用仍由现有网关检查；策略改为拒绝，或授权已撤销、过期、用尽、会话或代次不符时，该能力不会执行。这个方法不进入模型工具目录。
+聊天区不再提供常驻的「给这个 bot 授予一项能力」卡片（2026-10-28 裁决：该卡常驻在每个 bot 聊天里、与用户操作无关，读作无规则弹卡）。能力的给予只走两条路径：模型真实调用能力时弹出的审批卡（上面一段），以及设置页的三档策略与授权记录（撤销在授权记录里）。受信方法 `permission.grant.issue` / `permission.grant.revoke` 语义不变——一次一个能力，scope 只有 `session` 或 `permanent`，会话授权的 `sessionId` 由 Host 写成 `chat:<botId>` 并绑定当前 Host 代次、默认 5 次和 120 分钟；调用方不能自带会话、次数或期限。Host 重启时既有逻辑撤销旧的 once/session 授权。同一 bot、能力、作用域和会话上仍有效的授权被再次授予时，返回原来那一条，不延长到期时间，也不把次数清零。策略不是「每次询问」时拒绝发放：拒绝优先，始终允许也不再叠一条授权。`app.start_run` / `exec.shell` / `screen.capture` / `device.action` / `mcp.call` 不能取得会话或永久授权。发放和撤销之后，下一次工具调用仍由现有网关检查；策略改为拒绝，或授权已撤销、过期、用尽、会话或代次不符时，该能力不会执行。这两个方法不进入模型工具目录；渲染层聊天组件不再调用 `permission.grant.issue`。
 
 ## 5. 设置页
 

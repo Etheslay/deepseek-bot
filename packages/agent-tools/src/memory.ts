@@ -49,7 +49,11 @@ export function bindMemoryTools(store: MemoryStore): [
     {
       name: "memory_write",
       description:
-        "Save one private note for this bot. The note is not shared with other bots. There is no parameter for choosing a bot.",
+        "Save one private note for this bot. The note is not shared with other bots. There is no parameter for choosing a bot. " +
+        "Write only what the user explicitly stated and will stay useful across conversations — a durable preference, " +
+        "constraint or fact about them or this bot's setup (for example '记住：我喜欢简洁的中文回答'). Never write during " +
+        "greetings or small talk, never while a clarifying question is still open, and never speculative guesses or " +
+        "one-off task details. The write needs the user's approval first, so do not propose it lightly.",
       inputSchema: MemoryWriteInputSchema,
       async handler(params, context) {
         return store.write(requireBot(context), params.text);
