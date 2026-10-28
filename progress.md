@@ -1,5 +1,11 @@
 # 工作记录
 
+## 2026-10-29：CONTRACTS.md 契约补记 + 在途台账二更（纯文档）
+
+- PR #139 合入后 fetch：develop 快进至 `faecb98`；发现两条新远程在途分支 `feature/context-meter`、`feature/d17-skill-host-store`（均为 Destinyian 的完整切片，含任务书与报告；冲突试算分别 3 文件 / 1 文件）——只登记进 SPRINTS §10，不触碰。
+- 治理债 §7.8 收口：CONTRACTS.md §3 方法表补 `chat.send` / `chat.history` / `chat.cancel` / `chat.status` / `chat.attach` 五行，字段与边界逐一对照 `packages/contracts/src/methods.ts` 冻结 schema（此前 chat.status 全文零提及）；GAP_AUDIT §7.8 标记已收口。
+- 纯 Markdown；未运行 pnpm 测试（无代码路径变更）；执行 `git diff --check` 与本地链接检查，结果见 PR 验证证据表。
+
 ## 2026-10-29：GAP_AUDIT 三次刷新与在途台账清点（纯文档）
 
 - 开工时本地 develop 落后 1 提交，fetch 后快进至 `3e21112`（PR #136 互通派发、#137 原始人模式已合入，远程 feature 分支已删）；工作区干净，本轮未改任何代码、未装依赖、未发起 API 请求。
