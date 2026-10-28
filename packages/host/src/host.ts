@@ -124,6 +124,7 @@ import {
   type VoiceTranscribeRunner,
 } from "./voice.js";
 import { TaskDispatcher } from "./task-dispatcher.js";
+import { ChatNativeGate } from "./chat-gate.js";
 import { evaluateTriggerRules } from "./triggers.js";
 import { invokeConnector } from "./connectors.js";
 import { McpService } from "./mcp.js";
@@ -221,6 +222,10 @@ export interface DeepSeekBotHost {
   readonly screen: ScreenService;
   /** D27 local voice backend (whisper.cpp transcription + Windows SAPI speech). */
   readonly voice: VoiceService;
+  /** G2/G3: the D08 bridge session registry (diagnostics; chat turns register here). */
+  readonly sessions: SessionRegistry;
+  /** The D16 checkpoint instance backing the gateway and the chat native gate (diagnostics/tests). */
+  readonly permissions: AgentPermissionService;
   /** Trusted in-process human controls. Never registered as model capabilities. */
   readonly userQuestions: UserQuestionControls;
   /**
@@ -441,6 +446,43 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
           ...(skillCapabilities !== undefined ? { skillCapabilities } : {}),
         });
       },
+      // G3: native harness tool calls in a chat turn route through the D16
+      // checkpoint (fs/exec capabilities, chat D08 network seam, mcp.call);
+      // ask mints the same AppApproval card the app tools use.
+      bridgeRegistration: {
+        register: (sessionId, permissions) =>
+          sessionRegistry.register(sessionId, {
+            runId: sessionId,
+            nodeRunId: sessionId,
+            permissions,
+          }),
+        unregister: (sessionId) => sessionRegistry.unregister(sessionId),
+      },
+      nativeGate: (input) =>
+        new ChatNativeGate({
+          permissions,
+          network: (caller, action) => {
+            if (action.kind !== "network.request" || action.url === undefined) {
+              return Promise.reject(
+                new NodeExecutionError({
+                  code: "INVALID_INPUT",
+                  message: "chat network ask is missing a url",
+                  retryable: false,
+                }),
+              );
+            }
+            return chatNetworkPermissions(caller).authorize({
+              kind: "network.request",
+              callId: action.callId,
+              toolName: action.toolName,
+              url: action.url,
+              arguments: action.arguments as Readonly<Record<string, unknown>>,
+            }) as Promise<{ approvalId: string | null; resource: string }>;
+          },
+          botId: input.botId,
+          sessionId: input.sessionId,
+          signal: input.signal,
+        }),
     },
     () => uiLocale.current,
     (usage) => {
@@ -859,6 +901,8 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
     mcp,
     screen,
     voice,
+    sessions: sessionRegistry,
+    permissions,
     userQuestions: {
       listPending: (callerId) => questions.listPending(callerId),
       answer: (requestId, callerId, answer) => questions.answer(requestId, callerId, answer),

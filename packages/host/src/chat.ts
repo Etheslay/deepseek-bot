@@ -11,12 +11,21 @@
  * session persistence.
  *
  * Application tools use a per-turn private channel into the D16 gateway.
- * Native approval-requiring tools still fail closed: chat sessions are not
- * registered in the workflow engine's D08 session registry.
+ * Native approval-requiring tools reach the D16 checkpoint through the D08
+ * approval bridge: the turn registers a ChatNativeGate in the session
+ * registry (G3), so policy ask mints the same AppApproval card the app
+ * tools use and deny/allow/cancel follow the shared semantics.
  */
 import { randomUUID } from "node:crypto";
-import type { Bot, CapabilityId, ChatSkillInjection } from "@deepseek-bot/contracts";
-import { EngineError } from "@deepseek-bot/runtime";
+import type {
+  Bot,
+  CapabilityId,
+  ChatSkillInjection,
+} from "@deepseek-bot/contracts";
+import {
+  EngineError,
+  type NodePermissionHandle,
+} from "@deepseek-bot/runtime";
 import {
   HarnessAttempt,
   PINNED_DSH_VERSION,
@@ -75,6 +84,20 @@ export interface ChatToolWiring {
     signal: AbortSignal,
     skillCapabilities?: readonly CapabilityId[],
   ): ApplicationToolTurn;
+  /**
+   * G3: register/unregister the turn's native-tool gate with the D08 approval
+   * bridge. Present only when the host wires the bridge; absent means native
+   * approval asks keep failing closed exactly as before.
+   */
+  readonly bridgeRegistration?: {
+    register(sessionId: string, permissions: NodePermissionHandle): void;
+    unregister(sessionId: string): void;
+  };
+  readonly nativeGate?: (input: {
+    readonly sessionId: string;
+    readonly botId: string;
+    readonly signal: AbortSignal;
+  }) => NodePermissionHandle;
 }
 
 /** Cancelling a turn must not wait for a desktop credential RPC to return. */
@@ -198,6 +221,7 @@ export class ChatManager {
     session.lastSessionId = sessionId;
     let attempt: HarnessAttempt | null = null;
     let turn: ApplicationToolTurn | null = null;
+    let registered = false;
     const abortAttempt = () => {
       if (attempt !== null) void attempt.kill();
     };
@@ -251,6 +275,23 @@ export class ChatManager {
           : {}),
       });
       await turn.waitReady();
+      // G3: register the turn's native-tool gate so harness approval asks
+      // reach the D16 checkpoint; chat.cancel aborts the turn signal, which
+      // cancels any pending approval waiter.
+      if (
+        this.tools.bridgeRegistration !== undefined &&
+        this.tools.nativeGate !== undefined
+      ) {
+        this.tools.bridgeRegistration.register(
+          sessionId,
+          this.tools.nativeGate({
+            sessionId,
+            botId: bot.id,
+            signal: controller.signal,
+          }),
+        );
+        registered = true;
+      }
       const prompt = this.composePrompt(bot, text, history, skills);
       const outcome = await attempt.runTurn(sessionId, prompt, controller.signal, observeEvent);
       session.lastSessionId = sessionId;
@@ -269,6 +310,7 @@ export class ChatManager {
       }
       return { ...outcome, sessionId };
     } finally {
+      if (registered) this.tools.bridgeRegistration?.unregister(sessionId);
       controller.abort();
       if (turn !== null) await turn.close();
       if (attempt !== null) await attempt.dispose().catch(() => undefined);

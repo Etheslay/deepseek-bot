@@ -60,6 +60,12 @@ const CAPABILITIES: Readonly<Record<string, readonly CapabilityId[]>> = {
   // reading it back is the model `read` tool. Both default to ask.
   import_attachment: ["fs.write"],
   read: ["fs.read"],
+  // G3: native harness tool calls inside a chat turn gate on the same
+  // fs/exec capabilities; delete rides fs.write (destructive filesystem).
+  fs_read: ["fs.read"],
+  fs_write: ["fs.write"],
+  fs_delete: ["fs.write"],
+  exec_shell: ["exec.shell"],
 };
 
 /** Capability ids a gateway tool consumes. Unknown tools return undefined (fail closed). */
