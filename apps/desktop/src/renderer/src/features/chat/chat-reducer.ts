@@ -122,6 +122,9 @@ export function failureMessage(code: ErrorCode): string {
       return t("chat.authFailed");
     case "MODEL_UNAVAILABLE":
       return t("chat.modelUnavailable");
+    case "BUDGET_EXCEEDED":
+      /* out of credit reads differently from "the model is down"; retrying is pointless */
+      return t("chat.budgetExhausted");
     case "CANCELLED":
       return t("chat.cancelled");
     default:

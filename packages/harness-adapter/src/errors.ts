@@ -40,6 +40,24 @@ function errorFromResponseError(error: JsonRpcResponseError): NodeExecutionError
       ...(retryAfterMs !== undefined ? { retryAfterMs } : {}),
     });
   }
+  /*
+   * Out of credit is not a transient failure: retrying spends nothing and
+   * cannot succeed until the account is topped up. It has to be classified
+   * before the model-route pattern, because a 402 message normally names the
+   * model ("insufficient balance for model deepseek-chat") and would otherwise
+   * be reported as MODEL_UNAVAILABLE - which the UI shows as "try again later".
+   */
+  if (
+    /(^|\D)402(\D|$)|insufficient[- _]?(balance|quota|funds)|balance[- _]?(is[- ]?)?(insufficient|not[- ]?enough)|payment[- _]?required|quota[- _]?(exceeded|exhausted)|(余额|额度)(不足|已用尽|用尽|已用完)|欠费/.test(
+      message,
+    )
+  ) {
+    return new NodeExecutionError({
+      code: "BUDGET_EXCEEDED",
+      message: `harness reported exhausted balance or quota: ${error.message}`,
+      retryable: false,
+    });
+  }
   if (/auth|credential|api[- ]?key|unauthorized|forbidden|(^|\D)40[13](\D|$)/.test(message)) {
     return new NodeExecutionError({
       code: "AUTH_FAILED",

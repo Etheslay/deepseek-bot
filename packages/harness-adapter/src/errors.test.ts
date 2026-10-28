@@ -52,6 +52,48 @@ describe("nodeExecutionErrorFromHarness", () => {
     expect(error.retryable).toBe(true);
   });
 
+  it("classifies an exhausted balance as non-retryable BUDGET_EXCEEDED", () => {
+    const error = nodeExecutionErrorFromHarness(
+      new JsonRpcResponseError(-32003, "402 Payment Required: insufficient balance"),
+      base,
+    );
+    expect(error.code).toBe("BUDGET_EXCEEDED");
+    /* topping up is the fix; a retry loop would only burn the user's patience */
+    expect(error.retryable).toBe(false);
+  });
+
+  it("keeps an out-of-credit error out of MODEL_UNAVAILABLE even when it names the model", () => {
+    const error = nodeExecutionErrorFromHarness(
+      new JsonRpcResponseError(
+        -32004,
+        "insufficient balance for model deepseek-chat on provider route",
+      ),
+      base,
+    );
+    expect(error.code).toBe("BUDGET_EXCEEDED");
+  });
+
+  it("recognizes Chinese and quota-shaped wording for the same condition", () => {
+    for (const message of [
+      "余额不足，请充值后重试",
+      "当前账户额度已用尽",
+      "quota exceeded for this account",
+      "insufficient_quota",
+    ]) {
+      const error = nodeExecutionErrorFromHarness(new JsonRpcResponseError(-32005, message), base);
+      expect(error.code, message).toBe("BUDGET_EXCEEDED");
+      expect(error.retryable, message).toBe(false);
+    }
+  });
+
+  it("still classifies a plain rate limit as RATE_LIMITED, not as budget", () => {
+    const error = nodeExecutionErrorFromHarness(
+      new JsonRpcResponseError(-32006, "429 too many requests, rate limit reached"),
+      base,
+    );
+    expect(error.code).toBe("RATE_LIMITED");
+  });
+
   it("falls back to retryable RUNTIME_UNAVAILABLE for unknown wire errors", () => {
     const error = nodeExecutionErrorFromHarness(
       new JsonRpcResponseError(-32003, "something unexpected"),
