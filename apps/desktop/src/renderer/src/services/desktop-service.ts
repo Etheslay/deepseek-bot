@@ -40,6 +40,14 @@ export type BotDraft = {
   role?: BotRoleDraft;
 };
 
+/** Result of one D26 attachment upload commit (trusted desktop only). */
+export type AttachmentUploadResult = {
+  /** Workspace-relative posix path inside the bot workspace. */
+  path: string;
+  size: number;
+  checksum: string;
+};
+
 /** One persisted host chat row (chat.history) with its v0.5 meta marker. */
 export type ChatHistoryRow = {
   id: string;
@@ -139,6 +147,14 @@ export interface DesktopService {
       },
       options?: StreamOptions,
     ): StreamHandle;
+  };
+  /**
+   * D26 attachment upload (trusted desktop only): bytes stage chunked through
+   * the Host and commit into the bot workspace's attachments/ directory. The
+   * model never picks the path; reads go through read_workspace_file (fs.read).
+   */
+  attachments: {
+    upload(botId: string, file: { name: string; bytes: Uint8Array }): Promise<AttachmentUploadResult>;
   };
   /**
    * D28 co-edit sidecar over one bot's workspace files. Read/save address a

@@ -110,6 +110,7 @@ import type { McpService } from "./mcp.js";
 import type { ScreenService } from "./screen.js";
 import type { DeviceActionService } from "./device.js";
 import type { WorkspaceArtifacts } from "./artifacts.js";
+import type { AttachmentStore } from "./attachments.js";
 import {
   DEFAULT_MODEL_PROFILE_ID,
   SEARXNG_ENDPOINT_SETTING,
@@ -168,6 +169,8 @@ export interface HostContext {
   };
   /** v0.5 manager orchestration: dispatched-task queue + executor. */
   readonly tasks: TaskDispatcher;
+  /** D26 trusted-desktop attachment uploads staging into the bot workspace. */
+  readonly attachments: AttachmentStore;
   /**
    * Live UI language holder (settings.update { ui.locale }). Delivery notices,
    * handoff framing and the ask_user fallback label come out in this language.
@@ -930,6 +933,19 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
       const bot = requireLiveBot(db, payload.botId);
       return { searches: context.searchResults.list(bot.id) };
     },
+
+    "attachment.begin": (payload) => {
+      const bot = requireLiveBot(db, payload.botId);
+      const uploadId = context.attachments.begin(bot.id, payload.name, payload.size, payload.sha256);
+      return { uploadId };
+    },
+
+    "attachment.append": (payload) => {
+      const received = context.attachments.append(payload.uploadId, payload.chunkBase64);
+      return { received };
+    },
+
+    "attachment.commit": (payload) => context.attachments.commit(payload.uploadId),
 
     "memory.list": (payload) => {
       const bot = requireLiveBot(db, payload.botId);

@@ -27,7 +27,9 @@ describe("method whitelist", () => {
   it("defines a contract for every whitelisted method and nothing else", () => {
     const contractMethods = Object.keys(METHOD_CONTRACTS).sort();
     expect(contractMethods).toEqual([...METHODS].sort());
-    expect(METHODS).toHaveLength(104);
+    // 105 methods on develop (PR #101 added chat.status without bumping this
+    // pin — the baseline suite was red) + 3 attachment.* methods (D26).
+    expect(METHODS).toHaveLength(108);
   });
 
   it("covers every method group from CONTRACTS §3", () => {
@@ -35,6 +37,7 @@ describe("method whitelist", () => {
     expect([...groups].sort()).toEqual([
       "approval",
       "artifacts",
+      "attachment",
       "bot",
       "chat",
       "connector",
@@ -401,6 +404,76 @@ describe("parseRequest", () => {
         "memory.retention.set",
       ).success,
     ).toBe(true);
+  });
+});
+
+describe("attachment methods", () => {
+  const botId = "10000000-0000-4000-8000-000000000001";
+  const uploadId = "30000000-0000-4000-8000-000000000003";
+
+  it("accepts begin, append and commit with sane payloads", () => {
+    expect(
+      parseRequest(
+        envelope("attachment.begin", {
+          botId,
+          name: "报告.md",
+          size: 12,
+          sha256: "a".repeat(64),
+        }),
+        "attachment.begin",
+      ).success,
+    ).toBe(true);
+    expect(
+      parseRequest(
+        envelope("attachment.append", { uploadId, chunkBase64: Buffer.from("abc").toString("base64") }),
+        "attachment.append",
+      ).success,
+    ).toBe(true);
+    expect(
+      parseRequest(envelope("attachment.commit", { uploadId }), "attachment.commit").success,
+    ).toBe(true);
+  });
+
+  it("rejects traversal names, oversized files, and oversized chunks", () => {
+    expect(
+      parseRequest(
+        envelope("attachment.begin", {
+          botId,
+          name: "sub/dir.md",
+          size: 12,
+          sha256: "a".repeat(64),
+        }),
+        "attachment.begin",
+      ).success,
+    ).toBe(false);
+    expect(
+      parseRequest(
+        envelope("attachment.begin", {
+          botId,
+          name: ".hidden.md",
+          size: 12,
+          sha256: "a".repeat(64),
+        }),
+        "attachment.begin",
+      ).success,
+    ).toBe(false);
+    expect(
+      parseRequest(
+        envelope("attachment.begin", {
+          botId,
+          name: "big.md",
+          size: 2 * 1024 * 1024 + 1,
+          sha256: "a".repeat(64),
+        }),
+        "attachment.begin",
+      ).success,
+    ).toBe(false);
+    expect(
+      parseRequest(
+        envelope("attachment.append", { uploadId, chunkBase64: "x".repeat(700_001) }),
+        "attachment.append",
+      ).success,
+    ).toBe(false);
   });
 });
 

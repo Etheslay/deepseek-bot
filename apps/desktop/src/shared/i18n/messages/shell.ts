@@ -17,6 +17,8 @@ export const shellMessages = {
   "shell.artifacts": { zh: "产物", en: "Artifacts" },
   "shell.artifactsWorkspaceTitle": { zh: "产物（bot 工作区）", en: "Artifacts (bot workspace)" },
   "shell.attachmentTooLarge": { zh: "{0} 超过 2 MB 上限", en: "{0} exceeds the 2 MB limit" },
+  "shell.attachmentUploadFailed": { zh: "附件上传失败：{0}（{1}），未发送", en: "Attachment upload failed: {0} ({1}); nothing was sent" },
+  "shell.attachmentStoredPath": { zh: "已存工作区 {0}", en: "Stored in workspace {0}" },
   "shell.backToCurrentSession": { zh: "返回当前会话", en: "Back to current session" },
   "shell.bot": { zh: "机器人", en: "Bot" },
   "shell.botActionsMenuLabel": { zh: "Bot 操作：{0}", en: "Bot actions: {0}" },

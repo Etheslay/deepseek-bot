@@ -15,7 +15,7 @@
 | `entities.ts` | §2 | Bot（v0.2 增 nullish avatar/groupId）、BotGroup、Avatar（规范池 + `assignBatchAvatars` 纯函数）、BotCreationDraft、ModelProfile、Workspace、Workflow/Node/Edge、Schedule、Run、NodeRun、Approval、Artifact |
 | `events.ts` | §4 | 持久事件 envelope、10 类事件 payload schema、瞬态 `assistant.delta`、`isSequenceMonotonic` |
 | `workflow.ts` | §2、§3、§6 | DAG 校验器：环（WORKFLOW_CYCLE）、悬空边与缺失绑定（MISSING_BINDING）、重复节点/边（INVALID_INPUT），错误定位到节点与字段 |
-| `methods.ts` | §1、§3 | 80 个白名单方法的 envelope 与 per-method 请求/响应 schema（`METHOD_CONTRACTS`）、1 MiB 消息上限、`parseRequest` |
+| `methods.ts` | §1、§3 | 108 个白名单方法的 envelope 与 per-method 请求/响应 schema（`METHOD_CONTRACTS`）、1 MiB 消息上限、附件分片常量（`MAX_ATTACHMENT_BYTES` / `MAX_ATTACHMENT_CHUNK_BYTES`）、`parseRequest` |
 | `permissions.ts` | §2、§3 | 能力、全局策略、once/session/permanent grant、精确应用审批、追加式审计及 7 个受信人类 permission.* 方法；严格参数校验与高风险能力限制 |
 | `fixtures/` | §7 | 12 个场景夹具（成功、限流、取消、审批拒绝、重复消息、并发编辑、崩溃重连、循环图、路径越界、过期审批 + 版本拒绝、缺失绑定），见 [fixtures/README.md](fixtures/README.md) |
 

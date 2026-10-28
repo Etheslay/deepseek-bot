@@ -67,6 +67,7 @@ import type { MentionTable } from "./features/chat/mentions.js";
 import {
   attachmentAccept,
   classifyAttachment,
+  composeAttachmentBlocks,
   formatAttachmentSize,
   MAX_ATTACHMENT_BYTES,
   type AttachmentDraft,
@@ -170,9 +171,9 @@ type Msg = {
   /** Multi-bot delivery: stacked avatar chips, clickable per bot. */
   deliverTo?: number[];
   peerKey?: number;
-  /** Files sent with the message (D26 renderer slice). */
+  /** Files sent with the message (D26; path = workspace-relative after upload). */
   attachments?:
-    | { name: string; size: number; kind: "text" | "image" | "binary"; dataUrl?: string }[]
+    | { name: string; size: number; kind: "text" | "image" | "binary"; dataUrl?: string; path?: string }[]
     | undefined;
   /** Choice card the bot put to the user (D14 interaction slice). */
   choices?: {
@@ -2959,6 +2960,11 @@ function MessageBubble({
                     <span className="msg-attachment-size">
                       {formatAttachmentSize(file.size)}
                     </span>
+                    {file.path !== undefined && (
+                      <span className="msg-attachment-path">
+                        {t("shell.attachmentStoredPath", [file.path])}
+                      </span>
+                    )}
                   </span>
                 ),
               )}
@@ -3356,8 +3362,10 @@ function BotsPlaceholder({
         continue;
       }
       const kind = classifyAttachment(file.type, file.name);
+      // D26: every accepted kind keeps its File handle — bytes upload into the
+      // bot workspace at send time; text also pre-reads for inline injection.
       if (kind === "text") {
-        drafts.push({ name: file.name, size: file.size, mime: file.type, text: await file.text() });
+        drafts.push({ name: file.name, size: file.size, mime: file.type, text: await file.text(), file });
       } else if (kind === "image") {
         const dataUrl = await new Promise<string>((resolve, reject) => {
           const reader = new FileReader();
@@ -3365,9 +3373,9 @@ function BotsPlaceholder({
           reader.onerror = () => reject(reader.error);
           reader.readAsDataURL(file);
         });
-        drafts.push({ name: file.name, size: file.size, mime: file.type, dataUrl });
+        drafts.push({ name: file.name, size: file.size, mime: file.type, dataUrl, file });
       } else {
-        onNotify(t("shell.previewUnsupported", [file.name]));
+        drafts.push({ name: file.name, size: file.size, mime: file.type, file });
       }
     }
     if (drafts.length > 0) {
@@ -3456,18 +3464,61 @@ function BotsPlaceholder({
       answerClarify(clarify, text);
       return;
     }
-    const outgoing: NonNullable<Msg["attachments"]> = pendingFiles.map((f) => ({
-      name: f.name,
-      size: f.size,
-      kind: classifyAttachment(f.mime, f.name),
-      ...(f.dataUrl !== undefined ? { dataUrl: f.dataUrl } : {}),
-    }));
+    void sendWithAttachments(text);
+  };
+
+  /**
+   * D26 read closure: attachment bytes upload into the bot workspace before
+   * the turn starts; the outgoing text describes each file by its workspace
+   * path (small text stays inline, larger text and binaries point at
+   * read_workspace_file). A failed upload aborts the send and keeps the
+   * draft + chips so the user can retry without retyping.
+   */
+  const sendWithAttachments = async (text: string): Promise<void> => {
+    const files = pendingFiles;
+    const outgoing: NonNullable<Msg["attachments"]> = [];
+    const blocks: string[] = [];
+    for (const f of files) {
+      if (f.file === undefined) {
+        continue;
+      }
+      const kind = classifyAttachment(f.mime, f.name);
+      try {
+        const bytes = new Uint8Array(await f.file.arrayBuffer());
+        const uploaded = await service.attachments.upload(me.bot.id, { name: f.name, bytes });
+        outgoing.push({
+          name: f.name,
+          size: f.size,
+          kind,
+          ...(f.dataUrl !== undefined ? { dataUrl: f.dataUrl } : {}),
+          path: uploaded.path,
+        });
+        blocks.push(
+          ...composeAttachmentBlocks([
+            {
+              name: f.name,
+              size: f.size,
+              mime: f.mime,
+              kind,
+              ...(f.text !== undefined ? { text: f.text } : {}),
+              path: uploaded.path,
+            },
+          ]),
+        );
+      } catch (error) {
+        const code = (error as { code?: string }).code;
+        const detail = code ?? (error instanceof Error ? error.message : String(error));
+        onNotify(t("shell.attachmentUploadFailed", [f.name, detail]));
+        return;
+      }
+    }
+    const composed = [text, ...blocks].filter((part) => part.length > 0).join("\n\n");
     onSend(text, outgoing.length > 0 ? outgoing : undefined, pendingMeta ?? undefined);
     setPendingMeta(null);
     setPendingFiles([]);
     setFailedText(text);
     setDraft("");
-    startChatStream(text);
+    startChatStream(composed);
   };
 
   /** G6: 重新生成 — re-ask the latest user question as a new labelled turn. */

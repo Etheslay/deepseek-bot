@@ -18,6 +18,7 @@ import {
 } from "./contract-validation.js";
 import {
   ServiceError,
+  type AttachmentUploadResult,
   type ChatSessionView,
   type ConnectionScenario,
   type DesktopService,
@@ -323,6 +324,18 @@ export function createFixtureService(): DesktopService {
             // No real network in D05: the result is honestly unverified.
             return { result: "unverified", ok: false, errorCode: "RUNTIME_UNAVAILABLE" };
         }
+      },
+    },
+
+    // D26 fixture: no real storage — reports the path the host would use so
+    // the composer flow is exercisable offline. Never claim a real commit.
+    attachments: {
+      async upload(_botId, file): Promise<AttachmentUploadResult> {
+        return {
+          path: `attachments/${file.name}`,
+          size: file.bytes.byteLength,
+          checksum: "0".repeat(64),
+        };
       },
     },
 

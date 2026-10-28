@@ -271,6 +271,58 @@ describe("host-backed artifacts (D28 co-edit)", () => {
       code: "REVISION_CONFLICT",
     });
   });
+
+  it("uploads attachments chunked through begin/append/commit (D26)", { timeout: 30_000 }, async () => {
+    const { bridge, calls } = makeBridge({
+      "attachment.begin": (payload) => {
+        expect(payload).toMatchObject({ botId: bot.id, name: "big.md" });
+        return { uploadId: "upload-1" };
+      },
+      "attachment.append": (raw) => {
+        const payload = raw as { chunkBase64: string };
+        const chunk = Buffer.from(payload.chunkBase64, "base64");
+        expect(chunk.length).toBeLessThanOrEqual(512 * 1024);
+        return { received: chunk.length };
+      },
+      "attachment.commit": () => ({
+        botId: bot.id,
+        path: "attachments/big.md",
+        size: 600 * 1024,
+        checksum: "c".repeat(64),
+      }),
+    });
+    const service = createHostService(bridge);
+    const bytes = new Uint8Array(600 * 1024);
+    const result = await service.attachments.upload(bot.id, { name: "big.md", bytes });
+    expect(result).toEqual({
+      botId: bot.id,
+      path: "attachments/big.md",
+      size: 600 * 1024,
+      checksum: "c".repeat(64),
+    });
+    expect(calls.map((call) => call.method)).toEqual([
+      "attachment.begin",
+      "attachment.append",
+      "attachment.append",
+      "attachment.commit",
+    ]);
+    const roundTrip = calls
+      .filter((call) => call.method === "attachment.append")
+      .map((call) => Buffer.from((call.payload as { chunkBase64: string }).chunkBase64, "base64"));
+    expect(Buffer.concat(roundTrip)).toEqual(Buffer.from(bytes));
+  });
+
+  it("surfaces host attachment rejections as ServiceError", async () => {
+    const { bridge } = makeBridge({
+      "attachment.begin": () => {
+        throw Object.assign(new Error("bot was not found"), { code: "INVALID_INPUT" });
+      },
+    });
+    const service = createHostService(bridge);
+    await expect(
+      service.attachments.upload(bot.id, { name: "x.md", bytes: new Uint8Array([1]) }),
+    ).rejects.toMatchObject({ code: "INVALID_INPUT" });
+  });
 });
 
 describe("host-backed vault (D24 leftover)", () => {

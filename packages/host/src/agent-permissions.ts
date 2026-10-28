@@ -52,6 +52,9 @@ const CAPABILITIES: Readonly<Record<string, readonly CapabilityId[]>> = {
   mcp_call: ["mcp.call"],
   screen_capture: ["screen.capture"],
   device_action: ["device.action"],
+  // D26: chat attachment reads ride the same D08/D16 checkpoint as native
+  // filesystem reads; policy defaults to ask, audit records the exact path.
+  read_workspace_file: ["fs.read"],
 };
 function digest(call: Omit<PermissionCall, "actionDigest">): string {
   return createHash("sha256").update(stableStringify(call)).digest("hex");

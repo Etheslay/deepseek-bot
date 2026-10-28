@@ -72,4 +72,11 @@ export {
   type ListTasksInput,
 } from "./task-tools.js";
 export { bindWorkflowTools } from "./workflow-tools.js";
+export {
+  bindWorkspaceFileTool,
+  WorkspaceFileInputSchema,
+  WorkspaceFilePathSchema,
+  type WorkspaceFileContent,
+  type WorkspaceFileReader,
+} from "./workspace-file.js";
 export * from "./mcp.js";

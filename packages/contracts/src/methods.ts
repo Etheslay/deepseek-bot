@@ -68,6 +68,14 @@ export const MAX_MESSAGE_BYTES = 1_048_576;
  */
 export const MAX_ARTIFACT_CONTENT_BYTES = 768 * 1024;
 
+/**
+ * One chat attachment may carry at most 2 MiB of file bytes (D26). Bytes ride
+ * chunked `attachment.*` calls because a single envelope stays capped at 1 MiB.
+ */
+export const MAX_ATTACHMENT_BYTES = 2 * 1024 * 1024;
+/** One `attachment.append` chunk carries at most 512 KiB of decoded bytes. */
+export const MAX_ATTACHMENT_CHUNK_BYTES = 512 * 1024;
+
 export function messageSizeBytes(value: unknown): number {
   return new TextEncoder().encode(JSON.stringify(value ?? null)).length;
 }
@@ -114,6 +122,9 @@ export const METHODS = [
   "search.config.get",
   "search.config.set",
   "search.results.list",
+  "attachment.begin",
+  "attachment.append",
+  "attachment.commit",
   "memory.list",
   "memory.write",
   "memory.delete",
@@ -810,6 +821,55 @@ export const METHOD_CONTRACTS = {
         }),
       ),
     }),
+  },
+  "attachment.begin": {
+    request: z
+      .object({
+        botId: UuidSchema,
+        name: z
+          .string()
+          .trim()
+          .min(1)
+          .max(200)
+          .refine(
+            // eslint-disable-next-line no-control-regex -- attachment names must not carry control characters
+            (value) => !/[\\/]/.test(value) && !/[\u0000-\u001f\u007f]/.test(value),
+            {
+              message: "attachment name must be a single path segment",
+            },
+          )
+          .refine((value) => !value.startsWith("."), {
+            message: "attachment name must not start with a dot",
+          }),
+        size: z.int().min(1).max(MAX_ATTACHMENT_BYTES),
+        sha256: Sha256HexSchema,
+      })
+      .strict(),
+    response: z.object({ uploadId: UuidSchema }).strict(),
+  },
+  "attachment.append": {
+    request: z
+      .object({
+        uploadId: UuidSchema,
+        chunkBase64: z
+          .string()
+          .regex(/^[A-Za-z0-9+/]+={0,2}$/, "expected standard base64")
+          .min(4)
+          .max(700_000),
+      })
+      .strict(),
+    response: z.object({ received: z.int().nonnegative() }).strict(),
+  },
+  "attachment.commit": {
+    request: z.object({ uploadId: UuidSchema }).strict(),
+    response: z
+      .object({
+        botId: UuidSchema,
+        path: z.string().min(1).max(1024),
+        size: z.int().min(1),
+        checksum: Sha256HexSchema,
+      })
+      .strict(),
   },
   "knowledge.write": {
     request: z.object({

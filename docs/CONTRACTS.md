@@ -6,6 +6,8 @@ v0.5（D19 MCP HTTP 契约片）新增连接器类型、MCP 工具发现与逐�
 
 v0.6（D21 指定窗口截图与本地 OCR 契约片）新增 `screen.*` 受信桌面方法与结果元数据。当前 `protocolVersion` 为 0.7，继续接受 0.1–0.6 发送方；工作流 `schemaVersion` 仍为 0.1。Windows 采集、离线 OCR 与 Host 网关已在 develop；桌面设置页调用这些方法做本机预览。这不代表真实窗口、打包 Electron 或发布验收已经完成。实现依据见 [D21 设计](superpowers/specs/2026-10-27-local-screen-sensing-design.md)。
 
+v0.7（D26 附件收尾）新增仅受信桌面的 `attachment.begin` / `attachment.append` / `attachment.commit` 分片上传方法；模型侧新增工具 `read_workspace_file`（能力映射 `fs.read`，走 D16 网关检查点）。协议仍为 0.7，继续接受 0.1–0.6 发送方。
+
 ## 1. 通用规则
 
 - ID 使用不可预测的 UUID；时间用 UTC ISO 8601，展示/调度另外保存 IANA 时区。
@@ -90,6 +92,7 @@ MCP 实际调用使用独立能力 `mcp.call`，默认 `ask`，禁止全局 `all
 | memory.retention.get / set | v0.3 保留策略（记忆 + 知识共用）：retentionDays / memoryMaxPerBot / knowledgeMaxPerBot | 0 = 不限制（默认）；损坏值按 0 读——损坏的设置只会让清理变保守；Host 启动与每次写入后执行清扫 |
 | knowledge.list / write / delete | v0.3 当前 bot 的独立知识文档（迁移 `0010-knowledge-docs`） | 正文上限 100000 字（独立于 4000 字记忆）；list 只回摘要（不回正文，1 MiB 消息上限安全）；删除 bot 域隔离同记忆 |
 | knowledge.search | v0.3 本地向量检索：CJK 双字 + 拉丁词 TF-IDF 余弦 + 精确短语加分 | 每次查询即时分窗计算（480 字窗、100 字重叠），不预存向量、不引模型；score≤0 不返回，默认 5 条最多 10 条；数百条满幅文档内为设计边界（用 knowledgeMaxPerBot 约束） |
+| attachment.begin / append / commit | v0.7 附件上传（D26 收尾，仅受信桌面；协议仍为 0.7） | begin 严格校验 `{botId, name, size ≤ 2 MiB, sha256}`，name 必须是单个路径段（禁分隔符/控制字符/首部点号）；append 每块解码后 ≤ 512 KiB（分块绕过 1 MiB envelope 上限，总量不得超声明 size）；commit 校验字节与 sha256 后原子移入该 bot 工作区 `attachments/`，重名追加 `-1`、`-2` 后缀不覆盖；暂存区在数据根 `cache/attachments-staging/`，启动清扫、失败即删、关机清空；未知/归档 bot 拒绝。模型侧读取走 `read_workspace_file`（能力 `fs.read`，默认 ask），路径夹紧在工作区、拒绝隐藏项/目录/二进制/超过 768 KiB 的文件，不截断 |
 | artifacts.list / read / save / versions / versionContent / revert | v0.4 产物共编侧车：bot 工作区文件的列出、读取、保存、版本、版本内容与回退 | 路径必须相对且不穿越（`RelativeArtifactPathSchema` + realpath 夹紧）；内联内容 ≤ 768 KiB（1 MiB envelope 内留 JSON 转义余量），超限显式拒绝不截断；save 携带 expectedChecksum 时文件已变返回 REVISION_CONFLICT；save/revert 恒追加 author=user 版本，未入账的 bot 写入由 list/read/versions 先补记为 author=bot 版本；每文件保留最近 50 版 |
 | task.dispatch / list / cancel | v0.5 任务派发（manager-orchestration） | dispatch 仅由模型工具 `dispatch_task` 经网关到达，请求携带发起者 fromBotId；Host 重验协调者规则（角色/同组/非自身）并执行排队上限（默认 10）；`chain` 预声明 T7 交接链：简单路径（botId 不重复、不含自身）、同组、全链 ≤ 4 跳（Host 可配 2–4，默认 3）；一次审批覆盖整条链，逐跳执行前重验（撤销/deny 即停，剩余跳标 skipped）。list 按 fromBotId/toBotId/rootTaskId/status 过滤；cancel 仅人类：queued 直接取消、running 转 chat.cancel 语义，queued 同链跳级联取消 |
 
