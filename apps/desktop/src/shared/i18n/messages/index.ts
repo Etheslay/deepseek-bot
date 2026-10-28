@@ -1,9 +1,9 @@
 /**
  * The merged message catalogue (D22).
  *
- * Domain files below are generated from the sweep mapping; `d22.ts` and
- * `screen.ts` are hand-authored. Keys are a closed union so a `t("…")` typo
- * fails the typecheck instead of surfacing as a raw key in the UI.
+ * Domain files below are generated from the sweep mapping; `d22.ts`,
+ * `screen.ts`, and `event-rules.ts` are hand-authored. Keys are a closed union
+ * so a `t("…")` typo fails the typecheck instead of surfacing as a raw key.
  */
 import type { Message } from "../types.js";
 import { automationMessages } from "./automation.js";
@@ -29,6 +29,7 @@ import { tasksMessages } from "./tasks.js";
 import { workflowMessages } from "./workflow.js";
 import { d22Messages } from "./d22.js";
 import { d24Messages } from "./d24.js";
+import { eventRuleMessages } from "./event-rules.js";
 
 export const MESSAGES = {
   ...automationMessages,
@@ -54,6 +55,7 @@ export const MESSAGES = {
   ...workflowMessages,
   ...d22Messages,
   ...d24Messages,
+  ...eventRuleMessages,
 } satisfies Record<string, Message>;
 
 export type MessageKey = keyof typeof MESSAGES;
