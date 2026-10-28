@@ -126,6 +126,7 @@ import {
   newBackupId,
   type UiLocale,
 } from "./host.js";
+import { writeAutomationNotice } from "./automation-notices.js";
 import { chatSessionIdFor, type ChatManager } from "./chat.js";
 import type { AttachmentIngress } from "./workspace-attachments.js";
 import { KNOWN_CAPABILITIES, policyKey, readPolicy, type PolicyLevel } from "./permissions.js";
@@ -1147,19 +1148,51 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
       );
     },
 
-    "eventRule.enable": (payload) => ({
-      ...toEventRuleResponse(
-        setEventRuleEnabled(db, { id: payload.id, botId: payload.botId, enabled: true }),
-      ),
-      enabled: true as const,
-    }),
+    "eventRule.enable": (payload) => {
+      const prior = getEventRule(db, payload.id);
+      const updated = setEventRuleEnabled(db, { id: payload.id, botId: payload.botId, enabled: true });
+      if (prior !== undefined && prior.botId === payload.botId && !prior.enabled) {
+        writeAutomationNotice(
+          db,
+          {
+            ruleId: updated.id,
+            botId: updated.botId,
+            ruleName: updated.name,
+            outcome: "enabled",
+            runId: null,
+            reason: undefined,
+          },
+          context.locale.current,
+        );
+      }
+      return {
+        ...toEventRuleResponse(updated),
+        enabled: true as const,
+      };
+    },
 
-    "eventRule.disable": (payload) => ({
-      ...toEventRuleResponse(
-        setEventRuleEnabled(db, { id: payload.id, botId: payload.botId, enabled: false }),
-      ),
-      enabled: false as const,
-    }),
+    "eventRule.disable": (payload) => {
+      const prior = getEventRule(db, payload.id);
+      const updated = setEventRuleEnabled(db, { id: payload.id, botId: payload.botId, enabled: false });
+      if (prior !== undefined && prior.botId === payload.botId && prior.enabled) {
+        writeAutomationNotice(
+          db,
+          {
+            ruleId: updated.id,
+            botId: updated.botId,
+            ruleName: updated.name,
+            outcome: "disabled",
+            runId: null,
+            reason: undefined,
+          },
+          context.locale.current,
+        );
+      }
+      return {
+        ...toEventRuleResponse(updated),
+        enabled: false as const,
+      };
+    },
 
     "eventRule.record.list": (payload) => {
       requireLiveBot(db, payload.botId);
@@ -1187,10 +1220,28 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
       };
     },
 
-    "eventRule.review": (payload) => ({
-      ...toEventRuleResponse(setEventRuleReview(db, { id: payload.id, botId: payload.botId })),
-      review: true as const,
-    }),
+    "eventRule.review": (payload) => {
+      const prior = getEventRule(db, payload.id);
+      const updated = setEventRuleReview(db, { id: payload.id, botId: payload.botId });
+      if (prior !== undefined && prior.botId === payload.botId && !prior.review) {
+        writeAutomationNotice(
+          db,
+          {
+            ruleId: updated.id,
+            botId: updated.botId,
+            ruleName: updated.name,
+            outcome: "review",
+            runId: null,
+            reason: undefined,
+          },
+          context.locale.current,
+        );
+      }
+      return {
+        ...toEventRuleResponse(updated),
+        review: true as const,
+      };
+    },
 
     "eventRule.review.list": (payload) => {
       requireLiveBot(db, payload.botId);
