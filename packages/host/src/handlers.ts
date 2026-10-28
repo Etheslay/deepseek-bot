@@ -31,6 +31,7 @@ import {
   type LocalScheduler,
   type WorkflowEngine,
 } from "@deepseek-bot/runtime";
+import { readSkillLibrary, writeSkillLibrary } from "./skill-library.js";
 import {
   archiveBot,
   archiveBotUnchecked,
@@ -1501,6 +1502,15 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
           .run(credentialRef, at, DEFAULT_MODEL_PROFILE_ID);
       }
       return { configured: true };
+    },
+
+    "skillLibrary.get": () => ({ library: readSkillLibrary(db) }),
+
+    "skillLibrary.save": (payload) => {
+      // The dispatcher already validated the whole library against the
+      // contract (limits, bindings, instruction bounds); store and echo it.
+      writeSkillLibrary(db, payload.library);
+      return { library: payload.library };
     },
 
     "data.backup": () => {

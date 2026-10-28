@@ -12,6 +12,8 @@ v0.9（D27 本地语音后端切片）新增 `voice.status` / `voice.transcribe`
 
 v0.10 新增 `usage.summary`：把每个聊天回合的 token 用量聚合成「用量与账单」页需要的总量、按模型表、按本地日趋势与按 bot 分布。行由 Host 在回合结束时写入 `usage_events`（迁移 0021），渲染层只读。Harness 没上报用量时按字符数估算并标记 `estimated`，页面必须区分展示。当前 `protocolVersion` 为 0.10，继续接受 0.1–0.9 发送方；工作流 `schemaVersion` 仍为 0.1。
 
+v0.11 新增 `skillLibrary.get` / `skillLibrary.save`（D17' 收尾）：D17 技能库（技能定义 + bot 绑定）从渲染层 localStorage 迁到 Host 持久化，存于 settings KV 行 `skills.library.v1`，整库读写、请求侧整体校验（≤30 技能、指令入库上限 20 000 字、绑定 ≤50 bot 且 id 唯一）。注入零改动：`chat.send.skills`（0.8+）仍是唯一注入路径，声明能力仍是本轮网关允许集，网关在授权前拒绝名单外工具，无能力技能只注入说明；库存字符串能力 id（旧导出可载入），强制发生在发送组装时。当前 `protocolVersion` 为 0.11，继续接受 0.1–0.10 发送方；工作流 `schemaVersion` 仍为 0.1。
+
 ## 1. 通用规则
 
 - ID 使用不可预测的 UUID；时间用 UTC ISO 8601，展示/调度另外保存 IANA 时区。
@@ -100,6 +102,7 @@ MCP 实际调用使用独立能力 `mcp.call`，默认 `ask`，禁止全局 `all
 | voice.speak | v0.9：`{text: string≤2000}` → `{spoken: true}` | 用 Windows SAPI 把一段文本朗读出声。Host 调用固定参数的 PowerShell 脚本（文本以 base64 传入，不经 shell 字符串拼接），120 秒超时终止；非 Windows 拒绝。不产生模型工具 |
 | voice.config.get / set | D27 收尾（仅受信桌面；不提升协议版本）：get `{}` → `{whisperBin: string≤1024\|null, whisperModel: string≤1024\|null}`；set 同形状请求并回显存储值 | 本地 whisper 路径的配置面：set 即时生效并写入 settings KV（`voice.whisper.bin` / `voice.whisper.model`），重启后恢复；KV 存在即为权威（null/垃圾值清除，环境变量只是启动种子）；路径只是本地用户选择，模型不可读写；status 按当前值如实报告可用性 |
 | usage.summary | v0.10：`{botId?: UUID, days?: 1–365}` → `{windowDays, totals: {inputTokens, outputTokens, cachedInputTokens, turns, estimated}, byModel[], byDay[], byBot[]}` | 只读的 token 用量聚合，供「用量与账单」页使用。数据由聊天回合结束时写入 `usage_events`（迁移 0021），渲染层不能写入。`days` 缺省 30、超出范围夹到 1–365；`byDay` 按本地日历日分桶；任一来源行为估算时 `totals.estimated` 为 true，页面必须标注"估算" |
+| skillLibrary.get / save | v0.11（仅受信桌面）：get `{}` → `{library: {skills: ≤30 条, bindings: Record<botId, skillId[]>}}`；save 同形状请求并回显存储值 | D17 技能库的 Host 持久化（settings KV 行 `skills.library.v1`，随数据库备份/恢复）。save 整库原子覆写（最后写入胜，同旧 localStorage 语义），请求 schema 校验全部边界：技能 ≤30、指令入库 ≤20 000 字（注入发送时才截到 4 000）、能力存字符串（未知旧串可入库，强制在发送组装时）、绑定 ≤50 bot 且逐 bot id 唯一。损坏行读为空库。注入与能力白名单不在本方法职责内（见 `chat.send.skills`） |
 | memory.list / write / delete | v0.3 人类查看、写入和删除当前 bot 的记忆 | 只作用于 payload.botId；空查询返回最近记录，默认 20、最多 50；删除未命中返回 INVALID_INPUT，不暴露其他 bot 的记录 |
 | memory.retention.get / set | v0.3 保留策略（记忆 + 知识共用）：retentionDays / memoryMaxPerBot / knowledgeMaxPerBot | 0 = 不限制（默认）；损坏值按 0 读——损坏的设置只会让清理变保守；Host 启动与每次写入后执行清扫 |
 | knowledge.list / write / delete | v0.3 当前 bot 的独立知识文档（迁移 `0010-knowledge-docs`） | 正文上限 100000 字（独立于 4000 字记忆）；list 只回摘要（不回正文，1 MiB 消息上限安全）；删除 bot 域隔离同记忆 |
