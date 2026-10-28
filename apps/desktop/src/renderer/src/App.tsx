@@ -22,6 +22,7 @@ import { EventRuleSettings } from "./features/event-rules/event-rule-settings.js
 import { PermissionsPanel } from "./features/permissions/permissions-panel.js";
 import { ScreenSettings } from "./features/screen/screen-settings.js";
 import { UsagePanel } from "./features/usage/usage-panel.js";
+import { SettingsNav, type SettingsSectionKey } from "./features/settings/settings-nav.js";
 import { BotForm } from "./features/bots/bot-form.js";
 import { nextBotName } from "./features/bots/bot-names.js";
 import { CustomSelect } from "./components/custom-select.js";
@@ -445,10 +446,8 @@ export function App(): JSX.Element {
   }, [groupMenu]);
 
   const [settingsOpen, setSettingsOpen] = useState(false);
-  /** Which settings nav section is active (D24). */
-  const [settingsSection, setSettingsSection] = useState<
-    "general" | "permissions" | "computer" | "vault" | "usage" | "updates"
-  >("general");
+  /** Which settings nav section is active (D24; grouping in features/settings). */
+  const [settingsSection, setSettingsSection] = useState<SettingsSectionKey>("general");
   const [backups, setBackups] = useState<
     import("../../shared/ipc-channels.js").BackupSummary[] | null
   >(null);
@@ -2410,28 +2409,7 @@ const logout = (): void => {
             aria-label={t("shell.settings")}
             onClick={(e) => e.stopPropagation()}
           >
-            <aside className="settings-nav" aria-label={t("shell.settingsSections")}>
-              {(
-                [
-                  ["general", t("shell.general")],
-                  ["permissions", t("d24.permissionsSection")],
-                  ["computer", t("shell.computer")],
-                  ["vault", t("shell.vault")],
-                  ["usage", t("shell.usageAndBilling")],
-                  ["updates", t("shell.updates")],
-                ] as const
-              ).map(([key, label]) => (
-                <button
-                  key={key}
-                  type="button"
-                  className={"settings-nav-item" + (settingsSection === key ? " active" : "")}
-                  aria-current={settingsSection === key ? "true" : undefined}
-                  onClick={() => setSettingsSection(key)}
-                >
-                  {label}
-                </button>
-              ))}
-            </aside>
+            <SettingsNav active={settingsSection} onSelect={setSettingsSection} />
             <div className="settings-main">
               <header className="settings-head">
                 <h3>

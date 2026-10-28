@@ -46,6 +46,10 @@ export const shellMessages = {
   "shell.closeSettings": { zh: "关闭设置", en: "Close settings" },
   "shell.comingSoon": { zh: "后续提供", en: "Coming soon" },
   "shell.computer": { zh: "电脑", en: "Computer" },
+  /* hand-added (settings nav grouping): the sweep mapping has no entries for these */
+  "shell.navGroupBasics": { zh: "基础", en: "Basics" },
+  "shell.navGroupAccess": { zh: "权限与数据", en: "Access & data" },
+  "shell.navGroupUsage": { zh: "用量与系统", en: "Usage & system" },
   "shell.computerAndPermissions": { zh: "电脑与权限（策略 / 授权 / 撤销）", en: "Computer & permissions (policy / grants / revoke)" },
   "shell.configuredOverwrite": { zh: "已配置（输入新值覆盖）", en: "Set (type a new value to replace)" },
   "shell.confirm": { zh: "确定", en: "OK" },
