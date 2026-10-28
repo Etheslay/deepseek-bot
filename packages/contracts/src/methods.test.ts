@@ -27,10 +27,10 @@ describe("method whitelist", () => {
   it("defines a contract for every whitelisted method and nothing else", () => {
     const contractMethods = Object.keys(METHOD_CONTRACTS).sort();
     expect(contractMethods).toEqual([...METHODS].sort());
-    // develop is 109 (chat.attach, connector.setCommand, device.action.input
-    // and device.action.input.list on top of the previous 105). The closure
-    // adds attachment.begin/append/commit.
-    expect(METHODS).toHaveLength(112);
+    // develop is 112 (chat.attach, connector.setCommand, device.action.input
+    // and device.action.input.list plus the attachment.begin/append/commit
+    // closure); the voice backend adds voice.status/transcribe/speak.
+    expect(METHODS).toHaveLength(115);
   });
 
   it("covers every method group from CONTRACTS §3", () => {
@@ -62,13 +62,14 @@ describe("method whitelist", () => {
       "task",
       "tool",
       "trigger",
+      "voice",
       "workflow",
     ]);
   });
 });
 
 describe("protocol version", () => {
-  it("accepts v0.8 and previous v0.1–v0.7 senders", () => {
+  it("accepts v0.9 and previous v0.1–v0.8 senders", () => {
     expect(isProtocolVersionSupported("0.2")).toBe(true);
     expect(isProtocolVersionSupported("0.1")).toBe(true);
     expect(isProtocolVersionSupported("0.3")).toBe(true);
@@ -77,12 +78,13 @@ describe("protocol version", () => {
     expect(isProtocolVersionSupported("0.6")).toBe(true);
     expect(isProtocolVersionSupported("0.7")).toBe(true);
     expect(isProtocolVersionSupported("0.8")).toBe(true);
+    expect(isProtocolVersionSupported("0.9")).toBe(true);
     expect(isProtocolVersionSupported("1.0")).toBe(false);
   });
 
   it("rejects unknown or higher protocol versions outright", () => {
     const result = RequestEnvelopeSchema.safeParse({
-    protocolVersion: "0.9",
+    protocolVersion: "1.0",
       requestId: REQUEST_ID,
       method: "bot.list",
       payload: {},

@@ -112,6 +112,7 @@ import type { McpService } from "./mcp.js";
 import type { ScreenService } from "./screen.js";
 import type { DeviceActionService } from "./device.js";
 import type { DeviceInputService } from "./device-input.js";
+import type { VoiceService } from "./voice.js";
 import type { WorkspaceArtifacts } from "./artifacts.js";
 import type { AttachmentStore } from "./attachments.js";
 import {
@@ -148,6 +149,8 @@ export interface HostContext {
   readonly screen: ScreenService;
   readonly device: DeviceActionService;
   readonly deviceInput: DeviceInputService;
+  /** D27 local voice backend (whisper.cpp transcription + Windows SAPI speech). */
+  readonly voice: VoiceService;
   readonly db: OpenedDatabase;
   readonly engine: WorkflowEngine;
   readonly scheduler: LocalScheduler;
@@ -1347,6 +1350,10 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
     },
     "device.action.input": (payload) => context.deviceInput.input(payload.botId, payload.input),
     "device.action.input.list": (payload) => context.deviceInput.list(payload.botId, payload.limit),
+
+    "voice.status": () => context.voice.status(),
+    "voice.transcribe": (payload) => context.voice.transcribe(payload.audioBase64),
+    "voice.speak": (payload) => context.voice.speak(payload.text),
 
     "connector.list": () => ({
       connectors: listConnectors(db).map((row) => connectorPayload(row)),
