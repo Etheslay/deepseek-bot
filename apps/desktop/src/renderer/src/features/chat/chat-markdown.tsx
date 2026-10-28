@@ -5,24 +5,80 @@
  * delegated here and routed to onMentionClick, and the same delegation
  * serves the per-block copy buttons (the HTML is sanitized innerHTML, so
  * nothing inside it can own a React handler).
+ *
+ * D14 follow-up: `mermaid` fences stay plain code blocks through the
+ * pipeline and are enhanced after mount — each unprocessed block renders
+ * locally into a shadow root (see ./mermaid.ts); on failure the source
+ * block stays with an error note.
  */
-import { useMemo, type JSX } from "react";
+import { useEffect, useMemo, useRef, type JSX } from "react";
 import { renderChatMarkdown } from "./markdown.js";
 import { linkMentions, type MentionTable } from "./mentions.js";
 import { copyCodeBlock } from "./code-copy.js";
+import { renderMermaidSvg } from "./mermaid.js";
+import { t } from "../../i18n.js";
 
 export function ChatMarkdown(props: {
   text: string;
   mentions?: MentionTable | undefined;
   onMentionClick?: ((botKey: number) => void) | undefined;
 }): JSX.Element {
+  const hostRef = useRef<HTMLDivElement | null>(null);
   const html = useMemo(() => {
     const base = renderChatMarkdown(props.text);
     return props.mentions ? linkMentions(base, props.mentions) : base;
   }, [props.text, props.mentions]);
 
+  // Runs after every commit: React may reset the sanitized innerHTML on an
+  // update even when the html string is unchanged, so freshly written
+  // mermaid fences are re-detected here. The dataset flag keeps nodes that
+  // survived from being processed twice, and ./mermaid.ts caches renders.
+  useEffect(() => {
+    const host = hostRef.current;
+    if (!host) {
+      return;
+    }
+    let cancelled = false;
+    const blocks = Array.from(
+      host.querySelectorAll<HTMLElement>(".md-code code.language-mermaid"),
+    ).filter((code) => code.dataset.mermaidState === undefined);
+    if (blocks.length === 0) {
+      return;
+    }
+    void (async () => {
+      for (const code of blocks) {
+        if (cancelled) return;
+        code.dataset.mermaidState = "pending";
+        const source = code.textContent ?? "";
+        const svg = await renderMermaidSvg(source);
+        if (cancelled) return;
+        const wrapper = code.closest(".md-code");
+        if (!wrapper) continue;
+        if (svg === null) {
+          code.dataset.mermaidState = "failed";
+          wrapper.classList.add("md-code-mermaid-failed");
+          const note = document.createElement("div");
+          note.className = "md-code-mermaid-error";
+          note.textContent = t("chat.mermaidRenderFailed");
+          wrapper.prepend(note);
+          continue;
+        }
+        code.dataset.mermaidState = "done";
+        const block = document.createElement("div");
+        block.className = "mermaid-block";
+        // The shadow root keeps the diagram's inline <style> tree-scoped.
+        block.attachShadow({ mode: "open" }).innerHTML = svg;
+        wrapper.replaceWith(block);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  });
+
   return (
     <div
+      ref={hostRef}
       className="chat-md"
       dangerouslySetInnerHTML={{ __html: html }}
       onClick={(event) => {

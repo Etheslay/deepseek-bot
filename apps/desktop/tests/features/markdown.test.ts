@@ -57,4 +57,17 @@ describe("chat markdown pipeline", () => {
     const html = renderChatMarkdown("你好，我是普通回复。");
     expect(html).toContain("你好，我是普通回复。");
   });
+
+  it("leaves mermaid fences as escape-text code blocks for post-mount enhancement", () => {
+    // D14 follow-up: the pipeline does not render mermaid itself — the
+    // component enhances `language-mermaid` blocks after mount, so the
+    // sanitized HTML must carry the source as plain escaped text.
+    const html = renderChatMarkdown(
+      "```mermaid\nflowchart TD\n  A[开始] --> B{判断}\n  B -->|是| C[结束]\n```",
+    );
+    expect(html).toContain("language-mermaid");
+    expect(html).toContain("flowchart TD");
+    expect(html).toContain("A[开始]");
+    expect(html).not.toContain("<svg");
+  });
 });

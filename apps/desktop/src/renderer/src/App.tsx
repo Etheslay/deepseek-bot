@@ -65,6 +65,7 @@ import { WorkflowEditor } from "./features/workflow-editor/workflow-editor.js";
 import { RunMonitor } from "./features/run-monitor/run-monitor.js";
 import { CanvasSidecar } from "./features/canvas/canvas-sidecar.js";
 import { ChatMarkdown } from "./features/chat/chat-markdown.js";
+import { setMermaidTheme } from "./features/chat/mermaid.js";
 import { ThinkingLine } from "./features/chat/thinking-line.js";
 import { exportConversation } from "./features/chat/export-conversation.js";
 import type { MentionTable } from "./features/chat/mentions.js";
@@ -474,6 +475,10 @@ export function App(): JSX.Element {
   const [searchOpen, setSearchOpen] = useState(false);
   const initialSettings = useMemo(() => loadSettings(window.localStorage), []);
   const [theme, setTheme] = useState<"dark" | "light">(initialSettings.theme);
+  /** D14 mermaid follow-up: diagrams rendered afterwards follow the theme. */
+  useEffect(() => {
+    setMermaidTheme(theme);
+  }, [theme]);
   const [accountName, setAccountName] = useState(initialSettings.accountName);
   const [accent, setAccent] = useState(initialSettings.accent);
   const [language, setLanguage] = useState<LanguagePreference>(initialSettings.language);

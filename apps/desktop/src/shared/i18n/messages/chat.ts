@@ -6,6 +6,7 @@ export const chatMessages = {
   "chat.artifactList": { zh: "产物列表", en: "Artifact list" },
   "chat.artifactPreview": { zh: "产物预览", en: "Artifact preview" },
   "chat.authFailed": { zh: "认证失败，请检查 API 配置。", en: "Authentication failed; please check the API configuration." },
+  "chat.mermaidRenderFailed": { zh: "流程图渲染失败，已保留原始文本", en: "The flowchart failed to render; the original text is kept" },
   "chat.awaitingApproval": { zh: "等待审批", en: "Awaiting approval" },
   "chat.budgetExhausted": {
     zh: "账户余额不足或额度已用尽，重试不会有结果。请到 DeepSeek 开放平台充值后再发送。",
