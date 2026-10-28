@@ -257,11 +257,16 @@ export function createHostService(bridge: HostBridge): DesktopService {
         let cancelled = false;
         const sessionId = `chat:${botId}`;
         const skills = options?.skills;
+        const primitive = options?.primitive === true;
+        const payload: Record<string, unknown> = { botId, text };
+        if (skills !== undefined && skills.length > 0) {
+          payload.skills = skills;
+        }
+        if (primitive) {
+          payload.primitive = true;
+        }
         const done = bridge.host
-          .call(
-            "chat.send",
-            skills !== undefined && skills.length > 0 ? { botId, text, skills } : { botId, text },
-          )
+          .call("chat.send", payload)
           .then((response) => {
             const reply = (response as { text: string }).text;
             if (!cancelled) {

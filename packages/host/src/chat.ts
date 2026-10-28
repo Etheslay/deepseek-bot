@@ -154,6 +154,7 @@ export class ChatManager {
     text: string,
     history: ReadonlyArray<ChatHistoryEntry> = [],
     skills: readonly ChatSkillInjection[] = [],
+    options: { primitive?: boolean } = {},
   ): Promise<TurnOutcome & { sessionId: string }> {
     if (this.closed)
       throw new EngineError({
@@ -292,7 +293,7 @@ export class ChatManager {
         );
         registered = true;
       }
-      const prompt = this.composePrompt(bot, text, history, skills);
+      const prompt = this.composePrompt(bot, text, history, skills, options.primitive === true);
       const outcome = await attempt.runTurn(sessionId, prompt, controller.signal, observeEvent);
       session.lastSessionId = sessionId;
       /*
@@ -367,21 +368,30 @@ export class ChatManager {
     this.sessions.clear();
   }
 
+  /**
+   * Primitive mode (原始人模式) composes a one-step terse turn: no persona
+   * instructions, no history replay, only the explicitly attached skill block,
+   * one terse directive and this message. Persisted rows and history replay
+   * are untouched — the flag shapes this prompt only.
+   */
   private composePrompt(
     bot: Bot,
     text: string,
     history: ReadonlyArray<ChatHistoryEntry>,
     skills: readonly ChatSkillInjection[],
+    primitive = false,
   ): string {
     const parts: string[] = [];
-    if (bot.instructions.trim().length > 0) {
+    if (!primitive && bot.instructions.trim().length > 0) {
       parts.push(bot.instructions.trim());
     }
     const skillBlock = composeSkillBlock(skills);
     if (skillBlock.length > 0) {
       parts.push(skillBlock);
     }
-    if (history.length > 0) {
+    if (primitive) {
+      parts.push("【原始人模式】只回答下面这一步：不铺垫、不复述上下文、不做总结；直接给最短可用的答案。");
+    } else if (history.length > 0) {
       const lines = history.map(
         (entry) => `${entry.role === "user" ? "用户" : "助手"}：${entry.text}`,
       );

@@ -596,12 +596,19 @@ export const METHOD_CONTRACTS = {
    * instructions into the prompt and, when any capability id is present, the
    * tool gateway allows only tools those ids cover. Omitted or empty means
    * no skill constraint. This does not grant capabilities.
+   *
+   * `primitive` (原始人模式) marks a one-step terse turn: the Host composes a
+   * minimal prompt — no persona instructions and no history replay, only the
+   * attached skill block, a terse directive and this message. Storage and
+   * history replay are unchanged; the flag affects prompt assembly only.
+   * Optional and additive: omitted means the existing behavior.
    */
   "chat.send": {
     request: z.object({
       botId: UuidSchema,
       text: z.string().min(1).max(4000),
       skills: z.array(ChatSkillInjectionSchema).max(MAX_CHAT_SKILLS).optional(),
+      primitive: z.boolean().optional(),
     }),
     response: z.object({
       sessionId: z.string().min(1).max(128),

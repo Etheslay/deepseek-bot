@@ -811,17 +811,24 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
         throw invalid("archived bots cannot chat");
       }
       const sessionId = chatSessionIdFor(bot.id);
-      const history = listChatMessages(db, bot.id, 20).map((row) => ({
-        role: row.role,
-        text: row.text,
-      }));
+      // 原始人模式 composes a one-step prompt: rows are still persisted (and
+      // still replay for later normal turns), so the replay read is skipped.
+      const primitive = payload.primitive === true;
+      const history = primitive
+        ? []
+        : listChatMessages(db, bot.id, 20).map((row) => ({
+            role: row.role,
+            text: row.text,
+          }));
       appendChatMessage(db, {
         botId: bot.id,
         sessionId,
         role: "user",
         text: payload.text,
       });
-      const outcome = await chat.send(bot, payload.text, history, payload.skills ?? []);
+      const outcome = await chat.send(bot, payload.text, history, payload.skills ?? [], {
+        primitive,
+      });
       const assistant = appendChatMessage(db, {
         botId: bot.id,
         sessionId,

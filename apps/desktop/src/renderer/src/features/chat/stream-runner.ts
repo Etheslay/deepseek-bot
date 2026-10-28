@@ -44,6 +44,8 @@ export function runChatStream(deps: {
   /** User text only. Bound skills travel in `skills`, not inside this string. */
   text: string;
   skills?: StreamOptions["skills"];
+  /** 原始人模式: terse one-step prompt on the Host. Independent of skills. */
+  primitive?: boolean;
   forKey: number;
   update: StreamUpdater;
   onAssistant: (text: string) => void;
@@ -60,8 +62,15 @@ export function runChatStream(deps: {
    */
   onSettled?: (result: StreamResult) => void;
 }): StreamHandle {
-  const { stream, botId, text, skills, forKey, update, onAssistant, isCurrent, onSettled } = deps;
+  const { stream, botId, text, skills, primitive, forKey, update, onAssistant, isCurrent, onSettled } = deps;
   let acc = "";
+  const options: StreamOptions | undefined =
+    (skills !== undefined && skills.length > 0) || primitive === true
+      ? {
+          ...(skills !== undefined && skills.length > 0 ? { skills } : {}),
+          ...(primitive === true ? { primitive: true } : {}),
+        }
+      : undefined;
   const handle = stream(botId, text, {
     onDelta: (chunk) => {
       acc += chunk;
@@ -74,7 +83,7 @@ export function runChatStream(deps: {
         prev && prev.forKey === forKey ? { ...applyTool(prev, tool), forKey } : prev,
       );
     },
-  }, skills !== undefined && skills.length > 0 ? { skills } : undefined);
+  }, options);
   void handle.finish().then((result: StreamResult) => {
     // `update` is a React state updater: it runs during the render phase and has
     // to stay pure. Committing the assistant message from inside it made React

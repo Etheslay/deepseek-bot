@@ -84,6 +84,10 @@ import {
   isDeepThinkingEnabled,
 } from "./features/chat/reasoner.js";
 import {
+  loadPrimitiveModes,
+  setPrimitiveMode,
+} from "./features/chat/primitive-mode.js";
+import {
   buildSearchIndex,
   remoteHitsToItems,
   type SearchItem,
@@ -829,6 +833,21 @@ export function App(): JSX.Element {
   /** GAP_AUDIT G5: deep-thinking ships as the bot's model profile. */
   const deepThinking =
     selectedBotEntry !== undefined && isDeepThinkingEnabled(selectedBotEntry.bot.modelProfileId);
+  /** 原始人模式: per-bot renderer preference (localStorage shelf). */
+  const [primitiveModes, setPrimitiveModes] = useState<Record<string, true>>(() =>
+    loadPrimitiveModes(window.localStorage),
+  );
+  const primitiveMode =
+    selectedBotEntry !== undefined && primitiveModes[selectedBotEntry.bot.id] === true;
+
+  const togglePrimitiveMode = (): void => {
+    if (selectedBotEntry === undefined) {
+      return;
+    }
+    setPrimitiveModes(
+      setPrimitiveMode(window.localStorage, selectedBotEntry.bot.id, !primitiveMode),
+    );
+  };
 
   const toggleDeepThinking = async (): Promise<void> => {
     if (selectedBotEntry === undefined) {
@@ -1432,33 +1451,6 @@ const logout = (): void => {
             </span>
           )}
         </span>
-        {selectedBotEntry !== undefined && (
-          <button
-            type="button"
-            className={"deep-thinking-toggle" + (deepThinking ? " active" : "")}
-            aria-pressed={deepThinking}
-            title={
-              deepThinking
-                ? t("reasoner.tooltipOn")
-                : t("reasoner.tooltipOff")
-            }
-            onClick={() => {
-              void toggleDeepThinking();
-            }}
-          >
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path
-                d="M12 3a6 6 0 0 0-3.6 10.8c.5.4.8 1 .8 1.6v.6a1 1 0 0 0 1 1h3.6a1 1 0 0 0 1-1v-.6c0-.6.3-1.2.8-1.6A6 6 0 0 0 12 3Z"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.6"
-                strokeLinejoin="round"
-              />
-              <path d="M10 20h4" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-            </svg>
-            {t("reasoner.toggleLabel")}{deepThinking ? t("reasoner.onSuffix") : ""}
-          </button>
-        )}
         <button
           type="button"
           className={"top-icon-btn" + (monitorOpen ? " active" : "")}
@@ -1977,6 +1969,12 @@ const logout = (): void => {
               msgs={chats[selectedBot] ?? []}
               pairTranscripts={pairTranscripts}
               quoteDraft={quoteDraft}
+              primitiveMode={primitiveMode}
+              onTogglePrimitive={togglePrimitiveMode}
+              deepThinking={deepThinking}
+              onToggleDeepThinking={() => {
+                void toggleDeepThinking();
+              }}
               onQuote={(m) => {
                 const sender =
                   m.from === "bot"
@@ -3265,6 +3263,10 @@ function BotsPlaceholder({
   skillContext,
   onAnswerSeedCard,
   onOpenAttachment,
+  primitiveMode,
+  onTogglePrimitive,
+  deepThinking,
+  onToggleDeepThinking,
   onOpenAutomation,
 }: {
   bots: UiBot[];
@@ -3301,6 +3303,12 @@ function BotsPlaceholder({
    */
   onAnswerSeedCard: (botKey: number, msgId: number, text: string) => void;
   onOpenAttachment: (relativePath: string) => void;
+  /** 原始人模式: per-bot terse-prompt switch, live at the composer. */
+  primitiveMode: boolean;
+  onTogglePrimitive: () => void;
+  /** Deep thinking (G5): the bot's model profile, toggled from the composer. */
+  deepThinking: boolean;
+  onToggleDeepThinking: () => void;
   /** D20': jump from the chat automation notice to the settings panel. */
   onOpenAutomation: () => void;
 }): JSX.Element {
@@ -3536,6 +3544,7 @@ function BotsPlaceholder({
       botId: me.bot.id,
       text,
       skills: injected.skills,
+      primitive: primitiveMode,
       forKey,
       update: setStream,
       onAssistant,
@@ -4111,6 +4120,26 @@ function BotsPlaceholder({
             }
           }}
         />
+        <div className="composer-modes">
+          <button
+            type="button"
+            className={"composer-mode" + (primitiveMode ? " active" : "")}
+            aria-pressed={primitiveMode}
+            title={t("shell.primitiveModeTitle")}
+            onClick={onTogglePrimitive}
+          >
+            {t("shell.primitiveMode")}
+          </button>
+          <button
+            type="button"
+            className={"composer-mode" + (deepThinking ? " active" : "")}
+            aria-pressed={deepThinking}
+            title={deepThinking ? t("reasoner.tooltipOn") : t("reasoner.tooltipOff")}
+            onClick={onToggleDeepThinking}
+          >
+            {t("reasoner.toggleLabel")}
+          </button>
+        </div>
         <span className="composer-mic" title={t("shell.comingSoon")} aria-hidden="true">
           <svg viewBox="0 0 24 24">
             <rect x="9" y="3" width="6" height="11" rx="3" fill="none" stroke="currentColor" strokeWidth="1.8" />
