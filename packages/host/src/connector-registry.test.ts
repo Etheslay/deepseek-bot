@@ -92,6 +92,41 @@ describe("connector registry", () => {
   });
 });
 
+describe("stdio MCP registration", () => {
+  it("stores the command and credential ref without resolving the secret", async () => {
+    const host = await setup();
+    const registered = (await host.handleMethod("connector.register", {
+      name: "local stdio",
+      kind: "mcp-stdio",
+      command: "server",
+      args: ["--stdio"],
+      credentialRef: CREDENTIAL_REF,
+    })) as { id: string; command: string | null; credentialEnv: string | null; endpoint: string | null };
+    expect(registered).toMatchObject({
+      command: "server",
+      args: ["--stdio"],
+      credentialRef: CREDENTIAL_REF,
+      credentialEnv: "MCP_CREDENTIAL",
+      endpoint: null,
+      enabled: false,
+    });
+    await expect(
+      host.handleMethod("connector.register", {
+        name: "shell",
+        kind: "mcp-stdio",
+        command: "bash",
+        args: ["-c", "id"],
+      }),
+    ).rejects.toMatchObject({ code: "INVALID_INPUT" });
+    const updated = (await host.handleMethod("connector.setCommand", {
+      id: registered.id,
+      command: "/usr/local/bin/server",
+      args: [],
+    })) as { command: string | null; args: string[] };
+    expect(updated).toMatchObject({ command: "/usr/local/bin/server", args: [] });
+  });
+});
+
 describe("connector endpoint and invoke wiring (D19)", () => {
   it("stores a loopback endpoint, rejects remote targets and keeps fetch untouched", async () => {
     const host = await setup();

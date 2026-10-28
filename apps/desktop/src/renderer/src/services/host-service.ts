@@ -7,8 +7,13 @@
  * fixture for settings and bots; chat/workflow/run views stay on the fixture
  * until their contract methods exist (see docs/AGENT_PLATFORM.md).
  */
-import type { Bot, ErrorCode, Task } from "@deepseek-bot/contracts";
-import { MAX_ATTACHMENT_CHUNK_BYTES } from "@deepseek-bot/contracts";
+import {
+  MAX_ATTACHMENT_CHUNK_BYTES,
+  METHOD_CONTRACTS,
+  type Bot,
+  type ErrorCode,
+  type Task,
+} from "@deepseek-bot/contracts";
 import { bytesToBase64 } from "../features/chat/attachments.js";
 import {
   ServiceError,
@@ -21,7 +26,18 @@ import {
 } from "./desktop-service.js";
 import { validateArtifactVersion, validateBotArtifact } from "./contract-validation.js";
 import { createFixtureService } from "./fixture-service.js";
+import {
+  messagesForStoredSession,
+  STORED_SESSION_HISTORY_LIMIT,
+  storedChatSession,
+  storedSessionBotId,
+} from "./stored-session.js";
 import { t } from "../i18n.js";
+import {
+  encodeBase64,
+  sha256Hex,
+  splitAttachmentChunks,
+} from "../features/chat/attachments.js";
 
 type HostBridge = {
   host: { call: (method: string, payload: unknown) => Promise<unknown> };
@@ -58,6 +74,14 @@ export function createHostService(bridge: HostBridge): DesktopService {
       }
       throw error;
     }
+  };
+
+  const readHistory = async (botId: string, limit: number): Promise<ChatHistoryRow[]> => {
+    const response = (await bridge.host.call("chat.history", {
+      botId,
+      limit,
+    })) as { messages: ChatHistoryRow[] };
+    return response.messages;
   };
 
   return {
@@ -180,16 +204,54 @@ export function createHostService(bridge: HostBridge): DesktopService {
       },
     },
     chat: {
-      // The host has no event-session log, so these stay empty. The open
-      // thread reads chat.history; the composer appends later sends.
-      listSessions: async () => [],
-      openSession: async () => ({ events: [] }),
-      history: async (botId, limit = 100) => {
-        const response = (await bridge.host.call("chat.history", {
-          botId,
-          limit,
-        })) as { messages: ChatHistoryRow[] };
-        return response.messages;
+      // One logical chat per bot. The open thread reads the same rows.
+      listSessions: async (botId) => {
+        const messages = await readHistory(botId, STORED_SESSION_HISTORY_LIMIT);
+        return storedChatSession(botId, messages);
+      },
+      openSession: async (sessionId) => {
+        const botId = storedSessionBotId(sessionId);
+        if (botId === null) return { events: [], messages: [] };
+        const messages = await readHistory(botId, STORED_SESSION_HISTORY_LIMIT);
+        return {
+          events: [],
+          messages: messagesForStoredSession(sessionId, messages),
+        };
+      },
+      history: async (botId, limit = 100) => readHistory(botId, limit),
+      importAttachment: async (botId, file) => {
+        if (file.bytes.byteLength === 0) {
+          throw new ServiceError("INVALID_INPUT", t("shell.attachmentEmpty", [file.name]));
+        }
+        const checksum = await sha256Hex(file.bytes);
+        const chunks = splitAttachmentChunks(file.bytes);
+        const uploadId = crypto.randomUUID();
+        let imported: {
+          relativePath: string;
+          mediaType: string;
+          size: number;
+          checksum: string;
+        } | null = null;
+        for (let index = 0; index < chunks.length; index += 1) {
+          const response = METHOD_CONTRACTS["chat.attach"].response.parse(
+            await bridge.host.call("chat.attach", {
+              botId,
+              uploadId,
+              name: file.name,
+              mediaType: file.mediaType,
+              size: file.bytes.byteLength,
+              checksum,
+              index,
+              count: chunks.length,
+              data: encodeBase64(chunks[index]!),
+            }),
+          );
+          if (response.status === "imported") imported = response;
+        }
+        if (imported === null) {
+          throw new ServiceError("INVALID_INPUT", t("shell.attachmentImportFailed", [file.name]));
+        }
+        return imported;
       },
       stream: (botId, text, handlers) => {
         let cancelled = false;

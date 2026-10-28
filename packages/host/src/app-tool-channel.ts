@@ -113,6 +113,7 @@ export async function startApplicationToolServer(
   const schemas = gateway.capabilities.schemas(APPLICATION_TOOLS);
   const askUserSchema = gateway.capabilities.schemas(["ask_user"])[0];
   const webSearchSchema = gateway.capabilities.schemas(["web_search"])[0];
+  const readSchema = gateway.capabilities.schemas(["read"])[0];
   const memorySchemas = gateway.capabilities.schemas([
     "memory_write",
     "memory_search",
@@ -159,6 +160,10 @@ export async function startApplicationToolServer(
       send(response, 200, { tool: webSearchSchema });
       return;
     }
+    if (request.method === "GET" && request.url === "/read") {
+      send(response, 200, { tool: readSchema });
+      return;
+    }
     if (request.method === "GET" && request.url === "/memory") {
       send(response, 200, { tools: memorySchemas });
       return;
@@ -189,6 +194,7 @@ export async function startApplicationToolServer(
         request.url !== "/app-tools/call" &&
         request.url !== "/ask-user/call" &&
         request.url !== "/web-search/call" &&
+        request.url !== "/read/call" &&
         request.url !== "/memory/call" &&
         request.url !== "/connectors/call" &&
         request.url !== "/screen/call" &&
@@ -238,17 +244,19 @@ export async function startApplicationToolServer(
         ? parsed.tool === "ask_user"
         : request.url === "/web-search/call"
           ? parsed.tool === "web_search"
-          : request.url === "/memory/call"
-            ? parsed.tool === "memory_write" ||
-              parsed.tool === "memory_search" ||
-              parsed.tool === "knowledge_search"
-            : request.url === "/mcp/call"
-              ? true // Unknown aliases still enter gateway validation and audit.
-              : request.url === "/connectors/call"
-                ? parsed.tool === "connector_invoke"
-                : request.url === "/screen/call"
-                  ? parsed.tool === "screen_capture"
-                  : (APPLICATION_TOOLS as readonly string[]).includes(parsed.tool);
+          : request.url === "/read/call"
+            ? parsed.tool === "read"
+            : request.url === "/memory/call"
+              ? parsed.tool === "memory_write" ||
+                parsed.tool === "memory_search" ||
+                parsed.tool === "knowledge_search"
+              : request.url === "/mcp/call"
+                ? true // Unknown aliases still enter gateway validation and audit.
+                : request.url === "/connectors/call"
+                  ? parsed.tool === "connector_invoke"
+                  : request.url === "/screen/call"
+                    ? parsed.tool === "screen_capture"
+                    : (APPLICATION_TOOLS as readonly string[]).includes(parsed.tool);
     if (!toolAllowed) {
       send(response, 400, failure("INVALID_INPUT", "tool is not available in chat"));
       return;

@@ -551,7 +551,7 @@ export type ToolNetworkMode = (typeof TOOL_NETWORK_MODES)[number];
  * not representable: project files or model output cannot enlarge the grant
  * (SECURITY_DATA §3), only a policy record change can.
  */
-export const ConnectorKindSchema = z.enum(["sd-webui", "mcp-http"]);
+export const ConnectorKindSchema = z.enum(["sd-webui", "mcp-http", "mcp-stdio"]);
 export type ConnectorKind = z.infer<typeof ConnectorKindSchema>;
 
 /** Exact remote tool names; no glob expansion or normalization. */

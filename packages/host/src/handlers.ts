@@ -89,10 +89,12 @@ import {
   registerConnector,
   setConnectorEnabled,
   setConnectorEndpoint,
+  setConnectorCommand,
   getBotMcpGrants,
   setBotMcpGrant,
   updateBot,
   type BotPatch,
+  type ConnectorRow,
   type DataLayout,
   type OpenedDatabase,
   listPermissionPolicies,
@@ -109,6 +111,7 @@ import type { AgentPermissionService } from "./agent-permissions.js";
 import type { McpService } from "./mcp.js";
 import type { ScreenService } from "./screen.js";
 import type { DeviceActionService } from "./device.js";
+import type { DeviceInputService } from "./device-input.js";
 import type { WorkspaceArtifacts } from "./artifacts.js";
 import type { AttachmentStore } from "./attachments.js";
 import {
@@ -121,6 +124,7 @@ import {
   type UiLocale,
 } from "./host.js";
 import { chatSessionIdFor, type ChatManager } from "./chat.js";
+import type { AttachmentIngress } from "./workspace-attachments.js";
 import { KNOWN_CAPABILITIES, policyKey, readPolicy, type PolicyLevel } from "./permissions.js";
 import { type TaskDispatcher } from "./task-dispatcher.js";
 import { createGrant, listGrants, revokeGrant, type GrantRow } from "@deepseek-bot/storage";
@@ -143,6 +147,7 @@ export interface HostContext {
   readonly mcp: McpService;
   readonly screen: ScreenService;
   readonly device: DeviceActionService;
+  readonly deviceInput: DeviceInputService;
   readonly db: OpenedDatabase;
   readonly engine: WorkflowEngine;
   readonly scheduler: LocalScheduler;
@@ -170,7 +175,9 @@ export interface HostContext {
   /** v0.5 manager orchestration: dispatched-task queue + executor. */
   readonly tasks: TaskDispatcher;
   /** D26 trusted-desktop attachment uploads staging into the bot workspace. */
-  readonly attachments: AttachmentStore;
+  readonly attachmentUploads: AttachmentStore;
+  /** D26: stage a chat attachment, then import it through the tool gateway. */
+  readonly attachments: AttachmentIngress;
   /**
    * Live UI language holder (settings.update { ui.locale }). Delivery notices,
    * handoff framing and the ask_user fallback label come out in this language.
@@ -202,7 +209,9 @@ function displayAskUserOption(
  * user saw it (D forced), persisted when the answer arrives so a restart
  * replays a coherent "bot asked / user answered" context for the model.
  */
-const ASKED_QUESTION_FRAMING: Readonly<Record<UiLocale, (question: string, lines: string) => string>> = {
+const ASKED_QUESTION_FRAMING: Readonly<
+  Record<UiLocale, (question: string, lines: string) => string>
+> = {
   zh: (question, lines) => `【向用户提问】${question}\n${lines}`,
   en: (question, lines) => `[Asked the user] ${question}\n${lines}`,
 };
@@ -341,6 +350,22 @@ function requireGroup(db: OpenedDatabase, groupId: string): void {
   }
 }
 
+function connectorPayload<E extends boolean>(row: ConnectorRow, enabled?: E) {
+  return {
+    id: row.id,
+    kind: row.kind,
+    name: row.name,
+    enabled: (enabled ?? row.enabled) as E,
+    credentialRef: row.credentialRef,
+    endpoint: row.endpoint,
+    command: row.command,
+    args: [...row.args],
+    credentialEnv: row.credentialEnv,
+    at: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
 /**
  * The full CONTRACTS §3 surface. The mapped type keeps each handler bound to
  * its own request/response pair, so the compiler flags any drift from the
@@ -355,7 +380,10 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
       if (policy.mode === "deny") context.permissions.denyCapability(policy.capability);
       if (policy.mode === "deny" && policy.capability === "mcp.call") context.mcp.invalidate({});
       if (policy.capability === "screen.capture") context.screen.invalidate();
-      if (policy.capability === "device.action") context.device.invalidate();
+      if (policy.capability === "device.action") {
+        context.device.invalidate();
+        context.deviceInput.invalidate();
+      }
       return policy;
     },
     "permission.grant.list": (payload) => ({
@@ -812,6 +840,22 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
       })),
     }),
 
+    "chat.attach": async (payload) => {
+      try {
+        return await context.attachments.accept(payload);
+      } catch (error) {
+        if (error instanceof EngineError) throw error;
+        if (error instanceof ToolRejectionError) {
+          throw new EngineError({
+            code: error.code,
+            message: error.message,
+            retryable: false,
+          });
+        }
+        throw error;
+      }
+    },
+
     "chat.cancel": (payload) => {
       const cancelled = chat.cancel(payload.sessionId);
       const botId = payload.sessionId.startsWith("chat:")
@@ -859,7 +903,9 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
         questions: context.userQuestions.listPending(chatSessionIdFor(bot.id)).map((request) => ({
           requestId: request.requestId,
           question: request.question,
-          options: request.options.map((option) => displayAskUserOption(option, context.locale.current)),
+          options: request.options.map((option) =>
+            displayAskUserOption(option, context.locale.current),
+          ),
           allowOther: request.allowOther,
           expiresAt: request.expiresAt,
         })),
@@ -936,16 +982,21 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
 
     "attachment.begin": (payload) => {
       const bot = requireLiveBot(db, payload.botId);
-      const uploadId = context.attachments.begin(bot.id, payload.name, payload.size, payload.sha256);
+      const uploadId = context.attachmentUploads.begin(
+        bot.id,
+        payload.name,
+        payload.size,
+        payload.sha256,
+      );
       return { uploadId };
     },
 
     "attachment.append": (payload) => {
-      const received = context.attachments.append(payload.uploadId, payload.chunkBase64);
+      const received = context.attachmentUploads.append(payload.uploadId, payload.chunkBase64);
       return { received };
     },
 
-    "attachment.commit": (payload) => context.attachments.commit(payload.uploadId),
+    "attachment.commit": (payload) => context.attachmentUploads.commit(payload.uploadId),
 
     "memory.list": (payload) => {
       const bot = requireLiveBot(db, payload.botId);
@@ -1294,18 +1345,11 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
         })),
       };
     },
+    "device.action.input": (payload) => context.deviceInput.input(payload.botId, payload.input),
+    "device.action.input.list": (payload) => context.deviceInput.list(payload.botId, payload.limit),
 
     "connector.list": () => ({
-      connectors: listConnectors(db).map((row) => ({
-        id: row.id,
-        kind: row.kind,
-        name: row.name,
-        enabled: row.enabled,
-        credentialRef: row.credentialRef,
-        endpoint: row.endpoint,
-        at: row.createdAt,
-        updatedAt: row.updatedAt,
-      })),
+      connectors: listConnectors(db).map((row) => connectorPayload(row)),
     }),
 
     "connector.register": (payload) => {
@@ -1314,63 +1358,41 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
         kind: payload.kind,
         ...(payload.credentialRef !== undefined ? { credentialRef: payload.credentialRef } : {}),
         ...(payload.endpoint !== undefined ? { endpoint: payload.endpoint } : {}),
+        ...(payload.command !== undefined ? { command: payload.command } : {}),
+        ...(payload.args !== undefined ? { args: payload.args } : {}),
+        ...(payload.credentialEnv !== undefined ? { credentialEnv: payload.credentialEnv } : {}),
       });
-      return {
-        id: row.id,
-        kind: row.kind,
-        name: row.name,
-        enabled: false as const,
-        credentialRef: row.credentialRef,
-        endpoint: row.endpoint,
-        at: row.createdAt,
-        updatedAt: row.updatedAt,
-      };
+      return connectorPayload(row, false);
     },
 
     "connector.enable": (payload) => {
       const row = setConnectorEnabled(db, { id: payload.id, enabled: true });
-      return {
-        id: row.id,
-        kind: row.kind,
-        name: row.name,
-        enabled: true as const,
-        credentialRef: row.credentialRef,
-        endpoint: row.endpoint,
-        at: row.createdAt,
-        updatedAt: row.updatedAt,
-      };
+      return connectorPayload(row, true);
     },
 
     "connector.disable": (payload) => {
       const row = setConnectorEnabled(db, { id: payload.id, enabled: false });
       context.mcp.invalidate({ connectorId: payload.id });
       context.permissions.cancelMcp({ connectorId: payload.id });
-      return {
-        id: row.id,
-        kind: row.kind,
-        name: row.name,
-        enabled: false as const,
-        credentialRef: row.credentialRef,
-        endpoint: row.endpoint,
-        at: row.createdAt,
-        updatedAt: row.updatedAt,
-      };
+      return connectorPayload(row, false);
     },
 
     "connector.setEndpoint": (payload) => {
       const row = setConnectorEndpoint(db, { id: payload.id, endpoint: payload.endpoint });
       context.mcp.invalidate({ connectorId: payload.id });
       context.permissions.cancelMcp({ connectorId: payload.id });
-      return {
-        id: row.id,
-        kind: row.kind,
-        name: row.name,
-        enabled: row.enabled,
-        credentialRef: row.credentialRef,
-        endpoint: row.endpoint,
-        at: row.createdAt,
-        updatedAt: row.updatedAt,
-      };
+      return connectorPayload(row);
+    },
+
+    "connector.setCommand": (payload) => {
+      const row = setConnectorCommand(db, {
+        id: payload.id,
+        command: payload.command,
+        args: payload.args,
+      });
+      context.mcp.invalidate({ connectorId: payload.id });
+      context.permissions.cancelMcp({ connectorId: payload.id });
+      return connectorPayload(row);
     },
 
     "artifacts.list": (payload) => context.artifacts.list(payload.botId),

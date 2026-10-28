@@ -10,6 +10,7 @@ import {
   registerCredential,
   removeCredential,
   createModelProfile,
+  registerConnector,
 } from "./index.js";
 import { ensureDataLayout } from "./layout.js";
 import {
@@ -87,7 +88,8 @@ describe("credential registry", () => {
 
     const spare = createCredentialRef();
     registerCredential(db, { ref: spare, label: "备用" });
-    expect(removeCredential(db, spare).removed).toBe(true);
+    registerConnector(db, { name: "mcp", kind: "mcp-http", credentialRef: spare });
+    expect(() => removeCredential(db, spare)).toThrow(/connector/);
     db.close();
   });
 

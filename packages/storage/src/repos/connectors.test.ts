@@ -6,7 +6,10 @@ import { openDatabase, type OpenedDatabase } from "../database.js";
 import {
   connectorEndpoint,
   listConnectors,
+  mcpCredentialEnv,
+  mcpStdioCommand,
   registerConnector,
+  setConnectorCommand,
   setConnectorEnabled,
   setConnectorEndpoint,
 } from "./connectors.js";
@@ -146,9 +149,21 @@ it("keeps connector kinds distinct and validates MCP transport endpoints", () =>
     ]) {
       expect(() => registerConnector(db, { name: "bad", kind: "mcp-http", endpoint })).toThrow();
     }
+    expect(
+      registerConnector(db, {
+        name: "auth",
+        kind: "mcp-http",
+        endpoint: "http://127.0.0.1:9/mcp",
+        credentialRef: CREDENTIAL_REF,
+      }).credentialRef,
+    ).toBe(CREDENTIAL_REF);
     expect(() =>
-      registerConnector(db, { name: "auth", kind: "mcp-http", credentialRef: CREDENTIAL_REF }),
-    ).toThrow(/credential/);
+      registerConnector(db, {
+        name: "secret",
+        kind: "mcp-http",
+        credentialRef: "sk-live-secret",
+      }),
+    ).toThrow(/credential ref/);
     expect(() =>
       db.raw.prepare("UPDATE connectors SET kind='unknown' WHERE id=?").run(mcp.id),
     ).toThrow();
@@ -156,4 +171,54 @@ it("keeps connector kinds distinct and validates MCP transport endpoints", () =>
     db.close();
     cleanup();
   }
+});
+
+describe("stdio MCP registration", () => {
+  it("stores a bare or absolute command and a credential env name, never a shell line", () => {
+    const { db, cleanup } = tempDb();
+    try {
+      expect(mcpStdioCommand("server")).toBe("server");
+      expect(mcpStdioCommand("/usr/local/bin/server")).toBe("/usr/local/bin/server");
+      for (const command of ["bash", "cmd.exe", "../server", "sh -c echo", "\\\\server\\share"]) {
+        expect(() => mcpStdioCommand(command)).toThrow();
+      }
+      expect(mcpCredentialEnv(undefined, true)).toBe("MCP_CREDENTIAL");
+      expect(mcpCredentialEnv("API_TOKEN", true)).toBe("API_TOKEN");
+      expect(() => mcpCredentialEnv("PATH", true)).toThrow(/not allowed/);
+      expect(() => mcpCredentialEnv("LD_PRELOAD", true)).toThrow(/not allowed/);
+      expect(() => mcpCredentialEnv("API_TOKEN", false)).toThrow(/credential reference/);
+      const saved = registerConnector(db, {
+        name: "stdio",
+        kind: "mcp-stdio",
+        command: "server",
+        args: ["--stdio"],
+        credentialRef: CREDENTIAL_REF,
+      });
+      expect(saved).toMatchObject({
+        kind: "mcp-stdio",
+        command: "server",
+        args: ["--stdio"],
+        endpoint: null,
+        credentialRef: CREDENTIAL_REF,
+        credentialEnv: "MCP_CREDENTIAL",
+        enabled: false,
+      });
+      expect(setConnectorCommand(db, { id: saved.id, command: "/opt/mcp/server", args: [] })).toMatchObject({
+        command: "/opt/mcp/server",
+        args: [],
+      });
+      expect(() => setConnectorEndpoint(db, { id: saved.id, endpoint: "http://127.0.0.1:1/mcp" })).toThrow(
+        /HTTP endpoint/,
+      );
+      expect(() =>
+        registerConnector(db, { name: "remote", kind: "mcp-stdio", command: "bash", args: ["-c", "id"] }),
+      ).toThrow(/shell/);
+      expect(() =>
+        registerConnector(db, { name: "url", kind: "mcp-stdio", command: "server", endpoint: "http://127.0.0.1/mcp" }),
+      ).toThrow(/HTTP endpoint/);
+    } finally {
+      db.close();
+      cleanup();
+    }
+  });
 });

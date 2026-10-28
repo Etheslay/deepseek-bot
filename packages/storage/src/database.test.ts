@@ -202,6 +202,31 @@ describe("openDatabase error paths", () => {
   });
 });
 
+it("keeps connector rows when stdio columns are added", () => {
+  const layout = ensureDataLayout(makeTempRoot());
+  const raw = new DatabaseSync(layout.dbFile);
+  raw.exec("CREATE TABLE schema_migrations (id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE, checksum TEXT NOT NULL, applied_at TEXT NOT NULL)");
+  for (const migration of MIGRATIONS.filter((item) => item.id <= 19)) {
+    raw.exec(migration.sql);
+    raw.prepare("INSERT INTO schema_migrations VALUES (?, ?, ?, ?)").run(migration.id, migration.name, checksumMigration(migration), new Date().toISOString());
+  }
+  raw.exec("INSERT INTO connectors (id,name,enabled,credential_ref,endpoint,kind,created_at,updated_at) VALUES ('http','MCP',0,'cred:11111111-1111-4111-8111-111111111111','http://127.0.0.1:9/mcp','mcp-http','now','now')");
+  raw.close();
+  const db = openDatabase(layout.dbFile);
+  try {
+    expect(db.appliedMigrations).toContainEqual({ id: 20, name: "0020-mcp-stdio" });
+    expect(db.raw.prepare("SELECT kind, endpoint, command, credential_ref FROM connectors WHERE id='http'").get()).toMatchObject({
+      kind: "mcp-http",
+      endpoint: "http://127.0.0.1:9/mcp",
+      command: null,
+      credential_ref: "cred:11111111-1111-4111-8111-111111111111",
+    });
+    expect(() =>
+      db.raw.prepare("INSERT INTO connectors (id,name,enabled,kind,command,endpoint,created_at,updated_at) VALUES ('bad','x',0,'mcp-stdio',NULL,'http://127.0.0.1/mcp','now','now')").run(),
+    ).toThrow();
+  } finally { db.close(); }
+});
+
 it("upgrades v13 connector rows as SD WebUI without losing endpoints", () => {
   const layout = ensureDataLayout(makeTempRoot());
   const raw = new DatabaseSync(layout.dbFile);

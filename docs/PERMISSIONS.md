@@ -29,7 +29,7 @@
 | `fs.read` / `fs.write` | 工作目录文件读写 | 中 | D08 路径策略 + 审批 |
 | `exec.shell` | 执行本地命令 | 高 | 每次询问 |
 | `screen.capture` | 窗口截图 / OCR | 高 | 从不允许（需显式开启） |
-| `device.action` | 接受一次指针或按键动作 | 高 | 从不允许（需显式开启）；接受后只返回 id 与时间，并留下一条本地记录，不执行输入 |
+| `device.action` | 接受一次指针或按键动作；`device_input` 在另一次审批后执行一次有界输入 | 高 | 从不允许（需显式开启）；`device.action.request` 接受后只返回 id 与时间并留下一条本地记录；`device.action.input` 才调用 exec daemon |
 | `connector.invoke` | 调用 Stable Diffusion 连接器 | 中 | 每次询问 |
 | `mcp.call` | 调用已授权的本机 MCP 工具 | 中 | 每次询问；只接受单次审批 |
 | `network.search` / D08 `network.request` | web_search 向受信配置的 SearXNG 端点提交搜索 | 中 | D16 每次询问，另需 D08 网络策略放行；缺少受信权限句柄拒绝 |
@@ -43,6 +43,8 @@ v0.5 manager-orchestration（TASK_MANAGER_ORCHESTRATION.md §3.4）：新增模�
 `web_search` 先通过 D16 network.search，再通过现有 ToolPolicy.network 及 D08 精确动作授权。工具模型参数不能指定服务地址或传入权限对象；受信调用方经 ToolCallOptions.networkPermissions 绑定句柄。工作流节点仍使用真实 D08 句柄：禁止网络时不发请求，要求审批时先等真实审批。聊天回合没有工作流运行，Host 自有句柄在 allowed 时放行，disabled 时拒绝，approval-required 时以 APPROVAL_REQUIRED 失败且不发请求。网关 JSONL 存摘要；D08 本地 tool.requested 事件按已有规范保存精确搜索参数用于审批。聊天结果卡只渲染已去掉标记的文本。
 
 `memory_search` 绑定 `memory.read`，`memory_write` 绑定 `memory.write`。两者都只使用受信 `ToolCaller.botId`，模型参数不能指定 bot。默认不跨 bot 共享，也没有共享开关。用户经受信方法 `memory.list` / `memory.write` / `memory.delete` 查看、写入和删除当前 bot 的记忆；删除是物理删除，模型目录没有删除工具。网关 JSONL 仍只存摘要。知识导入是桌面文件对话框，不接收渲染进程传入的路径，也不是模型工具。通过后仍调用 `memory.write`，隔离规则不变。只接受 `.txt` / `.md`，文件不超过 16 KiB，正文仍须放进一条 1–4000 字的记忆。
+
+`import_attachment` 绑定 `fs.write`，模型工具 `read` 绑定 `fs.read`。两者默认每次询问。导入只接受 Host 已经暂存的字节，模型参数不能带文件正文或 bot id。`read` 的参数只有工作区相对路径 `file_path`。审批预览不含附件正文。
 
 `connector.*` 管理方法只对受信桌面开放，新登记连接器默认关闭。Stable Diffusion 使用 `connector_invoke`；自定义 MCP 使用独立的 `mcp.call` 能力。MCP 首版只接受无凭据的本机 HTTP(S) Streamable HTTP 端点，可带路径；localhost 固定归一化为 127.0.0.1，拒绝远程主机、URL 用户信息、查询、片段及重定向。Host 不解析或注入 MCP 凭据。
 
@@ -110,7 +112,9 @@ sequenceDiagram
 
 同一节下面的「屏幕与窗口感知」使用同一条 `screen.capture` 策略。开关只写成每次询问或从不允许，不提供始终允许。用户先选 bot，再刷新窗口并选定一个；截图和截图并识别各自调用 `screen.request`。等待审批时，这张卡只有「仅本次」和「拒绝」。缩略图是 `screen.result.read` 返回的 JPEG data URL，识别文本按转义文本显示，两者都不写入聊天。删除要再确认一次。换 bot 或换目标窗口之后，上一次请求的响应不会写进新的面板。
 
-设备动作使用同一套策略表里的 `device.action`。默认拒绝。改为每次询问后，受信方法 `device.action.request` 或模型工具 `device_action` 才等待一张仅本次审批。批准后的结果只有 id 和时间，并在本机留下一条记录：id、bot id、动作名（`pointer` 或 `key`）、时间。`device.action.list` 按该 bot 从新到旧列出。拒绝、把策略改回拒绝、再次使用同一张审批，或动作名不在这两组里，都不写入。未知动作名在产生审批前拒绝。这一片不移动鼠标、不发送按键、不调用 exec daemon，也没有单独的桌面页面。设置页会多出这一行，因为它列出全部能力。
+设备动作使用同一套策略表里的 `device.action`。默认拒绝。改为每次询问后，受信方法 `device.action.request` 或模型工具 `device_action` 才等待一张仅本次审批。批准后的结果只有 id 和时间，并在本机留下一条记录：id、bot id、动作名（`pointer` 或 `key`）、时间。`device.action.list` 按该 bot 从新到旧列出。拒绝、把策略改回拒绝、再次使用同一张审批，或动作名不在这两组里，都不写入。未知动作名在产生审批前拒绝。这条路径不移动鼠标、不发送按键、不调用 exec daemon，也没有单独的桌面页面。设置页会多出这一行，因为它列出全部能力。
+
+真实输入使用同一条策略和同一次精确审批规则，方法是 `device.action.input`，模型工具是 `device_input`。一次请求只包含一份有界输入：指针移动或点击，坐标 0–8192；或允许列表中的一个按键点按，可带 shift、ctrl、alt，不含 Windows 键。审批卡上的参数就是这份输入。通过后才调用 exec daemon。成功响应只有 id、时间和 pointer 或 key。本机 `device-outputs` 留下 JSON，可用 `device.action.input.list` 查看，列表不含路径。拒绝、停用、复用审批、未知按键，或这台系统没有输入辅助进程，都不执行。`device_input` 不进入聊天应用工具目录。没有单独的设备动作页面。
 
 ## 6. 审计与撤销
 

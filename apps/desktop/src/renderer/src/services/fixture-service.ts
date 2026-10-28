@@ -145,6 +145,13 @@ function fixtureChecksum(content: string): Promise<string> {
     );
 }
 
+function fixtureAttachmentPath(name: string): string {
+  const base = name.split(/[/\\]/).pop() ?? "file";
+  const cleaned = base.replace(/[^A-Za-z0-9._-]/g, "_").replace(/^\.+/, "").slice(0, 80);
+  const safe = /^[A-Za-z0-9]/.test(cleaned) ? cleaned : `file${cleaned}`;
+  return `attachments/${safe}`;
+}
+
 function fixtureMediaType(relativePath: string): string {
   const lower = relativePath.toLowerCase();
   if (lower.endsWith(".md") || lower.endsWith(".markdown")) return "text/markdown";
@@ -182,6 +189,9 @@ function fixtureArtifact(file: FixtureWorkspaceFile, checksum: string, relativeP
 
 export function createFixtureService(): DesktopService {
   let bots: Bot[] = SEED_BOTS.map((bot) => ({ ...bot }));
+  let rememberAttachment:
+    | ((botId: string, relativePath: string, content: string, mediaType: string) => void)
+    | undefined;
   let keyConfigured = false;
   let connectionScenario: ConnectionScenario = "unverified";
 
@@ -330,11 +340,20 @@ export function createFixtureService(): DesktopService {
     // D26 fixture: no real storage — reports the path the host would use so
     // the composer flow is exercisable offline. Never claim a real commit.
     attachments: {
-      async upload(_botId, file): Promise<AttachmentUploadResult> {
+      async upload(botId, file): Promise<AttachmentUploadResult> {
+        const path = fixtureAttachmentPath(file.name);
+        const mediaType = fixtureMediaType(path);
+        const textLike =
+          mediaType.startsWith("text/") ||
+          mediaType === "application/json" ||
+          mediaType === "text/yaml" ||
+          mediaType === "text/xml";
+        const content = textLike ? new TextDecoder().decode(file.bytes) : "";
+        rememberAttachment?.(botId, path, content, mediaType);
         return {
-          path: `attachments/${file.name}`,
+          path,
           size: file.bytes.byteLength,
-          checksum: "0".repeat(64),
+          checksum: await fixtureChecksum(content),
         };
       },
     },
@@ -359,13 +378,35 @@ export function createFixtureService(): DesktopService {
           }
           return checked.value as EventEnvelope;
         });
-        return { events };
+        return { events, messages: [] };
       },
 
       // The fixture chat thread lives in the UI's own state; there are no
       // persisted host rows to replay (dispatch markers/notices show up
       // only against a real host).
       history: async (botId, limit) => fixtureChatHistory(botId, limit),
+
+      async importAttachment(botId, file) {
+        requireBot(botId);
+        if (file.bytes.byteLength === 0) {
+          throw new ServiceError("INVALID_INPUT", t("shell.attachmentEmpty", [file.name]));
+        }
+        const relativePath = fixtureAttachmentPath(file.name);
+        const mediaType = fixtureMediaType(relativePath);
+        const textLike =
+          mediaType.startsWith("text/") ||
+          mediaType === "application/json" ||
+          mediaType === "text/yaml" ||
+          mediaType === "text/xml";
+        const content = textLike ? new TextDecoder().decode(file.bytes) : "";
+        rememberAttachment?.(botId, relativePath, content, mediaType);
+        return {
+          relativePath,
+          mediaType,
+          size: file.bytes.byteLength,
+          checksum: await fixtureChecksum(content),
+        };
+      },
 
       stream(botId, userText, handlers, options): StreamHandle {
         const bot = requireBot(botId);
@@ -525,6 +566,29 @@ export function createFixtureService(): DesktopService {
         if (file.versions.length === 0) {
           await appendVersion(botId, file, relativePath, "bot");
         }
+      };
+
+      rememberAttachment = (botId, relativePath, content, mediaType) => {
+        let files = workspaces.get(botId);
+        if (files === undefined) {
+          files = new Map();
+          workspaces.set(botId, files);
+        }
+        const existing = files.get(relativePath);
+        if (existing !== undefined) {
+          existing.content = content;
+          existing.mediaType = mediaType;
+          existing.updatedAt = isoNow();
+          return;
+        }
+        files.set(relativePath, {
+          content,
+          mediaType,
+          updatedAt: isoNow(),
+          versions: [],
+          nextRevision: 1,
+          versionContents: new Map(),
+        });
       };
 
       return {

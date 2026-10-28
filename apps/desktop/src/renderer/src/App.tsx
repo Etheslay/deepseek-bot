@@ -24,7 +24,7 @@ import { ScreenSettings } from "./features/screen/screen-settings.js";
 import { BotForm } from "./features/bots/bot-form.js";
 import { nextBotName } from "./features/bots/bot-names.js";
 import { CustomSelect } from "./components/custom-select.js";
-import type { BotDraft } from "./services/desktop-service.js";
+import type { BotDraft, ChatHistoryRow } from "./services/desktop-service.js";
 import { useService } from "./services/service-context.jsx";
 import { METHOD_CONTRACTS } from "@deepseek-bot/contracts";
 import {
@@ -42,6 +42,7 @@ import {
   mergeOpenedThread,
   type ThreadOrigin,
 } from "./features/chat/thread-history.js";
+import { StoredSessionReplay } from "./features/chat/stored-session-replay.js";
 import type { StreamHandle } from "./services/desktop-service.js";
 import { Avatar as AvatarView } from "./features/avatars/avatar.js";
 import { AvatarPicker } from "./features/avatars/avatar-picker.js";
@@ -66,8 +67,10 @@ import { exportConversation } from "./features/chat/export-conversation.js";
 import type { MentionTable } from "./features/chat/mentions.js";
 import {
   attachmentAccept,
+  buildAttachmentContext,
   classifyAttachment,
   composeAttachmentBlocks,
+  composeAttachmentPrompt,
   formatAttachmentSize,
   MAX_ATTACHMENT_BYTES,
   type AttachmentDraft,
@@ -173,7 +176,16 @@ type Msg = {
   peerKey?: number;
   /** Files sent with the message (D26; path = workspace-relative after upload). */
   attachments?:
-    | { name: string; size: number; kind: "text" | "image" | "binary"; dataUrl?: string; path?: string }[]
+    | {
+        name: string;
+        size: number;
+        kind: "text" | "image" | "binary";
+        dataUrl?: string;
+        /** Workspace path from attachment.commit. */
+        path?: string;
+        /** Same workspace path; opens the artifact preview. */
+        relativePath?: string;
+      }[]
     | undefined;
   /** Choice card the bot put to the user (D14 interaction slice). */
   choices?: {
@@ -373,6 +385,8 @@ export function App(): JSX.Element {
     startedAt: string;
     status: string;
   } | null>(null);
+  const [restoredMessages, setRestoredMessages] = useState<ChatHistoryRow[] | null>(null);
+  const restoredSessionRequest = useRef(0);
 
   const [chats, setChats] = useState<ChatState>({});
   /** Bots whose open thread already read chat.history this session. */
@@ -669,15 +683,28 @@ export function App(): JSX.Element {
       return;
     }
     let cancelled = false;
-    void desktop.chat.listSessions(bot.bot.id).then((sessions) => {
-      if (!cancelled) {
-        setHistorySessions(sessions);
-      }
-    });
+    void desktop.chat.listSessions(bot.bot.id).then(
+      (sessions) => {
+        if (!cancelled) {
+          setHistorySessions(sessions);
+        }
+      },
+      () => {
+        if (!cancelled) {
+          setHistorySessions([]);
+        }
+      },
+    );
     return () => {
       cancelled = true;
     };
   }, [historyOpen, selectedBot, bots, desktop]);
+
+  useEffect(() => {
+    restoredSessionRequest.current += 1;
+    setRestoredSession(null);
+    setRestoredMessages(null);
+  }, [selectedBot]);
 
   useEffect(() => {
     if (!artifactsOpen || selectedBot === null) {
@@ -1523,8 +1550,23 @@ const logout = (): void => {
                   type="button"
                   className="session-item"
                   onClick={() => {
+                    const token = restoredSessionRequest.current + 1;
+                    restoredSessionRequest.current = token;
                     setRestoredSession(session);
+                    setRestoredMessages(null);
                     setHistoryOpen(false);
+                    void desktop.chat.openSession(session.sessionId).then(
+                      (opened) => {
+                        if (restoredSessionRequest.current === token) {
+                          setRestoredMessages(opened.messages);
+                        }
+                      },
+                      () => {
+                        if (restoredSessionRequest.current === token) {
+                          setRestoredMessages([]);
+                        }
+                      },
+                    );
                   }}
                 >
                   <span className="tab-title">{session.title}</span>
@@ -1889,15 +1931,17 @@ const logout = (): void => {
                   {formatFullDateTime(restoredSession.startedAt)} ·{" "}
                   {restoredSession.status === "ended" ? t("shell.statusEnded") : t("shell.statusInProgress")}
                 </div>
-                <div className="sys-line">
-                  {t("shell.noReplayMessages")}
-                </div>
+                <StoredSessionReplay messages={restoredMessages} />
               </div>
               <div className="pair-foot">
                 <button
                   type="button"
                   className="pill-btn"
-                  onClick={() => setRestoredSession(null)}
+                  onClick={() => {
+                    restoredSessionRequest.current += 1;
+                    setRestoredSession(null);
+                    setRestoredMessages(null);
+                  }}
                 >
                   {t("shell.backToCurrentSession")}
                 </button>
@@ -1973,6 +2017,16 @@ const logout = (): void => {
               onTalkTo={(otherKey) => talkTo(selectedBot, otherKey)}
               onCopy={(text) => void copyText(text)}
               onNotify={(message) => setToast(message)}
+              onOpenAttachment={(relativePath) => {
+                const bot = bots.find((item) => item.key === selectedBot);
+                if (bot === undefined || selectedBot === null) return;
+                setCanvas({
+                  botKey: selectedBot,
+                  botId: bot.bot.id,
+                  botName: bot.bot.name,
+                  path: relativePath,
+                });
+              }}
               skillContext={(botId) => buildSkillContext(botId, skillLibrary)}
               onOpenBot={(botKey) => {
                 const target = bots.find((b) => b.key === botKey);
@@ -2870,6 +2924,7 @@ function MessageBubble({
   onRegenerate,
   canEditResend,
   onEditResend,
+  onOpenAttachment,
 }: {
   msg: Msg;
   accent: string;
@@ -2887,6 +2942,8 @@ function MessageBubble({
   /** G6: only the latest user message offers 编辑重发 (prefills the composer). */
   canEditResend?: boolean;
   onEditResend?: (text: string) => void;
+  /** Workspace path from the gateway import. Opens the artifact preview. */
+  onOpenAttachment?: (relativePath: string) => void;
 }): JSX.Element {
   const isUser = msg.from === "user";
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -2943,31 +3000,75 @@ function MessageBubble({
               {t("shell.quotedMessage", [msg.quote.name, msg.quote.text])}
             </div>
           )}
-          {msg.attachments && msg.attachments.length > 0 && (
+              {msg.attachments && msg.attachments.length > 0 && (
             <div className="msg-attachments">
-              {msg.attachments.map((file) =>
-                file.kind === "image" && file.dataUrl ? (
-                  <img
-                    key={file.name}
-                    className="msg-attachment-image"
-                    src={file.dataUrl}
-                    alt={file.name}
-                    draggable={false}
-                  />
-                ) : (
-                  <span className="msg-attachment-file" key={file.name}>
+              {msg.attachments.map((file) => {
+                const previewPath = file.relativePath ?? file.path;
+                const preview =
+                  previewPath !== undefined
+                    ? () => onOpenAttachment?.(previewPath)
+                    : undefined;
+                const stored =
+                  file.path !== undefined ? (
+                    <span className="msg-attachment-path">
+                      {t("shell.attachmentStoredPath", [file.path])}
+                    </span>
+                  ) : null;
+                const fileBody = (
+                  <>
                     <span className="msg-attachment-name">{file.name}</span>
                     <span className="msg-attachment-size">
                       {formatAttachmentSize(file.size)}
                     </span>
-                    {file.path !== undefined && (
-                      <span className="msg-attachment-path">
-                        {t("shell.attachmentStoredPath", [file.path])}
-                      </span>
-                    )}
+                    {stored}
+                  </>
+                );
+                if (file.kind === "image" && file.dataUrl) {
+                  const image = (
+                    <>
+                      <img
+                        className="msg-attachment-image"
+                        src={file.dataUrl}
+                        alt={file.name}
+                        draggable={false}
+                      />
+                      {file.path !== undefined && (
+                        <span className="msg-attachment-path">
+                          {t("shell.attachmentStoredPath", [file.path])}
+                        </span>
+                      )}
+                    </>
+                  );
+                  return preview ? (
+                    <button
+                      key={previewPath ?? file.name}
+                      type="button"
+                      className="msg-attachment-open"
+                      aria-label={t("shell.openAttachmentPreview", [file.name])}
+                      onClick={preview}
+                    >
+                      {image}
+                    </button>
+                  ) : (
+                    <span key={file.name}>{image}</span>
+                  );
+                }
+                return preview ? (
+                  <button
+                    key={previewPath ?? file.name}
+                    type="button"
+                    className="msg-attachment-file"
+                    aria-label={t("shell.openAttachmentPreview", [file.name])}
+                    onClick={preview}
+                  >
+                    {fileBody}
+                  </button>
+                ) : (
+                  <span className="msg-attachment-file" key={file.name}>
+                    {fileBody}
                   </span>
-                ),
-              )}
+                );
+              })}
             </div>
           )}
           {isUser ? (
@@ -3154,6 +3255,7 @@ function BotsPlaceholder({
   onApprovalPending,
   skillContext,
   onAnswerSeedCard,
+  onOpenAttachment,
 }: {
   bots: UiBot[];
   groups: Group[];
@@ -3188,6 +3290,7 @@ function BotsPlaceholder({
    * switching bots and coming back used to re-expand an answered card.
    */
   onAnswerSeedCard: (botKey: number, msgId: number, text: string) => void;
+  onOpenAttachment: (relativePath: string) => void;
 }): JSX.Element {
   const service = useService();
   const [draft, setDraft] = useState("");
@@ -3361,22 +3464,30 @@ function BotsPlaceholder({
         onNotify(t("shell.attachmentTooLarge", [file.name]));
         continue;
       }
+      if (file.size === 0) {
+        onNotify(t("shell.attachmentEmpty", [file.name]));
+        continue;
+      }
+      const bytes = new Uint8Array(await file.arrayBuffer());
       const kind = classifyAttachment(file.type, file.name);
-      // D26: every accepted kind keeps its File handle — bytes upload into the
-      // bot workspace at send time; text also pre-reads for inline injection.
+      const draft: AttachmentDraft = {
+        name: file.name,
+        size: file.size,
+        mime: file.type,
+        bytes,
+        file,
+      };
       if (kind === "text") {
-        drafts.push({ name: file.name, size: file.size, mime: file.type, text: await file.text(), file });
+        draft.text = new TextDecoder().decode(bytes);
       } else if (kind === "image") {
-        const dataUrl = await new Promise<string>((resolve, reject) => {
+        draft.dataUrl = await new Promise<string>((resolve, reject) => {
           const reader = new FileReader();
           reader.onload = () => resolve(String(reader.result));
           reader.onerror = () => reject(reader.error);
           reader.readAsDataURL(file);
         });
-        drafts.push({ name: file.name, size: file.size, mime: file.type, dataUrl, file });
-      } else {
-        drafts.push({ name: file.name, size: file.size, mime: file.type, file });
       }
+      drafts.push(draft);
     }
     if (drafts.length > 0) {
       setPendingFiles((prev) => [...prev, ...drafts]);
@@ -3468,57 +3579,65 @@ function BotsPlaceholder({
   };
 
   /**
-   * D26 read closure: attachment bytes upload into the bot workspace before
-   * the turn starts; the outgoing text describes each file by its workspace
-   * path (small text stays inline, larger text and binaries point at
-   * read_workspace_file). A failed upload aborts the send and keeps the
-   * draft + chips so the user can retry without retyping.
+   * Closure upload (attachment.begin/append/commit) runs before the turn.
+   * Small text stays inline; larger files point at read_workspace_file.
+   * The same path is named for the gateway `read` tool and opens the
+   * artifact preview. chat.attach remains on the service. A failed upload
+   * aborts the send and keeps the draft.
    */
   const sendWithAttachments = async (text: string): Promise<void> => {
     const files = pendingFiles;
+    const meta = pendingMeta ?? undefined;
     const outgoing: NonNullable<Msg["attachments"]> = [];
-    const blocks: string[] = [];
-    for (const f of files) {
-      if (f.file === undefined) {
+    const pointers: string[] = [];
+    for (const file of files) {
+      if (file.bytes === undefined) {
         continue;
       }
-      const kind = classifyAttachment(f.mime, f.name);
+      const kind = classifyAttachment(file.mime, file.name);
       try {
-        const bytes = new Uint8Array(await f.file.arrayBuffer());
-        const uploaded = await service.attachments.upload(me.bot.id, { name: f.name, bytes });
-        outgoing.push({
-          name: f.name,
-          size: f.size,
-          kind,
-          ...(f.dataUrl !== undefined ? { dataUrl: f.dataUrl } : {}),
-          path: uploaded.path,
+        const uploaded = await service.attachments.upload(me.bot.id, {
+          name: file.name,
+          bytes: file.bytes,
         });
-        blocks.push(
+        outgoing.push({
+          name: file.name,
+          size: file.size,
+          kind,
+          ...(file.dataUrl !== undefined ? { dataUrl: file.dataUrl } : {}),
+          path: uploaded.path,
+          relativePath: uploaded.path,
+        });
+        pointers.push(
           ...composeAttachmentBlocks([
             {
-              name: f.name,
-              size: f.size,
-              mime: f.mime,
+              name: file.name,
+              size: file.size,
+              mime: file.mime,
               kind,
-              ...(f.text !== undefined ? { text: f.text } : {}),
+              ...(file.text !== undefined ? { text: file.text } : {}),
               path: uploaded.path,
             },
           ]),
+          buildAttachmentContext({
+            name: file.name,
+            size: file.size,
+            relativePath: uploaded.path,
+          }),
         );
       } catch (error) {
         const code = (error as { code?: string }).code;
         const detail = code ?? (error instanceof Error ? error.message : String(error));
-        onNotify(t("shell.attachmentUploadFailed", [f.name, detail]));
+        onNotify(t("shell.attachmentUploadFailed", [file.name, detail]));
         return;
       }
     }
-    const composed = [text, ...blocks].filter((part) => part.length > 0).join("\n\n");
-    onSend(text, outgoing.length > 0 ? outgoing : undefined, pendingMeta ?? undefined);
+    onSend(text, outgoing.length > 0 ? outgoing : undefined, meta);
     setPendingMeta(null);
     setPendingFiles([]);
     setFailedText(text);
     setDraft("");
-    startChatStream(composed);
+    startChatStream(composeAttachmentPrompt(text, pointers));
   };
 
   /** G6: 重新生成 — re-ask the latest user question as a new labelled turn. */
@@ -3667,6 +3786,7 @@ function BotsPlaceholder({
                   onRegenerate={regenerate}
                   canEditResend={m.id === lastUserMsgId}
                   onEditResend={editResend}
+                  onOpenAttachment={onOpenAttachment}
                 />
               )}
             </Fragment>

@@ -16,12 +16,24 @@
  * and closes the database. A data restore tears the host down (the engine
  * holds the replaced database); the caller restarts the process.
  */
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { existsSync, mkdirSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { createScreenBackend, type ScreenBackend } from "@deepseek-bot/exec-daemon";
-import { methodContract, type Method, type Task, type ToolPolicy } from "@deepseek-bot/contracts";
+import {
+  createDeviceInputBackend,
+  createScreenBackend,
+  unavailableDeviceInputBackend,
+  type DeviceInputBackend,
+  type ScreenBackend,
+} from "@deepseek-bot/exec-daemon";
+import {
+  DeviceInputSchema,
+  methodContract,
+  type Method,
+  type Task,
+  type ToolPolicy,
+} from "@deepseek-bot/contracts";
 import {
   DshSdkExecutor,
   SessionRegistry,
@@ -87,6 +99,8 @@ import {
   bindMemoryTools,
   bindScreenCaptureTool,
   bindDeviceActionTool,
+  bindDeviceInputTool,
+  bindAttachmentTools,
   bindWebSearchTool,
   type ToolCaller,
   type ToolNetworkPermissions,
@@ -94,8 +108,14 @@ import {
   type WebSearchResult,
 } from "@deepseek-bot/agent-tools";
 import { startApplicationToolServer } from "./app-tool-channel.js";
+import {
+  AttachmentByteStore,
+  createAttachmentIngress,
+  createWorkspaceAttachmentFiles,
+} from "./workspace-attachments.js";
 import { createScreenService, unavailableScreenBackend, type ScreenService } from "./screen.js";
 import { createDeviceActionService } from "./device.js";
+import { createDeviceInputService } from "./device-input.js";
 import { TaskDispatcher } from "./task-dispatcher.js";
 import { evaluateTriggerRules } from "./triggers.js";
 import { invokeConnector } from "./connectors.js";
@@ -142,6 +162,13 @@ export interface HostOptions {
   readonly screen?: {
     readonly backend: ScreenBackend;
     readonly supported?: boolean;
+  };
+  /**
+   * Device-input backend seam. Production on Windows uses the bundled helper.
+   * Other platforms stay unavailable and do not spawn a process.
+   */
+  readonly deviceInput?: {
+    readonly backend: DeviceInputBackend;
   };
 }
 
@@ -285,7 +312,9 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
   });
   const bootGeneration = incrementBootGeneration(db);
   const permissions = new AgentPermissionService(db, bootGeneration);
-  const mcp = new McpService(db, layout.connectorOutputs);
+  const mcp = new McpService(db, layout.connectorOutputs, {
+    resolveCredential: (credentialRef) => options.resolveApiKey(credentialRef),
+  });
   const patches = writeProfilePatches(layout.harnessHome);
   const now = options.now ?? (() => new Date());
   const screenChoice = resolveScreenBackend(options);
@@ -298,6 +327,14 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
     supported: screenChoice.supported,
   });
   const device = createDeviceActionService({ db, permissions, now });
+  const deviceInputBackend = resolveDeviceInputBackend(options);
+  const deviceInput = createDeviceInputService({
+    root: layout.deviceOutputs,
+    db,
+    permissions,
+    now,
+    backend: deviceInputBackend,
+  });
 
   // The executor and the bridge reference each other (child env ← bridge
   // address; bridge asks → executor session registry), so the bridge handle
@@ -351,7 +388,8 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
   const chat = new ChatManager(
     executorOptions,
     {
-      prepareProfile: () => prepareAppToolProfile({ dshHome: layout.harnessHome, bridgePackageDir }),
+      prepareProfile: () =>
+        prepareAppToolProfile({ dshHome: layout.harnessHome, bridgePackageDir }),
       openTurn: (sessionId, caller, signal) => {
         return applicationTools.openTurn({ sessionId, caller, signal });
       },
@@ -439,6 +477,25 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
 
   let closed = false;
   const agentToolsHolder: { current?: ToolGateway } = {};
+  const attachmentFiles = createWorkspaceAttachmentFiles(db);
+  const attachmentBytes = new AttachmentByteStore();
+  const attachments = createAttachmentIngress({
+    db,
+    bytes: attachmentBytes,
+    files: attachmentFiles,
+    now,
+    call: (caller, params) => {
+      const gateway = agentToolsHolder.current;
+      if (gateway === undefined) {
+        throw new EngineError({
+          code: "RUNTIME_UNAVAILABLE",
+          message: "agent tools gateway is not ready yet",
+          retryable: false,
+        });
+      }
+      return gateway.call(caller, "import_attachment", params);
+    },
+  });
   const questions = new AskUserCoordinator();
   const context: HostContext = {
     db,
@@ -451,7 +508,9 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
     mcp,
     screen,
     device,
+    deviceInput,
     chat,
+    attachments,
     userQuestions: questions,
     webSearch: {
       currentEndpoint: () => webSearch.currentEndpoint(),
@@ -468,7 +527,7 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
     },
     tasks,
     locale: uiLocale,
-    attachments: attachmentStore,
+    attachmentUploads: attachmentStore,
     get agentTools(): ToolGateway {
       if (agentToolsHolder.current === undefined) {
         throw new Error("agent tools gateway is not ready yet");
@@ -522,6 +581,8 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
     if (method === "data.restore") {
       screen.close();
       device.close();
+      deviceInput.close();
+      attachmentStore.close();
       permissions.close();
     }
     const validated = contract.response.safeParse(result);
@@ -591,11 +652,12 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
     }),
     bindScreenCaptureTool(screen),
     bindDeviceActionTool(device),
-    // D26: chat attachments land in the bot workspace; the bot reads them
-    // back through this tool (capability fs.read, D08/D16 governed).
+    // D26 closure: chat attachments land in the bot workspace; the bot reads
+    // them back through this tool (capability fs.read, D08/D16 governed).
     bindWorkspaceFileTool({
       read: (botId, relativePath) => readWorkspaceFileText(db, botId, relativePath),
     }),
+    bindDeviceInputTool(deviceInput),
     // v0.5 manager orchestration (T4/T3): coordinator workflow saving and
     // dispatched-task tools. Role rules live inside the task tool layer;
     // the dispatcher re-checks them authoritatively.
@@ -634,6 +696,19 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
         return { tasks: ordered.slice(Math.max(0, ordered.length - filter.limit)) };
       },
     }),
+    ...bindAttachmentTools({
+      importFile(botId, input) {
+        const bytes = attachmentBytes.take(input.uploadId, botId);
+        const checksum = createHash("sha256").update(bytes).digest("hex");
+        if (bytes.byteLength !== input.size || checksum !== input.checksum) {
+          throw new ToolRejectionError("INVALID_INPUT", "staged attachment does not match the request");
+        }
+        return attachmentFiles.write(botId, input.name, bytes);
+      },
+      readFile(botId, relativePath) {
+        return attachmentFiles.read(botId, relativePath);
+      },
+    }),
   ]) {
     agentRegistry.register(capability);
   }
@@ -665,6 +740,18 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
             };
           }
           return device.authorize(caller, kind, options);
+        }
+        if (tool === "device_input") {
+          const parsed = DeviceInputSchema.safeParse(params);
+          if (!parsed.success) {
+            return {
+              allowed: false,
+              code: "INVALID_INPUT",
+              reason: "device input is invalid",
+              decision: "denied",
+            };
+          }
+          return deviceInput.authorize(caller, parsed.data, options);
         }
         const input = tool === "mcp_call" ? McpInvokeInputSchema.parse(params) : undefined;
         if (input) mcp.check(input, caller);
@@ -719,6 +806,7 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
       screen.close();
       device.close();
       attachmentStore.close();
+      deviceInput.close();
       permissions.close();
       mcp.close();
       questions.close();
@@ -768,6 +856,21 @@ function resolveScreenBackend(options: HostOptions): {
     }),
     supported: true,
   };
+}
+
+function resolveDeviceInputBackend(options: HostOptions): DeviceInputBackend {
+  if (options.deviceInput !== undefined) return options.deviceInput.backend;
+  if (process.platform !== "win32") return unavailableDeviceInputBackend();
+  const modulePath = fileURLToPath(import.meta.url);
+  const bundled = basename(modulePath) === "main.js";
+  const assets = bundled
+    ? join(dirname(modulePath), "screen-assets")
+    : join(dirname(modulePath), "..", "..", "exec-daemon");
+  return createDeviceInputBackend({
+    helperScriptPath: bundled
+      ? join(assets, "win32-input.ps1")
+      : join(assets, "assets", "win32-input.ps1"),
+  });
 }
 
 function restoreSearchEndpoint(search: WebSearchService, saved: unknown): void {

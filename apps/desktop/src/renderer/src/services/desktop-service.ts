@@ -128,15 +128,35 @@ export interface DesktopService {
     testConnection(input: { model: string; endpoint: string }): Promise<TestConnectionResult>;
   };
   chat: {
+    /**
+     * Host: the bot's stored chat (`chat:<botId>`) when that session has
+     * rows, otherwise an empty list. Fixture: seeded run sessions.
+     */
     listSessions(botId: string): Promise<ChatSessionView[]>;
-    /** Replays persisted events for a session (fixture-backed in D05). */
-    openSession(sessionId: string): Promise<{ events: EventEnvelope[] }>;
+    /**
+     * Host: that session's stored messages and an empty event list.
+     * Fixture: the run-event log and an empty message list.
+     */
+    openSession(sessionId: string): Promise<{
+      events: EventEnvelope[];
+      messages: ChatHistoryRow[];
+    }>;
     /**
      * chat.history: persisted host rows for one bot, including the v0.5
      * dispatch markers and task notices. The fixture chat is local-only
      * and returns an empty list.
      */
     history(botId: string, limit?: number): Promise<ChatHistoryRow[]>;
+    /**
+     * Stage the picked bytes and import them through the tool gateway.
+     * The real host waits for fs.write grant or approval before writing.
+     * Returns the workspace-relative path the artifact preview and the
+     * read tool both use.
+     */
+    importAttachment(
+      botId: string,
+      file: { name: string; mediaType: string; bytes: Uint8Array },
+    ): Promise<{ relativePath: string; mediaType: string; size: number; checksum: string }>;
     /** Rejects with ServiceError("INVALID_INPUT") for archived bots. */
     stream(
       botId: string,

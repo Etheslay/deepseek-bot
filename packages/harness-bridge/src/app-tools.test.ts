@@ -73,6 +73,21 @@ async function fixture(
           },
         }),
       );
+    } else if (request.url === "/read") {
+      response.end(
+        JSON.stringify({
+          tool: {
+            name: "read",
+            description: "read",
+            parameters: {
+              type: "object",
+              additionalProperties: false,
+              properties: { file_path: { type: "string" } },
+              required: ["file_path"],
+            },
+          },
+        }),
+      );
     } else if (request.url === "/memory") {
       response.end(
         JSON.stringify({
@@ -217,7 +232,7 @@ describe("application tool plugin", () => {
   ])("fails closed on an invalid optional MCP directory and preserves readiness", async (mcp) => {
     const { ctx, tools, calls } = await fixture({ mcp });
     await apply(ctx);
-    expect(tools).toHaveLength(18); // v0.7 adds save_workflow, dispatch_task, list_tasks; D26 adds read_workspace_file
+    expect(tools).toHaveLength(19); // catalog includes read_workspace_file; read is registered beside it
     expect(tools.some((tool) => tool.name.startsWith("mcp__"))).toBe(false);
     expect(calls).toEqual([{ tools: names }]);
   });
@@ -225,7 +240,7 @@ describe("application tool plugin", () => {
   it("keeps regular tools ready when the MCP endpoint is unavailable", async () => {
     const { ctx, tools, calls } = await fixture({ mcpStatus: 503 });
     await apply(ctx);
-    expect(tools).toHaveLength(18); // v0.7 adds save_workflow, dispatch_task, list_tasks; D26 adds read_workspace_file
+    expect(tools).toHaveLength(19); // catalog includes read_workspace_file; read is registered beside it
     expect(calls).toEqual([{ tools: names }]);
   });
 
@@ -239,7 +254,7 @@ describe("application tool plugin", () => {
     try {
       const { ctx, tools, calls } = await fixture({ mcpSlow: true });
       await apply(ctx);
-      expect(tools).toHaveLength(18); // v0.7 adds save_workflow, dispatch_task, list_tasks; D26 adds read_workspace_file
+      expect(tools).toHaveLength(19); // catalog includes read_workspace_file; read is registered beside it
       expect(calls).toEqual([{ tools: names }]);
     } finally {
       timeout.mockRestore();
@@ -281,6 +296,7 @@ describe("application tool plugin", () => {
       "knowledge_search",
       "connector_invoke",
       "web_search",
+      "read",
     ]);
     expect(calls).toEqual([{ tools: names }]);
     const tool = tools.find((item) => item.name === "create_group")!;
@@ -332,6 +348,7 @@ describe("application tool plugin", () => {
       "/memory",
       "/connectors",
       "/web-search",
+      "/read",
       "/screen",
       "/mcp",
       "/app-tools/ready",
@@ -403,6 +420,7 @@ describe("application tool plugin", () => {
       "memory_search",
       "knowledge_search",
       "connector_invoke",
+      "read",
     ]);
     expect(calls[0]).toEqual({ tools: names });
     const agentTools: Definition[] = [];

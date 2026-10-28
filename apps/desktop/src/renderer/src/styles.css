@@ -6166,6 +6166,77 @@ select option {
   display: block;
 }
 
+/* ---------- code block toolbar: language label and per-block copy ---------- */
+
+.chat-md .md-code {
+  margin: 0.7em 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--md-code-bg, #141418);
+  overflow: hidden;
+}
+
+.chat-md .md-code-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  padding: 4px 6px 4px 12px;
+  background: color-mix(in srgb, var(--md-code-bg, #141418) 70%, var(--raised));
+  border-bottom: 1px solid var(--border);
+}
+
+.chat-md .md-code-lang {
+  color: var(--muted);
+  font-family: Consolas, "Cascadia Mono", monospace;
+  font-size: 0.72rem;
+  letter-spacing: 0.02em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-md .md-code pre {
+  margin: 0;
+  padding: 10px 12px;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+}
+
+.md-code-copy {
+  font: inherit;
+  font-size: 0.74rem;
+  flex: 0 0 auto;
+  padding: 3px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+
+.md-code-copy:hover {
+  color: var(--text);
+  background: var(--item-hover);
+}
+
+.md-code-copy:focus-visible {
+  outline: 2px solid #8ab4ff;
+  outline-offset: 2px;
+}
+
+.md-code-copy.copied {
+  color: var(--bots, #9ae6a0);
+  border-color: color-mix(in srgb, var(--bots, #9ae6a0) 45%, var(--border));
+}
+
+.md-code-copy.failed {
+  color: #f87171;
+  border-color: color-mix(in srgb, #f87171 45%, var(--border));
+}
+
 .chat-md table {
   border-collapse: collapse;
   margin: 0.6em 0;
@@ -6597,6 +6668,20 @@ select option {
   border-radius: 10px;
   border: 1px solid var(--border);
   object-fit: contain;
+}
+
+.msg-attachment-open {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+button.msg-attachment-file {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
 }
 
 .msg-attachment-file {
@@ -7449,9 +7534,59 @@ select:focus-visible {
   white-space: nowrap;
 }
 
-.notify-bot-state {
-  font-size: 0.72rem;
-  color: var(--muted);
+/* Per-bot mute only. White is mute on; black is mute off. The shared
+   .settings-switch used by the other Computer rows stays as it is. */
+.notify-mute-switch {
+  position: relative;
+  flex: 0 0 auto;
+  width: 42px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid #4a4a52;
+  border-radius: 999px;
+  background: #000;
+  cursor: pointer;
+  line-height: 0;
+}
+
+.notify-mute-switch .notify-mute-knob {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 120ms ease, background 120ms ease;
+}
+
+.notify-mute-switch.on {
+  background: #fff;
+  border-color: #fff;
+}
+
+.notify-mute-switch.on .notify-mute-knob {
+  background: #000;
+  transform: translateX(18px);
+}
+
+.notify-mute-switch:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+.notify-mute-switch:hover {
+  border-color: #8a8a93;
+}
+
+.notify-mute-switch.on:hover {
+  border-color: #fff;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .notify-mute-switch .notify-mute-knob {
+    transition: none;
+  }
 }
 
 .chrome-profile-actions {

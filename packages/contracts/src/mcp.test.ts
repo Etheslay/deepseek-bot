@@ -21,6 +21,15 @@ describe("D19 MCP connector contracts", () => {
         .success,
     ).toBe(true);
     expect(request.safeParse({ name: "local", kind: "stdio" }).success).toBe(false);
+    expect(
+      request.safeParse({
+        name: "local",
+        kind: "mcp-stdio",
+        command: "server",
+        args: ["--stdio"],
+        credentialEnv: "MCP_CREDENTIAL",
+      }).success,
+    ).toBe(true);
   });
 
   it("keeps old connector responses readable while accepting kind in all catalog responses", () => {

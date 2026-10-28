@@ -39,7 +39,6 @@ export const d22Messages = {
   "d22.notifyOnlyUnfocused": { zh: "仅窗口不在前台时提醒", en: "Only when the window is not focused" },
   "d22.notifyPerBot": { zh: "按 Bot 静音", en: "Mute per bot" },
   "d22.notifyMute": { zh: "静音", en: "Mute" },
-  "d22.notifyUnmute": { zh: "取消静音", en: "Unmute" },
   "d22.notifyNoBots": { zh: "创建 Bot 后可单独静音", en: "Create a bot to mute it individually" },
   "d22.notifyTest": { zh: "发送测试通知", en: "Send test notification" },
   "d22.notifyTestTitle": { zh: "DeepSeek Bot", en: "DeepSeek Bot" },
