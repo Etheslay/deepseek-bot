@@ -59,6 +59,12 @@ describe("per-bot mute switches", () => {
 
     const muteSwitches = [...container.querySelectorAll<HTMLButtonElement>(".notify-mute-switch")];
     expect(muteSwitches.map((button) => button.textContent?.trim())).toEqual(["", ""]);
+    expect(muteSwitches.map((button) => button.childElementCount)).toEqual([1, 1]);
+    expect(muteSwitches.map((button) => button.firstElementChild?.className)).toEqual([
+      "notify-mute-knob",
+      "notify-mute-knob",
+    ]);
+    expect(muteSwitches.every((button) => !button.classList.contains("settings-switch"))).toBe(true);
     expect(muteSwitches.map((button) => button.getAttribute("aria-checked"))).toEqual(["true", "false"]);
     expect(muteSwitches.map((button) => button.classList.contains("on"))).toEqual([true, false]);
     expect(muteSwitches.map((button) => button.getAttribute("aria-label"))).toEqual([

@@ -7534,57 +7534,73 @@ select:focus-visible {
   white-space: nowrap;
 }
 
-/* Per-bot mute only. White is mute on; black is mute off. The shared
-   .settings-switch used by the other Computer rows stays as it is. */
-.notify-mute-switch {
+/* Per-bot mute only. The track width is fixed, so a longer label cannot
+   grow the pill leftward. The knob slides inside the frame.
+   White track = muted. Black track = not muted.
+   The shared .settings-switch on the other Computer rows stays as it is. */
+.notify-bot > .notify-mute-switch {
+  appearance: none;
+  -webkit-appearance: none;
+  box-sizing: border-box;
   position: relative;
-  flex: 0 0 auto;
-  width: 42px;
-  height: 24px;
+  display: inline-block;
+  flex: 0 0 52px;
+  width: 52px;
+  min-width: 52px;
+  max-width: 52px;
+  height: 28px;
+  min-height: 28px;
+  max-height: 28px;
+  margin: 0;
   padding: 0;
+  overflow: hidden;
   border: 1px solid #4a4a52;
   border-radius: 999px;
   background: #000;
-  cursor: pointer;
+  color: transparent;
+  font-size: 0;
   line-height: 0;
+  cursor: pointer;
+  vertical-align: middle;
 }
 
-.notify-mute-switch .notify-mute-knob {
+.notify-bot > .notify-mute-switch .notify-mute-knob {
   position: absolute;
   top: 3px;
   left: 3px;
-  width: 16px;
-  height: 16px;
+  width: 20px;
+  height: 20px;
   border-radius: 50%;
   background: #fff;
-  transition: transform 120ms ease, background 120ms ease;
+  transform: none;
+  transition: left 140ms ease, background-color 140ms ease;
 }
 
-.notify-mute-switch.on {
+.notify-bot > .notify-mute-switch.on {
   background: #fff;
   border-color: #fff;
 }
 
-.notify-mute-switch.on .notify-mute-knob {
-  background: #000;
-  transform: translateX(18px);
+.notify-bot > .notify-mute-switch.on .notify-mute-knob {
+  left: calc(100% - 20px - 3px);
+  background: #141416;
 }
 
-.notify-mute-switch:focus-visible {
+.notify-bot > .notify-mute-switch:focus-visible {
   outline: 2px solid #fff;
   outline-offset: 2px;
 }
 
-.notify-mute-switch:hover {
+.notify-bot > .notify-mute-switch:hover {
   border-color: #8a8a93;
 }
 
-.notify-mute-switch.on:hover {
+.notify-bot > .notify-mute-switch.on:hover {
   border-color: #fff;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .notify-mute-switch .notify-mute-knob {
+  .notify-bot > .notify-mute-switch .notify-mute-knob {
     transition: none;
   }
 }

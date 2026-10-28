@@ -111,7 +111,7 @@ export function NotificationSettingsPanel(props: {
         ) : (
           <ul className="notify-bot-list" aria-label={t("d22.notifyPerBot")}>
             {props.bots.map((bot) => {
-              // White and aria-checked mean mute is on. Black means it is off.
+              // Fixed track: white and aria-checked mean muted. The knob only slides inside it.
               const isMuted = muted.has(bot.id);
               return (
                 <li key={bot.id} className="notify-bot">
