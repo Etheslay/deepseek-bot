@@ -54,12 +54,13 @@
   --shadow-2: 0 12px 34px rgba(30, 30, 45, 0.13);
   --shadow-3: 0 14px 44px rgba(30, 30, 45, 0.15);
   --shadow-4: 0 18px 60px rgba(30, 30, 45, 0.18);
-  /* Same neutral wash, a little quieter on a light menu. */
-  --dropdown-hover-bg: rgba(15, 23, 42, 0.04);
-  --dropdown-hover-fg: var(--text);
+  /* The open menu stays the dark gray panel in both themes, so these
+     tokens do not flip to a white sheet or a black selected row. */
+  --dropdown-hover-bg: rgba(127, 127, 127, 0.1);
+  --dropdown-hover-fg: #ececf1;
   --dropdown-hover-border: transparent;
-  --dropdown-selected-bg: rgba(15, 23, 42, 0.06);
-  --dropdown-selected-fg: var(--text);
+  --dropdown-selected-bg: rgba(127, 127, 127, 0.14);
+  --dropdown-selected-fg: #ececf1;
   --dropdown-focus: transparent;
 }
 
@@ -2474,9 +2475,7 @@ select option {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  /* Shrink-wrapped pills ignore space-between, so the label sat on the
-     chevron. This gap is the clear space on every trigger. */
-  gap: 1rem;
+  gap: 0;
   font: inherit;
   font-size: 12.5px;
   color: var(--text);
@@ -2499,6 +2498,10 @@ select option {
 
 .select-arrow {
   flex: 0 0 auto;
+  /* Button contents stay inline in Electron, so flex gap on the trigger
+     never separates the word from the chevron. The margin does, on every
+     pill including the shrink-wrapped permissions ones. */
+  margin-inline-start: 1.5rem;
   color: var(--muted);
   font-size: 11px;
 }
@@ -2506,8 +2509,10 @@ select option {
 /* The menu is portaled to body and fixed-positioned by the component
    (viewport flip when the modal bottom would clip it). */
 .custom-select-menu {
-  background: var(--raised);
-  border: 1px solid var(--line);
+  /* Same dark raised panel in light theme. --raised flips to white there. */
+  background: #1d1d21;
+  color: #ececf1;
+  border: 1px solid #2a2a30;
   border-radius: 16px;
   padding: 0.25rem;
   box-shadow: var(--shadow-1);
@@ -2523,7 +2528,7 @@ select option {
   gap: 0.5rem;
   font: inherit;
   font-size: 12.5px;
-  color: var(--text);
+  color: #ececf1;
   background: transparent;
   border: none;
   border-radius: 12px;

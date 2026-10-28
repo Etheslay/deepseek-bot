@@ -14,9 +14,13 @@ describe("appearance theme label", () => {
   });
 
   it("keeps a clear gap between the label and the chevron on every trigger", () => {
-    const rule = css.slice(css.indexOf(".custom-select-trigger {"), css.indexOf(".custom-select-trigger:hover"));
-    expect(rule).toMatch(/gap:\s*1rem;/);
-    expect(rule).toContain("justify-content: space-between");
+    const arrow = css.slice(css.indexOf(".select-arrow {"), css.indexOf(".custom-select-menu {"));
+    expect(arrow).toMatch(/margin-inline-start:\s*1\.5rem;/);
+    const settings = css.slice(
+      css.indexOf(".settings-row .custom-select-trigger {"),
+      css.indexOf(".appearance-theme-label"),
+    );
+    expect(settings).not.toMatch(/margin-inline-start:\s*0/);
   });
 
   it("keeps that label outside a full-width theme pill", () => {

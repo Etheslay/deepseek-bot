@@ -36,9 +36,11 @@ describe("dropdown option selection style", () => {
     expect(dark).not.toMatch(/--dropdown-selected-bg:\s*#fff;/);
     expect(dark).not.toMatch(/--dropdown-selected-fg:\s*#000;/);
     const light = css.slice(css.indexOf(':root[data-theme="light"]'), css.indexOf("box-sizing"));
-    expect(light).toMatch(/--dropdown-selected-bg:\s*rgba\(15,\s*23,\s*42,\s*0\.06\);/);
-    expect(light).toMatch(/--dropdown-hover-bg:\s*rgba\(15,\s*23,\s*42,\s*0\.04\);/);
+    expect(light).toMatch(/--dropdown-selected-bg:\s*rgba\(127,\s*127,\s*127,\s*0\.14\);/);
+    expect(light).toMatch(/--dropdown-hover-bg:\s*rgba\(127,\s*127,\s*127,\s*0\.1\);/);
+    expect(light).toMatch(/--dropdown-selected-fg:\s*#ececf1;/);
     expect(light).not.toMatch(/--dropdown-selected-bg:\s*#000;/);
+    expect(css).toMatch(/\.custom-select-menu\s*\{[^}]*background:\s*#1d1d21;/);
   });
 
   it("covers selected, hover, focus, aria-selected, and text selection from the shared tokens", () => {
