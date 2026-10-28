@@ -7560,9 +7560,12 @@ select:focus-visible {
   margin: 0;
   padding: 0;
   overflow: hidden;
-  border: 1px solid #4a4a52;
+  border: 1px solid #55555e;
   border-radius: 999px;
-  background: #000;
+  /* Off reads as a dark gray track in BOTH themes: the previous black track
+     made the dark knob disappear, and the light-theme override that forced a
+     gray track made on and off indistinguishable. */
+  background: #3f3f47;
   color: transparent;
   font-size: 0;
   line-height: 0;
@@ -7578,28 +7581,30 @@ select:focus-visible {
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  background: #111;
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.42);
+  background: #f2f2f6;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
   transform: none;
   transition: left 140ms ease, background-color 140ms ease, box-shadow 140ms ease;
 }
 
 .settings-switch.on,
 .notify-bot > .notify-mute-switch.on {
-  background: #fff;
-  border-color: #fff;
+  /* On is blue in both themes, so the state is told apart by hue, not by
+     whether the card happens to be white. */
+  background: #2f7de0;
+  border-color: #2f7de0;
 }
 
 .settings-switch.on .settings-switch-knob,
 .notify-bot > .notify-mute-switch.on .notify-mute-knob {
   left: calc(100% - 20px - 3px);
   background: #fff;
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.16), 0 1px 2px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
 }
 
 .settings-switch:focus-visible,
 .notify-bot > .notify-mute-switch:focus-visible {
-  outline: 2px solid #fff;
+  outline: 2px solid #2f7de0;
   outline-offset: 2px;
 }
 
@@ -7610,7 +7615,7 @@ select:focus-visible {
 
 .settings-switch.on:hover,
 .notify-bot > .notify-mute-switch.on:hover {
-  border-color: #fff;
+  border-color: #5b9be8;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -7620,37 +7625,19 @@ select:focus-visible {
   }
 }
 
-/* Light settings cards are white. A white track vanishes, and a pale gray
-   track fades into the page. Both states use a solid mid gray with a dark
-   border. The knob still slides: dark and left when off, white and right
-   when on. */
+/* Light theme keeps the same two hues as dark - a dark gray track when off,
+   blue when on - and both sit clearly on a white card, so there is no longer a
+   per-state override. That override is what had made on and off look identical
+   in light mode. The only light-theme touch is a faint outer ring, so the dark
+   track reads as a control rather than a hole punched in the card. */
 [data-theme="light"] .settings-switch,
-[data-theme="light"] .notify-bot > .notify-mute-switch,
+[data-theme="light"] .notify-bot > .notify-mute-switch {
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.08);
+}
+
 [data-theme="light"] .settings-switch.on,
-[data-theme="light"] .notify-bot > .notify-mute-switch.on,
-[data-theme="light"] .settings-switch:hover,
-[data-theme="light"] .notify-bot > .notify-mute-switch:hover,
-[data-theme="light"] .settings-switch.on:hover,
-[data-theme="light"] .notify-bot > .notify-mute-switch.on:hover {
-  background: #9a9aa4;
-  border-color: #2a2a32;
-}
-
-[data-theme="light"] .settings-switch .settings-switch-knob,
-[data-theme="light"] .notify-bot > .notify-mute-switch .notify-mute-knob {
-  background: #1b1b1f;
-  box-shadow: none;
-}
-
-[data-theme="light"] .settings-switch.on .settings-switch-knob,
-[data-theme="light"] .notify-bot > .notify-mute-switch.on .notify-mute-knob {
-  background: #fff;
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.22), 0 1px 2px rgba(0, 0, 0, 0.28);
-}
-
-[data-theme="light"] .settings-switch:focus-visible,
-[data-theme="light"] .notify-bot > .notify-mute-switch:focus-visible {
-  outline-color: #1b1b1f;
+[data-theme="light"] .notify-bot > .notify-mute-switch.on {
+  box-shadow: 0 0 0 1px rgba(47, 125, 224, 0.18);
 }
 
 .notify-bot-list,
