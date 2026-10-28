@@ -16,8 +16,6 @@ import { t, useLanguage } from "../../i18n.js";
 
 type Scope = "bot" | "all";
 
-const SERIES_COLORS = ["#6ea8ff", "#7fdbca", "#f5c66e", "#ff7b9c", "#9ae6a0", "#c3a6ff"];
-
 /** Compact token counts: 12.3万 / 1.2M. */
 function compact(value: number): string {
   return new Intl.NumberFormat(undefined, { notation: "compact", maximumFractionDigits: 1 }).format(value);
@@ -132,12 +130,13 @@ function ShareCard(props: { rows: ReadonlyArray<ShareRow> }): JSX.Element | null
           const arc = (
             <circle
               key={row.model}
+              className={"usage-arc " + ("usage-series-" + (((index) % 6) + 1))}
               cx="110"
               cy="110"
               r={radius}
               fill="none"
               strokeWidth="24"
-              stroke={SERIES_COLORS[index % SERIES_COLORS.length]}
+              stroke="currentColor"
               strokeDasharray={`${length} ${circumference - length}`}
               strokeDashoffset={-offset}
               transform="rotate(-90 110 110)"
@@ -156,7 +155,7 @@ function ShareCard(props: { rows: ReadonlyArray<ShareRow> }): JSX.Element | null
       <ul className="usage-legend-list">
         {rows.map((row, index) => (
           <li key={row.model}>
-            <i className="usage-dot" style={{ background: SERIES_COLORS[index % SERIES_COLORS.length] }} />
+            <i className={"usage-dot " + ("usage-series-" + (((index) % 6) + 1))} />
             <span className="usage-legend-name">{row.model}</span>
             <span className="usage-legend-pct">{share(row.tokens, total)}%</span>
             <span className="usage-legend-value">
@@ -300,7 +299,7 @@ export function UsagePanel(props: { botId: string | null }): JSX.Element {
                 {modelRows.map((row, index) => (
                   <tr key={row.model}>
                     <td>
-                      <i className="usage-dot" style={{ background: SERIES_COLORS[index % SERIES_COLORS.length] }} />
+                      <i className={"usage-dot " + ("usage-series-" + (((index) % 6) + 1))} />
                       {row.model}
                     </td>
                     <td>{compact(row.inputTokens)}</td>

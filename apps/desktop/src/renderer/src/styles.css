@@ -8813,3 +8813,65 @@ select:focus-visible {
   padding: 22px 2px;
   text-align: center;
 }
+
+/* ============================================================
+   Usage chart palette, theme aware
+   Series colours were hardcoded pastels tuned for a dark card; on a white card
+   they sit at 1.6-2.3:1 and effectively disappear. The palette is now a pair of
+   custom-property sets, and the shapes take their colour from `currentColor` so
+   the ring, the legend dots, the table dots and the trend lines all follow it.
+   ============================================================ */
+
+:root {
+  --usage-c1: #6ea8ff;
+  --usage-c2: #7fdbca;
+  --usage-c3: #f5c66e;
+  --usage-c4: #ff7b9c;
+  --usage-c5: #9ae6a0;
+  --usage-c6: #c3a6ff;
+}
+
+:root[data-theme="light"] {
+  --usage-c1: #2f6fd0;
+  --usage-c2: #0f8f82;
+  --usage-c3: #a86a00;
+  --usage-c4: #c02a53;
+  --usage-c5: #2f7d32;
+  --usage-c6: #6b46c1;
+}
+
+.usage-series-1 { color: var(--usage-c1); }
+.usage-series-2 { color: var(--usage-c2); }
+.usage-series-3 { color: var(--usage-c3); }
+.usage-series-4 { color: var(--usage-c4); }
+.usage-series-5 { color: var(--usage-c5); }
+.usage-series-6 { color: var(--usage-c6); }
+
+.usage-arc {
+  transition: stroke-dasharray 160ms ease;
+}
+
+.usage-dot {
+  background: currentColor;
+}
+
+.usage-line,
+.usage-point {
+  stroke: currentColor;
+}
+
+.usage-point {
+  fill: currentColor;
+}
+
+.usage-line-input,
+.usage-dot-input,
+.usage-point.usage-line-input {
+  color: var(--usage-c1);
+}
+
+.usage-line-output,
+.usage-dot-output,
+.usage-point.usage-line-output {
+  color: var(--usage-c2);
+}
