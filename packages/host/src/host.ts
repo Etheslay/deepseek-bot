@@ -44,6 +44,7 @@ import {
   type RunningApprovalBridge,
 } from "@deepseek-bot/harness-adapter";
 import { ChatManager } from "./chat.js";
+import { stageApprovalBridge } from "./bridge-activation.js";
 import { createAttachmentStore, readWorkspaceFileText } from "./attachments.js";
 import { createWorkspaceArtifacts } from "./artifacts.js";
 import {
@@ -400,6 +401,17 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
   const bridgePackageDir = existsSync(join(packagedBridge, "package.json"))
     ? packagedBridge
     : fileURLToPath(new URL("../../harness-bridge/", import.meta.url));
+  // G2: stage the approval bridge at startup so the bridge-mount patch
+  // resolves on the FIRST dsh spawn — workflow runs and relay hops never go
+  // through the chat-time prepareProfile below. Best-effort: an unbuilt
+  // bridge package logs "unavailable" instead of stopping Host assembly, and
+  // chat turns still surface it as RUNTIME_UNAVAILABLE on their own check.
+  stageApprovalBridge({
+    harnessHome: layout.harnessHome,
+    bridgePackageDir,
+    logsDir: layout.logs,
+    ...(options.now !== undefined ? { now: options.now } : {}),
+  });
   // UI language for Host-authored copy (dispatcher notices, chat turn errors,
   // canvas conflicts, ask_user labels): seeded from the settings KV (the
   // desktop pushes the resolved preference via settings.update) and mutable
