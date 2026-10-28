@@ -2598,7 +2598,7 @@ const logout = (): void => {
                   />
                 </div>
                 <div className="settings-section-title">{t("shell.appearance")}</div>
-                <div className="settings-card">
+                <div className="settings-card appearance-card">
                   <div className="settings-row">
                     <span>{t("shell.theme")}</span>
                     <CustomSelect

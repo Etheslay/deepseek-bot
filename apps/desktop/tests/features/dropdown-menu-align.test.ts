@@ -6,6 +6,10 @@ import { placeCustomSelectMenu } from "../../src/renderer/src/components/custom-
 const css = readFileSync(join(process.cwd(), "src/renderer/src/styles.css"), "utf8");
 
 describe("settings dropdown right edge", () => {
+  it("pulls the appearance card's right edge in by 12px", () => {
+    expect(css).toMatch(/\.settings-card\.appearance-card\s*\{[^}]*padding-right:\s*calc\(1rem - 12px\);/);
+  });
+
   it("pins the closed settings-row control to the end of its min-width box", () => {
     const rule = css.slice(
       css.indexOf(".settings-row .custom-select {"),

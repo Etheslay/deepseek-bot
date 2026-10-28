@@ -24,13 +24,14 @@
   --shadow-2: 0 12px 34px rgba(0, 0, 0, 0.45);
   --shadow-3: 0 14px 44px rgba(0, 0, 0, 0.55);
   --shadow-4: 0 18px 60px rgba(0, 0, 0, 0.5);
-  /* Dropdown option states. Same black/white pair as the per-bot mute switch. */
-  --dropdown-hover-bg: #000;
-  --dropdown-hover-fg: #fff;
-  --dropdown-hover-border: #4a4a52;
-  --dropdown-selected-bg: #fff;
-  --dropdown-selected-fg: #000;
-  --dropdown-focus: #fff;
+  /* Dropdown option states. Dark-gray wash on the raised menu, light text.
+     A chosen row is not a white bar. */
+  --dropdown-hover-bg: rgba(127, 127, 127, 0.1);
+  --dropdown-hover-fg: var(--text);
+  --dropdown-hover-border: transparent;
+  --dropdown-selected-bg: rgba(127, 127, 127, 0.14);
+  --dropdown-selected-fg: var(--text);
+  --dropdown-focus: transparent;
 }
 
 :root[data-theme="light"] {
@@ -53,13 +54,13 @@
   --shadow-2: 0 12px 34px rgba(30, 30, 45, 0.13);
   --shadow-3: 0 14px 44px rgba(30, 30, 45, 0.15);
   --shadow-4: 0 18px 60px rgba(30, 30, 45, 0.18);
-  /* Swap the pair so a chosen row stays visible on a white menu. */
-  --dropdown-hover-bg: #fff;
-  --dropdown-hover-fg: #000;
-  --dropdown-hover-border: #000;
-  --dropdown-selected-bg: #000;
-  --dropdown-selected-fg: #fff;
-  --dropdown-focus: #000;
+  /* Same neutral wash, a little quieter on a light menu. */
+  --dropdown-hover-bg: rgba(15, 23, 42, 0.04);
+  --dropdown-hover-fg: var(--text);
+  --dropdown-hover-border: transparent;
+  --dropdown-selected-bg: rgba(15, 23, 42, 0.06);
+  --dropdown-selected-fg: var(--text);
+  --dropdown-focus: transparent;
 }
 
 * {
@@ -1319,6 +1320,12 @@ body {
   border: 1px solid var(--border);
   border-radius: 20px;
   padding: 0.35rem 1rem;
+}
+
+/* Appearance: nudge the accent chips, language dropdown, and theme trigger
+   right together so their shared right edge sits closer to the card. */
+.settings-card.appearance-card {
+  padding-right: calc(1rem - 12px);
 }
 
 .settings-row {
@@ -6983,14 +6990,11 @@ button.msg-attachment-file {
 
 /* ---------- dropdown-option-selection ----------
    One treatment for every dropdown option that can look chosen, hovered, or
-   focused: the custom listbox, a native <option>, and text selection inside
-   either. Colours come only from --dropdown-*, the same black/white pair as
-   the per-bot mute switch. A chosen row is the solid "on" colour and wins
-   over hover. A hovered row is the solid "off" colour. Focus is a monochrome
-   ring, never the system blue. Native <option> rules repeat the fill with an
-   inset shadow because Chromium paints its popup highlight under author
-   backgrounds; Windows' native popup ignores option CSS, which is why the
-   remaining controls use CustomSelect. */
+   focused. The panel stays the raised dark gray. Chosen and hovered rows use
+   the same neutral gray wash as before the black/white pass — light text on
+   that gray, never a white row. The chosen wash wins over hover. Native
+   <option> rules repeat the fill with an inset shadow because Chromium paints
+   its popup highlight under author backgrounds. */
 select,
 .custom-select-menu {
   accent-color: var(--dropdown-selected-bg);
@@ -7017,8 +7021,7 @@ select option:active {
 }
 
 .custom-select-item:focus-visible {
-  outline: 2px solid var(--dropdown-focus);
-  outline-offset: -2px;
+  outline: none;
 }
 
 .custom-select-item.current,
@@ -7054,21 +7057,16 @@ select option:checked:active {
 
 .custom-select-item.current:focus-visible,
 .custom-select-item[aria-selected="true"]:focus-visible {
-  outline: 2px solid var(--dropdown-selected-fg);
-  outline-offset: -2px;
+  outline: none;
 }
 
 .custom-select-item::selection,
-select option::selection {
-  background: var(--dropdown-focus);
-  color: var(--dropdown-selected-fg);
-}
-
 .custom-select-item.current::selection,
 .custom-select-item[aria-selected="true"]::selection,
+select option::selection,
 select option:checked::selection {
-  background: var(--dropdown-selected-fg);
-  color: var(--dropdown-selected-bg);
+  background: var(--dropdown-selected-bg);
+  color: var(--dropdown-selected-fg);
 }
 
 .custom-select-trigger:focus-visible,
