@@ -1688,6 +1688,9 @@ const logout = (): void => {
             </span>
           )}
         </div>
+        {/* Only the bot list scrolls: the identity block above and the account
+            row below stay put no matter how many bots are added. */}
+        <div className="sidebar-scroll">
         {groups.map((g) => {
           const members = bots.filter((b) => b.group === g.key);
           return (
@@ -1843,6 +1846,7 @@ const logout = (): void => {
             </div>
           );
         })}
+        </div>
         {updateStatus?.available && (
           <button
             type="button"
