@@ -26,6 +26,12 @@ describe("settings dropdown right edge", () => {
     expect(css).toMatch(/\.settings-card\.appearance-card\s*\{[^}]*padding-right:\s*calc\(1rem - 12px\);/);
   });
 
+  it("pulls the appearance dropdowns onto the card's right edge", () => {
+    expect(css).toMatch(
+      /\.appearance-card \.settings-row \.custom-select\s*\{[^}]*margin-right:\s*calc\(-0\.2rem - \(1rem - 12px\)\);/,
+    );
+  });
+
   it("pins the closed settings-row control to the end of its min-width box", () => {
     const rule = css.slice(
       css.indexOf(".settings-row .custom-select {"),
