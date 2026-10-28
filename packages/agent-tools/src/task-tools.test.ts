@@ -105,7 +105,7 @@ describe("bindTaskTools metadata", () => {
     expect(tools.map((tool) => tool.name)).toEqual(["dispatch_task", "list_tasks"]);
     expect(tools[0]?.inputSchema).toBe(DispatchTaskInputSchema);
     expect(tools[1]?.inputSchema).toBe(ListTasksInputSchema);
-    expect(tools[0]?.description).toContain("coordinator");
+    expect(tools[0]?.description).toContain("any other live bot");
     expect(tools[0]?.description).toContain("4 hops");
     expect(tools[1]?.description).toContain("read-only");
   });
@@ -313,6 +313,22 @@ describe("dispatch_task handler", () => {
     });
   });
 
+  it("forwards the idempotency key so a retry replays the first task", async () => {
+    const key = "70000000-0000-4000-8000-000000000009";
+    const { gateway, dispatch } = setup();
+    await gateway.call(coordinator, "dispatch_task", { ...VALID_DISPATCH, idempotencyKey: key });
+    expect(dispatch).toHaveBeenCalledWith({
+      fromBotId: COORD,
+      toBotId: WORKER,
+      task: "写一份部署手册",
+      idempotencyKey: key,
+    });
+    // Non-uuid keys never reach the handler (schema strictness).
+    await expect(
+      gateway.call(coordinator, "dispatch_task", { ...VALID_DISPATCH, idempotencyKey: "retry-1" }),
+    ).rejects.toMatchObject({ code: "INVALID_INPUT" });
+  });
+
   it("carries approval/grant references from the checkpoint into the dispatch", async () => {
     const { gateway, dispatch, audit } = setup({
       grant: { allowed: true, approvalId: "approval-1", grantIds: ["grant-1"] },
@@ -366,12 +382,19 @@ describe("dispatch_task handler", () => {
     expect(archived.dispatch).not.toHaveBeenCalled();
   });
 
-  it("rejects standard-role bots from dispatching", async () => {
+  it("lets a standard-role bot dispatch (interop: no coordinator gate)", async () => {
     const { gateway, dispatch } = setup();
-    await expect(
-      gateway.call({ id: `chat:s1/${WORKER}`, botId: WORKER }, "dispatch_task", VALID_DISPATCH),
-    ).rejects.toMatchObject({ code: "UNAUTHORIZED_PATH" });
-    expect(dispatch).not.toHaveBeenCalled();
+    const result = await gateway.call(
+      { id: `chat:s1/${WORKER}`, botId: WORKER },
+      "dispatch_task",
+      { toBotId: COORD, task: "写一份部署手册" },
+    );
+    expect(result).toBe(TASK);
+    expect(dispatch).toHaveBeenCalledWith({
+      fromBotId: WORKER,
+      toBotId: COORD,
+      task: "写一份部署手册",
+    });
   });
 
   it("refuses to dispatch a task to the coordinator itself", async () => {
@@ -398,34 +421,48 @@ describe("dispatch_task handler", () => {
     });
   });
 
-  it("rejects cross-group dispatch and a coordinator without a group", async () => {
+  it("allows cross-group targets and group-less senders (interop)", async () => {
     const { gateway, dispatch } = setup();
-    await expect(
-      gateway.call(coordinator, "dispatch_task", { toBotId: CROSS_GROUP, task: "t" }),
-    ).rejects.toMatchObject({ code: "UNAUTHORIZED_PATH" });
-    // A group-less coordinator has nobody reachable ("groupId === null" leg).
+    // Cross-group is fine now: the sender names a bot from another group.
+    await gateway.call(coordinator, "dispatch_task", { toBotId: CROSS_GROUP, task: "t" });
+    expect(dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({ fromBotId: COORD, toBotId: CROSS_GROUP }),
+    );
+    // A group-less sender has no reachability restriction either.
     const lonely = setup();
     lonely.resolveBot.mockImplementation((botId) =>
       botId === COORD
-        ? { id: COORD, name: "无组调度台", role: "coordinator", groupId: null, archivedAt: null }
+        ? { id: COORD, name: "无组调度台", role: "standard", groupId: null, archivedAt: null }
         : BOTS[botId],
     );
-    await expect(
-      lonely.gateway.call(coordinator, "dispatch_task", VALID_DISPATCH),
-    ).rejects.toMatchObject({ code: "UNAUTHORIZED_PATH" });
-    expect(dispatch).not.toHaveBeenCalled();
+    await lonely.gateway.call(coordinator, "dispatch_task", VALID_DISPATCH);
+    expect(lonely.dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({ fromBotId: COORD, toBotId: WORKER }),
+    );
   });
 
-  it("validates every chain hop with the same reachability rules", async () => {
+  it("validates every chain hop: live targets only, cross-group allowed", async () => {
     const { gateway, dispatch } = setup();
+    // A cross-group hop passes the reachability rules now.
+    await gateway.call(coordinator, "dispatch_task", {
+      toBotId: WORKER,
+      task: "t",
+      chain: [{ botId: CROSS_GROUP, instruction: "跨组" }],
+    });
+    expect(dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        chain: [{ botId: CROSS_GROUP, instruction: "跨组" }],
+      }),
+    );
+    // A missing hop is still rejected before dispatching.
     await expect(
       gateway.call(coordinator, "dispatch_task", {
         toBotId: WORKER,
         task: "t",
-        chain: [{ botId: HOP, instruction: "在组内" }, { botId: CROSS_GROUP, instruction: "跨组" }],
+        chain: [{ botId: MISSING_BOT, instruction: "x" }],
       }),
-    ).rejects.toMatchObject({ code: "UNAUTHORIZED_PATH" });
-    expect(dispatch).not.toHaveBeenCalled();
+    ).rejects.toMatchObject({ code: "INVALID_INPUT" });
+    expect(dispatch).toHaveBeenCalledTimes(1);
   });
 
   it("rejects schema-invalid dispatch parameters before any handler runs", async () => {
@@ -498,15 +535,19 @@ describe("list_tasks handler", () => {
     expect(filter).toEqual({ status: "done", limit: 20 });
   });
 
-  it("shares the coordinator requirement with dispatch_task", async () => {
+  it("opens list_tasks to any bot-bound caller (interop), never to the unbound", async () => {
     const { gateway, listForBot } = setup();
-    await expect(
-      gateway.call({ id: `chat:s1/${WORKER}`, botId: WORKER }, "list_tasks", {}),
-    ).rejects.toMatchObject({ code: "UNAUTHORIZED_PATH" });
+    const result = (await gateway.call({ id: `chat:s1/${WORKER}`, botId: WORKER }, "list_tasks", {})) as {
+      tasks: Task[];
+    };
+    expect(result.tasks).toEqual([TASK]);
+    expect(listForBot).toHaveBeenCalledWith(WORKER, { limit: 20 });
+    // An unbound caller never reaches the store at all.
+    const callsBefore = listForBot.mock.calls.length;
     await expect(
       gateway.call({ id: "ui:1" }, "list_tasks", {}),
     ).rejects.toMatchObject({ code: "UNAUTHORIZED_PATH" });
-    expect(listForBot).not.toHaveBeenCalled();
+    expect(listForBot.mock.calls.length).toBe(callsBefore);
   });
 
   it("rejects invalid filters before the store runs", async () => {

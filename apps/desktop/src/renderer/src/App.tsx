@@ -1445,11 +1445,6 @@ const logout = (): void => {
             <BlobMark />
           )}
           {selectedBotName}
-          {selectedBotEntry?.bot.role === "coordinator" && (
-            <span className="coord-badge" title={t("shell.coordinatorBadgeTitle")}>
-              {t("shell.coordinatorBadge")}
-            </span>
-          )}
         </span>
         <button
           type="button"
@@ -1848,12 +1843,7 @@ const logout = (): void => {
                     <span className="tab-label">
                       <span className="tab-title">
                         {b.bot.name}
-                {b.bot.role === "coordinator" && (
-                  <span className="coord-badge" title={t("shell.coordinatorBadgeTitle")}>
-                    {t("shell.coordinatorBadge")}
-                  </span>
-                )}
-                {b.unread && <span className="unread-dot" aria-label={t("shell.unread")} />}
+                        {b.unread && <span className="unread-dot" aria-label={t("shell.unread")} />}
                       </span>
 
                     </span>

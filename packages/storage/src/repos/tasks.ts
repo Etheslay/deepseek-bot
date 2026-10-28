@@ -34,6 +34,7 @@ interface TaskRow {
   chain_index: number;
   chain_total: number;
   authorization_json: string | null;
+  idempotency_key: string | null;
   created_at: string;
   started_at: string | null;
   finished_at: string | null;
@@ -87,6 +88,8 @@ export function insertTask(
     chainIndex: number;
     chainTotal: number;
     authorization?: TaskAuthorizationRef;
+    /** Idempotency key (interop): the dispatcher checks it before inserting. */
+    idempotencyKey?: string;
     createdAt?: string;
   },
 ): Task {
@@ -112,6 +115,7 @@ export function insertTask(
               ? { grantIds: input.authorization.grantIds }
               : {}),
           }),
+    idempotency_key: input.idempotencyKey ?? null,
     created_at: createdAt,
     started_at: null,
     finished_at: null,
@@ -122,8 +126,8 @@ export function insertTask(
       .prepare(
         "INSERT INTO tasks (id, from_bot_id, to_bot_id, instruction, status, " +
           "result_summary, root_task_id, chain_index, chain_total, " +
-          "authorization_json, created_at, started_at, finished_at, worker_message_ids) " +
-          "VALUES (?, ?, ?, ?, 'queued', NULL, ?, ?, ?, ?, ?, NULL, NULL, '[]');",
+          "authorization_json, idempotency_key, created_at, started_at, finished_at, worker_message_ids) " +
+          "VALUES (?, ?, ?, ?, 'queued', NULL, ?, ?, ?, ?, ?, ?, NULL, NULL, '[]');",
       )
       .run(
         row.id,
@@ -134,6 +138,7 @@ export function insertTask(
         row.chain_index,
         row.chain_total,
         row.authorization_json,
+        row.idempotency_key,
         row.created_at,
       );
   } catch (error) {
@@ -153,6 +158,22 @@ export function getTask(db: OpenedDatabase, id: string): Task | undefined {
   const row = db.raw.prepare("SELECT * FROM tasks WHERE id = ?;").get(id) as
     | TaskRow
     | undefined;
+  return row === undefined ? undefined : rowToTask(row);
+}
+
+/**
+ * Idempotency replay lookup (interop): the first task this sender created
+ * under the key, root row only (hops carry no key). Same key always replays
+ * the same task — first write wins, regardless of the replayed payload.
+ */
+export function getTaskByIdempotencyKey(
+  db: OpenedDatabase,
+  fromBotId: string,
+  idempotencyKey: string,
+): Task | undefined {
+  const row = db.raw
+    .prepare("SELECT * FROM tasks WHERE from_bot_id = ? AND idempotency_key = ?;")
+    .get(fromBotId, idempotencyKey) as TaskRow | undefined;
   return row === undefined ? undefined : rowToTask(row);
 }
 
