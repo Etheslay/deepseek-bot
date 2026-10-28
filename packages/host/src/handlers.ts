@@ -127,6 +127,7 @@ import { chatSessionIdFor, type ChatManager } from "./chat.js";
 import type { AttachmentIngress } from "./workspace-attachments.js";
 import { KNOWN_CAPABILITIES, policyKey, readPolicy, type PolicyLevel } from "./permissions.js";
 import { type TaskDispatcher } from "./task-dispatcher.js";
+import { globalSearch } from "./global-search.js";
 import { createGrant, listGrants, revokeGrant, type GrantRow } from "@deepseek-bot/storage";
 import {
   ToolRejectionError,
@@ -979,6 +980,8 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
       const bot = requireLiveBot(db, payload.botId);
       return { searches: context.searchResults.list(bot.id) };
     },
+
+    "search.global": (payload) => ({ results: globalSearch(db, payload.query, payload.limit) }),
 
     "attachment.begin": (payload) => {
       const bot = requireLiveBot(db, payload.botId);

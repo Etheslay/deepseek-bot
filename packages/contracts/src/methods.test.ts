@@ -30,7 +30,7 @@ describe("method whitelist", () => {
     // develop is 109 (chat.attach, connector.setCommand, device.action.input
     // and device.action.input.list on top of the previous 105). The closure
     // adds attachment.begin/append/commit.
-    expect(METHODS).toHaveLength(112);
+    expect(METHODS).toHaveLength(113);
   });
 
   it("covers every method group from CONTRACTS §3", () => {
