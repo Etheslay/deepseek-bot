@@ -35,8 +35,11 @@ async function edit(container: ParentNode, label: string, value: string): Promis
     await act(async () => {
       input.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
-    const box = input.closest(".custom-select");
-    const option = box?.querySelector<HTMLButtonElement>(`.custom-select-item[data-value="${value}"]`);
+    // The menu is portaled to document.body (viewport-flip fix); only one
+    // select menu is open at a time.
+    const option = document.querySelector<HTMLButtonElement>(
+      `.custom-select-item[data-value="${value}"]`,
+    );
     if (!(option instanceof HTMLButtonElement)) {
       throw new Error(`missing option ${value} on ${label}`);
     }

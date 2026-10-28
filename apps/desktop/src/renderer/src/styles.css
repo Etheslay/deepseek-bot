@@ -2498,12 +2498,9 @@ select option {
   font-size: 11px;
 }
 
+/* The menu is portaled to body and fixed-positioned by the component
+   (viewport flip when the modal bottom would clip it). */
 .custom-select-menu {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
-  right: 0;
-  z-index: 30;
   background: var(--raised);
   border: 1px solid var(--line);
   border-radius: 16px;
