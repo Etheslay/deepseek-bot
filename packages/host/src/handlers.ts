@@ -890,6 +890,9 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
         task: payload.task,
         ...(payload.context !== undefined ? { context: payload.context } : {}),
         ...(payload.chain !== undefined ? { chain: payload.chain } : {}),
+        ...(payload.idempotencyKey !== undefined
+          ? { idempotencyKey: payload.idempotencyKey }
+          : {}),
       }),
 
     "task.list": (payload) => ({

@@ -51,8 +51,6 @@ export const shellMessages = {
   "shell.confirm": { zh: "确定", en: "OK" },
   "shell.connectionSuccess": { zh: "连接成功", en: "Connected" },
   "shell.connectionUnverified": { zh: "UNVERIFIED（无真实网络，占位）", en: "UNVERIFIED (no real network, placeholder)" },
-  "shell.coordinatorBadge": { zh: "协调", en: "Coord" },
-  "shell.coordinatorBadgeTitle": { zh: "协调者：可在聊天中派发任务", en: "Coordinator: can dispatch tasks from the chat" },
   "shell.copied": { zh: "已复制", en: "Copied" },
   "shell.copy": { zh: "复制", en: "Copy" },
   "shell.copyChatId": { zh: "复制对话 ID", en: "Copy Chat ID" },

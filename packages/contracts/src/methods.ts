@@ -686,20 +686,25 @@ export const METHOD_CONTRACTS = {
     }),
   },
   /**
-   * v0.5 manager orchestration (TASK_MANAGER_ORCHESTRATION.md §3.3).
-   * task.dispatch is gateway-internal: only the model tool `dispatch_task`
-   * reaches it, and the Host re-checks the coordinator rules (role, same
-   * group, not self) before enqueueing — the gateway layer check explains
-   * the rejection to the model, this one is authoritative. task.list is the
-   * human + read-only-tool query surface; task.cancel is human-only (queued
-   * tasks cancel directly, running tasks ride the chat cancel path; queued
-   * hops of the same relay chain are cascaded, T7 R-13.5).
+   * v0.5 manager orchestration (TASK_MANAGER_ORCHESTRATION.md §3.3), relaxed
+   * to interop (TASK_BOT_INTEROP.md): task.dispatch is gateway-internal — only
+   * the model tool `dispatch_task` reaches it, and the Host re-checks the
+   * sender rules (trusted live bot, not self) before enqueueing; any bot may
+   * dispatch, cross-group included. The gateway layer check explains the
+   * rejection to the model, this one is authoritative. task.list is the human
+   * + read-only-tool query surface; task.cancel is human-only (queued tasks
+   * cancel directly, running tasks ride the chat cancel path; queued hops of
+   * the same relay chain are cascaded, T7 R-13.5).
    *
    * T7 relay chain: `chain` pre-declares the downstream hops. The chain is
-   * validated as a simple path (no repeated botId, no self-reference) of
-   * same-group live bots; total hops including this dispatch are capped at
-   * TASK_CHAIN_MAX. One approval on this call covers the whole chain
+   * validated as a simple path (no repeated botId, no self-reference) of live
+   * bots — cross-group allowed; total hops including this dispatch are capped
+   * at TASK_CHAIN_MAX. One approval on this call covers the whole chain
    * (R-13.1), and every hop is revalidated before execution (R-13.6).
+   *
+   * Idempotency: a repeated submission with the same `idempotencyKey` replays
+   * the first task this sender created under that key (first write wins) —
+   * no duplicate rows, queueing or dispatch markers.
    */
   "task.dispatch": {
     request: z
@@ -717,10 +722,11 @@ export const METHOD_CONTRACTS = {
           )
           .max(TASK_CHAIN_MAX - 1)
           .optional(),
+        idempotencyKey: UuidSchema.optional(),
       })
       .strict()
       .refine((request) => request.fromBotId !== request.toBotId, {
-        message: "a coordinator cannot dispatch a task to itself",
+        message: "a bot cannot dispatch a task to itself",
       })
       .refine(
         (request) => {

@@ -1,22 +1,26 @@
 /**
- * v0.5 manager orchestration tool layer (TASK_MANAGER_ORCHESTRATION.md §3.3).
+ * v0.5 manager orchestration tool layer (TASK_MANAGER_ORCHESTRATION.md §3.3),
+ * relaxed to interop (TASK_BOT_INTEROP.md).
  *
- * `dispatch_task` hands one instruction to a same-group executor bot; the
- * host's TaskDispatcher owns the queue, the chat turn and the receipts. The
- * gateway-layer role rules (FR-8) live HERE so the model gets an explainable
- * rejection; the `task.dispatch` method handler re-checks them
- * authoritatively (defense in depth, FR-9: 拒绝在网关层，不是 UI 隐藏).
+ * `dispatch_task` hands one instruction to any other live bot — cross-group
+ * included; the host's TaskDispatcher owns the queue, the chat turn and the
+ * receipts. The gateway-layer identity rules live HERE so the model gets an
+ * explainable rejection; the `task.dispatch` method handler re-checks them
+ * authoritatively (defense in depth: 拒绝在网关层，不是 UI 隐藏).
  *
- * The coordinator identity always comes from the trusted `ToolCaller.botId`
- * bound by the Host chat turn — never from model parameters. `list_tasks` is
- * the read-only companion scoped to tasks the caller participates in.
+ * The sender identity always comes from the trusted `ToolCaller.botId` bound
+ * by the Host chat turn — never from model parameters. No role gate: any bot
+ * may dispatch (the human approval on `app.dispatch_task` stays the gate).
+ * `list_tasks` is the read-only companion scoped to tasks the caller
+ * participates in. An optional `idempotencyKey` makes a retried dispatch
+ * replay the first task instead of queueing a duplicate.
  */
 import { TASK_CHAIN_MAX } from "@deepseek-bot/contracts";
 import { z } from "zod";
 import type { Task } from "@deepseek-bot/contracts";
 import { ToolRejectionError, type ToolCapability, type ToolContext } from "./types.js";
 
-/** Minimal bot view the Host resolves from storage for the role rules. */
+/** Minimal bot view the Host resolves from storage for the identity rules. */
 export interface TaskToolBotView {
   readonly id: string;
   readonly name: string;
@@ -33,6 +37,8 @@ export interface TaskToolDeps {
     task: string;
     context?: string;
     chain?: Array<{ botId: string; instruction: string }>;
+    /** Idempotency key (interop): a retry with the same key replays the task. */
+    idempotencyKey?: string;
     /** Authorization refs from the accepted approval/grant (T7 revalidation). */
     authorization?: { approvalId?: string; grantIds?: readonly string[] };
   }): Promise<Task>;
@@ -59,6 +65,7 @@ export const DispatchTaskInputSchema = z
       )
       .max(TASK_CHAIN_MAX - 1)
       .optional(),
+    idempotencyKey: z.string().uuid().optional(),
   })
   .strict();
 
@@ -77,11 +84,12 @@ export const ListTasksInputSchema = z
 export type ListTasksInput = z.output<typeof ListTasksInputSchema>;
 
 /**
- * Gateway-layer coordinator rules (FR-8): trusted bot caller, coordinator
- * role, same-group live target, never self. Every failure explains itself —
- * the model can correct course instead of retrying blind.
+ * Gateway-layer sender rules (interop): trusted bot caller, live (not
+ * archived). Any bot may dispatch — no role, no group requirement; every
+ * failure explains itself so the model can correct course instead of
+ * retrying blind.
  */
-function requireCoordinatorBot(ctx: ToolContext, deps: TaskToolDeps): TaskToolBotView {
+function requireDispatchingBot(ctx: ToolContext, deps: TaskToolDeps): TaskToolBotView {
   if (ctx.caller.botId === undefined) {
     throw new ToolRejectionError(
       "UNAUTHORIZED_PATH",
@@ -93,12 +101,6 @@ function requireCoordinatorBot(ctx: ToolContext, deps: TaskToolDeps): TaskToolBo
     throw new ToolRejectionError(
       "UNAUTHORIZED_PATH",
       "dispatch_task 的调用 bot 不存在或已归档",
-    );
-  }
-  if (me.role !== "coordinator") {
-    throw new ToolRejectionError(
-      "UNAUTHORIZED_PATH",
-      "只有协调者（coordinator）角色的 bot 才能派发或查询任务；角色由人类在 bot 编辑器中设置",
     );
   }
   return me;
@@ -116,15 +118,8 @@ function requireReachableTarget(
   if (target === undefined || target.archivedAt !== null) {
     throw new ToolRejectionError("INVALID_INPUT", `目标 bot 不存在或已归档：${toBotId}`);
   }
-  // Ungrouped bots share the implicit "未分组" group: null === null dispatches,
-  // while any grouped/ungrouped mix or a real group mismatch stays rejected.
-  // Mirrored authoritatively in the host's TaskDispatcher.
-  if (target.groupId !== me.groupId) {
-    throw new ToolRejectionError(
-      "UNAUTHORIZED_PATH",
-      "只能把任务派发给同一个分组内的 bot；跨组派发 v1 不支持",
-    );
-  }
+  // Cross-group is allowed (interop); only self and dead targets are
+  // rejected. Mirrored authoritatively in the host's TaskDispatcher.
 }
 
 /** Bind the two task capabilities to host-provided dispatcher access. */
@@ -133,17 +128,19 @@ export function bindTaskTools(deps: TaskToolDeps): ToolCapability[] {
     {
       name: "dispatch_task",
       description:
-        "Dispatch one task instruction to another bot in your group (the " +
-        "executor runs it as its own chat turn). You must hold the " +
-        "coordinator role; cross-group and self targets are rejected. " +
-        "Optionally pre-declare a relay chain: each hop {botId, instruction} " +
-        "runs after the previous hop succeeds — the whole chain is capped at " +
-        "4 hops, must stay inside your group and must not repeat a bot.",
+        "Dispatch one task instruction to any other live bot — any group (the " +
+        "executor runs it as its own chat turn). You cannot dispatch to " +
+        "yourself. Every dispatch still needs the human's app.dispatch_task " +
+        "approval. Optionally pre-declare a relay chain: each hop {botId, " +
+        "instruction} runs after the previous hop succeeds — the whole chain " +
+        "is capped at 4 hops and must not repeat a bot. Pass a fresh " +
+        "idempotencyKey (uuid) when you re-send the same task: the retry " +
+        "replays the first task instead of queueing a duplicate.",
       inputSchema: DispatchTaskInputSchema,
       handler: async (params, ctx) => {
         // The gateway has already validated params against the schema.
         const input = params as DispatchTaskInput;
-        const me = requireCoordinatorBot(ctx, deps);
+        const me = requireDispatchingBot(ctx, deps);
         requireReachableTarget(me, input.toBotId, deps);
         for (const hop of input.chain ?? []) {
           requireReachableTarget(me, hop.botId, deps);
@@ -154,6 +151,9 @@ export function bindTaskTools(deps: TaskToolDeps): ToolCapability[] {
           task: input.task,
           ...(input.context !== undefined ? { context: input.context } : {}),
           ...(input.chain !== undefined ? { chain: input.chain } : {}),
+          ...(input.idempotencyKey !== undefined
+            ? { idempotencyKey: input.idempotencyKey }
+            : {}),
           ...(ctx.authorization !== undefined
             ? {
                 authorization: {
@@ -177,7 +177,7 @@ export function bindTaskTools(deps: TaskToolDeps): ToolCapability[] {
       inputSchema: ListTasksInputSchema,
       handler: async (params, ctx) => {
         const input = params as ListTasksInput;
-        const me = requireCoordinatorBot(ctx, deps);
+        const me = requireDispatchingBot(ctx, deps);
         return deps.listForBot(me.id, {
           ...(input.status !== undefined ? { status: input.status } : {}),
           ...(input.rootTaskId !== undefined ? { rootTaskId: input.rootTaskId } : {}),

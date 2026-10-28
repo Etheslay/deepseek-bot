@@ -797,6 +797,20 @@ CREATE INDEX usage_events_time ON usage_events(occurred_at);
 CREATE INDEX usage_events_bot_time ON usage_events(bot_id, occurred_at);
 `,
   },
+  {
+    // Interop dispatch idempotency (TASK_BOT_INTEROP.md): a caller may key a
+    // dispatch so a retried submission replays the first task instead of
+    // queueing the same instruction twice. Scoped per sender, nullable for
+    // every unkeyed dispatch (plain task rows leave it NULL).
+    id: 22,
+    name: "0022-task-idempotency",
+    sql: /* sql */ `
+ALTER TABLE tasks ADD COLUMN idempotency_key TEXT;
+CREATE UNIQUE INDEX tasks_from_idem
+  ON tasks(from_bot_id, idempotency_key)
+  WHERE idempotency_key IS NOT NULL;
+`,
+  },
 
 ];
 

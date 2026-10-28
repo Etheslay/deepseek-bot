@@ -15,6 +15,7 @@ import {
   countTasks,
   finishTask,
   getTask,
+  getTaskByIdempotencyKey,
   insertTask,
   listQueuedHopsOfRoot,
   listTasks,
@@ -134,6 +135,47 @@ describe("task rows and transitions (U3/U4 storage half)", () => {
     expect(getTask(db, ROOT_ID)).toEqual(task);
     expect(countTasks(db)).toBe(1);
     expect(countQueuedTasksForBot(db, workerA.id)).toBe(1);
+  });
+
+  it("replays a dispatch by (fromBotId, idempotencyKey) and keeps other senders separate (interop)", () => {
+    const key = "80000000-0000-4000-8000-000000000001";
+    insertTask(db, {
+      id: ROOT_ID,
+      fromBotId: coordinator.id,
+      toBotId: workerA.id,
+      instruction: "只做一次",
+      rootTaskId: ROOT_ID,
+      chainIndex: 0,
+      chainTotal: 1,
+      idempotencyKey: key,
+    });
+    expect(getTaskByIdempotencyKey(db, coordinator.id, key)?.id).toBe(ROOT_ID);
+    // Another sender's namespace is independent.
+    expect(getTaskByIdempotencyKey(db, workerA.id, key)).toBeUndefined();
+    // Unkeyed rows never collide with the partial unique index.
+    insertTask(db, {
+      id: HOP2_ID,
+      fromBotId: coordinator.id,
+      toBotId: workerB.id,
+      instruction: "无键任务",
+      rootTaskId: HOP2_ID,
+      chainIndex: 0,
+      chainTotal: 1,
+    });
+    expect(getTaskByIdempotencyKey(db, coordinator.id, key)?.id).toBe(ROOT_ID);
+    // The unique index rejects a second row for the same (sender, key).
+    expect(() =>
+      insertTask(db, {
+        id: "50000000-0000-4000-8000-000000000009",
+        fromBotId: coordinator.id,
+        toBotId: workerA.id,
+        instruction: "重复键",
+        rootTaskId: "50000000-0000-4000-8000-000000000009",
+        chainIndex: 0,
+        chainTotal: 1,
+        idempotencyKey: key,
+      }),
+    ).toThrow(/UNIQUE constraint failed/);
   });
 
   it("guards the status machine on every transition", () => {
