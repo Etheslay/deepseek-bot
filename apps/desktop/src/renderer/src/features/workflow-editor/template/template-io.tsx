@@ -7,6 +7,7 @@
 import { useRef, useState, type JSX } from "react";
 import type { WorkflowDraft } from "@deepseek-bot/contracts";
 import type { WorkflowImportResult } from "../workflow-service.js";
+import type { WorkflowTemplate } from "./workflow-templates.js";
 import { t } from "../../../i18n.js";
 
 const MAX_TEMPLATE_BYTES = 1_048_576;
@@ -202,6 +203,62 @@ export function ExportDialog(props: {
             {copied ? t("shell.copied") : t("workflow.copyJson")}
           </button>
         </footer>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The local workflow template shelf (G11'). Rows are inert data: applying a
+ * template only loads the canvas draft; deletion removes the shelf entry.
+ * Nothing here executes a workflow or grants a permission.
+ */
+export function TemplateLibraryDialog(props: {
+  templates: WorkflowTemplate[];
+  onApply: (id: string) => void;
+  onDelete: (id: string) => void;
+  onClose: () => void;
+}): JSX.Element {
+  return (
+    <div className="modal-backdrop" onClick={props.onClose}>
+      <div
+        className="modal wf-templates-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label={t("workflow.templateLibrary")}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <header className="modal-head">
+          <h3>{t("workflow.templateLibrary")}</h3>
+          <button type="button" className="modal-close" aria-label={t("shell.close")} onClick={props.onClose}>
+            ×
+          </button>
+        </header>
+        <div className="modal-body wf-dialog-form">
+          {props.templates.length === 0 ? (
+            <p className="wf-dialog-hint">{t("workflow.templateLibraryEmpty")}</p>
+          ) : (
+            <ul className="wf-template-list">
+              {props.templates.map((template) => (
+                <li key={template.id} className="wf-template-row">
+                  <span className="wf-template-name">{template.name}</span>
+                  <span className="wf-template-meta">
+                    {t("workflow.templateNodeCount", [template.workflow.nodes.length])} ·{" "}
+                    {template.createdAt.slice(0, 10)}
+                  </span>
+                  <span className="wf-template-actions">
+                    <button type="button" className="primary-btn" onClick={() => props.onApply(template.id)}>
+                      {t("workflow.templateApply")}
+                    </button>
+                    <button type="button" className="ghost-btn" onClick={() => props.onDelete(template.id)}>
+                      {t("workflow.templateDelete")}
+                    </button>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </div>
     </div>
   );
