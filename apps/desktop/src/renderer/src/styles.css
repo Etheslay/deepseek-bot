@@ -8879,6 +8879,42 @@ select:focus-visible {
   color: var(--usage-c2);
 }
 
+   Sidebar: only the bot list scrolls
+   The account row sat after the list in the same flex column, so
+   enough bots stretched the column and pushed it out of the
+   viewport. The list is now its own scroll container; the identity
+   block above and the account row below are pinned, and the
+   scrollbar sits in a few pixels of padding so it never overlaps a
+   row or the selected tab's rounded edge.
+   ============================================================ */
+
+.sidebar {
+  min-height: 0;
+}
+
+.sidebar-scroll {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  padding-right: 3px;
+  margin-right: -3px;
+}
+
+.sidebar-foot {
+  flex: 0 0 auto;
+  margin-top: 0;
+}
+
+/* the update badge belongs with the pinned footer, not the scrolling list */
+.sidebar > .update-badge {
+  flex: 0 0 auto;
+}
+
 /* ------------------------------------------------------------
    Chat automation status notice (D20'). Visual language follows the
    chat's muted inline rows (.deliver-notice / .sys-line): centered
