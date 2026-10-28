@@ -16,7 +16,15 @@ import {
   type ConnectorRow,
   type OpenedDatabase,
 } from "@deepseek-bot/storage";
-import { callMcp, discoverMcp, validateMcpArguments, type McpCallResult } from "./mcp-client.js";
+import {
+  callMcp,
+  callMcpStdio,
+  discoverMcp,
+  discoverMcpStdio,
+  injectableCredential,
+  validateMcpArguments,
+  type McpCallResult,
+} from "./mcp-client.js";
 
 export interface McpCatalogTool {
   name: string;
@@ -33,6 +41,11 @@ export interface McpCatalogTool {
 export interface McpServiceOptions {
   /** Overall deadline shared by every service in a turn, including queued discovery. */
   catalogTimeoutMs?: number;
+  /**
+   * Decrypt a cred: reference. The desktop main owns the ciphertext.
+   * The returned string is injected into the MCP transport and then dropped.
+   */
+  resolveCredential?: (credentialRef: string) => Promise<string>;
 }
 interface Definition {
   botId: string;
@@ -50,10 +63,20 @@ function snapshot(row: ConnectorRow): string {
     row.kind,
     row.name,
     row.endpoint,
+    row.command,
+    row.args,
+    row.credentialEnv,
     row.enabled,
     row.credentialRef,
     row.updatedAt,
   ]);
+}
+function transportLabel(row: ConnectorRow): string {
+  if (row.kind === "mcp-stdio") return `stdio:${row.command ?? ""}`;
+  return row.endpoint ?? "";
+}
+function isMcpKind(kind: ConnectorRow["kind"]): boolean {
+  return kind === "mcp-http" || kind === "mcp-stdio";
 }
 function failure(error: unknown, signal?: AbortSignal): ToolRejectionError {
   if (signal?.aborted) return new ToolRejectionError("CANCELLED", "MCP request cancelled");
@@ -81,21 +104,59 @@ export class McpService {
     )
       throw new Error("MCP catalog deadline must be positive");
     mkdirSync(outputsRoot, { recursive: true });
+    this.stdioCwd = join(outputsRoot, "stdio-cwd");
   }
-  private connector(id: string): ConnectorRow & { endpoint: string } {
+  private readonly stdioCwd: string;
+  /** Created only when a stdio server is actually started, so HTTP-only runs leave the output root empty. */
+  private stdioDirectory(): string {
+    mkdirSync(this.stdioCwd, { recursive: true });
+    return this.stdioCwd;
+  }
+  private connector(id: string): ConnectorRow {
     try {
       const row = getConnector(this.db, id);
-      if (
-        this.closed ||
-        row.kind !== "mcp-http" ||
-        !row.enabled ||
-        !row.endpoint ||
-        row.credentialRef !== null
-      )
-        throw denied();
-      return row as ConnectorRow & { endpoint: string };
-    } catch {
+      if (this.closed || !row.enabled || !isMcpKind(row.kind)) throw denied();
+      if (row.kind === "mcp-http" && !row.endpoint) throw denied();
+      if (row.kind === "mcp-stdio" && !row.command) throw denied();
+      return row;
+    } catch (error) {
+      if (error instanceof ToolRejectionError) throw error;
       throw denied();
+    }
+  }
+  private async credential(ref: string | null, signal: AbortSignal): Promise<string | undefined> {
+    if (ref === null) return undefined;
+    if (!this.options.resolveCredential)
+      throw new ToolRejectionError("RUNTIME_UNAVAILABLE", "MCP credential is unavailable");
+    let value: string;
+    try {
+      value = await new Promise<string>((resolve, reject) => {
+        if (signal.aborted) {
+          reject(new Error("aborted"));
+          return;
+        }
+        const onAbort = () => reject(new Error("aborted"));
+        signal.addEventListener("abort", onAbort, { once: true });
+        this.options.resolveCredential!(ref).then(
+          (secret) => {
+            signal.removeEventListener("abort", onAbort);
+            resolve(secret);
+          },
+          (error: unknown) => {
+            signal.removeEventListener("abort", onAbort);
+            reject(error instanceof Error ? error : new Error("unavailable"));
+          },
+        );
+      });
+    } catch (error) {
+      if (signal.aborted || (error instanceof Error && error.message === "aborted"))
+        throw new ToolRejectionError("CANCELLED", "MCP request cancelled");
+      throw new ToolRejectionError("RUNTIME_UNAVAILABLE", "MCP credential is unavailable");
+    }
+    try {
+      return injectableCredential(value);
+    } catch {
+      throw new ToolRejectionError("RUNTIME_UNAVAILABLE", "MCP credential is unusable");
     }
   }
   private grants(caller: ToolCaller) {
@@ -129,10 +190,29 @@ export class McpService {
       this.active.delete(entry);
     }
   }
+  private async discoverLive(row: ConnectorRow, signal: AbortSignal): Promise<McpTool[]> {
+    const secret = await this.credential(row.credentialRef, signal);
+    if (row.kind === "mcp-stdio") {
+      return discoverMcpStdio(
+        {
+          command: row.command ?? "",
+          args: row.args,
+          cwd: this.stdioDirectory(),
+          ...(secret
+            ? { credential: secret, credentialEnv: row.credentialEnv ?? "MCP_CREDENTIAL" }
+            : {}),
+        },
+        signal,
+      );
+    }
+    return discoverMcp(row.endpoint ?? "", signal, secret ? { authorization: secret } : {});
+  }
   async discover(id: string, signal?: AbortSignal): Promise<McpTool[]> {
     const row = this.connector(id);
     return this.request(id, undefined, signal, async (combined) => {
-      const tools = await discoverMcp(row.endpoint, combined);
+      const current = this.connector(id);
+      if (snapshot(current) !== snapshot(row)) throw denied();
+      const tools = await this.discoverLive(current, combined);
       if (snapshot(this.connector(id)) !== snapshot(row)) throw denied();
       return tools;
     });
@@ -149,7 +229,7 @@ export class McpService {
     ]);
     const rows = listConnectors(this.db).filter(
       (row) =>
-        row.kind === "mcp-http" && row.enabled && grants.some((grant) => grant.serverId === row.id),
+        isMcpKind(row.kind) && row.enabled && grants.some((grant) => grant.serverId === row.id),
     );
     const results: Array<{ row: ConnectorRow; tools: McpTool[]; failed?: boolean }> = rows.map(
       (row) => ({ row, tools: [], failed: true }),
@@ -167,7 +247,8 @@ export class McpService {
               discoverySignal,
               async (combined) => {
                 const current = this.connector(row.id);
-                return discoverMcp(current.endpoint, combined);
+                if (snapshot(current) !== snapshot(row)) throw denied();
+                return this.discoverLive(current, combined);
               },
             );
             results[index] = { row, tools };
@@ -212,7 +293,7 @@ export class McpService {
             connectorId: result.row.id,
             connectorName: result.row.name,
             toolName: tool.name,
-            endpoint: result.row.endpoint!,
+            endpoint: transportLabel(result.row),
           },
         };
         const size = Buffer.byteLength(JSON.stringify(entry));
@@ -246,7 +327,7 @@ export class McpService {
       row.id !== definition.connector.id ||
       snapshot(row) !== snapshot(definition.connector) ||
       input.connectorName !== row.name ||
-      input.endpoint !== row.endpoint ||
+      input.endpoint !== transportLabel(row) ||
       input.toolName !== definition.tool.name ||
       !this.grants(caller).some(
         (grant) => grant.serverId === row.id && grant.allowedTools.includes(input.toolName),
@@ -280,14 +361,39 @@ export class McpService {
   async invoke(input: McpInvokeInput, context: ToolContext): Promise<unknown> {
     const definition = this.definition(input, context.caller);
     return this.request(input.connectorId, context.caller.botId, context.signal, async (signal) => {
-      const result = await callMcp(input.endpoint, input.toolName, input.arguments, signal, {
+      const approved = definition.connector;
+      const secret = await this.credential(approved.credentialRef, signal);
+      const callOptions = {
         expectedTool: definition.tool,
         beforeCall: () => {
           signal.throwIfAborted();
           this.check(input, context.caller);
           context.revalidateAuthorization?.();
         },
-      });
+      };
+      const result =
+        approved.kind === "mcp-stdio"
+          ? await callMcpStdio(
+              {
+                command: approved.command ?? "",
+                args: approved.args,
+                cwd: this.stdioDirectory(),
+                ...(secret
+                  ? {
+                      credential: secret,
+                      credentialEnv: approved.credentialEnv ?? "MCP_CREDENTIAL",
+                    }
+                  : {}),
+              },
+              input.toolName,
+              input.arguments,
+              signal,
+              callOptions,
+            )
+          : await callMcp(approved.endpoint ?? "", input.toolName, input.arguments, signal, {
+              ...callOptions,
+              ...(secret ? { authorization: secret } : {}),
+            });
       signal.throwIfAborted();
       this.check(input, context.caller);
       return this.output(input.connectorId, result);

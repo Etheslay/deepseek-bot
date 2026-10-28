@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "App-owned selected-window capture and offline OCR backend",
+  "description": "App-owned selected-window capture, offline OCR, and one-shot device input",
   "exports": {
     ".": "./src/index.ts"
   },

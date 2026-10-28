@@ -24,7 +24,7 @@ import { ScreenSettings } from "./features/screen/screen-settings.js";
 import { BotForm } from "./features/bots/bot-form.js";
 import { nextBotName } from "./features/bots/bot-names.js";
 import { CustomSelect } from "./components/custom-select.js";
-import type { BotDraft } from "./services/desktop-service.js";
+import type { BotDraft, ChatHistoryRow } from "./services/desktop-service.js";
 import { useService } from "./services/service-context.jsx";
 import { METHOD_CONTRACTS } from "@deepseek-bot/contracts";
 import {
@@ -42,6 +42,7 @@ import {
   mergeOpenedThread,
   type ThreadOrigin,
 } from "./features/chat/thread-history.js";
+import { StoredSessionReplay } from "./features/chat/stored-session-replay.js";
 import type { StreamHandle } from "./services/desktop-service.js";
 import { Avatar as AvatarView } from "./features/avatars/avatar.js";
 import { AvatarPicker } from "./features/avatars/avatar-picker.js";
@@ -382,6 +383,8 @@ export function App(): JSX.Element {
     startedAt: string;
     status: string;
   } | null>(null);
+  const [restoredMessages, setRestoredMessages] = useState<ChatHistoryRow[] | null>(null);
+  const restoredSessionRequest = useRef(0);
 
   const [chats, setChats] = useState<ChatState>({});
   /** Bots whose open thread already read chat.history this session. */
@@ -678,15 +681,28 @@ export function App(): JSX.Element {
       return;
     }
     let cancelled = false;
-    void desktop.chat.listSessions(bot.bot.id).then((sessions) => {
-      if (!cancelled) {
-        setHistorySessions(sessions);
-      }
-    });
+    void desktop.chat.listSessions(bot.bot.id).then(
+      (sessions) => {
+        if (!cancelled) {
+          setHistorySessions(sessions);
+        }
+      },
+      () => {
+        if (!cancelled) {
+          setHistorySessions([]);
+        }
+      },
+    );
     return () => {
       cancelled = true;
     };
   }, [historyOpen, selectedBot, bots, desktop]);
+
+  useEffect(() => {
+    restoredSessionRequest.current += 1;
+    setRestoredSession(null);
+    setRestoredMessages(null);
+  }, [selectedBot]);
 
   useEffect(() => {
     if (!artifactsOpen || selectedBot === null) {
@@ -1532,8 +1548,23 @@ const logout = (): void => {
                   type="button"
                   className="session-item"
                   onClick={() => {
+                    const token = restoredSessionRequest.current + 1;
+                    restoredSessionRequest.current = token;
                     setRestoredSession(session);
+                    setRestoredMessages(null);
                     setHistoryOpen(false);
+                    void desktop.chat.openSession(session.sessionId).then(
+                      (opened) => {
+                        if (restoredSessionRequest.current === token) {
+                          setRestoredMessages(opened.messages);
+                        }
+                      },
+                      () => {
+                        if (restoredSessionRequest.current === token) {
+                          setRestoredMessages([]);
+                        }
+                      },
+                    );
                   }}
                 >
                   <span className="tab-title">{session.title}</span>
@@ -1898,15 +1929,17 @@ const logout = (): void => {
                   {formatFullDateTime(restoredSession.startedAt)} ·{" "}
                   {restoredSession.status === "ended" ? t("shell.statusEnded") : t("shell.statusInProgress")}
                 </div>
-                <div className="sys-line">
-                  {t("shell.noReplayMessages")}
-                </div>
+                <StoredSessionReplay messages={restoredMessages} />
               </div>
               <div className="pair-foot">
                 <button
                   type="button"
                   className="pill-btn"
-                  onClick={() => setRestoredSession(null)}
+                  onClick={() => {
+                    restoredSessionRequest.current += 1;
+                    setRestoredSession(null);
+                    setRestoredMessages(null);
+                  }}
                 >
                   {t("shell.backToCurrentSession")}
                 </button>

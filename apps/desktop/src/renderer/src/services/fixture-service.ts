@@ -356,7 +356,7 @@ export function createFixtureService(): DesktopService {
           }
           return checked.value as EventEnvelope;
         });
-        return { events };
+        return { events, messages: [] };
       },
 
       // The fixture chat thread lives in the UI's own state; there are no

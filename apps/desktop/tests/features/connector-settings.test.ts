@@ -106,11 +106,11 @@ async function mountMcp(override?: (method: string, payload: unknown) => unknown
 }
 
 describe("MCP settings", () => {
-  it("registers MCP without a leftover SD credential", async () => {
+  it("clears a leftover credential when the kind changes, then sends one typed for MCP", async () => {
     const { container, calls } = await mountMcp();
     await edit(container, "凭据引用", REF);
     await edit(container, "连接器类型", "mcp-http");
-    expect(container.querySelector('[aria-label="凭据引用"]')).toBeNull();
+    expect((container.querySelector('[aria-label="凭据引用"]') as HTMLInputElement).value).toBe("");
     await edit(container, "连接器名称", "MCP");
     await edit(container, "连接器端点", "http://127.0.0.1:8080/mcp");
     await act(async () => click(container, "注册"));
@@ -120,6 +120,41 @@ describe("MCP settings", () => {
         name: "MCP",
         kind: "mcp-http",
         endpoint: "http://127.0.0.1:8080/mcp",
+      },
+    });
+    await edit(container, "连接器类型", "mcp-http");
+    await edit(container, "凭据引用", REF);
+    await edit(container, "连接器名称", "MCP token");
+    await edit(container, "连接器端点", "http://127.0.0.1:8080/mcp");
+    await act(async () => click(container, "注册"));
+    expect(calls).toContainEqual({
+      method: "connector.register",
+      payload: {
+        name: "MCP token",
+        kind: "mcp-http",
+        credentialRef: REF,
+        endpoint: "http://127.0.0.1:8080/mcp",
+      },
+    });
+  });
+
+  it("registers a stdio command without an HTTP endpoint", async () => {
+    const { container, calls } = await mountMcp();
+    await edit(container, "连接器类型", "mcp-stdio");
+    expect(container.querySelector('[aria-label="连接器端点"]')).toBeNull();
+    await edit(container, "连接器名称", "stdio");
+    await edit(container, "本地命令", "server");
+    await edit(container, "启动参数", '["--stdio"]');
+    await edit(container, "凭据引用", REF);
+    await act(async () => click(container, "注册"));
+    expect(calls).toContainEqual({
+      method: "connector.register",
+      payload: {
+        name: "stdio",
+        kind: "mcp-stdio",
+        command: "server",
+        args: ["--stdio"],
+        credentialRef: REF,
       },
     });
   });

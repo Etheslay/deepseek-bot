@@ -52,6 +52,7 @@ const CAPABILITIES: Readonly<Record<string, readonly CapabilityId[]>> = {
   mcp_call: ["mcp.call"],
   screen_capture: ["screen.capture"],
   device_action: ["device.action"],
+  device_input: ["device.action"],
   // D26: importing a chat attachment writes the bot workspace; reading it
   // back is the model `read` tool. Both default to ask.
   import_attachment: ["fs.write"],

@@ -29,7 +29,7 @@
 | `fs.read` / `fs.write` | 工作目录文件读写 | 中 | D08 路径策略 + 审批 |
 | `exec.shell` | 执行本地命令 | 高 | 每次询问 |
 | `screen.capture` | 窗口截图 / OCR | 高 | 从不允许（需显式开启） |
-| `device.action` | 接受一次指针或按键动作 | 高 | 从不允许（需显式开启）；接受后只返回 id 与时间，并留下一条本地记录，不执行输入 |
+| `device.action` | 接受一次指针或按键动作；`device_input` 在另一次审批后执行一次有界输入 | 高 | 从不允许（需显式开启）；`device.action.request` 接受后只返回 id 与时间并留下一条本地记录；`device.action.input` 才调用 exec daemon |
 | `connector.invoke` | 调用 Stable Diffusion 连接器 | 中 | 每次询问 |
 | `mcp.call` | 调用已授权的本机 MCP 工具 | 中 | 每次询问；只接受单次审批 |
 | `network.search` / D08 `network.request` | web_search 向受信配置的 SearXNG 端点提交搜索 | 中 | D16 每次询问，另需 D08 网络策略放行；缺少受信权限句柄拒绝 |
@@ -112,7 +112,9 @@ sequenceDiagram
 
 同一节下面的「屏幕与窗口感知」使用同一条 `screen.capture` 策略。开关只写成每次询问或从不允许，不提供始终允许。用户先选 bot，再刷新窗口并选定一个；截图和截图并识别各自调用 `screen.request`。等待审批时，这张卡只有「仅本次」和「拒绝」。缩略图是 `screen.result.read` 返回的 JPEG data URL，识别文本按转义文本显示，两者都不写入聊天。删除要再确认一次。换 bot 或换目标窗口之后，上一次请求的响应不会写进新的面板。
 
-设备动作使用同一套策略表里的 `device.action`。默认拒绝。改为每次询问后，受信方法 `device.action.request` 或模型工具 `device_action` 才等待一张仅本次审批。批准后的结果只有 id 和时间，并在本机留下一条记录：id、bot id、动作名（`pointer` 或 `key`）、时间。`device.action.list` 按该 bot 从新到旧列出。拒绝、把策略改回拒绝、再次使用同一张审批，或动作名不在这两组里，都不写入。未知动作名在产生审批前拒绝。这一片不移动鼠标、不发送按键、不调用 exec daemon，也没有单独的桌面页面。设置页会多出这一行，因为它列出全部能力。
+设备动作使用同一套策略表里的 `device.action`。默认拒绝。改为每次询问后，受信方法 `device.action.request` 或模型工具 `device_action` 才等待一张仅本次审批。批准后的结果只有 id 和时间，并在本机留下一条记录：id、bot id、动作名（`pointer` 或 `key`）、时间。`device.action.list` 按该 bot 从新到旧列出。拒绝、把策略改回拒绝、再次使用同一张审批，或动作名不在这两组里，都不写入。未知动作名在产生审批前拒绝。这条路径不移动鼠标、不发送按键、不调用 exec daemon，也没有单独的桌面页面。设置页会多出这一行，因为它列出全部能力。
+
+真实输入使用同一条策略和同一次精确审批规则，方法是 `device.action.input`，模型工具是 `device_input`。一次请求只包含一份有界输入：指针移动或点击，坐标 0–8192；或允许列表中的一个按键点按，可带 shift、ctrl、alt，不含 Windows 键。审批卡上的参数就是这份输入。通过后才调用 exec daemon。成功响应只有 id、时间和 pointer 或 key。本机 `device-outputs` 留下 JSON，可用 `device.action.input.list` 查看，列表不含路径。拒绝、停用、复用审批、未知按键，或这台系统没有输入辅助进程，都不执行。`device_input` 不进入聊天应用工具目录。没有单独的设备动作页面。
 
 ## 6. 审计与撤销
 

@@ -6166,6 +6166,77 @@ select option {
   display: block;
 }
 
+/* ---------- code block toolbar: language label and per-block copy ---------- */
+
+.chat-md .md-code {
+  margin: 0.7em 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--md-code-bg, #141418);
+  overflow: hidden;
+}
+
+.chat-md .md-code-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  padding: 4px 6px 4px 12px;
+  background: color-mix(in srgb, var(--md-code-bg, #141418) 70%, var(--raised));
+  border-bottom: 1px solid var(--border);
+}
+
+.chat-md .md-code-lang {
+  color: var(--muted);
+  font-family: Consolas, "Cascadia Mono", monospace;
+  font-size: 0.72rem;
+  letter-spacing: 0.02em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-md .md-code pre {
+  margin: 0;
+  padding: 10px 12px;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+}
+
+.md-code-copy {
+  font: inherit;
+  font-size: 0.74rem;
+  flex: 0 0 auto;
+  padding: 3px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+
+.md-code-copy:hover {
+  color: var(--text);
+  background: var(--item-hover);
+}
+
+.md-code-copy:focus-visible {
+  outline: 2px solid #8ab4ff;
+  outline-offset: 2px;
+}
+
+.md-code-copy.copied {
+  color: var(--bots, #9ae6a0);
+  border-color: color-mix(in srgb, var(--bots, #9ae6a0) 45%, var(--border));
+}
+
+.md-code-copy.failed {
+  color: #f87171;
+  border-color: color-mix(in srgb, #f87171 45%, var(--border));
+}
+
 .chat-md table {
   border-collapse: collapse;
   margin: 0.6em 0;
