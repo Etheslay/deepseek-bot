@@ -101,4 +101,26 @@ describe("D27 voice contracts", () => {
     // 1 MiB message envelope after base64 (4/3 growth).
     expect(VOICE_MAX_AUDIO_BASE64_CHARS).toBeLessThan(1_048_576);
   });
+
+  it("bounds the whisper config surface and allows clearing", () => {
+    const contract = METHOD_CONTRACTS["voice.config.get"];
+    expect(contract.request.safeParse({}).success).toBe(true);
+    expect(contract.request.safeParse({ x: 1 }).success).toBe(false);
+    const setter = METHOD_CONTRACTS["voice.config.set"];
+    expect(setter.request.safeParse({ whisperBin: null, whisperModel: null }).success).toBe(true);
+    expect(
+      setter.request.safeParse({ whisperBin: "C:\\whisper\\cli.exe", whisperModel: "m.bin" })
+        .success,
+    ).toBe(true);
+    expect(setter.request.safeParse({ whisperBin: "", whisperModel: null }).success).toBe(false);
+    expect(
+      setter.request.safeParse({ whisperBin: "x".repeat(1_025), whisperModel: null }).success,
+    ).toBe(false);
+    expect(setter.request.safeParse({ whisperBin: "a.exe" }).success).toBe(false);
+    expect(
+      setter.response.safeParse({ whisperBin: null, whisperModel: "m.bin" }).success,
+    ).toBe(true);
+    expect(METHODS).toContain("voice.config.get");
+    expect(METHODS).toContain("voice.config.set");
+  });
 });

@@ -66,6 +66,19 @@ export const VoiceSpeakResultSchema = z
 export type VoiceSpeakResult = z.infer<typeof VoiceSpeakResultSchema>;
 
 /**
+ * Local whisper configuration as seen by the Host: null means "not set" and
+ * keeps `voice.status` honest. Paths are local user choices; the model never
+ * reads or writes them.
+ */
+export const VoiceConfigSchema = z
+  .object({
+    whisperBin: z.string().min(1).max(1_024).nullable(),
+    whisperModel: z.string().min(1).max(1_024).nullable(),
+  })
+  .strict();
+export type VoiceConfig = z.infer<typeof VoiceConfigSchema>;
+
+/**
  * Trusted desktop methods. The user pressed the button, so there is no
  * capability, no grant, and no model tool: these methods are not reachable
  * from the model tool registry.
@@ -93,5 +106,18 @@ export const VOICE_METHODS = {
       })
       .strict(),
     response: VoiceSpeakResultSchema,
+  },
+  /**
+   * Trusted desktop configuration surface for the local whisper paths.
+   * Values persist in the Host settings KV and apply live; the environment
+   * seeds the boot default and the KV overrides it. Setting null clears.
+   */
+  "voice.config.get": {
+    request: z.object({}).strict(),
+    response: VoiceConfigSchema,
+  },
+  "voice.config.set": {
+    request: VoiceConfigSchema,
+    response: VoiceConfigSchema,
   },
 } as const;
