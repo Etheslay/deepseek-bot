@@ -151,8 +151,8 @@ export function createHostService(bridge: HostBridge): DesktopService {
       },
     },
     chat: {
-      // Sessions/history replay stays empty for now: the Host persists chat
-      // rows (chat.history) but the UI rebuilds its thread from live sends.
+      // The host has no event-session log, so these stay empty. The open
+      // thread reads chat.history; the composer appends later sends.
       listSessions: async () => [],
       openSession: async () => ({ events: [] }),
       history: async (botId, limit = 100) => {
