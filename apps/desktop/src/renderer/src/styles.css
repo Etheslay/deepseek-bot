@@ -1435,27 +1435,7 @@ body {
   flex: 0 0 auto;
 }
 
-/* ---------- chat stamps and sender labels ---------- */
-
-/* bot-to-bot dialogue renders group-chat style: avatar beside the bubble,
-   sender name in the bot's color above it */
-.sender-line {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-}
-
-.sender-line .sender-name {
-  font-size: 0.8rem;
-  line-height: 1.2;
-  margin: 0 0 3px 4px;
-}
-
-.msg-row.bot > .avatar-img {
-  flex: 0 0 auto;
-  margin-top: auto;
-  margin-bottom: 2px;
-}
+/* ---------- chat stamps ---------- */
 
 .msg-stamp {
   font-size: 0.72rem;
@@ -2498,12 +2478,9 @@ select option {
   font-size: 11px;
 }
 
+/* The menu is portaled to body and fixed-positioned by the component
+   (viewport flip when the modal bottom would clip it). */
 .custom-select-menu {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
-  right: 0;
-  z-index: 30;
   background: var(--raised);
   border: 1px solid var(--line);
   border-radius: 16px;
@@ -3542,11 +3519,6 @@ select option {
   gap: 12px;
 }
 
-[data-theme="light"] .sender-line {
-  margin-bottom: 3px;
-  font-size: 0.78rem;
-}
-
 [data-theme="light"] .chat-time {
   margin: 10px 0 0;
   font-size: 0.75rem;
@@ -3865,11 +3837,6 @@ select option {
   background: #202024;
   color: var(--text);
   border-radius: 20px 20px 5px 20px;
-}
-
-[data-theme="dark"] .sender-line {
-  margin-bottom: 3px;
-  font-size: 0.78rem;
 }
 
 [data-theme="dark"] .chat-time {
@@ -4497,11 +4464,6 @@ select option {
 .msg-row.user .msg-actions {
   order: -1;
   margin: 0 6px 0 0;
-}
-
-.sender-line {
-  margin-bottom: 3px;
-  font-size: 0.78rem;
 }
 
 .composer {
@@ -5961,16 +5923,6 @@ select option {
   padding-bottom: 6px;
 }
 
-.sender-line {
-  font-size: 0.74rem;
-  color: var(--muted);
-}
-
-.sender-name {
-  color: var(--muted) !important;
-  font-weight: 500;
-}
-
 /* 3. user bubble: painted with the bot's exact colour, no transparency
    (owner request 2026-10-26). `--bot-color` / `--bot-ink` are written per
    conversation by the chat pane; the ink is the auto-contrast text colour for
@@ -6489,6 +6441,24 @@ select option {
   font-size: 0.8rem;
   color: var(--muted);
   margin: 2px 0;
+}
+
+/* Exchange feed: the instruction preview rides inside the sent notice. */
+.exchange-preview {
+  min-width: 0;
+  max-width: 420px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0.8;
+}
+
+/* G6: the weak 重新生成 / 编辑后重发 label on re-entered messages. */
+.msg-meta {
+  display: block;
+  font-size: 0.72rem;
+  opacity: 0.65;
+  margin-bottom: 4px;
 }
 
 .deliver-label {
@@ -7399,64 +7369,6 @@ select:focus-visible {
   transform: none;
 }
 
-.composer-skill {
-  font-size: 0.9rem;
-}
-
-.skills-menu {
-  min-width: 240px;
-  max-height: 300px;
-  overflow-y: auto;
-}
-
-.skills-empty {
-  color: var(--muted);
-  font-size: 0.78rem;
-  cursor: default;
-}
-
-.skill-row {
-  display: flex;
-  align-items: stretch;
-}
-
-.skill-apply {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-
-.skill-name {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.skill-version {
-  font-size: 0.66rem;
-  color: var(--muted);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 1px 5px;
-}
-
-.skill-remove {
-  border: none;
-  background: transparent;
-  color: var(--muted);
-  cursor: pointer;
-  font-size: 0.95rem;
-  padding: 0 8px;
-}
-
-.skill-remove:hover {
-  color: var(--text);
-}
-
 .menu-item:disabled {
   opacity: 0.45;
   cursor: default;
@@ -7972,18 +7884,74 @@ select:focus-visible {
   margin-left: auto;
 }
 
-/* ---- 思考中状态行（任务相关文案） ---- */
+/* ---- 思考中状态行（真实阶段文案 + 流光 + 状态头像球） ---- */
 .thinking-line {
   display: inline-flex;
-  align-items: baseline;
-  gap: 6px;
+  align-items: center;
+  gap: 10px;
   color: var(--muted);
+}
+
+/* Screen-reader-only: the stable task-aware sentence that aria-live announces
+   once, while the visible phase copy ticks and stays out of the live region. */
+.thinking-announce {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Visible phase copy: a light band sweeps across the text (image-2 style). */
+.thinking-text {
+  background: linear-gradient(
+    90deg,
+    var(--muted) 0%,
+    var(--muted) 35%,
+    var(--text) 50%,
+    var(--muted) 65%,
+    var(--muted) 100%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: thinking-shimmer 2s linear infinite;
+}
+
+@keyframes thinking-shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: 0% 0;
+  }
 }
 
 .thinking-hint {
   font-size: 0.8em;
   opacity: 0.65;
   font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .thinking-text {
+    animation: none;
+    background: none;
+    color: var(--muted);
+  }
+}
+
+/* ---- 等待答复行：bot 头像球（thinking 态）+ 状态行 + 取消 ---- */
+.stream-pending {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 2px;
 }
 
 /* ============================================================

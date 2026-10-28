@@ -133,9 +133,11 @@ describe("automation panel", () => {
     await act(async () => {
       workflowSelect.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
-    const workflowOption = workflowSelect
-      .closest(".custom-select")
-      ?.querySelector<HTMLButtonElement>(`.custom-select-item[data-value="${WORKFLOW}"]`);
+    // The menu is portaled to document.body (viewport-flip fix); the option
+    // is looked up there instead of inside the trigger's wrapper.
+    const workflowOption = document.querySelector<HTMLButtonElement>(
+      `.custom-select-item[data-value="${WORKFLOW}"]`,
+    );
     if (!(workflowOption instanceof HTMLButtonElement)) throw new Error("missing workflow option");
     await act(async () => {
       workflowOption.dispatchEvent(new MouseEvent("click", { bubbles: true }));

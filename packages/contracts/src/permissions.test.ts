@@ -5,6 +5,7 @@ import {
   MethodSchema,
   PERMISSION_METHODS,
   PermissionDecisionRequestSchema,
+  PermissionGrantIssueRequestSchema,
   PermissionGrantSchema,
   defaultPermissionMode,
   requiresPerActionApproval,
@@ -131,5 +132,51 @@ describe("permission schemas", () => {
         grantSelf: true,
       }).success,
     ).toBe(false);
+  });
+
+  it("accepts one session or permanent chat grant and rejects per-action capabilities", () => {
+    expect(MethodSchema.safeParse("permission.grant.issue").success).toBe(true);
+    expect(
+      PermissionGrantIssueRequestSchema.parse({
+        botId: id,
+        capability: "app.create_group",
+        scope: "session",
+      }),
+    ).toEqual({ botId: id, capability: "app.create_group", scope: "session" });
+    expect(
+      PermissionGrantIssueRequestSchema.safeParse({
+        botId: id,
+        capability: "app.create_bot",
+        scope: "permanent",
+      }).success,
+    ).toBe(true);
+    for (const capability of [
+      "app.start_run",
+      "exec.shell",
+      "screen.capture",
+      "device.action",
+      "mcp.call",
+    ]) {
+      expect(
+        PermissionGrantIssueRequestSchema.safeParse({ botId: id, capability, scope: "session" })
+          .success,
+      ).toBe(false);
+    }
+    for (const patch of [
+      { scope: "once" },
+      { scope: "policy" },
+      { sessionId: "chat:spoofed" },
+      { maxUses: 5 },
+      { capability: "unknown" },
+    ]) {
+      expect(
+        PermissionGrantIssueRequestSchema.safeParse({
+          botId: id,
+          capability: "app.create_group",
+          scope: "session",
+          ...patch,
+        }).success,
+      ).toBe(false);
+    }
   });
 });

@@ -193,8 +193,18 @@ export class HarnessAttempt {
    * durable enqueue receipt for our message, collect session events, return
    * when the agent reports idle. Abort kills the subprocess immediately;
    * the rejection is classified with `CANCELLED`.
+   *
+   * `onEvent` (optional) observes every collected event as it arrives — the
+   * same wire-ordered events the outcome returns, but live, so the host can
+   * mirror real turn progress (tool calls and their results) while the turn
+   * is still running.
    */
-  async runTurn(sessionId: string, prompt: string, signal?: AbortSignal): Promise<TurnOutcome> {
+  async runTurn(
+    sessionId: string,
+    prompt: string,
+    signal?: AbortSignal,
+    onEvent?: (event: SessionEventEnvelope) => void,
+  ): Promise<TurnOutcome> {
     if (signal?.aborted) {
       this.cancelRequested = true;
       throw nodeExecutionErrorFromHarness(new HarnessAttemptClosedError("cancelled"), this.failureContext());
@@ -216,7 +226,7 @@ export class HarnessAttempt {
           retryable: true,
         });
       }
-      return await this.awaitTurnSettle(sessionId, messageId.messageId);
+      return await this.awaitTurnSettle(sessionId, messageId.messageId, onEvent);
     } catch (error) {
       throw nodeExecutionErrorFromHarness(error, this.failureContext());
     } finally {
@@ -346,7 +356,11 @@ export class HarnessAttempt {
     });
   }
 
-  private async awaitTurnSettle(sessionId: string, messageId: string): Promise<TurnOutcome> {
+  private async awaitTurnSettle(
+    sessionId: string,
+    messageId: string,
+    onEvent?: (event: SessionEventEnvelope) => void,
+  ): Promise<TurnOutcome> {
     const events: SessionEventEnvelope[] = [];
     let finalResponse = "";
     let turnEndKind: TurnEndKind = undefined;
@@ -366,6 +380,7 @@ export class HarnessAttempt {
           sawReceipt = true;
         }
         events.push(event);
+        onEvent?.(event);
         if (event.type === "assistant/message") {
           finalResponse = assistantText(event) ?? finalResponse;
         } else if (event.type === "turn/end") {

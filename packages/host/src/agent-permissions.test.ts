@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AppApproval, PermissionGrant } from "@deepseek-bot/contracts";
 import { createHost, type DeepSeekBotHost } from "./host.js";
 import { AgentPermissionService } from "./agent-permissions.js";
+import { chatSessionIdFor } from "./chat.js";
 
 const hosts: DeepSeekBotHost[] = [];
 const roots: string[] = [];
@@ -311,4 +312,161 @@ describe("D16 Host tool authorization", () => {
       expect(await host.handleMethod("permission.grant.list", {})).toEqual({ grants: [] });
     },
   );
+});
+
+describe("chat capability grant", () => {
+  function chatCaller(botId: string) {
+    const sessionId = chatSessionIdFor(botId);
+    return { id: sessionId, botId, sessionId };
+  }
+
+  it("lets the gateway run one granted capability and stops it after revoke", async () => {
+    const { host, caller } = await setup();
+    const botId = caller.botId ?? "";
+    const issued = (await host.handleMethod("permission.grant.issue", {
+      botId,
+      capability: "app.create_group",
+      scope: "session",
+    })) as { grant: PermissionGrant };
+    expect(issued.grant).toMatchObject({
+      botId,
+      capability: "app.create_group",
+      scope: "session",
+      sessionId: chatSessionIdFor(botId),
+      maxUses: 5,
+      uses: 0,
+      approvalId: null,
+    });
+    const again = (await host.handleMethod("permission.grant.issue", {
+      botId,
+      capability: "app.create_group",
+      scope: "session",
+    })) as { grant: PermissionGrant };
+    expect(again.grant.id).toBe(issued.grant.id);
+    await expect(
+      host.handleMethod("permission.grant.issue", {
+        botId,
+        capability: "app.create_group",
+        scope: "session",
+        sessionId: "spoofed",
+      }),
+    ).rejects.toMatchObject({ code: "INVALID_INPUT" });
+    await expect(
+      host.agentTools.call(chatCaller(botId), "create_group", { name: "granted" }),
+    ).resolves.toMatchObject({ name: "granted" });
+    const used = (await host.handleMethod("permission.grant.list", { botId })) as {
+      grants: PermissionGrant[];
+    };
+    expect(used.grants).toMatchObject([{ id: issued.grant.id, uses: 1 }]);
+    await host.handleMethod("permission.grant.revoke", { grantId: issued.grant.id });
+    const controller = new AbortController();
+    const blocked = host.agentTools.call(
+      chatCaller(botId),
+      "create_group",
+      { name: "revoked" },
+      { signal: controller.signal },
+    );
+    const rejected = expect(blocked).rejects.toMatchObject({ code: "CANCELLED" });
+    await pending(host);
+    controller.abort();
+    await rejected;
+    const groups = (await host.handleMethod("group.list", {})) as { groups: { name: string }[] };
+    expect(groups.groups.map((group) => group.name)).toEqual(["granted"]);
+  });
+
+  it("does not run a capability the policy denies, even when a chat grant exists", async () => {
+    const { host, caller } = await setup();
+    const botId = caller.botId ?? "";
+    await host.handleMethod("permission.grant.issue", {
+      botId,
+      capability: "app.create_group",
+      scope: "permanent",
+    });
+    await host.handleMethod("permission.policy.set", {
+      capability: "app.create_group",
+      mode: "deny",
+    });
+    await expect(
+      host.agentTools.call(chatCaller(botId), "create_group", { name: "denied" }),
+    ).rejects.toMatchObject({ code: "UNAUTHORIZED_PATH" });
+    expect(await host.handleMethod("group.list", {})).toEqual({ groups: [] });
+  });
+
+  it("refuses session grants for per-action capabilities and leaves them unexecuted", async () => {
+    const { host, caller } = await setup();
+    const botId = caller.botId ?? "";
+    await host.handleMethod("permission.policy.set", { capability: "device.action", mode: "ask" });
+    await host.handleMethod("permission.policy.set", { capability: "screen.capture", mode: "ask" });
+    for (const capability of [
+      "app.start_run",
+      "exec.shell",
+      "screen.capture",
+      "device.action",
+      "mcp.call",
+    ]) {
+      await expect(
+        host.handleMethod("permission.grant.issue", { botId, capability, scope: "session" }),
+      ).rejects.toMatchObject({ code: "INVALID_INPUT" });
+    }
+    await expect(
+      host.agentTools.call({ id: "model" }, "permission.grant.issue", {
+        botId,
+        capability: "app.create_group",
+        scope: "permanent",
+      }),
+    ).rejects.toMatchObject({ code: "INVALID_INPUT" });
+    expect(await host.handleMethod("permission.grant.list", { botId })).toEqual({ grants: [] });
+    expect(await host.handleMethod("device.action.list", { botId })).toEqual({ records: [] });
+  });
+
+  it("keeps a chat session grant inside that chat session and drops it on restart", async () => {
+    const { host, root, caller } = await setup();
+    const botId = caller.botId ?? "";
+    await host.handleMethod("permission.grant.issue", {
+      botId,
+      capability: "app.create_group",
+      scope: "session",
+    });
+    const controller = new AbortController();
+    const other = host.agentTools.call(
+      { id: "other", botId, sessionId: "other-session" },
+      "create_group",
+      { name: "other-session" },
+      { signal: controller.signal },
+    );
+    const rejected = expect(other).rejects.toMatchObject({ code: "CANCELLED" });
+    await pending(host);
+    controller.abort();
+    await rejected;
+    expect(await host.handleMethod("group.list", {})).toEqual({ groups: [] });
+    await host.shutdown();
+    const { host: restarted } = await setup(root);
+    const again = new AbortController();
+    const after = restarted.agentTools.call(
+      chatCaller(botId),
+      "create_group",
+      { name: "after-restart" },
+      { signal: again.signal },
+    );
+    const expired = expect(after).rejects.toMatchObject({ code: "CANCELLED" });
+    await pending(restarted);
+    again.abort();
+    await expired;
+    expect(await restarted.handleMethod("group.list", {})).toEqual({ groups: [] });
+  });
+
+  it("keeps a permanent chat grant across a host restart", async () => {
+    const { host, root, caller } = await setup();
+    const botId = caller.botId ?? "";
+    await host.handleMethod("permission.grant.issue", {
+      botId,
+      capability: "app.create_group",
+      scope: "permanent",
+    });
+    await host.shutdown();
+    const { host: restarted } = await setup(root);
+    await expect(
+      restarted.agentTools.call(chatCaller(botId), "create_group", { name: "still-granted" }),
+    ).resolves.toMatchObject({ name: "still-granted" });
+  });
 });

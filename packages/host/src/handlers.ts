@@ -98,6 +98,7 @@ import {
   listPermissionPolicies,
   setPermissionPolicy,
   listPermissionGrants,
+  issuePermissionGrant,
   revokePermissionGrant,
   listPermissionApprovals,
   listPermissionAudit,
@@ -112,8 +113,11 @@ import type { WorkspaceArtifacts } from "./artifacts.js";
 import {
   DEFAULT_MODEL_PROFILE_ID,
   SEARXNG_ENDPOINT_SETTING,
+  UI_LOCALE_SETTING,
+  asUiLocale,
   backupDirFor,
   newBackupId,
+  type UiLocale,
 } from "./host.js";
 import { chatSessionIdFor, type ChatManager } from "./chat.js";
 import { KNOWN_CAPABILITIES, policyKey, readPolicy, type PolicyLevel } from "./permissions.js";
@@ -164,17 +168,30 @@ export interface HostContext {
   };
   /** v0.5 manager orchestration: dispatched-task queue + executor. */
   readonly tasks: TaskDispatcher;
+  /**
+   * Live UI language holder (settings.update { ui.locale }). Delivery notices,
+   * handoff framing and the ask_user fallback label come out in this language.
+   */
+  readonly locale: { current: UiLocale };
 }
 
 /** The Host never renders or persists the model's own label for the fallback option. */
 const ASK_USER_OTHER_ID = "D";
-const ASK_USER_OTHER_LABEL = "以上都不是";
+const ASK_USER_OTHER_LABELS: Readonly<Record<UiLocale, string>> = {
+  zh: "以上都不是",
+  en: "None of the above",
+};
 
-function displayAskUserOption(option: AskUserRequest["options"][number]): {
+function displayAskUserOption(
+  option: AskUserRequest["options"][number],
+  locale: UiLocale,
+): {
   id: AskUserRequest["options"][number]["id"];
   label: string;
 } {
-  return option.id === ASK_USER_OTHER_ID ? { id: option.id, label: ASK_USER_OTHER_LABEL } : option;
+  return option.id === ASK_USER_OTHER_ID
+    ? { id: option.id, label: ASK_USER_OTHER_LABELS[locale] }
+    : option;
 }
 
 /**
@@ -182,11 +199,17 @@ function displayAskUserOption(option: AskUserRequest["options"][number]): {
  * user saw it (D forced), persisted when the answer arrives so a restart
  * replays a coherent "bot asked / user answered" context for the model.
  */
-function formatAskedQuestion(request: AskUserRequest): string {
+const ASKED_QUESTION_FRAMING: Readonly<Record<UiLocale, (question: string, lines: string) => string>> = {
+  zh: (question, lines) => `【向用户提问】${question}\n${lines}`,
+  en: (question, lines) => `[Asked the user] ${question}\n${lines}`,
+};
+
+function formatAskedQuestion(request: AskUserRequest, locale: UiLocale): string {
   const lines = request.options.map(
-    (option) => `${displayAskUserOption(option).id}. ${displayAskUserOption(option).label}`,
+    (option) =>
+      `${displayAskUserOption(option, locale).id}. ${displayAskUserOption(option, locale).label}`,
   );
-  return `【向用户提问】${request.question}\n${lines.join("\n")}`;
+  return ASKED_QUESTION_FRAMING[locale](request.question, lines.join("\n"));
 }
 
 function grantResponse(row: GrantRow): {
@@ -347,6 +370,21 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
         context.permissions.cancelMcp({ botId: grant.botId });
       }
       return { grant };
+    },
+    "permission.grant.issue": (payload) => {
+      requireLiveBot(db, payload.botId);
+      return {
+        grant: issuePermissionGrant(
+          db,
+          {
+            botId: payload.botId,
+            capability: payload.capability,
+            scope: payload.scope,
+            sessionId: payload.scope === "session" ? chatSessionIdFor(payload.botId) : null,
+          },
+          context.permissions.generation,
+        ),
+      };
     },
     "permission.approval.list": (payload) => ({
       approvals: listPermissionApprovals(db, {
@@ -780,6 +818,10 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
       return { cancelled };
     },
 
+    // Polled by the renderer's pending status line; stages are real harness
+    // events only (see ChatManager.status).
+    "chat.status": (payload) => chat.status(payload.botId),
+
     /**
      * v0.5 manager orchestration. task.dispatch is the gateway-internal
      * surface for the dispatch_task tool: the dispatcher re-checks the
@@ -814,7 +856,7 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
         questions: context.userQuestions.listPending(chatSessionIdFor(bot.id)).map((request) => ({
           requestId: request.requestId,
           question: request.question,
-          options: request.options.map(displayAskUserOption),
+          options: request.options.map((option) => displayAskUserOption(option, context.locale.current)),
           allowOther: request.allowOther,
           expiresAt: request.expiresAt,
         })),
@@ -851,7 +893,7 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
           botId: bot.id,
           sessionId: callerId,
           role: "assistant",
-          text: formatAskedQuestion(pending),
+          text: formatAskedQuestion(pending, context.locale.current),
         });
       }
       const message = appendChatMessage(db, {
@@ -1376,6 +1418,13 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
     "settings.update": (payload) => {
       for (const [key, value] of Object.entries(payload.patch)) {
         setSetting(db, key, value);
+      }
+      // The resolved UI language rides the same patch: apply it live so task
+      // notices, handoff framing and ask_user labels follow the desktop
+      // language without a Host restart. Non-string values are ignored here
+      // and fall back to zh at the next boot seed.
+      if (typeof payload.patch[UI_LOCALE_SETTING] === "string") {
+        context.locale.current = asUiLocale(payload.patch[UI_LOCALE_SETTING]);
       }
       // Keep the default model profile pointed at the freshly saved key.
       const credentialRef = payload.patch["apiKeyRef"];

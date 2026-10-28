@@ -116,7 +116,10 @@ function requireReachableTarget(
   if (target === undefined || target.archivedAt !== null) {
     throw new ToolRejectionError("INVALID_INPUT", `目标 bot 不存在或已归档：${toBotId}`);
   }
-  if (me.groupId === null || target.groupId !== me.groupId) {
+  // Ungrouped bots share the implicit "未分组" group: null === null dispatches,
+  // while any grouped/ungrouped mix or a real group mismatch stays rejected.
+  // Mirrored authoritatively in the host's TaskDispatcher.
+  if (target.groupId !== me.groupId) {
     throw new ToolRejectionError(
       "UNAUTHORIZED_PATH",
       "只能把任务派发给同一个分组内的 bot；跨组派发 v1 不支持",

@@ -66,3 +66,19 @@ export function formatElapsed(ms: number): string;
 - 工具活动（`onTool`）未接入，工具阶段仍显示同一句；
 - 文案未抽词条，双语（D22）时需迁移；
 - 未处理"请求与后续工具调用不一致"的情况（例如用户说"看看这个"，词表不会命中，只回显）。
+
+## 5. v2：等待态头像球 + 流光 + 真实事件驱动文案（2026-10-27，需求人：Destinyian）
+
+用户拍板三点，并明确否决了"按时间跳变的固定文案"（那是一段不动的假文字）：
+
+1. **等待态头像球**：首块回复分块到达前，流式行显示 bot 的 GrokBall（`AvatarView` 新增 `state` 覆盖参数）+ 状态行 + 取消按钮；文本到达后恢复普通气泡（无名字、无头像）。
+2. **流动光亮**：可见状态文字以 `background-clip: text` 线性渐变扫光（2s 循环），`prefers-reduced-motion` 降级为静态灰。
+3. **文案必须来自真实过程**：Harness 子进程在整个回合期间实时推送 `session.event`（收据 → tool/call → tool/result → turn/end，含工具名与参数）。真实链路：
+   - `harness-adapter` 的 `runTurn` 增加可选 `onEvent`，把收据之后的事件实时回调；
+   - host `ChatManager` 把事件镜像为每 bot 的 `TurnProgress`（preparing → thinking → tool[toolName] → thinking，finally 归 idle），新增 `status(botId)`；
+   - 契约新增 **`chat.status`**（小型契约面：request `{botId}`，response `{active, stage, toolName?, startedAt?}`）——按仓库规范本应独立契约 PR 先行，本分支合并为同一 PR，评审时请把契约面单独过目；
+   - renderer 的 `ThinkingLine` 每秒轮询 `chat.status`（与 question.list 同款轮询模式），文案严格映射真实阶段：`正在准备` / `正在深度思考` / `正在调用 {toolName}`；10s 耗时提示保留；不再有基于时钟的假阶段（正在查阅文档/正在完成已删除），请求回显文案一并移除。
+
+无障碍：可见阶段文案随真实事件变化，保持 `aria-hidden`；`aria-live` 朗读区只播报稳定的「正在处理…」一句。头像球状态映射：thinking 阶段 = 球的 `thinking` 态，tool 阶段 = `working` 态——也是真实数据。
+
+诚实边界：`chat.send` 仍一次性返回最终文本（假分块喂 `onDelta` 的现状未动）；本设计只把**工具活动与阶段**实时化，逐 token 流式仍是后续工程。

@@ -187,6 +187,24 @@ export const PermissionDecisionRequestSchema = z
   );
 export type PermissionDecisionRequest = z.output<typeof PermissionDecisionRequestSchema>;
 
+/**
+ * Human chat grant for one capability on one bot. Session and permanent only:
+ * once grants stay bound to an exact approval. Per-action capabilities cannot
+ * take a longer grant. The Host binds the chat session; callers cannot.
+ */
+export const PermissionGrantIssueRequestSchema = z
+  .object({
+    botId: UuidSchema,
+    capability: CapabilityIdSchema,
+    scope: z.enum(["session", "permanent"]),
+  })
+  .strict()
+  .refine(
+    (request) => !requiresPerActionApproval(request.capability),
+    "capability requires per-action approval",
+  );
+export type PermissionGrantIssueRequest = z.infer<typeof PermissionGrantIssueRequestSchema>;
+
 export const PermissionAuditSchema = z
   .object({
     id: UuidSchema,
@@ -235,6 +253,10 @@ export const PERMISSION_METHODS = {
   },
   "permission.grant.revoke": {
     request: z.object({ grantId: UuidSchema }).strict(),
+    response: z.object({ grant: PermissionGrantSchema }),
+  },
+  "permission.grant.issue": {
+    request: PermissionGrantIssueRequestSchema,
     response: z.object({ grant: PermissionGrantSchema }),
   },
   "permission.approval.list": {

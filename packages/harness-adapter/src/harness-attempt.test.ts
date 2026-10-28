@@ -69,11 +69,19 @@ describe("HarnessAttempt", () => {
     const root = makeRoot();
     const attempt = new HarnessAttempt(attemptOptions("tool", root));
     await attempt.start({ cwd: root, provider: "deepseek-official", model: "deepseek-chat" });
-    const outcome = await attempt.runTurn("session-1", "write hello.txt");
+    const live: string[] = [];
+    const outcome = await attempt.runTurn("session-1", "write hello.txt", undefined, (event) => {
+      live.push(event.type);
+    });
     const toolCall = outcome.events.find((event) => event.type === "tool/call");
     const toolResult = outcome.events.find((event) => event.type === "tool/result");
     expect(toolCall?.data).toMatchObject({ callId: "call-1", name: "write" });
     expect(toolResult?.data).toMatchObject({ callId: "call-1", isError: false });
+    // The live mirror saw the same wire order, receipt first.
+    expect(live[0]).toBe("agent/inbox/spliced");
+    expect(live).toContain("tool/call");
+    expect(live).toContain("tool/result");
+    expect(live.indexOf("tool/call")).toBeLessThan(live.indexOf("tool/result"));
     await attempt.shutdown();
   });
 
