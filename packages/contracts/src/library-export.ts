@@ -21,7 +21,8 @@ export const LIBRARY_EXPORT_FORMAT_VERSION = 1 as const;
 /**
  * Mirror of the renderer-side `SkillDefinition`
  * (apps/desktop/src/renderer/src/features/skills/skills.ts).
- * `capabilities` are declared metadata only; enforcement belongs to D16 grants.
+ * `capabilities` stay free-form here so older library files still import.
+ * A turn enforces them only after chat.send accepts them as capability ids.
  */
 export const SkillExportSchema = z.object({
   id: UuidSchema,

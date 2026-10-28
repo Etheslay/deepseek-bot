@@ -47,6 +47,14 @@ export interface ToolCallOptions {
   readonly signal?: AbortSignal;
   /** Trusted in-process D08 handle; never accepted in model parameters. */
   readonly networkPermissions?: ToolNetworkPermissions;
+  /**
+   * Capability ids declared by skills injected into this turn (D17).
+   * When set, the gateway rejects a tool whose consumed capabilities are
+   * not all in this list, before the grant checkpoint. An empty list allows
+   * nothing. Omit the field when the turn has no skill capability constraint.
+   * Declaring a capability never grants it.
+   */
+  readonly skillCapabilities?: readonly CapabilityId[];
 }
 
 /** Structurally compatible with D08 NodePermissionHandle, without a runtime dependency. */

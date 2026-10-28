@@ -67,7 +67,7 @@ export function placeCustomSelectMenu(
 /**
  * 自绘下拉：原生 select 在 Windows 上无法去掉系统蓝色选中高亮，
  * 这里用按钮 + 弹层实现。选中/悬停颜色只来自 styles.css 里的
- * dropdown-option-selection（黑白，与静音开关同一套，不用强调蓝）。
+ * dropdown-option-selection（暗灰菜单和灰洗选中/悬停，不用白底行，也不用强调蓝）。
  *
  * 弹层经 portal 渲染到 body：设置弹窗等内容区自带滚动容器，内联 absolute
  * 菜单在底部行会被裁掉（语言三档只剩一档可选）。改为固定定位按触发钮实时

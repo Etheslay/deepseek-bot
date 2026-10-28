@@ -7,6 +7,7 @@
  * audit trail; digests + registered schema are the trace).
  */
 import { createHash } from "node:crypto";
+import type { CapabilityId } from "@deepseek-bot/contracts";
 import { z } from "zod";
 import {
   ToolRejectionError,
@@ -72,6 +73,15 @@ export interface ToolGatewayOptions {
   readonly audit: AuditSink;
   /** Missing checkpoint fails closed; the Host installs D16 authorization. */
   readonly grants?: GrantCheckpoint;
+  /**
+   * Host-owned map from a tool call to the capability ids it consumes.
+   * Required for skill enforcement; a turn that sets skillCapabilities
+   * fails closed when this is missing.
+   */
+  readonly capabilitiesForTool?: (
+    tool: string,
+    params: unknown,
+  ) => readonly CapabilityId[] | undefined;
   /** Wall clock for audit timestamps (tests inject). */
   readonly now?: () => Date;
 }
@@ -117,7 +127,27 @@ export class ToolGateway {
       caller,
       ...(options.signal !== undefined ? { signal: options.signal } : {}),
       ...(options.networkPermissions !== undefined ? { networkPermissions: options.networkPermissions } : {}),
-    };    let grant: GrantCheckResult | undefined;
+    };
+    if (options.skillCapabilities !== undefined) {
+      const required = this.options.capabilitiesForTool?.(tool, parsed.data);
+      const allowed = new Set(options.skillCapabilities);
+      if (required === undefined || required.some((capability) => !allowed.has(capability))) {
+        await this.audit(
+          caller.id,
+          tool,
+          parsed.data,
+          undefined,
+          "rejected",
+          "UNAUTHORIZED_PATH",
+          "skill does not declare this capability",
+          now,
+          undefined,
+          caller,
+        );
+        throw new ToolRejectionError("UNAUTHORIZED_PATH", "skill does not declare this capability");
+      }
+    }
+    let grant: GrantCheckResult | undefined;
     let executing = false;
     try {
       grant = await this.options.grants?.check(tool, caller, parsed.data, options)

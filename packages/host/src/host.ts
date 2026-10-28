@@ -75,7 +75,7 @@ import {
   type OpenedDatabase,
 } from "@deepseek-bot/storage";
 import { buildHandlers, type ChatSearchRecord, type HostContext } from "./handlers.js";
-import { AgentPermissionService } from "./agent-permissions.js";
+import { AgentPermissionService, capabilitiesConsumedBy } from "./agent-permissions.js";
 import {
   AskUserCoordinator,
   JsonlAuditSink,
@@ -412,8 +412,13 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
     {
       prepareProfile: () =>
         prepareAppToolProfile({ dshHome: layout.harnessHome, bridgePackageDir }),
-      openTurn: (sessionId, caller, signal) => {
-        return applicationTools.openTurn({ sessionId, caller, signal });
+      openTurn: (sessionId, caller, signal, skillCapabilities) => {
+        return applicationTools.openTurn({
+          sessionId,
+          caller,
+          signal,
+          ...(skillCapabilities !== undefined ? { skillCapabilities } : {}),
+        });
       },
     },
     () => uiLocale.current,
@@ -739,6 +744,7 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
   const agentTools = new ToolGateway({
     registry: agentRegistry,
     audit: agentAudit,
+    capabilitiesForTool: capabilitiesConsumedBy,
     grants: {
       async check(tool, caller, params, options) {
         if (tool === "screen_capture") {

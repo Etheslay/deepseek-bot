@@ -94,7 +94,8 @@
 | D26 附件经网关进工作区 | **已在 develop（PR #106）**。`chat.attach` 与 `fs.write` 审批写入工作区，模型用 `read` 读取。本分支与理解闭环并存；自审记录仍以原报告为准，此处不补签 | `feature/d26-gateway-attachments` | [D26-gateway-attachments-report](reports/D26-gateway-attachments-report.md) |
 | D24 设置与更新 | **切片交付，任务未完成**（备份保险库见下一行） | 同上 → `0f20970` | [D24-report](reports/D24-report.md) |
 | D24 备份/恢复与设置收尾 | **切片交付**：设置分区化（保险库/用量/电脑/更新全部真实可用）、`backups:list` 桌面通道（只读 manifest）、`data.restore` 后 Host 子进程重启、硬件加速偏好真实开关。实机安装版验证与更新链路仍 UNVERIFIED | `feature/settings-vault`（见 PR） | [D24-data-report](reports/D24-data-report.md) |
-| D17 技能与模板 | **已交付（渲染层闭环）**：模板库 + 技能定义/复用/版本化 + 统一文件导入导出（契约校验）。工作流模板、Host 注入与能力强制留后续 | `feature/skills-templates` → `292c3b8`、PR #48 `2ecb2f9` | [D17-report](reports/D17-report.md) |
+| D17 技能与模板 | **渲染层已交付**。技能注入与能力强制见下一行。工作流模板与 Host 持久化仍未做 | `feature/skills-templates` → `292c3b8`、PR #48 `2ecb2f9` | [D17-report](reports/D17-report.md) |
+| D17 技能注入与能力强制 | **切片交付**：已保存的技能随 `chat.send` 交给 Host 注入本轮；声明的能力 id 由工具网关在授权前限制。技能库仍在渲染层 localStorage。工作流模板未做。自审未填 | `feature/d17-skill-injection` | [D17-skill-injection-report](reports/D17-skill-injection-report.md) |
 | D27 本地语音后端 | 后端切片已实现待合并：`voice.status` / `voice.transcribe` / `voice.speak`（协议 0.9），whisper.cpp 本地转写 + Windows SAPI 播报，剪辑不落盘不外发；麦克风采集/断句/播放接线与真实模型分发归后续 | `feature/voice-local-backend-8c21` | [D27-voice-backend-report](reports/D27-voice-backend-report.md) |
 | D18 记忆写入 / 检索 / 删除 | 已交付 | `feature/memory-knowledge` → PR #57 `7de305b` | [D18-memory-report](reports/D18-memory-report.md) |
 | D18 知识导入（.txt/.md，16 KiB 上限） | 已交付 | `feature/knowledge-import` → PR #59 `9805b6a` | [D18-knowledge-import-report](reports/D18-knowledge-import-report.md) |

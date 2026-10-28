@@ -2,10 +2,46 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { placeCustomSelectMenu } from "../../src/renderer/src/components/custom-select.js";
+import { shellMessages } from "../../src/shared/i18n/messages/shell.js";
 
 const css = readFileSync(join(process.cwd(), "src/renderer/src/styles.css"), "utf8");
 
+describe("appearance theme label", () => {
+  it("uses 深 色 for the row label and leaves the option words unspaced", () => {
+    expect(shellMessages["shell.theme"].zh).toBe("深 色");
+    expect(shellMessages["shell.themeDark"].zh).toBe("深色");
+    expect(shellMessages["shell.themeLight"].zh).toBe("浅色");
+  });
+
+  it("keeps a clear gap between the label and the chevron on every trigger", () => {
+    const arrow = css.slice(css.indexOf(".select-arrow {"), css.indexOf(".custom-select-menu {"));
+    expect(arrow).toMatch(/margin-inline-start:\s*1\.5rem;/);
+    const settings = css.slice(
+      css.indexOf(".settings-row .custom-select-trigger {"),
+      css.indexOf(".appearance-theme-label"),
+    );
+    expect(settings).not.toMatch(/margin-inline-start:\s*0/);
+  });
+
+  it("keeps that label outside a full-width theme pill", () => {
+    const app = readFileSync(join(process.cwd(), "src/renderer/src/App.tsx"), "utf8");
+    expect(app).toContain('className="appearance-theme-label">{t("shell.theme")}');
+    expect(app).toContain('className="theme-select"');
+    expect(css).toMatch(/\.settings-row \.custom-select\.theme-select \.custom-select-trigger\s*\{[^}]*width:\s*100%;/);
+  });
+});
+
 describe("settings dropdown right edge", () => {
+  it("pulls the appearance card's right edge in by 12px", () => {
+    expect(css).toMatch(/\.settings-card\.appearance-card\s*\{[^}]*padding-right:\s*calc\(1rem - 12px\);/);
+  });
+
+  it("pulls the appearance dropdowns onto the card's right edge", () => {
+    expect(css).toMatch(
+      /\.appearance-card \.settings-row \.custom-select\s*\{[^}]*margin-right:\s*calc\(-0\.2rem - \(1rem - 12px\)\);/,
+    );
+  });
+
   it("pins the closed settings-row control to the end of its min-width box", () => {
     const rule = css.slice(
       css.indexOf(".settings-row .custom-select {"),

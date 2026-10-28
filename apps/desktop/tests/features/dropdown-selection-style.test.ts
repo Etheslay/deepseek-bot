@@ -29,16 +29,18 @@ function withoutComments(source: string): string {
 }
 
 describe("dropdown option selection style", () => {
-  it("defines one black/white pair and swaps it on the light theme", () => {
-    expect(css).toMatch(/--dropdown-selected-bg:\s*#fff;/);
-    expect(css).toMatch(/--dropdown-selected-fg:\s*#000;/);
-    expect(css).toMatch(/--dropdown-hover-bg:\s*#000;/);
-    expect(css).toMatch(/--dropdown-hover-fg:\s*#fff;/);
+  it("uses a dark-gray wash for the chosen and hovered row, not a white bar", () => {
+    const dark = css.slice(0, css.indexOf(':root[data-theme="light"]'));
+    expect(dark).toMatch(/--dropdown-selected-bg:\s*rgba\(127,\s*127,\s*127,\s*0\.14\);/);
+    expect(dark).toMatch(/--dropdown-hover-bg:\s*rgba\(127,\s*127,\s*127,\s*0\.1\);/);
+    expect(dark).not.toMatch(/--dropdown-selected-bg:\s*#fff;/);
+    expect(dark).not.toMatch(/--dropdown-selected-fg:\s*#000;/);
     const light = css.slice(css.indexOf(':root[data-theme="light"]'), css.indexOf("box-sizing"));
-    expect(light).toMatch(/--dropdown-selected-bg:\s*#000;/);
-    expect(light).toMatch(/--dropdown-selected-fg:\s*#fff;/);
-    expect(light).toMatch(/--dropdown-hover-bg:\s*#fff;/);
-    expect(light).toMatch(/--dropdown-hover-fg:\s*#000;/);
+    expect(light).toMatch(/--dropdown-selected-bg:\s*rgba\(127,\s*127,\s*127,\s*0\.14\);/);
+    expect(light).toMatch(/--dropdown-hover-bg:\s*rgba\(127,\s*127,\s*127,\s*0\.1\);/);
+    expect(light).toMatch(/--dropdown-selected-fg:\s*#ececf1;/);
+    expect(light).not.toMatch(/--dropdown-selected-bg:\s*#000;/);
+    expect(css).toMatch(/\.custom-select-menu\s*\{[^}]*background:\s*#1d1d21;/);
   });
 
   it("covers selected, hover, focus, aria-selected, and text selection from the shared tokens", () => {
@@ -61,7 +63,7 @@ describe("dropdown option selection style", () => {
     expect(block).toContain("var(--dropdown-selected-bg)");
     expect(block).toContain("var(--dropdown-hover-bg)");
     expect(block).toContain("var(--dropdown-selected-fg)");
-    expect(block).toContain("var(--dropdown-focus)");
+    expect(block).toContain("outline: none");
     const painted = withoutComments(block);
     expect(painted).not.toMatch(/#(?:8ab4ff|3b82f6|4f7cff|6ea8ff|0a84ff|0078d4)/i);
     expect(painted).not.toMatch(/\b(?:blue|Highlight)\b/);
