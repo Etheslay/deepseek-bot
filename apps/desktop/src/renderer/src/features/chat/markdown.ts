@@ -17,6 +17,7 @@ import katex from "katex";
 import { Marked } from "marked";
 // KaTeX layout + fonts ship from the npm package (bundled locally).
 import "katex/dist/katex.min.css";
+import { t } from "../../i18n.js";
 
 /** Inline math must look like math before we touch it: bare `$1 $2` shell
  * variables stay untouched. */
@@ -68,7 +69,19 @@ const parser = new Marked({
   renderer: {
     code({ text, lang }: { text: string; lang?: string }) {
       const language = (lang ?? "").split(/\s+/)[0] ?? "";
-      return `<pre><code class="hljs language-${escapeHtml(language)}">${highlightCode(text, language)}</code></pre>\n`;
+      /*
+       * A fenced block gets its own toolbar. The button carries no copy of the
+       * code: the click handler reads the sibling <code>'s textContent, so what
+       * lands on the clipboard is exactly what is on screen and the payload can
+       * never drift from the rendered block.
+       */
+      return (
+        `<div class="md-code"><div class="md-code-bar">` +
+        `<span class="md-code-lang">${escapeHtml(language || t("chat.codeLabel"))}</span>` +
+        `<button type="button" class="md-code-copy" aria-label="${escapeHtml(t("chat.copyCodeAria"))}">` +
+        `${escapeHtml(t("chat.copyCode"))}</button>` +
+        `</div><pre><code class="hljs language-${escapeHtml(language)}">${highlightCode(text, language)}</code></pre></div>\n`
+      );
     },
   },
 });
@@ -83,8 +96,10 @@ export function renderChatMarkdown(source: string): string {
       "p", "br", "strong", "em", "del", "s", "code", "pre", "span",
       "ul", "ol", "li", "blockquote", "h1", "h2", "h3", "h4", "h5", "h6",
       "table", "thead", "tbody", "tr", "th", "td", "a",
+      /* the code toolbar: a wrapper, its label and one button */
+      "div", "button",
     ],
-    ALLOWED_ATTR: ["class", "href", "title"],
+    ALLOWED_ATTR: ["class", "href", "title", "type", "aria-label"],
     ALLOW_DATA_ATTR: false,
     ALLOWED_URI_REGEXP: /^(?:https?:|mailto:)/i,
   });
