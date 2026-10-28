@@ -7,6 +7,7 @@
  */
 import type { Message } from "../types.js";
 import { automationMessages } from "./automation.js";
+import { automationNoticeMessages } from "./automation-notice.js";
 import { avatarsMessages } from "./avatars.js";
 import { botsMessages } from "./bots.js";
 import { canvasMessages } from "./canvas.js";
@@ -34,6 +35,7 @@ import { usageMessages } from "./usage.js";
 
 export const MESSAGES = {
   ...automationMessages,
+  ...automationNoticeMessages,
   ...avatarsMessages,
   ...botsMessages,
   ...canvasMessages,
