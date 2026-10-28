@@ -7534,9 +7534,59 @@ select:focus-visible {
   white-space: nowrap;
 }
 
-.notify-bot-state {
-  font-size: 0.72rem;
-  color: var(--muted);
+/* Per-bot mute only. White is mute on; black is mute off. The shared
+   .settings-switch used by the other Computer rows stays as it is. */
+.notify-mute-switch {
+  position: relative;
+  flex: 0 0 auto;
+  width: 42px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid #4a4a52;
+  border-radius: 999px;
+  background: #000;
+  cursor: pointer;
+  line-height: 0;
+}
+
+.notify-mute-switch .notify-mute-knob {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 120ms ease, background 120ms ease;
+}
+
+.notify-mute-switch.on {
+  background: #fff;
+  border-color: #fff;
+}
+
+.notify-mute-switch.on .notify-mute-knob {
+  background: #000;
+  transform: translateX(18px);
+}
+
+.notify-mute-switch:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+.notify-mute-switch:hover {
+  border-color: #8a8a93;
+}
+
+.notify-mute-switch.on:hover {
+  border-color: #fff;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .notify-mute-switch .notify-mute-knob {
+    transition: none;
+  }
 }
 
 .chrome-profile-actions {
