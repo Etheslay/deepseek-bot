@@ -38,6 +38,18 @@ CI 自动化现状：产品打包 CI（`.github/workflows/package.yml`，D11）�
 5. 创建 main → develop 回合 PR，同步版本和修复；如存在活跃 release，另建对应回合 PR。
 6. 回合检查与审查通过后清理 release 分支。保留 tag、构建日志与旧版安装包供追溯。
 
+### 4.1 发布即触发更新的检查单（D24 应用内更新通道）
+
+GitHub Release 一经发布，旧版本客户端的下一次检查就会命中它（通道行为见 [DESKTOP_SHELL.md](DESKTOP_SHELL.md)「应用内更新」）。发布时逐项确认：
+
+- [ ] Release assets 包含 NSIS 安装包、同名 `.blockmap` 与 `latest.yml`——打包 CI artifact 已内含三者（`.github/workflows/package.yml` 上传清单），不得手工替换为不同来源的文件。
+- [ ] `latest.yml` 内的版本、文件名与 SHA-512 与实际上传的安装包一致（electron-updater 下载后按它校验完整性，不一致会安装失败）。
+- [ ] `latest.yml` 的版本号大于所有已发布旧版本（比较逻辑在 `apps/desktop/src/shared/versions.ts`，严格大于才提示）。
+- [ ] 用上一已发布版本实机验证：启动静默检查或设置 → 更新 手动检查后，侧栏左下角出现新版本徽标；首个发布无旧版可验时，如实记录"无旧版可验"。
+- [ ] 点击徽标下载并进入安装器，升级后用户数据保留（`deleteAppDataOnUninstall: false`，升级不卸载数据）。
+- [ ] 记录失败样例（离线、`latest.yml` 缺失、版本不大于旧版）：徽标不出现、失败原因如实显示，不误报成功。
+- [ ] Release 发布后不再替换已上传的安装包或 `latest.yml`；确需撤回时删除 Release 并在发布说明注明，此后旧版本检查以错误字符串软着陆并如实显示原因。
+
 CI 可以使用 GitHub Actions 等托管构建机；这不改变产品运行时无云电脑、数据在本地的要求。任何将真实用户数据上传 CI 的做法都不属于该授权。
 
 ## 5. 回滚
