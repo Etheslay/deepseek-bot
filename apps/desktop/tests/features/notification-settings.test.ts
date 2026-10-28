@@ -59,13 +59,25 @@ describe("per-bot mute switches", () => {
 
     const muteSwitches = [...container.querySelectorAll<HTMLButtonElement>(".notify-mute-switch")];
     expect(muteSwitches.map((button) => button.textContent?.trim())).toEqual(["", ""]);
+    expect(muteSwitches.map((button) => button.childElementCount)).toEqual([1, 1]);
+    expect(muteSwitches.map((button) => button.firstElementChild?.className)).toEqual([
+      "notify-mute-knob",
+      "notify-mute-knob",
+    ]);
+    expect(muteSwitches.every((button) => !button.classList.contains("settings-switch"))).toBe(true);
     expect(muteSwitches.map((button) => button.getAttribute("aria-checked"))).toEqual(["true", "false"]);
     expect(muteSwitches.map((button) => button.classList.contains("on"))).toEqual([true, false]);
     expect(muteSwitches.map((button) => button.getAttribute("aria-label"))).toEqual([
       "Alpha 静音",
       "Beta 静音",
     ]);
-    expect(container.querySelectorAll(".settings-switch")).toHaveLength(2);
+    const shared = [...container.querySelectorAll<HTMLButtonElement>(".settings-switch")];
+    expect(shared).toHaveLength(2);
+    expect(shared.map((button) => button.textContent?.trim())).toEqual(["", ""]);
+    expect(shared.map((button) => button.firstElementChild?.className)).toEqual([
+      "settings-switch-knob",
+      "settings-switch-knob",
+    ]);
     expect(container.querySelector(".notify-bot-state")).toBeNull();
   });
 
