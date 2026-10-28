@@ -144,6 +144,59 @@ describe("authenticated chat application tool channel", () => {
     await turn.close();
     expect((await call("list_bots")).status).toBe(401);
   });
+  it("caps ask_user at three per turn without counting replays or blocking other tools", async () => {
+    const { host, request, call, bot, sessionId } = await setup();
+    const ask = (questionText: string, callId = randomUUID()) =>
+      request("/ask-user/call", {
+        sessionId,
+        callId,
+        tool: "ask_user",
+        params: {
+          question: questionText,
+          options: [
+            { id: "A", label: "Alpha" },
+            { id: "B", label: "Beta" },
+          ],
+          allowOther: false,
+        },
+      });
+    const answerOnce = async (questionText: string) => {
+      const listed = await vi.waitFor(async () => {
+        const response = (await host.handleMethod("question.list", { botId: bot.id })) as {
+          questions: Array<{ requestId: string; question: string }>;
+        };
+        const match = response.questions.find((item) => item.question === questionText);
+        expect(match).toBeDefined();
+        return match!;
+      });
+      await host.handleMethod("question.answer", {
+        botId: bot.id,
+        requestId: listed.requestId,
+        optionId: "A",
+      });
+    };
+
+    const firstId = randomUUID();
+    const first = ask("first?", firstId);
+    await answerOnce("first?");
+    expect(await (await first).json()).toMatchObject({ ok: true, result: { text: "Alpha" } });
+    for (const text of ["second?", "third?"]) {
+      const pending = ask(text);
+      await answerOnce(text);
+      expect(await (await pending).json()).toMatchObject({ ok: true });
+    }
+    expect(await (await ask("fourth?")).json()).toMatchObject({
+      ok: false,
+      error: { code: "RATE_LIMITED" },
+    });
+    // A replay of an already-counted call returns its recorded result, not the limit.
+    expect(await (await ask("first?", firstId)).json()).toMatchObject({
+      ok: true,
+      result: { text: "Alpha" },
+    });
+    // The cap is ask_user-specific: ordinary application tools keep working.
+    expect(await (await call("list_bots")).json()).toMatchObject({ ok: true });
+  });
   it("cancels pending authorization when the transport disconnects", async () => {
     const { server, turn, host, sessionId } = await setup();
     const requestAbort = new AbortController();
