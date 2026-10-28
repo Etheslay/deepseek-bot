@@ -304,7 +304,9 @@ describe("chat permission cards", () => {
     await act(async () => {
       trigger?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
-    const values = [...container.querySelectorAll(".custom-select-item")].map((item) =>
+    // CustomSelect portals its menu to document.body, so the options are not
+    // descendants of the rendered container — query the document instead.
+    const values = [...document.querySelectorAll(".custom-select-item")].map((item) =>
       item.getAttribute("data-value"),
     );
     expect(values).toContain("app.create_group");
