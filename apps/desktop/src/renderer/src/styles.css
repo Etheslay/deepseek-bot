@@ -7466,41 +7466,82 @@ select:focus-visible {
   align-items: start;
 }
 
-.settings-switch {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 58px;
-  padding: 3px 6px;
-  border: 1px solid var(--line);
+/* Sliding settings toggles, including per-bot mute. The track width is fixed
+   so a label cannot grow the pill. The knob only slides inside the frame.
+   White track = on. Black track = off. */
+.settings-switch,
+.notify-bot > .notify-mute-switch {
+  appearance: none;
+  -webkit-appearance: none;
+  box-sizing: border-box;
+  position: relative;
+  display: inline-block;
+  flex: 0 0 52px;
+  width: 52px;
+  min-width: 52px;
+  max-width: 52px;
+  height: 28px;
+  min-height: 28px;
+  max-height: 28px;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid #4a4a52;
   border-radius: 999px;
-  background: var(--input-bg);
-  color: var(--muted);
+  background: #000;
+  color: transparent;
+  font-size: 0;
+  line-height: 0;
   cursor: pointer;
-  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+  vertical-align: middle;
 }
 
-.settings-switch .settings-switch-knob {
-  width: 16px;
-  height: 16px;
+.settings-switch .settings-switch-knob,
+.notify-bot > .notify-mute-switch .notify-mute-knob {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 20px;
+  height: 20px;
   border-radius: 50%;
-  background: var(--line);
-  transition: background 120ms ease, transform 120ms ease;
+  background: #fff;
+  transform: none;
+  transition: left 140ms ease, background-color 140ms ease;
 }
 
-.settings-switch.on {
-  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
-  color: var(--text);
+.settings-switch.on,
+.notify-bot > .notify-mute-switch.on {
+  background: #fff;
+  border-color: #fff;
 }
 
-.settings-switch.on .settings-switch-knob {
-  background: var(--accent);
-  transform: translateX(4px);
+.settings-switch.on .settings-switch-knob,
+.notify-bot > .notify-mute-switch.on .notify-mute-knob {
+  left: calc(100% - 20px - 3px);
+  background: #141416;
 }
 
-.settings-switch:focus-visible {
-  outline: 2px solid var(--accent);
+.settings-switch:focus-visible,
+.notify-bot > .notify-mute-switch:focus-visible {
+  outline: 2px solid #fff;
   outline-offset: 2px;
+}
+
+.settings-switch:hover,
+.notify-bot > .notify-mute-switch:hover {
+  border-color: #8a8a93;
+}
+
+.settings-switch.on:hover,
+.notify-bot > .notify-mute-switch.on:hover {
+  border-color: #fff;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .settings-switch .settings-switch-knob,
+  .notify-bot > .notify-mute-switch .notify-mute-knob {
+    transition: none;
+  }
 }
 
 .notify-bot-list,
@@ -7532,77 +7573,6 @@ select:focus-visible {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-/* Per-bot mute only. The track width is fixed, so a longer label cannot
-   grow the pill leftward. The knob slides inside the frame.
-   White track = muted. Black track = not muted.
-   The shared .settings-switch on the other Computer rows stays as it is. */
-.notify-bot > .notify-mute-switch {
-  appearance: none;
-  -webkit-appearance: none;
-  box-sizing: border-box;
-  position: relative;
-  display: inline-block;
-  flex: 0 0 52px;
-  width: 52px;
-  min-width: 52px;
-  max-width: 52px;
-  height: 28px;
-  min-height: 28px;
-  max-height: 28px;
-  margin: 0;
-  padding: 0;
-  overflow: hidden;
-  border: 1px solid #4a4a52;
-  border-radius: 999px;
-  background: #000;
-  color: transparent;
-  font-size: 0;
-  line-height: 0;
-  cursor: pointer;
-  vertical-align: middle;
-}
-
-.notify-bot > .notify-mute-switch .notify-mute-knob {
-  position: absolute;
-  top: 3px;
-  left: 3px;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  background: #fff;
-  transform: none;
-  transition: left 140ms ease, background-color 140ms ease;
-}
-
-.notify-bot > .notify-mute-switch.on {
-  background: #fff;
-  border-color: #fff;
-}
-
-.notify-bot > .notify-mute-switch.on .notify-mute-knob {
-  left: calc(100% - 20px - 3px);
-  background: #141416;
-}
-
-.notify-bot > .notify-mute-switch:focus-visible {
-  outline: 2px solid #fff;
-  outline-offset: 2px;
-}
-
-.notify-bot > .notify-mute-switch:hover {
-  border-color: #8a8a93;
-}
-
-.notify-bot > .notify-mute-switch.on:hover {
-  border-color: #fff;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .notify-bot > .notify-mute-switch .notify-mute-knob {
-    transition: none;
-  }
 }
 
 .chrome-profile-actions {

@@ -71,7 +71,13 @@ describe("per-bot mute switches", () => {
       "Alpha 静音",
       "Beta 静音",
     ]);
-    expect(container.querySelectorAll(".settings-switch")).toHaveLength(2);
+    const shared = [...container.querySelectorAll<HTMLButtonElement>(".settings-switch")];
+    expect(shared).toHaveLength(2);
+    expect(shared.map((button) => button.textContent?.trim())).toEqual(["", ""]);
+    expect(shared.map((button) => button.firstElementChild?.className)).toEqual([
+      "settings-switch-knob",
+      "settings-switch-knob",
+    ]);
     expect(container.querySelector(".notify-bot-state")).toBeNull();
   });
 
