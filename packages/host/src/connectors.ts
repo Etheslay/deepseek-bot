@@ -5,8 +5,8 @@
  * against the local SD WebUI API (`/sdapi/v1/txt2img`). Generated images
  * land under the data root's connector-outputs directory and are referenced
  * by absolute path — image bytes never travel through the contract
- * envelope (1 MiB message cap). Credential references stay unresolved:
- * local services need none, and resolving them is a later, explicit slice.
+ * envelope (1 MiB message cap). Stable Diffusion does not resolve
+ * credential references. MCP resolution lives in the MCP client.
  */
 import { randomUUID } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";

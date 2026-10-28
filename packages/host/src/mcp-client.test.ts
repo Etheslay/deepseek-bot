@@ -1,6 +1,16 @@
 import { createServer, type Server, type IncomingMessage, type ServerResponse } from "node:http";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { callMcp, discoverMcp, normalizeMcpEndpoint, validateMcpArguments } from "./mcp-client.js";
+import {
+  callMcp,
+  callMcpStdio,
+  discoverMcp,
+  discoverMcpStdio,
+  normalizeMcpEndpoint,
+  validateMcpArguments,
+} from "./mcp-client.js";
 
 const servers: Server[] = [];
 afterEach(async () => {
@@ -27,7 +37,7 @@ async function endpoint(
     id?: number,
   ) => boolean,
 ) {
-  const calls: { method: string; params?: unknown }[] = [];
+  const calls: { method: string; params?: unknown; authorization?: string | undefined }[] = [];
   const server = createServer(async (request, response) => {
     if (request.method === "GET") {
       response.writeHead(405).end();
@@ -36,7 +46,7 @@ async function endpoint(
     let body = "";
     for await (const chunk of request) body += String(chunk);
     const message = JSON.parse(body) as { id?: number; method: string; params?: unknown };
-    calls.push(message);
+    calls.push({ ...message, authorization: request.headers.authorization });
     if (override?.(message.method, response, request, message.id)) return;
     if (message.id === undefined) {
       response.writeHead(202).end();
@@ -270,4 +280,76 @@ describe("local MCP HTTP client", () => {
       });
     },
   );
+  it("injects a bearer token and keeps the secret out of auth failures", async () => {
+    const secret = "local-mcp-token";
+    const local = await endpoint();
+    await discoverMcp(local.url, undefined, { authorization: secret });
+    expect(local.calls.some((call) => call.authorization === `Bearer ${secret}`)).toBe(true);
+    const denied = await endpoint((_method, response) => {
+      response.writeHead(401).end(secret);
+      return true;
+    });
+    await expect(discoverMcp(denied.url, undefined, { authorization: secret })).rejects.toThrow(
+      "MCP authentication failed",
+    );
+    await expect(
+      discoverMcp(denied.url, undefined, { authorization: secret }).catch((error: unknown) => {
+        throw new Error(error instanceof Error ? error.message : "failed");
+      }),
+    ).rejects.toThrow(/^MCP authentication failed$/u);
+    const blocked = await endpoint();
+    await expect(
+      discoverMcp(blocked.url, undefined, { authorization: "bad\ntoken" }),
+    ).rejects.toThrow("unusable");
+    expect(blocked.calls).toHaveLength(0);
+  });
+  it("injects a stdio credential through the environment and not argv", async () => {
+    const root = mkdtempSync(join(tmpdir(), "dsb-mcp-stdio-"));
+    const script = join(root, "server.mjs");
+    const proof = join(root, "proof.json");
+    const secret = "stdio-local-token";
+    writeFileSync(
+      script,
+      [
+        "import { createInterface } from 'node:readline';",
+        "import { writeFileSync } from 'node:fs';",
+        "const proof = process.argv[2];",
+        "writeFileSync(proof, JSON.stringify({ env: process.env.MCP_CREDENTIAL ?? null, argv: process.argv }));",
+        "const rl = createInterface({ input: process.stdin, terminal: false });",
+        "rl.on('line', (line) => {",
+        "  if (!line.trim()) return;",
+        "  const msg = JSON.parse(line);",
+        "  if (msg.id === undefined) return;",
+        "  const tool = { name: 'echo', description: 'Echo', inputSchema: { type: 'object', properties: { text: { type: 'string' } }, required: ['text'], additionalProperties: false } };",
+        "  const result = msg.method === 'initialize'",
+        "    ? { protocolVersion: '2025-11-25', capabilities: { tools: {} }, serverInfo: { name: 'fixture', version: '1' } }",
+        "    : msg.method === 'tools/list' ? { tools: [tool] }",
+        "    : { content: [{ type: 'text', text: 'stdio-ok' }] };",
+        "  process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: msg.id, result }) + '\\n');",
+        "});",
+        "",
+      ].join("\n"),
+    );
+    const target = {
+      command: process.execPath,
+      args: [script, proof],
+      cwd: root,
+      credential: secret,
+      credentialEnv: "MCP_CREDENTIAL",
+    };
+    try {
+      expect(await discoverMcpStdio(target)).toMatchObject([{ name: "echo" }]);
+      const recorded = JSON.parse(readFileSync(proof, "utf8")) as { env: string | null; argv: string[] };
+      expect(recorded.env).toBe(secret);
+      expect(recorded.argv.join("\n")).not.toContain(secret);
+      await expect(callMcpStdio(target, "echo", { text: "hello" })).resolves.toMatchObject({
+        content: [{ type: "text", text: "stdio-ok" }],
+      });
+      await expect(
+        discoverMcpStdio({ command: "bash", args: ["-c", secret], cwd: root }),
+      ).rejects.toThrow("not allowed");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
 });

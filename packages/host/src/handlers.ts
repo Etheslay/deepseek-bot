@@ -89,10 +89,12 @@ import {
   registerConnector,
   setConnectorEnabled,
   setConnectorEndpoint,
+  setConnectorCommand,
   getBotMcpGrants,
   setBotMcpGrant,
   updateBot,
   type BotPatch,
+  type ConnectorRow,
   type DataLayout,
   type OpenedDatabase,
   listPermissionPolicies,
@@ -340,6 +342,22 @@ function requireGroup(db: OpenedDatabase, groupId: string): void {
   if (group.archivedAt !== null) {
     throw invalid("group is archived", { groupId });
   }
+}
+
+function connectorPayload<E extends boolean>(row: ConnectorRow, enabled?: E) {
+  return {
+    id: row.id,
+    kind: row.kind,
+    name: row.name,
+    enabled: (enabled ?? row.enabled) as E,
+    credentialRef: row.credentialRef,
+    endpoint: row.endpoint,
+    command: row.command,
+    args: [...row.args],
+    credentialEnv: row.credentialEnv,
+    at: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
 }
 
 /**
@@ -1291,16 +1309,7 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
     "device.action.input.list": (payload) => context.deviceInput.list(payload.botId, payload.limit),
 
     "connector.list": () => ({
-      connectors: listConnectors(db).map((row) => ({
-        id: row.id,
-        kind: row.kind,
-        name: row.name,
-        enabled: row.enabled,
-        credentialRef: row.credentialRef,
-        endpoint: row.endpoint,
-        at: row.createdAt,
-        updatedAt: row.updatedAt,
-      })),
+      connectors: listConnectors(db).map((row) => connectorPayload(row)),
     }),
 
     "connector.register": (payload) => {
@@ -1309,63 +1318,41 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
         kind: payload.kind,
         ...(payload.credentialRef !== undefined ? { credentialRef: payload.credentialRef } : {}),
         ...(payload.endpoint !== undefined ? { endpoint: payload.endpoint } : {}),
+        ...(payload.command !== undefined ? { command: payload.command } : {}),
+        ...(payload.args !== undefined ? { args: payload.args } : {}),
+        ...(payload.credentialEnv !== undefined ? { credentialEnv: payload.credentialEnv } : {}),
       });
-      return {
-        id: row.id,
-        kind: row.kind,
-        name: row.name,
-        enabled: false as const,
-        credentialRef: row.credentialRef,
-        endpoint: row.endpoint,
-        at: row.createdAt,
-        updatedAt: row.updatedAt,
-      };
+      return connectorPayload(row, false);
     },
 
     "connector.enable": (payload) => {
       const row = setConnectorEnabled(db, { id: payload.id, enabled: true });
-      return {
-        id: row.id,
-        kind: row.kind,
-        name: row.name,
-        enabled: true as const,
-        credentialRef: row.credentialRef,
-        endpoint: row.endpoint,
-        at: row.createdAt,
-        updatedAt: row.updatedAt,
-      };
+      return connectorPayload(row, true);
     },
 
     "connector.disable": (payload) => {
       const row = setConnectorEnabled(db, { id: payload.id, enabled: false });
       context.mcp.invalidate({ connectorId: payload.id });
       context.permissions.cancelMcp({ connectorId: payload.id });
-      return {
-        id: row.id,
-        kind: row.kind,
-        name: row.name,
-        enabled: false as const,
-        credentialRef: row.credentialRef,
-        endpoint: row.endpoint,
-        at: row.createdAt,
-        updatedAt: row.updatedAt,
-      };
+      return connectorPayload(row, false);
     },
 
     "connector.setEndpoint": (payload) => {
       const row = setConnectorEndpoint(db, { id: payload.id, endpoint: payload.endpoint });
       context.mcp.invalidate({ connectorId: payload.id });
       context.permissions.cancelMcp({ connectorId: payload.id });
-      return {
-        id: row.id,
-        kind: row.kind,
-        name: row.name,
-        enabled: row.enabled,
-        credentialRef: row.credentialRef,
-        endpoint: row.endpoint,
-        at: row.createdAt,
-        updatedAt: row.updatedAt,
-      };
+      return connectorPayload(row);
+    },
+
+    "connector.setCommand": (payload) => {
+      const row = setConnectorCommand(db, {
+        id: payload.id,
+        command: payload.command,
+        args: payload.args,
+      });
+      context.mcp.invalidate({ connectorId: payload.id });
+      context.permissions.cancelMcp({ connectorId: payload.id });
+      return connectorPayload(row);
     },
 
     "artifacts.list": (payload) => context.artifacts.list(payload.botId),

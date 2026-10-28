@@ -1,10 +1,10 @@
-# 接口与数据契约 v0.7
+# 接口与数据契约 v0.8
 
 本文件定义本项目前后端契约，不是 DeepSeek Harness 官方 API。状态：v0.1 已冻结（2026-10-23，D00 验收记录见 D00 Issue）；v0.2 为 D15 写层扩展；v0.3（2026-10-26，D16 后端）新增人类权限控制方法；v0.4（2026-10-26，D28 共编侧车）新增 `artifacts.*` 方法组；v0.5（2026-10-26，manager-orchestration，TASK_MANAGER_ORCHESTRATION.md）新增 bot 协调者角色、`task.*` 方法组、`task.status` 任务事件与能力 `app.dispatch_task`，`protocolVersion` 升至 0.5，继续接受 0.1–0.4 发送方。工作流文档 `schemaVersion` 保持 0.1（存量数据可读）。后续变更按 §7 提升版本并由变更负责人自审同步使用方。可执行实现位于 `packages/contracts/`：schema、§7 夹具与双方共用契约测试见 [packages/contracts/README.md](../packages/contracts/README.md)。所有字段均需后端校验，TypeScript 类型不能替代运行时校验。
 
 v0.5（D19 MCP HTTP 契约片）新增连接器类型、MCP 工具发现与逐机器人精确工具授权方法，以及独立能力 `mcp.call`。该契约片不代表 MCP Host、存储迁移、桌面设置或真实服务联调已经完成。
 
-v0.6（D21 指定窗口截图与本地 OCR 契约片）新增 `screen.*` 受信桌面方法与结果元数据。当前 `protocolVersion` 为 0.7，继续接受 0.1–0.6 发送方；工作流 `schemaVersion` 仍为 0.1。Windows 采集、离线 OCR 与 Host 网关已在 develop；桌面设置页调用这些方法做本机预览。这不代表真实窗口、打包 Electron 或发布验收已经完成。实现依据见 [D21 设计](superpowers/specs/2026-10-27-local-screen-sensing-design.md)。
+v0.6（D21 指定窗口截图与本地 OCR 契约片）新增 `screen.*` 受信桌面方法与结果元数据。v0.7 起 `protocolVersion` 接受管理编排；v0.8 增加 `mcp-stdio` 与 `connector.setCommand`。当前 `protocolVersion` 为 0.8，继续接受 0.1–0.7 发送方；工作流 `schemaVersion` 仍为 0.1。Windows 采集、离线 OCR 与 Host 网关已在 develop；桌面设置页调用这些方法做本机预览。这不代表真实窗口、打包 Electron 或发布验收已经完成。实现依据见 [D21 设计](superpowers/specs/2026-10-27-local-screen-sensing-design.md)。
 
 ## 1. 通用规则
 
@@ -38,7 +38,7 @@ v0.6（D21 指定窗口截图与本地 OCR 契约片）新增 `screen.*` 受信�
 | ScreenResult | id, mode(image\|ocr), at, width, height, hasOcr | v0.6：严格元数据对象；id 为 UUID，at 为 UTC ISO，每边整数 1–8192；不含路径、窗口标题、图像或 OCR 正文 |
 | ScreenStatus | supported, enabled, target, busy | v0.6：布尔状态；target 为 null 或 `{id: UUID, title: string≤512}`，id 是当前 Host 代次的不透明窗口 token |
 | CapabilityPolicy | capability, mode | v0.3；全局 allow/ask/deny 默认策略，受高风险能力限制 |
-| ConnectorKind | sd-webui / mcp-http | v0.5；register 省略 kind 时默认 sd-webui；现有连接器响应 kind 可选以兼容旧 Host，后续实现应始终输出类型；旧记录按 sd-webui 解释 |
+| ConnectorKind | sd-webui / mcp-http / mcp-stdio | v0.5 起 HTTP，v0.8 起 stdio；register 省略 kind 时默认 sd-webui；响应 kind 可选以兼容旧 Host，后续实现应始终输出类型；旧记录按 sd-webui 解释 |
 | McpTool | name, description?, inputSchema | v0.5；name 为 1–200 字符精确名称，description ≤4000 字符，inputSchema 为 JSON 对象（record unknown）；发现最多 200 项，不把远端描述当指令或授权 |
 | McpServerGrant | serverId, allowedTools | 单个服务器的精确工具白名单，最多 200 个唯一名称；名称 1–200 字符，禁止 `*`/`?` 通配符，不进行大小写或空白归一化；空数组表示不允许该服务器的工具 |
 | PermissionGrant | id, capability, botId, mode, scope, sessionId, generation, approvalId, maxUses, uses, expiresAt, createdAt, revokedAt | v0.3；scope=policy 为全局策略行，其余为 bot 专属 once/session/permanent 授权；计数在执行前原子扣减 |
@@ -49,7 +49,7 @@ v0.6（D21 指定窗口截图与本地 OCR 契约片）新增 `screen.*` 受信�
 
 ## 3. 方法边界
 
-v0.5 的 MCP 控制方法只供受信桌面调用，不能注册为模型工具。`mcp-http` 后续传输仅使用本机 HTTP 回环端点，允许 `/mcp` 等路径；端点的 scheme、回环主机、凭据与重定向等检查由 Host 实现承担，当前契约仍只校验 endpoint 字符串长度与形状字段。`connector.register` 和 `connector.setEndpoint` 不因配置地址而自动调用服务。
+v0.5 的 MCP 控制方法只供受信桌面调用，不能注册为模型工具。`mcp-http` 仅使用本机 HTTP 回环端点，允许 `/mcp` 等路径。`mcp-stdio` 只保存本机命令和参数数组，不保存 shell 字符串。凭据列仍是 `cred:<uuid>`；登记方法不解析密文。发现和调用时 Host 才通过既有凭据通道注入，HTTP 使用 Bearer，stdio 写入指定环境变量，不进入参数数组。端点、命令和重定向检查由 Host 实现承担。`connector.register`、`connector.setEndpoint` 和 `connector.setCommand` 不因配置而自动调用服务。
 
 MCP 实际调用使用独立能力 `mcp.call`，默认 `ask`，禁止全局 `allow` 与 session/permanent 授权；只允许绑定精确动作、代次与一次消费的 once 审批。`deny` 可全面禁用。既有 `connector.invoke` 策略或授权不能替代该审批；`ToolPolicy.mcp` 的服务器/工具白名单也是独立门槛，不能代替人类逐次批准。此规则本片落实为能力和授权 schema，Host 执行检查与错误路径将在后续实现片完成。
 
@@ -73,7 +73,8 @@ MCP 实际调用使用独立能力 `mcp.call`，默认 `ask`，禁止全局 `all
 | permission.grant.issue | 人类为当前 bot 授予一项能力 | 请求只有 botId、capability、scope（session 或 permanent）。会话由 Host 绑定 `chat:<botId>`、当前代次、默认 5 次 / 120 分钟；永久不带会话、次数或期限。逐次能力与非 ask 策略拒绝。仍有效的同一授权再次发放时返回原记录。协议仍为 0.7 |
 | permission.approval.list / decide | v0.3 人类读取精确动作/批准或拒绝 | 列表默认 pending；决定必须匹配 approvalId、expectedActionDigest、代次、期限；scope 默认 once，session 可指定 maxUses/ttlMinutes；一次消费 |
 | permission.audit.list | v0.3 人类按 botId、afterSequence 查询追加式审计 | 默认最多 50，最高 100；模型不能写入/删除或调用控制方法 |
-| connector.mcp.discover | v0.5 受信桌面契约：`{id: UUID}` → `{tools: McpTool[], at: UTC ISO}` | 请求严格字段；最多 200 个工具。Host 后续负责启用状态、mcp-http 类型、端点与远端响应验证 |
+| connector.setCommand | v0.8 受信桌面契约：`{id, command, args?}` → 连接器 | 只替换 stdio 命令和参数。不启动进程，不读取凭据 |
+| connector.mcp.discover | v0.5 受信桌面契约：`{id: UUID}` → `{tools: McpTool[], at: UTC ISO}` | 请求严格字段；最多 200 个工具。Host 负责启用状态、传输类型、端点或命令，以及响应验证 |
 | connector.mcp.grants.get | v0.5 受信桌面契约：`{botId: UUID}` → `{servers: McpServerGrant[]}` | 请求严格字段；返回最多 50 个服务器，仅当前 bot 的授权 |
 | connector.mcp.grants.set | v0.5 受信桌面契约：`{botId: UUID, id: UUID, allowedTools: string[]}` → `{servers: McpServerGrant[]}` | 仅替换指定 bot 与连接器的工具白名单；最多 200 个唯一精确名称，空数组清空；不得扩大其他服务器权限。后续 Host 校验名称确实存在于该服务器的发现结果 |
 | screen.status | v0.6：`{botId: UUID}` → `ScreenStatus` | 仅受信桌面；不能凭读取状态取得采集授权 |

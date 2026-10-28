@@ -741,6 +741,39 @@ CREATE TABLE device_action_records (
 CREATE INDEX device_action_records_bot ON device_action_records(bot_id, created_at);
 `,
   },
+  {
+    // D19 stdio MCP: rebuild connectors so kind can be mcp-stdio and the
+    // command is stored beside the credential reference. The reference stays
+    // opaque. Existing HTTP and SD rows keep their endpoints and kinds.
+    id: 20,
+    name: "0020-mcp-stdio",
+    sql: /* sql */ `
+CREATE TABLE connectors_mcp (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)),
+  credential_ref TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  endpoint TEXT,
+  kind TEXT NOT NULL DEFAULT 'sd-webui'
+    CHECK (kind IN ('sd-webui', 'mcp-http', 'mcp-stdio')),
+  command TEXT,
+  args_json TEXT,
+  credential_env TEXT,
+  CHECK (kind <> 'mcp-stdio' OR (command IS NOT NULL AND endpoint IS NULL)),
+  CHECK (credential_env IS NULL OR kind = 'mcp-stdio')
+);
+INSERT INTO connectors_mcp (
+  id, name, enabled, credential_ref, created_at, updated_at, endpoint, kind
+)
+SELECT id, name, enabled, credential_ref, created_at, updated_at, endpoint, kind
+FROM connectors;
+DROP TABLE connectors;
+ALTER TABLE connectors_mcp RENAME TO connectors;
+CREATE INDEX connectors_created ON connectors(created_at);
+`,
+  },
 
 ];
 

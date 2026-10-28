@@ -304,7 +304,9 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
   });
   const bootGeneration = incrementBootGeneration(db);
   const permissions = new AgentPermissionService(db, bootGeneration);
-  const mcp = new McpService(db, layout.connectorOutputs);
+  const mcp = new McpService(db, layout.connectorOutputs, {
+    resolveCredential: (credentialRef) => options.resolveApiKey(credentialRef),
+  });
   const patches = writeProfilePatches(layout.harnessHome);
   const now = options.now ?? (() => new Date());
   const screenChoice = resolveScreenBackend(options);

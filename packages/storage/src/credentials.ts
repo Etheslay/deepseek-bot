@@ -73,6 +73,12 @@ export function removeCredential(db: OpenedDatabase, ref: string): { removed: bo
   if (referenced !== undefined) {
     throw invalidInput("credential is still referenced by a model profile", { ref });
   }
+  const connector = db.raw
+    .prepare("SELECT id FROM connectors WHERE credential_ref = ? LIMIT 1;")
+    .get(ref);
+  if (connector !== undefined) {
+    throw invalidInput("credential is still referenced by a connector", { ref });
+  }
   const result = db.raw.prepare("DELETE FROM credentials WHERE ref = ?;").run(ref);
   return { removed: Number(result.changes) > 0 };
 }
