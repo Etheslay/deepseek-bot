@@ -32,6 +32,9 @@ const APPLICATION_TOOLS = [
 ] as const;
 const MAX_BODY_BYTES = 1024 * 1024;
 const MAX_CALLS_PER_TURN = 1000;
+/** One ask_user parks the turn on a human answer, so a model that asks in a
+ * loop stalls the conversation; this is the ceiling the tool description promises. */
+const MAX_ASK_USER_PER_TURN = 3;
 type Result =
   | { ok: true; result: unknown }
   | { ok: false; error: { code: string; message: string } };
@@ -47,6 +50,8 @@ interface TurnState {
   ready: Promise<void>;
   markReady(): void;
   calls: Map<string, CallRecord>;
+  /** Successful ask_user dispatches this turn; replays of a counted call do not re-count. */
+  askUserCalls: number;
   /** Present only when injected skills declared at least one capability. */
   skillCapabilities?: readonly CapabilityId[];
   mcpCatalog?: Promise<{ tools: McpCatalogTool[]; warnings: string[] }>;
@@ -278,6 +283,10 @@ export async function startApplicationToolServer(
         send(response, 429, failure("RATE_LIMITED", "chat tool call limit reached"));
         return;
       }
+      if (request.url === "/ask-user/call" && turn.askUserCalls >= MAX_ASK_USER_PER_TURN) {
+        send(response, 429, failure("RATE_LIMITED", "ask_user turn limit reached"));
+        return;
+      }
       const controller = new AbortController();
       const abort = () => controller.abort();
       turn.controller.signal.addEventListener("abort", abort, { once: true });
@@ -310,6 +319,7 @@ export async function startApplicationToolServer(
         .finally(() => turn.controller.signal.removeEventListener("abort", abort));
       record = { digest, controller, result };
       turn.calls.set(parsed.callId, record);
+      if (request.url === "/ask-user/call") turn.askUserCalls += 1;
       if (turn.controller.signal.aborted) controller.abort();
     }
     const active = record;
@@ -351,6 +361,7 @@ export async function startApplicationToolServer(
         ready,
         markReady,
         calls: new Map(),
+        askUserCalls: 0,
         ...(options.skillCapabilities !== undefined
           ? { skillCapabilities: Object.freeze([...options.skillCapabilities]) }
           : {}),
