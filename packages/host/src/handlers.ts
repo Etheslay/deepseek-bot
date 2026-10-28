@@ -813,7 +813,7 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
         role: "user",
         text: payload.text,
       });
-      const outcome = await chat.send(bot, payload.text, history);
+      const outcome = await chat.send(bot, payload.text, history, payload.skills ?? []);
       const assistant = appendChatMessage(db, {
         botId: bot.id,
         sessionId,

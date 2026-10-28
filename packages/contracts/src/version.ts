@@ -27,6 +27,7 @@
 // prior senders stay accepted.
 // v0.8 adds stdio MCP and credential-ref injection. Optional connector fields
 // stay compatible; 0.1–0.7 senders stay accepted. Workflow documents are unchanged.
+// D17 adds optional chat.send skills inside 0.8. No protocol bump.
 export const CONTRACT_VERSION = "0.8" as const;
 export const PROTOCOL_VERSION = CONTRACT_VERSION;
 /** Workflow documents did not change in v0.3–v0.8; keep the document version. */

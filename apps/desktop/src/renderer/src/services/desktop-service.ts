@@ -10,6 +10,7 @@ import type {
   ArtifactVersion,
   Bot,
   BotArtifact,
+  ChatSkillInjection,
   ErrorCode,
   EventEnvelope,
   Task,
@@ -83,6 +84,8 @@ export type StreamOptions = {
   chunkDelayMs?: number;
   chunkCount?: number;
   simulateFailure?: Extract<ErrorCode, "RATE_LIMITED" | "AUTH_FAILED" | "MODEL_UNAVAILABLE">;
+  /** Saved skills for this turn. The host injects them; the fixture ignores them. */
+  skills?: readonly ChatSkillInjection[];
 };
 
 export type StreamHandle = {

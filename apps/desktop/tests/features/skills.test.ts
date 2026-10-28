@@ -4,6 +4,7 @@ import {
   MAX_SKILL_CONTEXT_CHARS,
   buildSkillContext,
   deleteSkill,
+  skillsForInjection,
   emptyLibrary,
   loadSkills,
   saveSkill,
@@ -229,5 +230,42 @@ describe("skill library", () => {
     const context = buildSkillContext("bot-1", bound);
     expect(context).toContain("````");
     expect(context.endsWith("````")).toBe(true);
+  });
+});
+
+describe("skillsForInjection", () => {
+  it("returns the bound snapshot and refuses an unknown capability", () => {
+    const storage = makeStorage();
+    const created = saveSkill(storage, emptyLibrary(), {
+      name: "周报",
+      instructions: "三段",
+      capabilities: ["fs.read", "fs.read"],
+    });
+    if (!created.ok) throw new Error("create failed");
+    const bound = setBotSkills(storage, created.library, "bot-1", [created.skill.id]);
+    const injected = skillsForInjection("bot-1", bound);
+    expect(injected).toMatchObject({
+      ok: true,
+      skills: [{ name: "周报", capabilities: ["fs.read"], instructions: "三段" }],
+    });
+    const unknown = saveSkill(storage, bound, {
+      id: created.skill.id,
+      name: "周报",
+      instructions: "三段",
+      capabilities: ["read"],
+    });
+    if (!unknown.ok) throw new Error("edit failed");
+    const rebound = setBotSkills(storage, unknown.library, "bot-1", [created.skill.id]);
+    expect(skillsForInjection("bot-1", rebound)).toEqual({
+      ok: false,
+      reason: "unknown-capability",
+      skill: "周报",
+      capability: "read",
+    });
+  });
+
+  it("returns no skills when the bot has none bound", () => {
+    expect(skillsForInjection("bot-1", emptyLibrary())).toEqual({ ok: true, skills: [] });
+    expect(skillsForInjection(null, emptyLibrary())).toEqual({ ok: true, skills: [] });
   });
 });

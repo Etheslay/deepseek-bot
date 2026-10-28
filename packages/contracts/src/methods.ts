@@ -51,7 +51,7 @@ import {
   TaskEventEnvelopeSchema,
 } from "./events.js";
 import { WorkflowIssueSchema } from "./workflow.js";
-import { PERMISSION_METHODS } from "./permissions.js";
+import { CapabilityIdSchema, PERMISSION_METHODS } from "./permissions.js";
 import { SCREEN_METHODS } from "./screen.js";
 import { DEVICE_METHODS } from "./device.js";
 
@@ -78,6 +78,29 @@ export const ATTACHMENT_CHUNK_RAW_BYTES = 192 * 1024;
 export const MAX_ATTACHMENT_BYTES = 2 * 1024 * 1024;
 /** One `attachment.append` chunk carries at most 512 KiB of decoded bytes. */
 export const MAX_ATTACHMENT_CHUNK_BYTES = 512 * 1024;
+
+/**
+ * Skills injected on one `chat.send` (D17). Optional inside protocol 0.8:
+ * older senders omit the field. The export-file schema stays free-form;
+ * only these capability ids are enforced on a turn.
+ */
+export const MAX_CHAT_SKILLS = 30;
+export const MAX_CHAT_SKILL_INSTRUCTIONS = 4_000;
+export const MAX_CHAT_SKILL_CAPABILITIES = 16;
+
+export const ChatSkillInjectionSchema = z
+  .object({
+    name: NonEmptyStringSchema(TEXT_LIMITS.name),
+    version: z.number().int().min(1).max(1_000_000),
+    instructions: NonEmptyStringSchema(MAX_CHAT_SKILL_INSTRUCTIONS),
+    capabilities: z.array(CapabilityIdSchema).max(MAX_CHAT_SKILL_CAPABILITIES),
+  })
+  .strict()
+  .refine(
+    (skill) => new Set(skill.capabilities).size === skill.capabilities.length,
+    "capabilities must be unique",
+  );
+export type ChatSkillInjection = z.infer<typeof ChatSkillInjectionSchema>;
 
 export function messageSizeBytes(value: unknown): number {
   return new TextEncoder().encode(JSON.stringify(value ?? null)).length;
@@ -559,10 +582,17 @@ export const METHOD_CONTRACTS = {
     request: RevisionRefSchema,
     response: ScheduleSchema,
   },
+  /**
+   * `skills` is the saved skill snapshot for this turn. The Host injects the
+   * instructions into the prompt and, when any capability id is present, the
+   * tool gateway allows only tools those ids cover. Omitted or empty means
+   * no skill constraint. This does not grant capabilities.
+   */
   "chat.send": {
     request: z.object({
       botId: UuidSchema,
       text: z.string().min(1).max(4000),
+      skills: z.array(ChatSkillInjectionSchema).max(MAX_CHAT_SKILLS).optional(),
     }),
     response: z.object({
       sessionId: z.string().min(1).max(128),

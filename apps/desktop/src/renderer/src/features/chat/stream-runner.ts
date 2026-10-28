@@ -15,7 +15,12 @@ import {
   applyTool,
   type StreamState,
 } from "./chat-reducer.js";
-import type { StreamHandle, StreamResult, ToolStatus } from "../../services/desktop-service.js";
+import type {
+  StreamHandle,
+  StreamOptions,
+  StreamResult,
+  ToolStatus,
+} from "../../services/desktop-service.js";
 
 export type StreamStateForBot = StreamState & { forKey: number };
 
@@ -30,13 +35,15 @@ export type ChatStreamFn = (
     onDelta: (chunk: string) => void;
     onTool: (tool: ToolStatus) => void;
   },
+  options?: StreamOptions,
 ) => StreamHandle;
 
 export function runChatStream(deps: {
   stream: ChatStreamFn;
   botId: string;
-  /** Already composed outgoing text (skill context + user text). */
+  /** User text only. Bound skills travel in `skills`, not inside this string. */
   text: string;
+  skills?: StreamOptions["skills"];
   forKey: number;
   update: StreamUpdater;
   onAssistant: (text: string) => void;
@@ -53,7 +60,7 @@ export function runChatStream(deps: {
    */
   onSettled?: (result: StreamResult) => void;
 }): StreamHandle {
-  const { stream, botId, text, forKey, update, onAssistant, isCurrent, onSettled } = deps;
+  const { stream, botId, text, skills, forKey, update, onAssistant, isCurrent, onSettled } = deps;
   let acc = "";
   const handle = stream(botId, text, {
     onDelta: (chunk) => {
@@ -67,7 +74,7 @@ export function runChatStream(deps: {
         prev && prev.forKey === forKey ? { ...applyTool(prev, tool), forKey } : prev,
       );
     },
-  });
+  }, skills !== undefined && skills.length > 0 ? { skills } : undefined);
   void handle.finish().then((result: StreamResult) => {
     // `update` is a React state updater: it runs during the render phase and has
     // to stay pure. Committing the assistant message from inside it made React

@@ -1,19 +1,31 @@
+import {
+  CAPABILITY_IDS,
+  MAX_CHAT_SKILL_CAPABILITIES,
+  MAX_CHAT_SKILL_INSTRUCTIONS,
+  MAX_CHAT_SKILLS,
+  TEXT_LIMITS,
+  type CapabilityId,
+  type ChatSkillInjection,
+} from "@deepseek-bot/contracts";
+
 /**
  * Skill library (D17 renderer slice).
  *
  * A skill is a named, versioned block of reusable instructions with declared
- * capabilities (metadata only — enforcement belongs to D16 grants). Storage is
- * localStorage alongside the bot templates; host persistence arrives with the
- * Renderer↔Host decision. Nothing here runs model code: reuse means the
- * renderer composes the bound skills into a delimited context block at send
- * time (see `buildSkillContext`).
+ * capability ids. Storage stays in localStorage. A send passes the bound
+ * snapshot to the Host (`skillsForInjection`); the Host injects the
+ * instructions and the tool gateway enforces declared capability ids.
+ * `buildSkillContext` remains the fence-safe block shape the Host mirrors.
  */
 export type SkillDefinition = {
   id: string;
   name: string;
   description?: string;
   instructions: string;
-  /** Declared capability ids; metadata only, never enforced here. */
+  /**
+   * Declared capability ids. Unknown strings are kept in the library so an
+   * older file still loads; a send refuses them instead of ignoring them.
+   */
   capabilities: string[];
   /** Starts at 1 and increments on every edit. */
   version: number;
@@ -243,6 +255,59 @@ export function setBotSkills(
   const next: SkillLibrary = { ...library, bindings };
   persist(storage, next);
   return next;
+}
+
+const CAPABILITY_ID_SET = new Set<string>(CAPABILITY_IDS);
+
+export type SkillInjectionResult =
+  | { ok: true; skills: ChatSkillInjection[] }
+  | { ok: false; reason: "unknown-capability"; skill: string; capability: string }
+  | { ok: false; reason: "too-many-capabilities"; skill: string }
+  | { ok: false; reason: "too-many-skills"; skill: string }
+  | { ok: false; reason: "invalid"; skill: string };
+
+/**
+ * Snapshot of the skills bound to a bot, shaped for `chat.send`.
+ * Does not read or write the Host. Unknown capability strings fail the
+ * send so a typo cannot silently skip enforcement.
+ */
+export function skillsForInjection(
+  botId: string | null | undefined,
+  library: SkillLibrary,
+): SkillInjectionResult {
+  const bound = skillsForBot(library, botId);
+  if (bound.length > MAX_CHAT_SKILLS) {
+    return { ok: false, reason: "too-many-skills", skill: bound[MAX_CHAT_SKILLS]?.name ?? "" };
+  }
+  const skills: ChatSkillInjection[] = [];
+  for (const skill of bound) {
+    const name = skill.name.trim();
+    if (name.length === 0 || name.length > TEXT_LIMITS.name) {
+      return { ok: false, reason: "invalid", skill: skill.name };
+    }
+    const capabilities: CapabilityId[] = [];
+    for (const raw of skill.capabilities) {
+      const token = raw.trim();
+      if (token.length === 0) continue;
+      if (!CAPABILITY_ID_SET.has(token)) {
+        return { ok: false, reason: "unknown-capability", skill: name, capability: token };
+      }
+      const id = token as CapabilityId;
+      if (!capabilities.includes(id)) capabilities.push(id);
+    }
+    if (capabilities.length > MAX_CHAT_SKILL_CAPABILITIES) {
+      return { ok: false, reason: "too-many-capabilities", skill: name };
+    }
+    const instructions = skill.instructions.trim().slice(0, MAX_CHAT_SKILL_INSTRUCTIONS);
+    if (instructions.length === 0) continue;
+    skills.push({
+      name,
+      version: skill.version,
+      instructions,
+      capabilities,
+    });
+  }
+  return { ok: true, skills };
 }
 
 export function skillsForBot(

@@ -168,11 +168,17 @@ NodeRun：`pending → running ↔ waiting_approval → succeeded / failed / can
 
 默认工作区 `55555555-5555-4555-8555-555555555555` 仍是各默认 bot 共用的一个目录。获得读授权的 bot 可以读到这个目录里的附件。本片不提供跨 bot 的文件系统隔离。产物预览沿用既有 `artifacts.read`：文本可打开，HTML 与二进制仍按 QA-14 拦截。
 
+## D17 技能注入
+
+`chat.send` 增加可选字段 `skills`，不提升协议版本。省略该字段的旧发送方行为不变。每项含 `name`、`version`、`instructions`（最多 4000 字）和 `capabilities`（最多 16 个能力 id，不可重复）。一轮最多 30 个技能。技能库仍留在渲染层；这个字段只携带本轮要用的快照，不在 Host 落库。
+
+Host 把技能指令写成有界、围栏安全的提示块，放在 bot 指令之后、历史与用户消息之前。用户聊天记录只保存用户原文。多个技能的指令合计超过 4000 字时截断并标明。没有任何已声明能力时，不额外收窄工具。声明了能力 id 时，这些 id 的并集是本轮工具网关的允许集：工具消耗的能力必须全部落在该集合内，否则在授权检查之前以 `UNAUTHORIZED_PATH` 拒绝，并且不创建审批。已声明的能力仍走既有策略、grant 与审批；声明本身不授予能力。`tool.invoke` 与 `chat.attach` 不带这份额外允许集。
+
 ## 8. 库导出文件（协议面之外）
 
 D17 新增：技能/模板库的统一导出文件格式，定义见 `packages/contracts/src/library-export.ts`，设计见 `docs/superpowers/specs/2026-10-25-skill-library-design.md`。该格式**不进入 Host 协议面**：不经 IPC envelope、不参与 `PROTOCOL_VERSION` 协商，只用于导入/导出文件校验。
 
 - `format` 固定 `"deepseek-bot-library"`、`formatVersion` 固定 `1`；导入先整份校验，不过即整份拒绝，不做部分导入；
-- `skills[]` 镜像渲染层 `SkillDefinition`（id/name/instructions/capabilities/version/createdAt/updatedAt）；`capabilities` 仅为声明元数据，强制校验归 D16 三层模型；
+- `skills[]` 镜像渲染层 `SkillDefinition`（id/name/instructions/capabilities/version/createdAt/updatedAt）；文件里的 `capabilities` 仍是自由字符串，便于旧库导入。注入本轮时只接受能力 id，见上一节；
 - `templates[]` 镜像渲染层模板条目（name + bot{name, instructions, avatarUi}）；`avatarUi` 为渲染层头像派生快照，**不是**契约 `Avatar` 规范池 id；
 - 未知对象键按 zod object 默认行为剥离（由契约测试固定）；文件格式升级需契约 PR 提升 `formatVersion` 并写明兼容策略。

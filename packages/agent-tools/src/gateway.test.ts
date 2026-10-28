@@ -192,6 +192,77 @@ describe("bindReadTools", () => {
   });
 });
 
+describe("skill capability enforcement", () => {
+  function gated(grant?: { allowed: boolean; code?: "UNAUTHORIZED_PATH"; reason?: string }) {
+    const audit = new MemoryAuditSink();
+    const registry = new ToolRegistry();
+    registry.register({
+      name: "list_bots",
+      description: "list",
+      inputSchema: z.object({}).strict(),
+      handler: () => ({ bots: [] }),
+    });
+    const grantCheck = vi.fn(async () => grant ?? { allowed: true });
+    const gateway = new ToolGateway({
+      registry,
+      audit,
+      grants: { check: grantCheck },
+      capabilitiesForTool: (tool) => (tool === "list_bots" ? ["app.read"] : undefined),
+      now: () => new Date("2026-10-28T00:00:00Z"),
+    });
+    return { gateway, audit, grantCheck };
+  }
+
+  it("rejects an undeclared capability before the grant checkpoint", async () => {
+    const { gateway, audit, grantCheck } = gated();
+    await expect(
+      gateway.call({ id: "model" }, "list_bots", {}, { skillCapabilities: ["memory.read"] }),
+    ).rejects.toMatchObject({ code: "UNAUTHORIZED_PATH", message: "skill does not declare this capability" });
+    expect(grantCheck).not.toHaveBeenCalled();
+    expect(audit.records[0]).toMatchObject({
+      outcome: "rejected",
+      code: "UNAUTHORIZED_PATH",
+      reason: "skill does not declare this capability",
+    });
+  });
+
+  it("still consults the grant checkpoint after a skill declares the capability", async () => {
+    const { gateway, grantCheck } = gated({ allowed: false, code: "UNAUTHORIZED_PATH", reason: "denied" });
+    await expect(
+      gateway.call({ id: "model" }, "list_bots", {}, { skillCapabilities: ["app.read"] }),
+    ).rejects.toMatchObject({ code: "UNAUTHORIZED_PATH" });
+    expect(grantCheck).toHaveBeenCalledOnce();
+  });
+
+  it("does not narrow a turn that omitted skill capabilities", async () => {
+    const { gateway, grantCheck } = gated();
+    await expect(gateway.call({ id: "model" }, "list_bots", {})).resolves.toEqual({ bots: [] });
+    expect(grantCheck).toHaveBeenCalledOnce();
+  });
+
+  it("denies every tool when the allowlist is empty and fails closed without a capability map", async () => {
+    const { gateway, grantCheck } = gated();
+    await expect(
+      gateway.call({ id: "model" }, "list_bots", {}, { skillCapabilities: [] }),
+    ).rejects.toMatchObject({ code: "UNAUTHORIZED_PATH" });
+    expect(grantCheck).not.toHaveBeenCalled();
+    const open = new ToolGateway({
+      registry: new ToolRegistry(),
+      audit: new MemoryAuditSink(),
+      grants: { check: grantCheck },
+    });
+    open.capabilities.register({
+      name: "list_bots",
+      description: "list",
+      inputSchema: z.object({}).strict(),
+      handler: () => "no",
+    });
+    await expect(
+      open.call({ id: "model" }, "list_bots", {}, { skillCapabilities: ["app.read"] }),
+    ).rejects.toMatchObject({ code: "UNAUTHORIZED_PATH" });
+  });
+});
+
 describe("JsonlAuditSink", () => {
   it("appends one JSON record per line", async () => {
     const root = mkdtempSync(join(tmpdir(), "agent-tools-"));

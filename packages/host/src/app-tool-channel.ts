@@ -1,6 +1,7 @@
 /** Private per-turn Harness -> Host application tools. Never a desktop contract. */
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { randomBytes, createHash, timingSafeEqual } from "node:crypto";
+import type { CapabilityId } from "@deepseek-bot/contracts";
 import {
   ToolRejectionError,
   type ToolCaller,
@@ -46,6 +47,8 @@ interface TurnState {
   ready: Promise<void>;
   markReady(): void;
   calls: Map<string, CallRecord>;
+  /** Present only when injected skills declared at least one capability. */
+  skillCapabilities?: readonly CapabilityId[];
   mcpCatalog?: Promise<{ tools: McpCatalogTool[]; warnings: string[] }>;
   detach(): void;
 }
@@ -62,6 +65,7 @@ export interface ApplicationToolServer {
     sessionId: string;
     caller: ToolCaller;
     signal: AbortSignal;
+    skillCapabilities?: readonly CapabilityId[];
   }): ApplicationToolTurn;
   close(): Promise<void>;
 }
@@ -287,9 +291,13 @@ export async function startApplicationToolServer(
           request.url === "/mcp/call"
             ? { ...mcpEntry?.invocation, arguments: parsed.params }
             : parsed.params,
-          networkPermissions === undefined
-            ? { signal: controller.signal }
-            : { signal: controller.signal, networkPermissions },
+          {
+            signal: controller.signal,
+            ...(networkPermissions !== undefined ? { networkPermissions } : {}),
+            ...(turn.skillCapabilities !== undefined
+              ? { skillCapabilities: turn.skillCapabilities }
+              : {}),
+          },
         )
         .then((value): Result => ({ ok: true, result: value }))
         .catch(
@@ -343,6 +351,9 @@ export async function startApplicationToolServer(
         ready,
         markReady,
         calls: new Map(),
+        ...(options.skillCapabilities !== undefined
+          ? { skillCapabilities: Object.freeze([...options.skillCapabilities]) }
+          : {}),
         detach: () => options.signal.removeEventListener("abort", abort),
       };
       const releaseMcp = () => {
