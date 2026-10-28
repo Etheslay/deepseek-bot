@@ -6,16 +6,24 @@ import {
   TEXT_LIMITS,
   type CapabilityId,
   type ChatSkillInjection,
+  type SkillLibrary as ContractSkillLibrary,
 } from "@deepseek-bot/contracts";
 
 /**
- * Skill library (D17 renderer slice).
+ * Skill library (D17 renderer slice, D17' host persistence).
  *
  * A skill is a named, versioned block of reusable instructions with declared
- * capability ids. Storage stays in localStorage. A send passes the bound
- * snapshot to the Host (`skillsForInjection`); the Host injects the
- * instructions and the tool gateway enforces declared capability ids.
- * `buildSkillContext` remains the fence-safe block shape the Host mirrors.
+ * capability ids. The durable copy lives in the Host (`skillLibrary.get` /
+ * `skillLibrary.save`, protocol v0.11) — this module owns the pure library
+ * operations only and no longer writes localStorage. `loadSkills` stays for
+ * the one-time migration and the degraded no-Host fallback; the composer's
+ * prompt-template store keeps writing its own array shape to the same legacy
+ * key, which no longer collides with anything.
+ *
+ * A send passes the bound snapshot to the Host (`skillsForInjection`); the
+ * Host injects the instructions and the tool gateway enforces declared
+ * capability ids. `buildSkillContext` remains the fence-safe block shape the
+ * Host mirrors.
  */
 export type SkillDefinition = {
   id: string;
@@ -65,6 +73,31 @@ export function emptyLibrary(): SkillLibrary {
   return { skills: [], bindings: {} };
 }
 
+/**
+ * Adapt a contract-parsed library (from `skillLibrary.get`/`save`) to the
+ * renderer shape: under `exactOptionalPropertyTypes` the zod-inferred
+ * `description?: string | undefined` is not assignable to the local
+ * `description?: string`, so a present-but-undefined description is dropped
+ * here instead of leaking into state.
+ */
+export function toRendererLibrary(hostLibrary: ContractSkillLibrary): SkillLibrary {
+  return {
+    skills: hostLibrary.skills.map((skill) => ({
+      id: skill.id,
+      name: skill.name,
+      ...(skill.description !== undefined ? { description: skill.description } : {}),
+      instructions: skill.instructions,
+      capabilities: [...skill.capabilities],
+      version: skill.version,
+      createdAt: skill.createdAt,
+      updatedAt: skill.updatedAt,
+    })),
+    bindings: Object.fromEntries(
+      Object.entries(hostLibrary.bindings).map(([botId, ids]) => [botId, [...ids]]),
+    ),
+  };
+}
+
 export function newSkillId(): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
     return crypto.randomUUID();
@@ -104,25 +137,13 @@ function isBindingMap(value: unknown): value is Record<string, string[]> {
 }
 
 /**
- * Read the library. Corrupt payloads degrade to an empty library rather than
- * throwing, mirroring `settings-store.ts`. When `knownBotIds` is given, the
- * bindings pointing at bots that no longer exist are pruned (and the pruned
- * result is not written back — the caller decides when to persist).
+ * Read the library from a parsed payload. Corrupt payloads degrade to an
+ * empty library rather than throwing, mirroring `settings-store.ts`. When
+ * `knownBotIds` is given, the bindings pointing at bots that no longer exist
+ * are pruned (and the pruned result is not written back — the caller decides
+ * when to persist).
  */
-export function loadSkills(
-  storage: Storage,
-  knownBotIds?: readonly string[],
-): SkillLibrary {
-  let parsed: unknown;
-  try {
-    const raw = storage.getItem(STORAGE_KEY);
-    if (raw === null) {
-      return emptyLibrary();
-    }
-    parsed = JSON.parse(raw) as unknown;
-  } catch {
-    return emptyLibrary();
-  }
+function parseLibrary(parsed: unknown, knownBotIds?: readonly string[]): SkillLibrary {
   if (typeof parsed !== "object" || parsed === null) {
     return emptyLibrary();
   }
@@ -145,20 +166,52 @@ export function loadSkills(
   return { skills, bindings };
 }
 
-function persist(storage: Storage, library: SkillLibrary): void {
+export function loadSkills(
+  storage: Storage,
+  knownBotIds?: readonly string[],
+): SkillLibrary {
+  let parsed: unknown;
   try {
-    storage.setItem(STORAGE_KEY, JSON.stringify(library));
+    const raw = storage.getItem(STORAGE_KEY);
+    if (raw === null) {
+      return emptyLibrary();
+    }
+    parsed = JSON.parse(raw) as unknown;
   } catch {
-    // Quota/private mode: this session keeps the in-memory library only.
+    return emptyLibrary();
   }
+  return parseLibrary(parsed, knownBotIds);
 }
 
 /**
- * Create (no id) or edit (existing id). Names are compared after trimming;
+ * One-time migration candidate (D17'): parse the raw localStorage payload and
+ * return it only when it is the LIBRARY shape with at least one skill. The
+ * composer prompt-template store writes an ARRAY to the same legacy key — an
+ * array payload returns null so that store stays untouched.
+ */
+export function localLibraryCandidate(raw: string | null): SkillLibrary | null {
+  if (raw === null) {
+    return null;
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw) as unknown;
+  } catch {
+    return null;
+  }
+  if (Array.isArray(parsed)) {
+    return null;
+  }
+  const library = parseLibrary(parsed);
+  return library.skills.length > 0 ? library : null;
+}
+
+/**
+ * Create (no id) or edit (existing id). Pure: the caller persists the returned
+ * library through `skillLibrary.save`. Names are compared after trimming;
  * editing a skill never collides with itself.
  */
 export function saveSkill(
-  storage: Storage,
   library: SkillLibrary,
   input: SaveSkillInput,
 ): SaveSkillResult {
@@ -212,16 +265,11 @@ export function saveSkill(
     ? library.skills.map((entry) => (entry.id === skill.id ? skill : entry))
     : [...library.skills, skill];
   const next: SkillLibrary = { ...library, skills };
-  persist(storage, next);
   return { ok: true, skill, library: next };
 }
 
 /** Remove a skill and every binding that referenced it. */
-export function deleteSkill(
-  storage: Storage,
-  library: SkillLibrary,
-  id: string,
-): SkillLibrary {
+export function deleteSkill(library: SkillLibrary, id: string): SkillLibrary {
   const skills = library.skills.filter((skill) => skill.id !== id);
   const bindings: Record<string, string[]> = {};
   for (const [botId, ids] of Object.entries(library.bindings)) {
@@ -230,14 +278,11 @@ export function deleteSkill(
       bindings[botId] = kept;
     }
   }
-  const next: SkillLibrary = { skills, bindings };
-  persist(storage, next);
-  return next;
+  return { skills, bindings };
 }
 
 /** Bind an ordered list of skills to a bot; an empty list unbinds. */
 export function setBotSkills(
-  storage: Storage,
   library: SkillLibrary,
   botId: string,
   skillIds: readonly string[],
@@ -252,9 +297,7 @@ export function setBotSkills(
   } else {
     bindings[botId] = ordered;
   }
-  const next: SkillLibrary = { ...library, bindings };
-  persist(storage, next);
-  return next;
+  return { ...library, bindings };
 }
 
 const CAPABILITY_ID_SET = new Set<string>(CAPABILITY_IDS);

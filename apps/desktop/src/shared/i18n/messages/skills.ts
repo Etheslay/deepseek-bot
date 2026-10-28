@@ -14,6 +14,8 @@ export const skillsMessages = {
   "skills.emptyHint": { zh: "还没有技能：输入内容后可存为技能", en: "No skills yet — type something and save it as a skill" },
   "skills.emptyState": { zh: "还没有技能。绑定到 bot 后，发送时由 Host 注入指令。", en: "No skills yet. After you bind them to a bot, the Host injects them when you send." },
   "skills.export": { zh: "导出", en: "Export" },
+  "skills.hostDegraded": { zh: "未能连接技能库存储，本次会话使用本机暂存，编辑可能不会保留", en: "Could not reach the skill library store; this session uses local scratch data and edits may not survive" },
+  "skills.hostSaveFailed": { zh: "技能库未能保存到 Host，本次会话仍在本地生效", en: "The skill library could not be saved to the Host; it stays session-local for now" },
   "skills.import": { zh: "导入", en: "Import" },
   "skills.importDone": { zh: "导入完成：技能 +{0}（跳过 {1}），模板 +{2}（跳过 {3}）", en: "Import complete: skills +{0} ({1} skipped), templates +{2} ({3} skipped)" },
   "skills.importFailed": { zh: "导入失败：{0}", en: "Import failed: {0}" },
