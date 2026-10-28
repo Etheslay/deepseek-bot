@@ -16,7 +16,7 @@
  * and closes the database. A data restore tears the host down (the engine
  * holds the replaced database); the caller restarts the process.
  */
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { existsSync, mkdirSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -98,6 +98,7 @@ import {
   bindScreenCaptureTool,
   bindDeviceActionTool,
   bindDeviceInputTool,
+  bindAttachmentTools,
   bindWebSearchTool,
   type ToolCaller,
   type ToolNetworkPermissions,
@@ -105,6 +106,11 @@ import {
   type WebSearchResult,
 } from "@deepseek-bot/agent-tools";
 import { startApplicationToolServer } from "./app-tool-channel.js";
+import {
+  AttachmentByteStore,
+  createAttachmentIngress,
+  createWorkspaceAttachmentFiles,
+} from "./workspace-attachments.js";
 import { createScreenService, unavailableScreenBackend, type ScreenService } from "./screen.js";
 import { createDeviceActionService } from "./device.js";
 import { createDeviceInputService } from "./device-input.js";
@@ -466,6 +472,25 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
 
   let closed = false;
   const agentToolsHolder: { current?: ToolGateway } = {};
+  const attachmentFiles = createWorkspaceAttachmentFiles(db);
+  const attachmentBytes = new AttachmentByteStore();
+  const attachments = createAttachmentIngress({
+    db,
+    bytes: attachmentBytes,
+    files: attachmentFiles,
+    now,
+    call: (caller, params) => {
+      const gateway = agentToolsHolder.current;
+      if (gateway === undefined) {
+        throw new EngineError({
+          code: "RUNTIME_UNAVAILABLE",
+          message: "agent tools gateway is not ready yet",
+          retryable: false,
+        });
+      }
+      return gateway.call(caller, "import_attachment", params);
+    },
+  });
   const questions = new AskUserCoordinator();
   const context: HostContext = {
     db,
@@ -480,6 +505,7 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
     device,
     deviceInput,
     chat,
+    attachments,
     userQuestions: questions,
     webSearch: {
       currentEndpoint: () => webSearch.currentEndpoint(),
@@ -656,6 +682,19 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
               : 1,
         );
         return { tasks: ordered.slice(Math.max(0, ordered.length - filter.limit)) };
+      },
+    }),
+    ...bindAttachmentTools({
+      importFile(botId, input) {
+        const bytes = attachmentBytes.take(input.uploadId, botId);
+        const checksum = createHash("sha256").update(bytes).digest("hex");
+        if (bytes.byteLength !== input.size || checksum !== input.checksum) {
+          throw new ToolRejectionError("INVALID_INPUT", "staged attachment does not match the request");
+        }
+        return attachmentFiles.write(botId, input.name, bytes);
+      },
+      readFile(botId, relativePath) {
+        return attachmentFiles.read(botId, relativePath);
       },
     }),
   ]) {

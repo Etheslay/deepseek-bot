@@ -67,6 +67,9 @@ export const MAX_MESSAGE_BYTES = 1_048_576;
  * explicit error — never a silent truncation.
  */
 export const MAX_ARTIFACT_CONTENT_BYTES = 768 * 1024;
+/** Chat attachment bytes. One gateway import, staged in chunks under the 1 MiB envelope. */
+export const MAX_CHAT_ATTACHMENT_BYTES = 2 * 1024 * 1024;
+export const ATTACHMENT_CHUNK_RAW_BYTES = 192 * 1024;
 
 export function messageSizeBytes(value: unknown): number {
   return new TextEncoder().encode(JSON.stringify(value ?? null)).length;
@@ -103,6 +106,7 @@ export const METHODS = [
   "events.subscribe",
   "approval.decide",
   "chat.send",
+  "chat.attach",
   "chat.history",
   "chat.cancel",
   "chat.status",
@@ -555,6 +559,41 @@ export const METHOD_CONTRACTS = {
       text: z.string(),
       at: IsoDateTimeUtcSchema,
     }),
+  },
+  /**
+   * Stage one chunk of a chat attachment, then import it through the tool
+   * gateway once every chunk is present. The gateway call is `import_attachment`
+   * (`fs.write`): default ask, so a grant or an approval is required before
+   * any workspace write. `data` is the chunk only; the approval preview stores
+   * the name, media type, size and checksum.
+   */
+  "chat.attach": {
+    request: z
+      .object({
+        botId: UuidSchema,
+        uploadId: UuidSchema,
+        name: z.string().min(1).max(200),
+        mediaType: MediaTypeSchema,
+        size: z.int().min(1).max(MAX_CHAT_ATTACHMENT_BYTES),
+        checksum: Sha256HexSchema,
+        index: z.int().min(0).max(15),
+        count: z.int().min(1).max(16),
+        data: z.string().min(4).max(270_000),
+      })
+      .strict()
+      .refine((chunk) => chunk.index < chunk.count, "chunk index is outside the file"),
+    response: z.discriminatedUnion("status", [
+      z.object({ status: z.literal("staged"), received: z.int().min(1).max(16) }).strict(),
+      z
+        .object({
+          status: z.literal("imported"),
+          relativePath: RelativeArtifactPathSchema,
+          mediaType: MediaTypeSchema,
+          size: z.int().min(1).max(MAX_CHAT_ATTACHMENT_BYTES),
+          checksum: Sha256HexSchema,
+        })
+        .strict(),
+    ]),
   },
   "chat.history": {
     request: z.object({

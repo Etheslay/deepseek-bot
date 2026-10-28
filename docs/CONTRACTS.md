@@ -157,6 +157,14 @@ NodeRun：`pending → running ↔ waiting_approval → succeeded / failed / can
 
 `device.action.input` 是同一能力上的真实输入路径。请求带 `botId` 和一份有界 `input`：指针是 `move` 或 `click`，按钮是 `left`、`right` 或 `middle`，坐标是 0–8192 的整数；按键是允许列表中的一个名字，动作只能是 `tap`，并显式带上 `shift`、`ctrl`、`alt`。不接受命令、路径、自由文本、按住不放，或 Windows 键。审批摘要覆盖整份 input。范围只能是 once。通过后 Host 调用 exec daemon 的固定参数数组，不经过 shell 命令字符串。成功后的响应只有 `{id, at, kind}`。本机 `device-outputs/<botId>/` 留下对应 JSON 和清单，`device.action.input.list` 按该 bot 从新到旧列出，默认 50，最多 100，不含路径。拒绝、策略不是 ask、同一张审批再用、未知按键，或辅助进程不可用，都不执行，也不留下成功产物。产物不进入元数据备份。模型工具 `device_input` 走同一闸门，不进入聊天应用工具目录。
 
+## D26 聊天附件进入工作区
+
+`chat.attach` 不提升协议版本。当前 `protocolVersion` 为 0.8。新增受信方法 `chat.attach`。桌面把一个附件按块交给 Host：单文件不超过 2 MiB，每块原始字节 192 KiB，最多 16 块。块齐并且校验和一致之后，Host 以绑定该 bot 的调用方调用网关工具 `import_attachment`（能力 `fs.write`，默认 ask）。审批预览只有名称、媒体类型、体积、校验和与 uploadId，不含文件正文。拒绝或失败不写盘。
+
+写入路径是工作区 `attachments/<安全文件名>`。只保留文件名，去掉路径，并拒绝 `..` 与隐藏段。模型工具 `read`（能力 `fs.read`，默认 ask）的参数只有工作区相对路径 `file_path`。文本返回内容，超过 32000 字符时截断；光栅图片和其它二进制只返回类型与体积，不返回像素。`import_attachment` 不进入模型目录。`read` 经 `/read` 注册，并在聊天会话里盖过同名的 harness 工具。`tool.invoke` 不能导入附件。
+
+默认工作区 `55555555-5555-4555-8555-555555555555` 仍是各默认 bot 共用的一个目录。获得读授权的 bot 可以读到这个目录里的附件。本片不提供跨 bot 的文件系统隔离。产物预览沿用既有 `artifacts.read`：文本可打开，HTML 与二进制仍按 QA-14 拦截。
+
 ## 8. 库导出文件（协议面之外）
 
 D17 新增：技能/模板库的统一导出文件格式，定义见 `packages/contracts/src/library-export.ts`，设计见 `docs/superpowers/specs/2026-10-25-skill-library-design.md`。该格式**不进入 Host 协议面**：不经 IPC envelope、不参与 `PROTOCOL_VERSION` 协商，只用于导入/导出文件校验。

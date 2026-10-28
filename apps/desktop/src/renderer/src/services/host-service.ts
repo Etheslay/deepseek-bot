@@ -7,7 +7,7 @@
  * fixture for settings and bots; chat/workflow/run views stay on the fixture
  * until their contract methods exist (see docs/AGENT_PLATFORM.md).
  */
-import type { Bot, ErrorCode, Task } from "@deepseek-bot/contracts";
+import { METHOD_CONTRACTS, type Bot, type ErrorCode, type Task } from "@deepseek-bot/contracts";
 import {
   ServiceError,
   type BotDraft,
@@ -25,6 +25,11 @@ import {
   storedSessionBotId,
 } from "./stored-session.js";
 import { t } from "../i18n.js";
+import {
+  encodeBase64,
+  sha256Hex,
+  splitAttachmentChunks,
+} from "../features/chat/attachments.js";
 
 type HostBridge = {
   host: { call: (method: string, payload: unknown) => Promise<unknown> };
@@ -180,6 +185,40 @@ export function createHostService(bridge: HostBridge): DesktopService {
         };
       },
       history: async (botId, limit = 100) => readHistory(botId, limit),
+      importAttachment: async (botId, file) => {
+        if (file.bytes.byteLength === 0) {
+          throw new ServiceError("INVALID_INPUT", t("shell.attachmentEmpty", [file.name]));
+        }
+        const checksum = await sha256Hex(file.bytes);
+        const chunks = splitAttachmentChunks(file.bytes);
+        const uploadId = crypto.randomUUID();
+        let imported: {
+          relativePath: string;
+          mediaType: string;
+          size: number;
+          checksum: string;
+        } | null = null;
+        for (let index = 0; index < chunks.length; index += 1) {
+          const response = METHOD_CONTRACTS["chat.attach"].response.parse(
+            await bridge.host.call("chat.attach", {
+              botId,
+              uploadId,
+              name: file.name,
+              mediaType: file.mediaType,
+              size: file.bytes.byteLength,
+              checksum,
+              index,
+              count: chunks.length,
+              data: encodeBase64(chunks[index]!),
+            }),
+          );
+          if (response.status === "imported") imported = response;
+        }
+        if (imported === null) {
+          throw new ServiceError("INVALID_INPUT", t("shell.attachmentImportFailed", [file.name]));
+        }
+        return imported;
+      },
       stream: (botId, text, handlers) => {
         let cancelled = false;
         const sessionId = `chat:${botId}`;

@@ -53,6 +53,10 @@ const CAPABILITIES: Readonly<Record<string, readonly CapabilityId[]>> = {
   screen_capture: ["screen.capture"],
   device_action: ["device.action"],
   device_input: ["device.action"],
+  // D26: importing a chat attachment writes the bot workspace; reading it
+  // back is the model `read` tool. Both default to ask.
+  import_attachment: ["fs.write"],
+  read: ["fs.read"],
 };
 function digest(call: Omit<PermissionCall, "actionDigest">): string {
   return createHash("sha256").update(stableStringify(call)).digest("hex");

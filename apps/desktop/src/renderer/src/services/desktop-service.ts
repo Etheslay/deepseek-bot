@@ -139,6 +139,16 @@ export interface DesktopService {
      * and returns an empty list.
      */
     history(botId: string, limit?: number): Promise<ChatHistoryRow[]>;
+    /**
+     * Stage the picked bytes and import them through the tool gateway.
+     * The real host waits for fs.write grant or approval before writing.
+     * Returns the workspace-relative path the artifact preview and the
+     * read tool both use.
+     */
+    importAttachment(
+      botId: string,
+      file: { name: string; mediaType: string; bytes: Uint8Array },
+    ): Promise<{ relativePath: string; mediaType: string; size: number; checksum: string }>;
     /** Rejects with ServiceError("INVALID_INPUT") for archived bots. */
     stream(
       botId: string,
