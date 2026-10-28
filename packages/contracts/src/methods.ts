@@ -150,6 +150,7 @@ export const METHODS = [
   "search.config.get",
   "search.config.set",
   "search.results.list",
+  "search.global",
   "attachment.begin",
   "attachment.append",
   "attachment.commit",
@@ -820,6 +821,37 @@ export const METHOD_CONTRACTS = {
           at: IsoDateTimeUtcSchema,
         }),
       ),
+    }),
+  },
+  /**
+   * D25 host-side global search (trusted desktop). One literal-substring
+   * query fans out over bot names, workflow names, persisted chat messages
+   * and artifact paths across all bots. Results carry no file paths, no
+   * message bodies beyond the bounded snippet, and no grant or approval
+   * records; opening a hit routes through the existing per-bot methods.
+   */
+  "search.global": {
+    request: z
+      .object({
+        query: NonEmptyStringSchema(200),
+        limit: z.int().min(1).max(50).default(20),
+      })
+      .strict(),
+    response: z.object({
+      results: z
+        .array(
+          z
+            .object({
+              kind: z.enum(["bot", "workflow", "message", "artifact"]),
+              id: UuidSchema,
+              botId: UuidSchema.nullable(),
+              title: NonEmptyStringSchema(200),
+              snippet: z.string().max(400).nullable(),
+              at: IsoDateTimeUtcSchema.nullable(),
+            })
+            .strict(),
+        )
+        .max(200),
     }),
   },
   "memory.list": {

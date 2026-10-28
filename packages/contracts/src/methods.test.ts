@@ -27,10 +27,9 @@ describe("method whitelist", () => {
   it("defines a contract for every whitelisted method and nothing else", () => {
     const contractMethods = Object.keys(METHOD_CONTRACTS).sort();
     expect(contractMethods).toEqual([...METHODS].sort());
-    // develop is 112 (chat.attach, connector.setCommand, device.action.input
-    // and device.action.input.list plus the attachment.begin/append/commit
-    // closure); the voice backend adds voice.status/transcribe/speak.
-    expect(METHODS).toHaveLength(115);
+    // develop (with the voice backend, PR #113) is 115; this slice adds
+    // search.global.
+    expect(METHODS).toHaveLength(116);
   });
 
   it("covers every method group from CONTRACTS §3", () => {
