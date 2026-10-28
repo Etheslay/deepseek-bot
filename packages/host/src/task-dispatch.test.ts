@@ -593,3 +593,89 @@ describe("queue cap (Q3)", () => {
     expect(listTasks(fx.host.db, { toBotId: fx.workerA })).toHaveLength(3);
   });
 });
+
+describe("dispatcher copy follows the UI locale", () => {
+  it("writes English handoff framing and delivery notices when the UI language is en", async () => {
+    const fx = await hostWithGroup("echo-model", { tasks: { locale: "en" } });
+    const root = (await fx.host.handleMethod("task.dispatch", {
+      fromBotId: fx.coordinator,
+      toBotId: fx.workerA,
+      task: "design the landing sketch",
+      chain: [{ botId: fx.workerB, instruction: "code it from the sketch" }],
+    })) as Task;
+    await waitForTask(fx.host, root.id, "done");
+    await waitForTask(
+      fx.host,
+      ((await fx.host.handleMethod("task.list", { rootTaskId: root.id })) as { tasks: Task[] })
+        .tasks.find((task) => task.chainIndex === 1)!.id,
+      "done",
+    );
+
+    // The coder's marker carries the English handoff header + task marker.
+    const coderHistory = listChatMessages(fx.host.db, fx.workerB, 20);
+    const marker = coderHistory.find((row) => row.meta?.kind === "dispatch");
+    expect(marker?.text).toContain("[Upstream handoff · Goal] design the landing sketch");
+    expect(marker?.text).toContain("[Task] code it from the sketch");
+
+    // The coordinator's delivery notice is English too.
+    const notices = listChatMessages(fx.host.db, fx.coordinator, 50).filter(
+      (row) => row.meta?.kind === "task_notice",
+    );
+    expect(notices.length).toBeGreaterThanOrEqual(1);
+    expect(notices[0]?.text).toContain("Task notice (Completed)");
+    expect(notices[0]?.text).toContain('task dispatched from "manager" to "writer" completed');
+  });
+
+  it("settings.update { ui.locale } applies live and survives a Host restart", async () => {
+    const fx = await hostWithGroup("ok");
+    const zhRoot = (await fx.host.handleMethod("task.dispatch", {
+      fromBotId: fx.coordinator,
+      toBotId: fx.workerA,
+      task: "默认语言任务",
+    })) as Task;
+    await waitForTask(fx.host, zhRoot.id, "done");
+    expect(
+      listChatMessages(fx.host.db, fx.coordinator, 50).some(
+        (row) => row.meta?.kind === "task_notice" && row.text.includes("任务通知（已完成）"),
+      ),
+    ).toBe(true);
+
+    // Live switch: the next notice is English, no Host restart involved.
+    await fx.host.handleMethod("settings.update", { patch: { "ui.locale": "en" } });
+    const enRoot = (await fx.host.handleMethod("task.dispatch", {
+      fromBotId: fx.coordinator,
+      toBotId: fx.workerB,
+      task: "switched task",
+    })) as Task;
+    await waitForTask(fx.host, enRoot.id, "done");
+    const noticesAfterSwitch = listChatMessages(fx.host.db, fx.coordinator, 50).filter(
+      (row) => row.meta?.kind === "task_notice",
+    );
+    expect(noticesAfterSwitch.some((row) => row.text.includes("任务通知（已完成）"))).toBe(true);
+    expect(noticesAfterSwitch.some((row) => row.text.includes("Task notice (Completed)"))).toBe(
+      true,
+    );
+
+    // The pushed value persists in the settings KV; the restarted Host seeds
+    // it, so the language survives a data.restore-style process restart.
+    const rootDir = fx.host.layout.root;
+    await fx.host.shutdown();
+    const restarted = await createHost({
+      dataRoot: rootDir,
+      resolveApiKey: async () => "sk-test-only",
+      dshBin: fakeHarness,
+    });
+    hosts.push(restarted);
+    const afterRestart = (await restarted.handleMethod("task.dispatch", {
+      fromBotId: fx.coordinator,
+      toBotId: fx.workerA,
+      task: "after restart",
+    })) as Task;
+    await waitForTask(restarted, afterRestart.id, "done");
+    expect(
+      listChatMessages(restarted.db, fx.coordinator, 50).filter(
+        (row) => row.meta?.kind === "task_notice" && row.text.includes("Task notice (Completed)"),
+      ).length,
+    ).toBeGreaterThanOrEqual(2);
+  });
+});

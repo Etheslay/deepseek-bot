@@ -226,7 +226,7 @@ describe("chat task feed (FR-4/FR-7)", () => {
     } as unknown as Window["deepseekBot"];
   }
 
-  it("renders the dispatch marker with its sender and the delivery notice jump", async () => {
+  it("renders the exchange notices from real dispatch data (executor side)", async () => {
     const rootTask = task({ status: "done", resultSummary: "清单完成" });
     installHost(
       [
@@ -238,20 +238,6 @@ describe("chat task feed (FR-4/FR-7)", () => {
           text: "【任务】出本周选题清单",
           meta: { kind: "dispatch", taskId: rootTask.id, fromBotId: COORDINATOR },
           at: "2026-10-26T09:00:01.000Z",
-        },
-        {
-          id: "60000000-0000-4000-8000-000000000002",
-          botId: COORDINATOR,
-          sessionId: `chat:${COORDINATOR}`,
-          role: "user",
-          text: "任务通知（已完成）：manager 派发给 writer 的任务已完成。",
-          meta: {
-            kind: "task_notice",
-            taskId: rootTask.id,
-            status: "done",
-            resultSummary: "清单完成",
-          },
-          at: "2026-10-26T09:01:10.000Z",
         },
       ],
       [rootTask],
@@ -274,16 +260,67 @@ describe("chat task feed (FR-4/FR-7)", () => {
     );
     const feed = container.querySelector(".task-feed");
     expect(feed).not.toBeNull();
-    const tag = feed!.querySelector<HTMLButtonElement>(".dispatch-tag");
-    expect(tag?.textContent).toContain("manager");
+    // The incoming dispatch reads as a message from the sender.
+    expect(feed!.querySelector(".dispatch-tag")?.textContent).toBe("消息来自");
     expect(feed!.querySelector(".dispatch-text")?.textContent).toContain("选题清单");
-    // The notice resolves the executor through the task list and offers the jump.
-    const notice = feed!.querySelector<HTMLButtonElement>(".task-notice.clickable");
-    expect(notice?.textContent).toContain("查看执行者会话");
+    // The sender chip jumps to the coordinator's session.
+    const senderChip = feed!.querySelector<HTMLButtonElement>(".dispatch-msg .summary-bot");
+    expect(senderChip?.textContent).toContain("manager");
     await act(async () => {
-      notice!.click();
+      senderChip!.click();
     });
-    expect(opened).toEqual([2]);
+    expect(opened).toEqual([1]);
+    // The counter aggregates the real pair traffic.
+    const summary = feed!.querySelector(".chat-summary");
+    expect(summary?.textContent).toContain("1 条消息往来：");
+    expect(summary?.querySelector(".summary-bot")?.textContent).toContain("manager");
+  });
+
+  it("renders the coordinator side: the sent notice, the reply, and the counter", async () => {
+    const done = task({
+      status: "done",
+      resultSummary: "清单完成",
+      finishedAt: "2026-10-26T09:01:00.000Z",
+    });
+    const queued = task({
+      id: "50000000-0000-4000-8000-000000000002",
+      rootTaskId: "50000000-0000-4000-8000-000000000002",
+      status: "queued",
+      instruction: "整理纪要",
+      createdAt: "2026-10-26T09:02:00.000Z",
+    });
+    installHost([], [done, queued]);
+    const container = await render(
+      createElement(
+        ServiceProvider,
+        null,
+        createElement(TaskFeedCards, {
+          botId: COORDINATOR,
+          bots: [
+            { key: 1, bot: { id: COORDINATOR, name: "manager", role: "coordinator" } },
+            { key: 2, bot: { id: WRITER, name: "writer", role: "standard" } },
+          ] as never,
+          onOpenBot: () => undefined,
+        }),
+      ),
+    );
+    const feed = container.querySelector(".task-feed");
+    expect(feed).not.toBeNull();
+    const notices = feed!.querySelectorAll(".deliver-notice");
+    // done task first (09:01): 已发消息给 writer, then the reply arrives as
+    // 消息来自 writer; the queued task (09:02) trails as its own sent notice.
+    expect(notices.length).toBe(3);
+    expect(notices[0]?.textContent).toContain("已发消息给");
+    expect(notices[0]?.querySelector(".exchange-preview")?.textContent).toContain("出本周选题清单");
+    expect(notices[1]?.textContent).toContain("消息来自");
+    expect(notices[2]?.textContent).toContain("已发消息给");
+    expect(notices[2]?.querySelector(".exchange-preview")?.textContent).toContain("整理纪要");
+    const bubbles = feed!.querySelectorAll(".dispatch-text");
+    expect(bubbles).toHaveLength(1);
+    expect(bubbles[0]?.textContent).toContain("清单完成");
+    const summary = feed!.querySelector(".chat-summary");
+    expect(summary?.textContent).toContain("3 条消息往来：");
+    expect(summary?.querySelector(".summary-bot")?.textContent).toContain("writer");
   });
 
   it("renders nothing when the host has no marked rows", async () => {

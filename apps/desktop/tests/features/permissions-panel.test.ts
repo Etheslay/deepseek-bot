@@ -118,16 +118,17 @@ function modeOfLabel(label: string): string {
   return entry ? entry[0] : label;
 }
 
-function menuOf(trigger: HTMLButtonElement): HTMLElement | null {
-  const box = trigger.closest(".custom-select");
-  return box instanceof HTMLElement ? box.querySelector<HTMLElement>(".custom-select-menu") : null;
+function menuOf(): HTMLElement | null {
+  // The menu is portaled to document.body (viewport-flip fix); only one
+  // select menu is open at a time, so a document-level lookup is unambiguous.
+  return document.querySelector<HTMLElement>(".custom-select-menu");
 }
 
 async function openMenu(trigger: HTMLButtonElement): Promise<HTMLElement> {
   await act(async () => {
     trigger.dispatchEvent(new MouseEvent("click", { bubbles: true }));
   });
-  const menu = menuOf(trigger);
+  const menu = menuOf();
   if (menu === null) {
     throw new Error("the policy dropdown did not open");
   }

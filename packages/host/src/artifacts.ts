@@ -46,6 +46,7 @@ import {
   pruneArtifactVersions,
   type OpenedDatabase,
 } from "@deepseek-bot/storage";
+import type { UiLocale } from "./host.js";
 
 /** Keep at most this many versions per (bot, file); oldest pruned on insert. */
 const MAX_VERSIONS_PER_FILE = 50;
@@ -87,7 +88,49 @@ interface HostArtifactsDeps {
   /** Data root; version snapshots go to `<root>/artifacts/coedit-versions/`. */
   readonly artifactsRoot: string;
   readonly now: () => Date;
+  /** Live UI language for canvas conflict/validation copy (settings.update { ui.locale }). */
+  readonly locale?: () => UiLocale;
 }
+
+/**
+ * Canvas copy in both UI languages; the zh column is byte-identical to the
+ * pre-locale strings so pinned tests and stored history keep matching.
+ */
+type ArtifactStrings = {
+  readonly readTooLarge: (max: number) => string;
+  readonly readHtmlBlocked: string;
+  readonly readNotEditable: (mediaType: string) => string;
+  readonly saveTooLarge: (max: number) => string;
+  readonly saveHtmlUnsupported: string;
+  readonly saveMediaTypeUnsupported: (mediaType: string) => string;
+  readonly editedDuringSave: string;
+  readonly baselineMissing: string;
+};
+
+const ARTIFACT_STRINGS: Readonly<Record<UiLocale, ArtifactStrings>> = {
+  zh: {
+    readTooLarge: (max) => `文件超过 ${max} 字节，不能在画布中打开（可继续用列表与版本历史）。`,
+    readHtmlBlocked: "HTML 不做内联编辑/渲染（防脚本执行）。",
+    readNotEditable: (mediaType) => `mediaType ${mediaType} 不是可编辑文本。`,
+    saveTooLarge: (max) => `保存内容超过 ${max} 字节上限，已拒绝（未截断、未写入）。`,
+    saveHtmlUnsupported: "HTML 不支持画布编辑（防脚本执行）。",
+    saveMediaTypeUnsupported: (mediaType) => `mediaType ${mediaType} 不支持画布编辑。`,
+    editedDuringSave: "文件在编辑期间被修改（可能来自 bot），请刷新后再保存。",
+    baselineMissing: "文件已不存在，无法按编辑基准保存。",
+  },
+  en: {
+    readTooLarge: (max) =>
+      `The file exceeds ${max} bytes and cannot open in the canvas (the list and version history still work).`,
+    readHtmlBlocked: "HTML does not get inline editing or rendering (script execution is blocked).",
+    readNotEditable: (mediaType) => `mediaType ${mediaType} is not editable text.`,
+    saveTooLarge: (max) =>
+      `The save was rejected: content exceeds the ${max}-byte limit (nothing truncated, nothing written).`,
+    saveHtmlUnsupported: "HTML canvas editing is not supported (script execution is blocked).",
+    saveMediaTypeUnsupported: (mediaType) => `mediaType ${mediaType} does not support canvas editing.`,
+    editedDuringSave: "The file changed while editing (possibly by the bot); refresh and save again.",
+    baselineMissing: "The file no longer exists; cannot save against the editing baseline.",
+  },
+};
 
 function invalid(message: string, details?: Record<string, unknown>): EngineError {
   return new EngineError({
@@ -193,6 +236,8 @@ function listFilesRecursive(root: string, current: string, depth: number, out: s
 
 export function createWorkspaceArtifacts(deps: HostArtifactsDeps): WorkspaceArtifacts {
   const { db } = deps;
+  const locale = deps.locale ?? ((): UiLocale => "zh");
+  const strings = (): ArtifactStrings => ARTIFACT_STRINGS[locale()];
   const versionsRoot = coeditVersionsRoot(deps.artifactsRoot);
 
   const requireBotWorkspace = (botId: string): string => {
@@ -303,6 +348,7 @@ export function createWorkspaceArtifacts(deps: HostArtifactsDeps): WorkspaceArti
 
     read(botId, relativePath) {
       const workspacePath = requireBotWorkspace(botId);
+      const s = strings();
       const artifact = reconcile(botId, workspacePath, relativePath);
       if (artifact === null) {
         throw invalid("artifact does not exist", { path: relativePath });
@@ -312,7 +358,7 @@ export function createWorkspaceArtifacts(deps: HostArtifactsDeps): WorkspaceArti
         return {
           kind: "blocked",
           mediaType: artifact.mediaType,
-          reason: `文件超过 ${MAX_INLINE_FILE_BYTES} 字节，不能在画布中打开（可继续用列表与版本历史）。`,
+          reason: s.readTooLarge(MAX_INLINE_FILE_BYTES),
         };
       }
       if (!isTextEditableMediaType(artifact.mediaType)) {
@@ -320,9 +366,7 @@ export function createWorkspaceArtifacts(deps: HostArtifactsDeps): WorkspaceArti
           kind: "blocked",
           mediaType: artifact.mediaType,
           reason:
-            artifact.mediaType === "text/html"
-              ? "HTML 不做内联编辑/渲染（防脚本执行）。"
-              : `mediaType ${artifact.mediaType} 不是可编辑文本。`,
+            artifact.mediaType === "text/html" ? s.readHtmlBlocked : s.readNotEditable(artifact.mediaType),
         };
       }
       return {
@@ -335,19 +379,15 @@ export function createWorkspaceArtifacts(deps: HostArtifactsDeps): WorkspaceArti
 
     save(botId, relativePath, content, expectedChecksum) {
       const workspacePath = requireBotWorkspace(botId);
+      const s = strings();
       const bytes = Buffer.from(content, "utf8");
       if (bytes.byteLength > MAX_ARTIFACT_CONTENT_BYTES) {
-        throw invalid(
-          `保存内容超过 ${MAX_ARTIFACT_CONTENT_BYTES} 字节上限，已拒绝（未截断、未写入）。`,
-          { path: relativePath },
-        );
+        throw invalid(s.saveTooLarge(MAX_ARTIFACT_CONTENT_BYTES), { path: relativePath });
       }
       const mediaType = artifactMediaTypeForPath(relativePath);
       if (!isTextEditableMediaType(mediaType)) {
         throw invalid(
-          mediaType === "text/html"
-            ? "HTML 不支持画布编辑（防脚本执行）。"
-            : `mediaType ${mediaType} 不支持画布编辑。`,
+          mediaType === "text/html" ? s.saveHtmlUnsupported : s.saveMediaTypeUnsupported(mediaType),
           { path: relativePath },
         );
       }
@@ -364,7 +404,7 @@ export function createWorkspaceArtifacts(deps: HostArtifactsDeps): WorkspaceArti
           expectedChecksum !== undefined &&
           current.checksum.value !== expectedChecksum
         ) {
-          throw conflict("文件在编辑期间被修改（可能来自 bot），请刷新后再保存。", {
+          throw conflict(s.editedDuringSave, {
             path: relativePath,
           });
         }
@@ -379,7 +419,7 @@ export function createWorkspaceArtifacts(deps: HostArtifactsDeps): WorkspaceArti
         expectedChecksum !== undefined &&
         expectedChecksum !== sha256Bytes(Buffer.alloc(0))
       ) {
-        throw conflict("文件已不存在，无法按编辑基准保存。", { path: relativePath });
+        throw conflict(s.baselineMissing, { path: relativePath });
       }
       fs.mkdirSync(path.dirname(absolute), { recursive: true });
       const temporary = `${absolute}.d28-tmp-${randomUUID()}`;

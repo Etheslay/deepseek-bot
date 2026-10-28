@@ -23,10 +23,12 @@ import {
   resolveDshSpec,
   type DshSdkExecutorOptions,
   type HarnessAttemptOptions,
+  type SessionEventEnvelope,
   type TurnOutcome,
 } from "@deepseek-bot/harness-adapter";
 import type { ToolCaller } from "@deepseek-bot/agent-tools";
 import type { ApplicationToolTurn } from "./app-tool-channel.js";
+import type { UiLocale } from "./host.js";
 
 export function chatSessionIdFor(botId: string): string {
   return `chat:${botId}`;
@@ -39,12 +41,28 @@ export interface ChatHistoryEntry {
   readonly text: string;
 }
 
+/**
+ * Real turn stages, derived from live harness session events (never guessed):
+ * `preparing` covers credential/profile resolution and the harness handshake,
+ * `thinking` means the model is generating (no tool in flight), `tool` means a
+ * tool call from the wire is currently executing.
+ */
+export type TurnStage = "preparing" | "thinking" | "tool";
+
+export interface TurnProgress {
+  readonly stage: TurnStage;
+  readonly toolName?: string;
+  readonly startedAt: string;
+}
+
 interface ChatSession {
   lastSessionId: string;
   busy: boolean;
   active: HarnessAttempt | null;
   controller: AbortController | null;
   settled: Promise<void> | null;
+  /** Live progress of the running turn; null while idle. */
+  progress: TurnProgress | null;
 }
 
 export interface ChatToolWiring {
@@ -88,6 +106,8 @@ export class ChatManager {
   constructor(
     private readonly options: DshSdkExecutorOptions,
     private readonly tools: ChatToolWiring,
+    /** Live UI language for Host-authored turn errors (settings.update { ui.locale }). */
+    private readonly locale: () => UiLocale = () => "zh",
   ) {}
 
   /** Live sessions (diagnostics / tests). */
@@ -114,6 +134,7 @@ export class ChatManager {
         active: null,
         controller: null,
         settled: null,
+        progress: null,
       };
       this.sessions.set(bot.id, session);
     }
@@ -125,6 +146,33 @@ export class ChatManager {
       });
     }
     session.busy = true;
+    session.progress = { stage: "preparing", startedAt: new Date().toISOString() };
+    /**
+     * Mirror the wire into the session's live progress. Only real harness
+     * events move it: the receipt means the model took the message
+     * ("thinking"), a `tool/call` names the tool now executing, a
+     * `tool/result` hands control back to the model ("thinking" again).
+     */
+    const observeEvent = (event: SessionEventEnvelope): void => {
+      const current = session.progress;
+      if (current === null) {
+        return;
+      }
+      if (event.type === "tool/call") {
+        const name = (event.data as { name?: unknown } | undefined)?.name;
+        if (typeof name === "string" && name.length > 0) {
+          session.progress = { ...current, stage: "tool", toolName: name };
+        }
+        return;
+      }
+      if (event.type === "tool/result" && current.stage === "tool") {
+        session.progress = { stage: "thinking", startedAt: current.startedAt };
+      } else if (current.stage === "preparing") {
+        // The enqueue receipt (or any turn traffic) means the harness took
+        // the prompt: the model is generating now.
+        session.progress = { stage: "thinking", startedAt: current.startedAt };
+      }
+    };
     const controller = new AbortController();
     session.controller = controller;
     let finish!: () => void;
@@ -142,9 +190,13 @@ export class ChatManager {
     try {
       const inputs = await whileActive(
         this.options.resolveBotInputs(bot).catch((error: unknown) => {
+          const detail = error instanceof Error ? error.message : String(error);
           throw new EngineError({
             code: "INVALID_INPUT",
-            message: `无法解析模型凭据：${error instanceof Error ? error.message : String(error)}。请到设置里重新保存 API Key。`,
+            message:
+              this.locale() === "en"
+                ? `Cannot resolve the model credential: ${detail}. Re-save the API Key in Settings.`
+                : `无法解析模型凭据：${detail}。请到设置里重新保存 API Key。`,
             retryable: false,
           });
         }),
@@ -184,7 +236,7 @@ export class ChatManager {
       });
       await turn.waitReady();
       const prompt = this.composePrompt(bot, text, history);
-      const outcome = await attempt.runTurn(sessionId, prompt, controller.signal);
+      const outcome = await attempt.runTurn(sessionId, prompt, controller.signal, observeEvent);
       session.lastSessionId = sessionId;
       return { ...outcome, sessionId };
     } finally {
@@ -195,6 +247,7 @@ export class ChatManager {
       session.active = null;
       session.controller = null;
       session.busy = false;
+      session.progress = null;
       finish();
       session.settled = null;
     }
@@ -210,6 +263,24 @@ export class ChatManager {
     }
     session.controller.abort();
     return true;
+  }
+
+  /**
+   * Live progress of a bot's turn, for the chat UI's status line. Only real
+   * harness events feed it; when no turn is running the bot reports idle.
+   */
+  status(botId: string): { active: boolean; stage: "idle" | TurnStage; toolName?: string; startedAt?: string } {
+    const session = this.sessions.get(botId);
+    const progress = session?.progress ?? null;
+    if (progress === null) {
+      return { active: false, stage: "idle" };
+    }
+    return {
+      active: true,
+      stage: progress.stage,
+      ...(progress.toolName !== undefined ? { toolName: progress.toolName } : {}),
+      startedAt: progress.startedAt,
+    };
   }
 
   async disposeAll(): Promise<void> {
