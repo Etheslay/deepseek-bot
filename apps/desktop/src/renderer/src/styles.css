@@ -6620,6 +6620,24 @@ select option {
 .gs-kind--bot { color: var(--bots, #2dd4a7); border-color: color-mix(in srgb, var(--bots, #2dd4a7) 40%, transparent); }
 .gs-kind--message { color: var(--runs, #ec4899); border-color: color-mix(in srgb, var(--runs, #ec4899) 40%, transparent); }
 .gs-kind--action { color: var(--settings, #3b82f6); border-color: color-mix(in srgb, var(--settings, #3b82f6) 40%, transparent); }
+.gs-kind--workflow { color: var(--workflows, #a78bfa); border-color: color-mix(in srgb, var(--workflows, #a78bfa) 40%, transparent); }
+.gs-kind--artifact { color: var(--canvas, #f59e0b); border-color: color-mix(in srgb, var(--canvas, #f59e0b) 40%, transparent); }
+
+/* D25 second half: local / host-database section dividers and the honest
+   loading / failure status line above the results. */
+.gs-section {
+  padding: 6px 12px 2px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+
+.gs-status {
+  padding: 6px 12px;
+  font-size: 0.74rem;
+  color: var(--muted);
+}
 
 .gs-title {
   flex: 1;
