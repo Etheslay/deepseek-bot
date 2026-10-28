@@ -8648,3 +8648,103 @@ select:focus-visible {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* ------------------------------------------------------------
+   Chat automation status notice (D20'). Visual language follows the
+   chat's muted inline rows (.deliver-notice / .sys-line): centered
+   small text, panel-tinted strip, no bubble, never a chat message.
+   ------------------------------------------------------------ */
+
+.automation-notice {
+  margin: 0 16px 8px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel);
+  overflow: hidden;
+}
+
+.automation-notice-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 12px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+  text-align: left;
+  cursor: pointer;
+}
+
+.automation-notice-toggle:hover {
+  background: var(--item-hover);
+}
+
+.automation-notice-title {
+  color: var(--text);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.automation-notice-summary {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  min-width: 0;
+}
+
+.automation-notice-caret {
+  flex: none;
+  font-size: 10px;
+}
+
+.automation-notice-body {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--border);
+}
+
+.automation-notice-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 5px 12px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.automation-notice-row + .automation-notice-row {
+  border-top: 1px solid var(--border);
+}
+
+.automation-notice-main {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.automation-notice-meta {
+  flex: none;
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+button.automation-notice-jump {
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+button.automation-notice-jump:hover {
+  background: var(--item-hover);
+}
+
+button.automation-notice-jump .automation-notice-main {
+  color: var(--text);
+}

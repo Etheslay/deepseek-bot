@@ -18,6 +18,7 @@ import { MemoryPanel } from "./features/memory/memory-panel.js";
 import { SearchSettings } from "./features/search/search-settings.js";
 import { ConnectorSettings } from "./features/connectors/connector-settings.js";
 import { AutomationPanel } from "./features/automation/automation-panel.js";
+import { ChatAutomationNotice } from "./features/automation/chat-automation-notice.js";
 import { EventRuleSettings } from "./features/event-rules/event-rule-settings.js";
 import { PermissionsPanel } from "./features/permissions/permissions-panel.js";
 import { ScreenSettings } from "./features/screen/screen-settings.js";
@@ -2014,6 +2015,10 @@ const logout = (): void => {
                   path: relativePath,
                 });
               }}
+              onOpenAutomation={() => {
+                setSettingsOpen(true);
+                setSettingsSection("general");
+              }}
               skillContext={(botId) => skillsForInjection(botId, skillLibrary)}
               onOpenBot={(botKey) => {
                 const target = bots.find((b) => b.key === botKey);
@@ -3226,6 +3231,7 @@ function BotsPlaceholder({
   skillContext,
   onAnswerSeedCard,
   onOpenAttachment,
+  onOpenAutomation,
 }: {
   bots: UiBot[];
   groups: Group[];
@@ -3261,6 +3267,8 @@ function BotsPlaceholder({
    */
   onAnswerSeedCard: (botKey: number, msgId: number, text: string) => void;
   onOpenAttachment: (relativePath: string) => void;
+  /** D20': jump from the chat automation notice to the settings panel. */
+  onOpenAutomation: () => void;
 }): JSX.Element {
   const service = useService();
   const [draft, setDraft] = useState("");
@@ -3687,6 +3695,7 @@ function BotsPlaceholder({
       <p className="sys-line" aria-live="polite">
         {t("shell.staticPlaceholderNotice")}
       </p>
+      <ChatAutomationNotice botId={me.bot.id} onOpenAutomation={onOpenAutomation} />
       <div className="chat" ref={listRef}>
         {msgs.map((m, index) => {
           const prev = msgs[index - 1];
