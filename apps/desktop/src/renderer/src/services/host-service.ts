@@ -18,6 +18,12 @@ import {
 } from "./desktop-service.js";
 import { validateArtifactVersion, validateBotArtifact } from "./contract-validation.js";
 import { createFixtureService } from "./fixture-service.js";
+import {
+  messagesForStoredSession,
+  STORED_SESSION_HISTORY_LIMIT,
+  storedChatSession,
+  storedSessionBotId,
+} from "./stored-session.js";
 import { t } from "../i18n.js";
 
 type HostBridge = {
@@ -55,6 +61,14 @@ export function createHostService(bridge: HostBridge): DesktopService {
       }
       throw error;
     }
+  };
+
+  const readHistory = async (botId: string, limit: number): Promise<ChatHistoryRow[]> => {
+    const response = (await bridge.host.call("chat.history", {
+      botId,
+      limit,
+    })) as { messages: ChatHistoryRow[] };
+    return response.messages;
   };
 
   return {
@@ -151,17 +165,21 @@ export function createHostService(bridge: HostBridge): DesktopService {
       },
     },
     chat: {
-      // The host has no event-session log, so these stay empty. The open
-      // thread reads chat.history; the composer appends later sends.
-      listSessions: async () => [],
-      openSession: async () => ({ events: [] }),
-      history: async (botId, limit = 100) => {
-        const response = (await bridge.host.call("chat.history", {
-          botId,
-          limit,
-        })) as { messages: ChatHistoryRow[] };
-        return response.messages;
+      // One logical chat per bot. The open thread reads the same rows.
+      listSessions: async (botId) => {
+        const messages = await readHistory(botId, STORED_SESSION_HISTORY_LIMIT);
+        return storedChatSession(botId, messages);
       },
+      openSession: async (sessionId) => {
+        const botId = storedSessionBotId(sessionId);
+        if (botId === null) return { events: [], messages: [] };
+        const messages = await readHistory(botId, STORED_SESSION_HISTORY_LIMIT);
+        return {
+          events: [],
+          messages: messagesForStoredSession(sessionId, messages),
+        };
+      },
+      history: async (botId, limit = 100) => readHistory(botId, limit),
       stream: (botId, text, handlers) => {
         let cancelled = false;
         const sessionId = `chat:${botId}`;

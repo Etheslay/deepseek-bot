@@ -163,7 +163,7 @@ describe("host-backed chat", () => {
     expect(result.failure).toMatchObject({ code: "AUTH_FAILED" });
   });
 
-  it("reads chat.history and leaves session replay empty", async () => {
+  it("reads chat.history for the open thread", async () => {
     const row = {
       id: "11111111-1111-4111-8111-111111111111",
       botId: "22222222-2222-4222-8222-222222222222",
@@ -177,11 +177,79 @@ describe("host-backed chat", () => {
     });
     const service = createHostService(bridge);
     await expect(service.chat.history(row.botId, 200)).resolves.toEqual([row]);
-    await expect(service.chat.listSessions(row.botId)).resolves.toEqual([]);
-    await expect(service.chat.openSession(`chat:${row.botId}`)).resolves.toEqual({ events: [] });
     expect(calls).toEqual([
       { method: "chat.history", payload: { botId: row.botId, limit: 200 } },
     ]);
+  });
+
+  it("lists chat:<botId> and opens that session's messages", async () => {
+    const botId = "22222222-2222-4222-8222-222222222222";
+    const rows = [
+      {
+        id: "11111111-1111-4111-8111-111111111111",
+        botId,
+        sessionId: `chat:${botId}`,
+        role: "user" as const,
+        text: "remember this",
+        at: "2026-10-28T00:00:01.000Z",
+      },
+      {
+        id: "11111111-1111-4111-8111-111111111112",
+        botId,
+        sessionId: `chat:${botId}`,
+        role: "assistant" as const,
+        text: "stored reply",
+        at: "2026-10-28T00:00:02.000Z",
+      },
+    ];
+    const { bridge, calls } = makeBridge({
+      "chat.history": () => ({ messages: rows }),
+    });
+    const service = createHostService(bridge);
+    await expect(service.chat.listSessions(botId)).resolves.toEqual([
+      {
+        sessionId: `chat:${botId}`,
+        botId,
+        title: "remember this",
+        startedAt: "2026-10-28T00:00:01.000Z",
+        replayEventCount: 2,
+        status: "active",
+      },
+    ]);
+    await expect(service.chat.openSession(`chat:${botId}`)).resolves.toEqual({
+      events: [],
+      messages: rows,
+    });
+    expect(calls).toEqual([
+      { method: "chat.history", payload: { botId, limit: 200 } },
+      { method: "chat.history", payload: { botId, limit: 200 } },
+    ]);
+  });
+
+  it("returns an empty list when the bot has no stored messages", async () => {
+    const { bridge, calls } = makeBridge({
+      "chat.history": () => ({ messages: [] }),
+    });
+    const service = createHostService(bridge);
+    await expect(service.chat.listSessions(bot.id)).resolves.toEqual([]);
+    await expect(service.chat.openSession(`chat:${bot.id}`)).resolves.toEqual({
+      events: [],
+      messages: [],
+    });
+    expect(calls).toEqual([
+      { method: "chat.history", payload: { botId: bot.id, limit: 200 } },
+      { method: "chat.history", payload: { botId: bot.id, limit: 200 } },
+    ]);
+  });
+
+  it("does not read history for a session id that is not chat:<botId>", async () => {
+    const { bridge, calls } = makeBridge({});
+    const service = createHostService(bridge);
+    await expect(service.chat.openSession("sess-success-run")).resolves.toEqual({
+      events: [],
+      messages: [],
+    });
+    expect(calls).toEqual([]);
   });
 
   it("cancel forwards to chat.cancel", async () => {
