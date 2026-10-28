@@ -1,10 +1,11 @@
 /**
  * Open-thread hydration from host `chat.history`.
  *
- * The host keeps one logical chat per bot in `chat_messages`. listSessions /
- * openSession stay empty (there is no event-session log). When a thread
- * opens, the desktop loads that bot's stored rows once. Later sends stay in
- * the in-memory list and are appended; this module does not reload them.
+ * The host keeps one logical chat per bot in `chat_messages`. listSessions
+ * reports that session (`chat:<botId>`) when rows exist, and openSession
+ * returns those rows. When a thread opens, the desktop loads that bot's
+ * stored rows once. Later sends stay in the in-memory list and are appended;
+ * this module does not reload them.
  *
  * Rows with meta are dispatch markers and task notices. The task feed already
  * renders those, so they stay out of the message thread.
