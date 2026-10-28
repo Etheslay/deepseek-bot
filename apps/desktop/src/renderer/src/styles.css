@@ -7598,9 +7598,10 @@ select:focus-visible {
   }
 }
 
-/* Light settings cards are white, so a white or gray track disappears.
-   Both states stay a white track with a dark border. The knob still
-   slides: dark and left when off, white and right when on. */
+/* Light settings cards are white. A white track vanishes, and a pale gray
+   track fades into the page. Both states use a solid mid gray with a dark
+   border. The knob still slides: dark and left when off, white and right
+   when on. */
 [data-theme="light"] .settings-switch,
 [data-theme="light"] .notify-bot > .notify-mute-switch,
 [data-theme="light"] .settings-switch.on,
@@ -7609,8 +7610,8 @@ select:focus-visible {
 [data-theme="light"] .notify-bot > .notify-mute-switch:hover,
 [data-theme="light"] .settings-switch.on:hover,
 [data-theme="light"] .notify-bot > .notify-mute-switch.on:hover {
-  background: #fff;
-  border-color: #1b1b1f;
+  background: #9a9aa4;
+  border-color: #2a2a32;
 }
 
 [data-theme="light"] .settings-switch .settings-switch-knob,
