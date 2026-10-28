@@ -44,3 +44,4 @@ export * from "./repos/connectors.js";
 export * from "./repos/grants.js";
 export * from "./repos/mcp-grants.js";
 export * from "./repos/usage.js";
+export * from "./repos/global-search.js";
