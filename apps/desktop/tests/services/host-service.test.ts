@@ -163,6 +163,27 @@ describe("host-backed chat", () => {
     expect(result.failure).toMatchObject({ code: "AUTH_FAILED" });
   });
 
+  it("reads chat.history and leaves session replay empty", async () => {
+    const row = {
+      id: "11111111-1111-4111-8111-111111111111",
+      botId: "22222222-2222-4222-8222-222222222222",
+      sessionId: "chat:22222222-2222-4222-8222-222222222222",
+      role: "user" as const,
+      text: "remember this",
+      at: "2026-10-28T00:00:00.000Z",
+    };
+    const { bridge, calls } = makeBridge({
+      "chat.history": () => ({ messages: [row] }),
+    });
+    const service = createHostService(bridge);
+    await expect(service.chat.history(row.botId, 200)).resolves.toEqual([row]);
+    await expect(service.chat.listSessions(row.botId)).resolves.toEqual([]);
+    await expect(service.chat.openSession(`chat:${row.botId}`)).resolves.toEqual({ events: [] });
+    expect(calls).toEqual([
+      { method: "chat.history", payload: { botId: row.botId, limit: 200 } },
+    ]);
+  });
+
   it("cancel forwards to chat.cancel", async () => {
     const { bridge, calls } = makeBridge({
       "chat.send": () => new Promise(() => undefined),

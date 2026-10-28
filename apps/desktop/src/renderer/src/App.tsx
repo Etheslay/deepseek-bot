@@ -35,6 +35,13 @@ import {
   runChatStream,
   type StreamStateForBot,
 } from "./features/chat/stream-runner.js";
+import {
+  CHAT_THREAD_HISTORY_LIMIT,
+  historyThreadMessages,
+  isSameStoredTurn,
+  mergeOpenedThread,
+  type ThreadOrigin,
+} from "./features/chat/thread-history.js";
 import type { StreamHandle } from "./services/desktop-service.js";
 import { Avatar as AvatarView } from "./features/avatars/avatar.js";
 import { AvatarPicker } from "./features/avatars/avatar-picker.js";
@@ -176,6 +183,11 @@ type Msg = {
   } | undefined;
   /** System notices (e.g. blocked cross-group requests) render as a centered muted line. */
   system?: boolean;
+  /**
+   * seed: welcome placeholder. history: host chat.history. live: this session's
+   * composer. Absent means live (notices and older call sites).
+   */
+  origin?: ThreadOrigin;
   /** G6: the message re-enters the thread as 重新生成 / 编辑后重发, weakly labelled. */
   meta?: "regenerate" | "edited_resend";
 };
@@ -362,6 +374,8 @@ export function App(): JSX.Element {
   } | null>(null);
 
   const [chats, setChats] = useState<ChatState>({});
+  /** Bots whose open thread already read chat.history this session. */
+  const threadHistoryLoaded = useRef(new Set<number>());
   const [pairTranscripts, setPairTranscripts] = useState<
     Record<string, { id: number; speakerKey: number; text: string; time: number }[]>
   >({});
@@ -1000,6 +1014,7 @@ export function App(): JSX.Element {
             time: Date.now(),
             system: false,
             attachments: attachments && attachments.length > 0 ? attachments : undefined,
+            origin: "live",
             ...(meta !== undefined ? { meta } : {}),
           },
         ],
@@ -1133,49 +1148,102 @@ export function App(): JSX.Element {
     setMenuDialog(null);
   };
 
-  const ensureChat = (bot: UiBot): void => {
+  const welcomeThread = (botKey: number, botName: string): Msg[] => {
+    const now = Date.now();
+    return [
+      {
+        id: botKey,
+        from: "bot",
+        text: t("shell.welcomeMessage", [botName]),
+        quote: null,
+        reactions: {},
+        mine: [],
+        time: now,
+        system: false,
+        speakerKey: botKey,
+        origin: "seed",
+      },
+      {
+        id: botKey + 0.5,
+        from: "bot",
+        text: t("shell.welcomeChoicesHint", [botName]),
+        quote: null,
+        reactions: {},
+        mine: [],
+        time: now,
+        system: false,
+        speakerKey: botKey,
+        origin: "seed",
+        choices: {
+          question: t("shell.choicesQuestion"),
+          options: [
+            { id: "A", label: t("shell.choiceDeepThinking") },
+            { id: "B", label: t("shell.choiceDraftWorkflow") },
+            { id: "C", label: t("shell.choiceRunMonitor") },
+          ],
+          other: true,
+        },
+      },
+    ];
+  };
+
+  const storedThread = (rows: Parameters<typeof historyThreadMessages>[0], botKey: number): Msg[] =>
+    historyThreadMessages(rows, botKey).map((message) => ({
+      id: message.id,
+      from: message.from,
+      text: message.text,
+      quote: null,
+      reactions: {},
+      mine: [],
+      time: message.time,
+      system: false,
+      origin: "history" as const,
+      ...(message.speakerKey !== undefined ? { speakerKey: message.speakerKey } : {}),
+    }));
+
+  /**
+   * First open of a bot reads chat.history. The welcome seed shows immediately
+   * and is replaced when stored rows exist. A later open in this session keeps
+   * the in-memory thread, including sends appended after the load.
+   */
+  const openThread = (bot: UiBot): void => {
+    if (threadHistoryLoaded.current.has(bot.key)) {
+      return;
+    }
+    threadHistoryLoaded.current.add(bot.key);
+    const botKey = bot.key;
+    const botName = bot.bot.name;
     setChats((prev) => {
-      if (prev[bot.key]) {
+      if ((prev[botKey] ?? []).length > 0) {
         return prev;
       }
-      return {
-        ...prev,
-            [bot.key]: [
-          {
-            id: bot.key,
-            from: "bot",
-            text: t("shell.welcomeMessage", [bot.bot.name]),
-            quote: null,
-            reactions: {},
-            mine: [],
-            time: Date.now(),
-            system: false,
-            speakerKey: bot.key,
-          },
-          {
-            id: bot.key + 0.5,
-            from: "bot",
-            text: t("shell.welcomeChoicesHint", [bot.bot.name]),
-            quote: null,
-            reactions: {},
-            mine: [],
-            time: Date.now(),
-            system: false,
-            speakerKey: bot.key,
-            choices: {
-              question: t("shell.choicesQuestion"),
-              options: [
-                { id: "A", label: t("shell.choiceDeepThinking") },
-                { id: "B", label: t("shell.choiceDraftWorkflow") },
-                { id: "C", label: t("shell.choiceRunMonitor") },
-              ],
-              other: true,
-            },
-          },
-        ],
-      };
+      return { ...prev, [botKey]: welcomeThread(botKey, botName) };
     });
+    void desktop.chat
+      .history(bot.bot.id, CHAT_THREAD_HISTORY_LIMIT)
+      .then((rows) => {
+        const history = storedThread(rows, botKey);
+        const seed = welcomeThread(botKey, botName);
+        setChats((prev) => ({
+          ...prev,
+          [botKey]: mergeOpenedThread(history, prev[botKey] ?? [], seed),
+        }));
+      })
+      .catch(() => {
+        threadHistoryLoaded.current.delete(botKey);
+      });
   };
+
+  useEffect(() => {
+    if (selectedBot === null) {
+      return;
+    }
+    const bot = bots.find((candidate) => candidate.key === selectedBot);
+    if (bot === undefined) {
+      return;
+    }
+    openThread(bot);
+  }, [selectedBot, bots, desktop]);
 
   const dropBotToGroup = (botKey: number, groupKey: number): void => {
     const b = bots.find((x) => x.key === botKey);
@@ -1288,7 +1356,7 @@ const logout = (): void => {
       if (botKey !== undefined && target) {
         setSelectedBot(botKey);
         setQuoteDraft(null);
-        ensureChat(target);
+        openThread(target);
       }
       return;
     }
@@ -1713,7 +1781,7 @@ const logout = (): void => {
                     onClick={() => {
                       setSelectedBot(b.key);
                       setQuoteDraft(null);
-                      ensureChat(b);
+                      openThread(b);
                     }}
                     onDoubleClick={() => startRename(b.key, b.bot.name)}
                     onContextMenu={(e) => {
@@ -1852,7 +1920,7 @@ const logout = (): void => {
               }}
               onPairQuote={(name, text) => setQuoteDraft({ name, text: text.slice(0, 60) })}
               onCancelQuote={() => setQuoteDraft(null)}
-              onSend={(text, attachments) => sendUserMessage(selectedBot, text, attachments)}
+              onSend={(text, attachments, meta) => sendUserMessage(selectedBot, text, attachments, meta)}
                 onAnswerSeedCard={(botKey, msgId, text) =>
                   setChats((prev) => ({
                     ...prev,
@@ -1870,23 +1938,35 @@ const logout = (): void => {
                   }
                 }}
                 onAssistant={(assistantText) =>
-                setChats((prev) => ({
-                  ...prev,
-                  [selectedBot]: [
-                    ...(prev[selectedBot] ?? []),
-                    {
-                      id: Date.now() + 1,
-                      from: "bot",
-                      text: assistantText,
-                      quote: null,
-                      reactions: {},
-                      mine: [],
-                      time: Date.now(),
-                      system: false,
-                      speakerKey: selectedBot,
-                    },
-                  ],
-                }))
+                setChats((prev) => {
+                  const list = prev[selectedBot] ?? [];
+                  const now = Date.now();
+                  const tail = list[list.length - 1];
+                  if (
+                    tail !== undefined &&
+                    isSameStoredTurn(tail, { from: "bot", text: assistantText }, now)
+                  ) {
+                    return prev;
+                  }
+                  return {
+                    ...prev,
+                    [selectedBot]: [
+                      ...list,
+                      {
+                        id: now + 1,
+                        from: "bot",
+                        text: assistantText,
+                        quote: null,
+                        reactions: {},
+                        mine: [],
+                        time: now,
+                        system: false,
+                        speakerKey: selectedBot,
+                        origin: "live",
+                      },
+                    ],
+                  };
+                })
               }
               onReact={(msgId, emoji) => toggleReaction(selectedBot, msgId, emoji)}
               onTalkTo={(otherKey) => talkTo(selectedBot, otherKey)}
@@ -1898,7 +1978,7 @@ const logout = (): void => {
                 if (target) {
                   setSelectedBot(botKey);
                   setQuoteDraft(null);
-                  ensureChat(target);
+                  openThread(target);
                 }
               }}
             />
