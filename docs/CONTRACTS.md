@@ -12,6 +12,8 @@ v0.9（D27 本地语音后端切片）新增 `voice.status` / `voice.transcribe`
 
 v0.10 新增 `usage.summary`：把每个聊天回合的 token 用量聚合成「用量与账单」页需要的总量、按模型表、按本地日趋势与按 bot 分布。行由 Host 在回合结束时写入 `usage_events`（迁移 0021），渲染层只读。Harness 没上报用量时按字符数估算并标记 `estimated`，页面必须区分展示。当前 `protocolVersion` 为 0.10，继续接受 0.1–0.9 发送方；工作流 `schemaVersion` 仍为 0.1。
 
+原始人模式在当前协议上为 `chat.send` 请求追加**可选** `primitive: boolean`（不另升 `protocolVersion`，旧发送方缺省即现状）：该回合 Host 组装最短提示——不带 bot persona 指令、不回放 `【最近对话】`，仅保留当轮显式附加的技能块并注入简短的"只答这一步"指令；`chat_messages` 落库与 `chat.history` 回放完全不受影响。
+
 ## 1. 通用规则
 
 - ID 使用不可预测的 UUID；时间用 UTC ISO 8601，展示/调度另外保存 IANA 时区。

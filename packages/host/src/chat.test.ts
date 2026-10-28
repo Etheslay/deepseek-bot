@@ -259,6 +259,73 @@ describe("chat runtime", () => {
     expect(history.messages.map((m) => m.role)).toEqual(["user", "assistant", "user", "assistant"]);
   });
 
+  it("primitive mode answers just this step: no persona, no history replay, rows still persisted", async () => {
+    const { host, botId } = await hostWithBot("echo-model");
+    // Turn 1 (normal): no history exists yet, persona applies.
+    const first = (await host.handleMethod("chat.send", { botId, text: "第一问" })) as {
+      text: string;
+    };
+    expect(first.text).toContain("be brief");
+    expect(first.text).not.toContain("【最近对话】");
+
+    // Turn 2 (normal): the previous turn now replays as context.
+    const normal = (await host.handleMethod("chat.send", { botId, text: "第二问" })) as {
+      text: string;
+    };
+    expect(normal.text).toContain("be brief");
+    expect(normal.text).toContain("【最近对话】");
+
+    // Turn 3 (primitive): persona and replay drop out; the terse directive
+    // replaces them and no earlier row leaks into the prompt.
+    const terse = (await host.handleMethod("chat.send", {
+      botId,
+      text: "第三问",
+      primitive: true,
+    })) as { text: string };
+    expect(terse.text).toContain("【原始人模式】");
+    expect(terse.text).toContain("[用户消息]\n第三问");
+    expect(terse.text).not.toContain("be brief");
+    expect(terse.text).not.toContain("【最近对话】");
+    expect(terse.text).not.toContain("第一问");
+    expect(terse.text).not.toContain("第二问");
+
+    // Turn 4 (normal): replay is back — the switch leaves no residue.
+    const back = (await host.handleMethod("chat.send", { botId, text: "第四问" })) as {
+      text: string;
+    };
+    expect(back.text).toContain("be brief");
+    expect(back.text).toContain("【最近对话】");
+
+    // Storage is untouched by the flag: every row of every turn is kept.
+    const history = (await host.handleMethod("chat.history", { botId, limit: 10 })) as {
+      messages: Array<{ role: string; text: string }>;
+    };
+    expect(history.messages.map((m) => m.role)).toEqual([
+      "user",
+      "assistant",
+      "user",
+      "assistant",
+      "user",
+      "assistant",
+      "user",
+      "assistant",
+    ]);
+    expect(history.messages[4]?.text).toBe("第三问");
+  });
+
+  it("primitive mode keeps the explicitly attached skill block", async () => {
+    const { host, botId } = await hostWithBot("echo-model");
+    const sent = (await host.handleMethod("chat.send", {
+      botId,
+      text: "你好",
+      primitive: true,
+      skills: [{ name: "周报", version: 2, instructions: "只写三段。", capabilities: [] }],
+    })) as { text: string };
+    expect(sent.text).toContain("### 周报（v2）");
+    expect(sent.text).toContain("【原始人模式】");
+    expect(sent.text).not.toContain("be brief");
+  });
+
   it("reports live turn progress from real harness events", async () => {
     const { host, botId } = await hostWithBot("slow-tool");
     const idle = (await host.handleMethod("chat.status", { botId })) as { active: boolean };

@@ -7462,39 +7462,38 @@ select:focus-visible {
 }
 
 
-/* ---------- G5 深度思考开关（会话头部） ---------- */
-.deep-thinking-toggle {
+/* ---------- 原始人模式 + 深度思考：composer 双开关 ---------- */
+.composer-modes {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
+  flex: none;
+}
+
+.composer-mode {
   font: inherit;
-  font-size: 0.85rem;
+  font-size: 0.72rem;
   color: var(--muted);
   background: transparent;
   border: 1px solid var(--border);
   border-radius: 999px;
-  padding: 0.32rem 0.8rem;
+  padding: 0.18rem 0.55rem;
   cursor: pointer;
-  -webkit-app-region: no-drag;
+  white-space: nowrap;
 }
 
-.deep-thinking-toggle svg {
-  width: 15px;
-  height: 15px;
-}
-
-.deep-thinking-toggle:hover {
+.composer-mode:hover {
   color: var(--text);
   background: var(--item-hover);
 }
 
-.deep-thinking-toggle.active {
+.composer-mode.active {
   color: var(--text);
   background: var(--item-active);
   border-color: var(--accent, #3b82f6);
 }
 
-.deep-thinking-toggle:focus-visible {
+.composer-mode:focus-visible {
   outline: 2px solid #8ab4ff;
   outline-offset: 2px;
 }

@@ -149,6 +149,11 @@ export const shellMessages = {
   "shell.pinned": { zh: "已置顶", en: "Pinned" },
   "shell.pinToTop": { zh: "置顶", en: "Pin to Top" },
   "shell.preview": { zh: "预览", en: "Preview" },
+  "shell.primitiveMode": { zh: "原始人", en: "Primitive" },
+  "shell.primitiveModeTitle": {
+    zh: "原始人模式：省 token 的短回答——提示更短、不铺垫、不复述上下文，只答这一步",
+    en: "Primitive mode: token-saving short replies — shorter prompts, no preamble, no context repeats, answers just this step",
+  },
   "shell.quote": { zh: "引用", en: "Quote" },
   "shell.quotedMessage": { zh: "引用 {0}：{1}", en: "Quoting {0}: {1}" },
   "shell.react": { zh: "回应", en: "React" },

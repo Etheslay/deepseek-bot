@@ -89,6 +89,12 @@ export type StreamOptions = {
   >;
   /** Saved skills for this turn. The host injects them; the fixture ignores them. */
   skills?: readonly ChatSkillInjection[];
+  /**
+   * 原始人模式 (primitive mode): one-step terse turn. The Host composes a
+   * minimal prompt — no persona instructions, no history replay. Persisted
+   * rows and history replay are unchanged. The fixture ignores the flag.
+   */
+  primitive?: boolean;
 };
 
 export type StreamHandle = {
