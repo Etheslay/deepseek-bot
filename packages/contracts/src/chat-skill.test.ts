@@ -6,8 +6,8 @@ const botId = "11111111-1111-4111-8111-111111111111";
 describe("chat.send skill injection", () => {
   const request = METHOD_CONTRACTS["chat.send"].request;
 
-  it("stays on protocol 0.8 and still accepts a turn without skills", () => {
-    expect(PROTOCOL_VERSION).toBe("0.8");
+  it("stays on the current protocol and still accepts a turn without skills", () => {
+    expect(PROTOCOL_VERSION).toBe("0.9");
     expect(request.safeParse({ botId, text: "你好" }).success).toBe(true);
   });
 
