@@ -1,10 +1,12 @@
-# 接口与数据契约 v0.7
+# 接口与数据契约 v0.8
 
 本文件定义本项目前后端契约，不是 DeepSeek Harness 官方 API。状态：v0.1 已冻结（2026-10-23，D00 验收记录见 D00 Issue）；v0.2 为 D15 写层扩展；v0.3（2026-10-26，D16 后端）新增人类权限控制方法；v0.4（2026-10-26，D28 共编侧车）新增 `artifacts.*` 方法组；v0.5（2026-10-26，manager-orchestration，TASK_MANAGER_ORCHESTRATION.md）新增 bot 协调者角色、`task.*` 方法组、`task.status` 任务事件与能力 `app.dispatch_task`，`protocolVersion` 升至 0.5，继续接受 0.1–0.4 发送方。工作流文档 `schemaVersion` 保持 0.1（存量数据可读）。后续变更按 §7 提升版本并由变更负责人自审同步使用方。可执行实现位于 `packages/contracts/`：schema、§7 夹具与双方共用契约测试见 [packages/contracts/README.md](../packages/contracts/README.md)。所有字段均需后端校验，TypeScript 类型不能替代运行时校验。
 
 v0.5（D19 MCP HTTP 契约片）新增连接器类型、MCP 工具发现与逐机器人精确工具授权方法，以及独立能力 `mcp.call`。该契约片不代表 MCP Host、存储迁移、桌面设置或真实服务联调已经完成。
 
-v0.6（D21 指定窗口截图与本地 OCR 契约片）新增 `screen.*` 受信桌面方法与结果元数据。当前 `protocolVersion` 为 0.7，继续接受 0.1–0.6 发送方；工作流 `schemaVersion` 仍为 0.1。Windows 采集、离线 OCR 与 Host 网关已在 develop；桌面设置页调用这些方法做本机预览。这不代表真实窗口、打包 Electron 或发布验收已经完成。实现依据见 [D21 设计](superpowers/specs/2026-10-27-local-screen-sensing-design.md)。
+v0.6（D21 指定窗口截图与本地 OCR 契约片）新增 `screen.*` 受信桌面方法与结果元数据。该契约片将 `protocolVersion` 升至 0.7，继续接受当时 0.1–0.6 发送方；工作流 `schemaVersion` 仍为 0.1。Windows 采集、离线 OCR 与 Host 网关已在 develop；桌面设置页调用这些方法做本机预览。这不代表真实窗口、打包 Electron 或发布验收已经完成。实现依据见 [D21 设计](superpowers/specs/2026-10-27-local-screen-sensing-design.md)。
+
+v0.8（D27 本地语音后端切片）新增 `voice.status` / `voice.transcribe` / `voice.speak` 三个受信桌面方法：whisper.cpp 本地转写与 Windows SAPI 本地播报，全本地、无网络、不产生模型工具。当前 `protocolVersion` 为 0.8，继续接受 0.1–0.7 发送方；工作流 `schemaVersion` 仍为 0.1。语音录制（按住说话/自动断句）与播放接线归桌面后续联调。
 
 ## 1. 通用规则
 
@@ -88,6 +90,9 @@ MCP 实际调用使用独立能力 `mcp.call`，默认 `ask`，禁止全局 `all
 | device.action.list | v0.7：`{botId: UUID, limit?: 1–100}` → `{records: {id, botId, action: pointer\|key, at}[]}` | 一次精确审批通过后写入的本地记录。按该 bot 从新到旧列出，默认 50，最多 100。另一个 bot 看不到。拒绝、策略不是 ask、同一张审批再用，都不在此列表。不移动鼠标、不发送按键 |
 | device.action.input | v0.7：`{botId: UUID, input: pointer\|key}` → `{id: UUID, at: UTC ISO, kind: pointer\|key}` | 一次精确仅本次审批后执行一次输入。pointer 为 move 或 click，button 为 left/right/middle，x/y 为 0–8192 的整数。key 为允许列表中的一个名字，action 只能是 tap，并带 shift/ctrl/alt 布尔值。不接受命令、路径、自由文本或 Windows 键。响应没有坐标和路径。当前系统没有输入辅助进程时，在审批前拒绝 |
 | device.action.input.list | v0.7：`{botId: UUID, limit?: 1–100}` → `{records: {id, botId, at, input}[]}` | 已执行输入的本地产物索引，按该 bot 从新到旧，默认 50，最多 100。不含文件系统路径。拒绝、未执行、另一个 bot 的产物都不在此列表 |
+| voice.status | v0.8：`{}` → `{transcribe: {available, reason\|null}, speak: {available, reason\|null}}` | 仅受信桌面；只汇报本机可用性（whisper.cpp 二进制/模型是否已配置且存在、SAPI 是否在 Windows），不启动任何进程 |
+| voice.transcribe | v0.8：`{audioBase64: string≤900000}` → `{text: string≤4000, seconds: 0–20}` | 用用户自备的 whisper.cpp 把一段 16 kHz 单声道 16-bit PCM WAV 剪辑转成文本。全本地：无网络、无模型调用、无云端转写。临时音频文件在运行结束后删除，不进备份；格式、时长（≤20 秒）或大小不符拒绝且不落盘。不产生模型工具 |
+| voice.speak | v0.8：`{text: string≤2000}` → `{spoken: true}` | 用 Windows SAPI 把一段文本朗读出声。Host 调用固定参数的 PowerShell 脚本（文本以 base64 传入，不经 shell 字符串拼接），120 秒超时终止；非 Windows 拒绝。不产生模型工具 |
 | memory.list / write / delete | v0.3 人类查看、写入和删除当前 bot 的记忆 | 只作用于 payload.botId；空查询返回最近记录，默认 20、最多 50；删除未命中返回 INVALID_INPUT，不暴露其他 bot 的记录 |
 | memory.retention.get / set | v0.3 保留策略（记忆 + 知识共用）：retentionDays / memoryMaxPerBot / knowledgeMaxPerBot | 0 = 不限制（默认）；损坏值按 0 读——损坏的设置只会让清理变保守；Host 启动与每次写入后执行清扫 |
 | knowledge.list / write / delete | v0.3 当前 bot 的独立知识文档（迁移 `0010-knowledge-docs`） | 正文上限 100000 字（独立于 4000 字记忆）；list 只回摘要（不回正文，1 MiB 消息上限安全）；删除 bot 域隔离同记忆 |
@@ -155,6 +160,12 @@ NodeRun：`pending → running ↔ waiting_approval → succeeded / failed / can
 `device.action` 默认 deny。只能改为 ask，或保持 deny，不能 allow，也不接受会话或永久授权。`device.action.request` 请求 `{botId, kind: pointer|key}`，响应只有 `{id, at}`。一次请求对应一次精确 `actionDigest` 的仅本次审批。拒绝、策略不是 ask，或同一张审批用第二次，都不返回接受结果。模型工具 `device_action` 只接受 `kind`，可信 bot 身份由 Host 绑定。动作名只有 `pointer` 和 `key`；其他名字在创建审批前拒绝。一次接受会在本机数据库留下一条记录：id、bot id、动作名、时间。`device.action.list` 按该 bot 从新到旧列出这些记录，默认 50，最多 100。拒绝、策略不是 ask、同一张审批再用，都不写入。记录随元数据备份。这条请求路径不包含坐标、按键名、鼠标移动、击键或 exec daemon 调用。协议仍为 0.7，旧发送方仍被接受。
 
 `device.action.input` 是同一能力上的真实输入路径。请求带 `botId` 和一份有界 `input`：指针是 `move` 或 `click`，按钮是 `left`、`right` 或 `middle`，坐标是 0–8192 的整数；按键是允许列表中的一个名字，动作只能是 `tap`，并显式带上 `shift`、`ctrl`、`alt`。不接受命令、路径、自由文本、按住不放，或 Windows 键。审批摘要覆盖整份 input。范围只能是 once。通过后 Host 调用 exec daemon 的固定参数数组，不经过 shell 命令字符串。成功后的响应只有 `{id, at, kind}`。本机 `device-outputs/<botId>/` 留下对应 JSON 和清单，`device.action.input.list` 按该 bot 从新到旧列出，默认 50，最多 100，不含路径。拒绝、策略不是 ask、同一张审批再用、未知按键，或辅助进程不可用，都不执行，也不留下成功产物。产物不进入元数据备份。模型工具 `device_input` 走同一闸门，不进入聊天应用工具目录。
+
+## D27 本地语音边界（实现要求）
+
+`voice.*` 全部仅供受信桌面调用：是用户按下了按钮，不是模型在调用——因此没有能力、没有授权、没有模型工具，模型目录永远不包含 voice 工具。`voice.transcribe` 只接受一段 16 kHz、单声道、16-bit PCM 的 WAV 剪辑，最多 20 秒，base64 编码后落在 1 MiB 消息信封内；Host 校验 RIFF 头、声道、采样率、位深与数据块长度，格式不符拒绝且不落盘，不重采样、不转换、不猜测格式。转写调用用户自备的 whisper.cpp 二进制与模型（环境变量 `DEEPSEEK_BOT_WHISPER_BIN` / `DEEPSEEK_BOT_WHISPER_MODEL` 配置）：固定参数数组、无 shell、隐藏窗口，120 秒超时终止；进程输出留在本机，错误只报稳定错误码与退出码，不回传进程输出。临时剪辑在运行结束后删除，不进数据库、不进备份；转写文本只返回一次，不持久化。
+
+`voice.speak` 用 Windows SAPI（`System.Speech`）朗读至多 2000 字的文本：固定 PowerShell 脚本、文本以 base64 传入 `-EncodedCommand`，不经 shell 字符串拼接；120 秒超时终止。`voice.status` 只读汇报两侧可用性与原因，不启动进程。语音任务一次一个：后续调用排队，不并发堆积语音进程；`close()` 中止进行中的任务并拒绝新任务。识别与合成都发生在本机，无云端转写、无遥测、无远程中继；麦克风采集（按住说话）、自动断句、播放接线与设置页归桌面后续联调。
 
 ## 8. 库导出文件（协议面之外）
 

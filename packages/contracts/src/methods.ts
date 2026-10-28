@@ -54,6 +54,7 @@ import { WorkflowIssueSchema } from "./workflow.js";
 import { PERMISSION_METHODS } from "./permissions.js";
 import { SCREEN_METHODS } from "./screen.js";
 import { DEVICE_METHODS } from "./device.js";
+import { VOICE_METHODS } from "./voice.js";
 
 export const MAX_MESSAGE_BYTES = 1_048_576;
 
@@ -188,6 +189,9 @@ export const METHODS = [
   "device.action.list",
   "device.action.input",
   "device.action.input.list",
+  "voice.status",
+  "voice.transcribe",
+  "voice.speak",
 ] as const;
 
 export type Method = (typeof METHODS)[number];
@@ -1411,6 +1415,7 @@ export const METHOD_CONTRACTS = {
   ...PERMISSION_METHODS,
   ...SCREEN_METHODS,
   ...DEVICE_METHODS,
+  ...VOICE_METHODS,
 } as const satisfies Record<
   Method,
   { request: z.ZodType; response: z.ZodType }
