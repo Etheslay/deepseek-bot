@@ -21,6 +21,7 @@ import { AutomationPanel } from "./features/automation/automation-panel.js";
 import { EventRuleSettings } from "./features/event-rules/event-rule-settings.js";
 import { PermissionsPanel } from "./features/permissions/permissions-panel.js";
 import { ScreenSettings } from "./features/screen/screen-settings.js";
+import { UsagePanel } from "./features/usage/usage-panel.js";
 import { BotForm } from "./features/bots/bot-form.js";
 import { nextBotName } from "./features/bots/bot-names.js";
 import { CustomSelect } from "./components/custom-select.js";
@@ -2686,6 +2687,7 @@ const logout = (): void => {
                   </div>
                 )}
                 {settingsSection === "usage" && (
+                  <>
                   <div className="settings-card">
                     <div className="settings-row">
                       <span>{t("d24.dbVersion")}</span>
@@ -2713,6 +2715,8 @@ const logout = (): void => {
                       </span>
                     </div>
                   </div>
+                  <UsagePanel botId={bots.find((b) => b.key === selectedBot)?.bot.id ?? null} />
+                  </>
                 )}
                 {settingsSection === "vault" && (
                   <>

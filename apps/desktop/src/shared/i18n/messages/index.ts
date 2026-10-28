@@ -30,6 +30,7 @@ import { workflowMessages } from "./workflow.js";
 import { d22Messages } from "./d22.js";
 import { d24Messages } from "./d24.js";
 import { eventRuleMessages } from "./event-rules.js";
+import { usageMessages } from "./usage.js";
 
 export const MESSAGES = {
   ...automationMessages,
@@ -56,6 +57,7 @@ export const MESSAGES = {
   ...d22Messages,
   ...d24Messages,
   ...eventRuleMessages,
+  ...usageMessages,
 } satisfies Record<string, Message>;
 
 export type MessageKey = keyof typeof MESSAGES;
