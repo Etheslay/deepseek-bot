@@ -25,9 +25,11 @@
 // v0.6 adds selected-window capture/OCR contracts; prior senders stay accepted.
 // v0.7 adds manager orchestration (tasks, relay chains, coordinator role);
 // prior senders stay accepted.
-export const CONTRACT_VERSION = "0.7" as const;
+// v0.8 adds stdio MCP and credential-ref injection. Optional connector fields
+// stay compatible; 0.1–0.7 senders stay accepted. Workflow documents are unchanged.
+export const CONTRACT_VERSION = "0.8" as const;
 export const PROTOCOL_VERSION = CONTRACT_VERSION;
-/** Workflow documents did not change in v0.3–v0.7; keep the document version. */
+/** Workflow documents did not change in v0.3–v0.8; keep the document version. */
 export const WORKFLOW_SCHEMA_VERSION = "0.1" as const;
 
 export const SUPPORTED_PROTOCOL_VERSIONS: readonly string[] = [
@@ -37,6 +39,7 @@ export const SUPPORTED_PROTOCOL_VERSIONS: readonly string[] = [
   "0.4",
   "0.5",
   "0.6",
+  "0.7",
   PROTOCOL_VERSION,
 ];
 

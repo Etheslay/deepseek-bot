@@ -49,6 +49,8 @@ Host 不绑定 0.0.0.0，不默认开局域网远控。优先私有 IPC；回环
 
 取消或退出仅结束应用拥有的进程树；不停止用户其他程序。重启后未知副作用标记 interrupted，不无条件重放。
 
+MCP HTTP 仍只访问本机回环。没有凭据引用时不发送 `Authorization`。有 `cred:` 引用时，发现和调用才解密，并只放进 `Authorization: Bearer`。stdio MCP 用 `shell: false` 启动单个命令，工作目录在连接器产物下的 `stdio-cwd`，不接受 shell 程序名、`..` 或 UNC。明文只写入一个指定环境变量，不进入 argv。官方客户端仍会带上它认定可继承的少数变量（Linux 上为 `HOME`、`LOGNAME`、`PATH`、`SHELL`、`TERM`、`USER`），再覆盖该凭据变量；不把 Host 的其余环境交给子进程。stderr 管道最多保留 1 MiB，不写入日志。Stable Diffusion 调用不解析凭据。
+
 ## 5. 桌面系统集成（D22）
 
 | 能力 | 读取/写入范围 | 边界 |

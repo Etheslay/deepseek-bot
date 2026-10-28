@@ -128,6 +128,7 @@ export const METHODS = [
   "connector.enable",
   "connector.disable",
   "connector.setEndpoint",
+  "connector.setCommand",
   "connector.mcp.discover",
   "connector.mcp.grants.get",
   "connector.mcp.grants.set",
@@ -288,6 +289,28 @@ export const ScheduleDraftSchema = ScheduleSchema
  * Unknown workflow schemaVersion is rejected explicitly with
  * DATA_VERSION_UNSUPPORTED instead of being imported with dropped fields.
  */
+const connectorTransportFields = {
+  kind: ConnectorKindSchema.optional(),
+  credentialRef: z.string().nullable(),
+  endpoint: z.string().nullable(),
+  /** Bare name or absolute path. Null unless the connector is mcp-stdio. */
+  command: z.string().nullable().optional(),
+  args: z.array(z.string().max(1024)).max(32).nullable().optional(),
+  /** Env var that receives the resolved secret. Never the secret itself. */
+  credentialEnv: z.string().nullable().optional(),
+  at: IsoDateTimeUtcSchema,
+  updatedAt: IsoDateTimeUtcSchema,
+};
+
+function connectorResponse<T extends z.ZodType>(enabled: T) {
+  return z.object({
+    id: UuidSchema,
+    name: NonEmptyStringSchema(TEXT_LIMITS.name),
+    enabled,
+    ...connectorTransportFields,
+  });
+}
+
 export const METHOD_CONTRACTS = {
   "bot.list": {
     request: z.object({}),
@@ -859,24 +882,15 @@ export const METHOD_CONTRACTS = {
   },
   /**
    * Trusted desktop catalog. Registration always starts disabled.
-   * credentialRef is an opaque cred:<uuid> reference; these methods never
-   * resolve it or contact the connector. ToolPolicy.mcp is a separate gate.
+   * credentialRef is an opaque cred:<uuid> reference. These methods store it
+   * and do not resolve or contact the connector. Resolution happens only when
+   * a later MCP discover or call injects the secret. ToolPolicy.mcp is a
+   * separate gate.
    */
   "connector.list": {
     request: z.object({}).strict(),
     response: z.object({
-      connectors: z.array(
-        z.object({
-          id: UuidSchema,
-          name: NonEmptyStringSchema(TEXT_LIMITS.name),
-          enabled: z.boolean(),
-          kind: ConnectorKindSchema.optional(),
-          credentialRef: z.string().nullable(),
-          endpoint: z.string().nullable(),
-          at: IsoDateTimeUtcSchema,
-          updatedAt: IsoDateTimeUtcSchema,
-        }),
-      ),
+      connectors: z.array(connectorResponse(z.boolean())),
     }),
   },
   "connector.register": {
@@ -888,44 +902,20 @@ export const METHOD_CONTRACTS = {
         // Loopback http(s) URL of the local service (D19); validated by the
         // Host before storage, never contacted at registration time.
         endpoint: z.string().trim().max(2048).nullable().optional(),
+        command: z.string().trim().min(1).max(1024).nullable().optional(),
+        args: z.array(z.string().max(1024)).max(32).optional(),
+        credentialEnv: z.string().trim().min(1).max(64).nullable().optional(),
       })
       .strict(),
-    response: z.object({
-      id: UuidSchema,
-      name: NonEmptyStringSchema(TEXT_LIMITS.name),
-      enabled: z.literal(false),
-      kind: ConnectorKindSchema.optional(),
-      credentialRef: z.string().nullable(),
-      endpoint: z.string().nullable(),
-      at: IsoDateTimeUtcSchema,
-      updatedAt: IsoDateTimeUtcSchema,
-    }),
+    response: connectorResponse(z.literal(false)),
   },
   "connector.enable": {
     request: z.object({ id: UuidSchema }).strict(),
-    response: z.object({
-      id: UuidSchema,
-      name: NonEmptyStringSchema(TEXT_LIMITS.name),
-      enabled: z.literal(true),
-      kind: ConnectorKindSchema.optional(),
-      credentialRef: z.string().nullable(),
-      endpoint: z.string().nullable(),
-      at: IsoDateTimeUtcSchema,
-      updatedAt: IsoDateTimeUtcSchema,
-    }),
+    response: connectorResponse(z.literal(true)),
   },
   "connector.disable": {
     request: z.object({ id: UuidSchema }).strict(),
-    response: z.object({
-      id: UuidSchema,
-      name: NonEmptyStringSchema(TEXT_LIMITS.name),
-      enabled: z.literal(false),
-      kind: ConnectorKindSchema.optional(),
-      credentialRef: z.string().nullable(),
-      endpoint: z.string().nullable(),
-      at: IsoDateTimeUtcSchema,
-      updatedAt: IsoDateTimeUtcSchema,
-    }),
+    response: connectorResponse(z.literal(false)),
   },
   /**
    * D19: set or clear the loopback http(s) endpoint of a local connector.
@@ -937,16 +927,21 @@ export const METHOD_CONTRACTS = {
       id: UuidSchema,
       endpoint: z.string().trim().max(2048).nullable(),
     }).strict(),
-    response: z.object({
-      id: UuidSchema,
-      name: NonEmptyStringSchema(TEXT_LIMITS.name),
-      enabled: z.boolean(),
-      kind: ConnectorKindSchema.optional(),
-      credentialRef: z.string().nullable(),
-      endpoint: z.string().nullable(),
-      at: IsoDateTimeUtcSchema,
-      updatedAt: IsoDateTimeUtcSchema,
-    }),
+    response: connectorResponse(z.boolean()),
+  },
+  /**
+   * Replace the local stdio command. The Host checks the executable shape
+   * and does not spawn it here. Arguments are a list, never a shell string.
+   */
+  "connector.setCommand": {
+    request: z
+      .object({
+        id: UuidSchema,
+        command: z.string().trim().min(1).max(1024),
+        args: z.array(z.string().max(1024)).max(32).default([]),
+      })
+      .strict(),
+    response: connectorResponse(z.boolean()),
   },
   /** Trusted control plane only; Host implementation follows this contract. */
   "connector.mcp.discover": {
