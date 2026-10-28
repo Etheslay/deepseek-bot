@@ -17,9 +17,8 @@
  * holds the replaced database); the caller restarts the process.
  */
 import { randomUUID } from "node:crypto";
-import { createRequire } from "node:module";
 import { existsSync, mkdirSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createScreenBackend, type ScreenBackend } from "@deepseek-bot/exec-daemon";
 import { methodContract, type Method, type Task, type ToolPolicy } from "@deepseek-bot/contracts";
@@ -39,6 +38,7 @@ import {
   NodeExecutionError,
   WorkflowEngine,
   LocalScheduler,
+  evaluateEventRules,
   evaluateToolAction,
   type ScheduleMissNotice,
 } from "@deepseek-bot/runtime";
@@ -84,6 +84,7 @@ import {
   bindKnowledgeTools,
   bindMemoryTools,
   bindScreenCaptureTool,
+  bindDeviceActionTool,
   bindWebSearchTool,
   type ToolCaller,
   type ToolNetworkPermissions,
@@ -92,6 +93,7 @@ import {
 } from "@deepseek-bot/agent-tools";
 import { startApplicationToolServer } from "./app-tool-channel.js";
 import { createScreenService, unavailableScreenBackend, type ScreenService } from "./screen.js";
+import { createDeviceActionService } from "./device.js";
 import { TaskDispatcher } from "./task-dispatcher.js";
 import { evaluateTriggerRules } from "./triggers.js";
 import { invokeConnector } from "./connectors.js";
@@ -284,6 +286,7 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
     backend: screenChoice.backend,
     supported: screenChoice.supported,
   });
+  const device = createDeviceActionService({ db, permissions, now });
 
   // The executor and the bridge reference each other (child env ← bridge
   // address; bridge asks → executor session registry), so the bridge handle
@@ -383,19 +386,27 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
   // D18 保留策略: apply configured limits once at startup so expiry and
   // caps hold even when nothing writes for a while.
   sweepRetention(db, readRetentionPolicy(db), now());
-  // D20 事件自动化: catch up on events that accumulated while the host was
-  // down (enqueued as reason "missed", never silently replayed), then keep
-  // scanning the persisted stream on an interval.
+  // D20 review queue: catch up on events that accumulated while the host
+  // was down (enqueued as reason "missed", never silently replayed). The
+  // same tick evaluates local event rules, which start one run, hold one
+  // pending review, or record a disabled skip. Neither path opens a network
+  // connection.
   const bootAt = now();
-  evaluateTriggerRules(db, { bootAt });
-  const triggerTimer = setInterval(() => {
+  const scanLocalEvents = (): void => {
     try {
       evaluateTriggerRules(db, { bootAt });
     } catch {
       // A failed scan retries on the next tick; the cursor only advances
       // after a successful pass, so nothing is skipped.
     }
-  }, options.triggers?.intervalMs ?? 5_000);
+    try {
+      evaluateEventRules(db, engine);
+    } catch {
+      // A failed rule keeps its cursor and is retried on the next tick.
+    }
+  };
+  scanLocalEvents();
+  const triggerTimer = setInterval(scanLocalEvents, options.triggers?.intervalMs ?? 5_000);
   triggerTimer.unref?.();
 
   let closed = false;
@@ -411,6 +422,7 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
     permissions,
     mcp,
     screen,
+    device,
     chat,
     userQuestions: questions,
     webSearch: {
@@ -479,6 +491,7 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
     });
     if (method === "data.restore") {
       screen.close();
+      device.close();
       permissions.close();
     }
     const validated = contract.response.safeParse(result);
@@ -547,6 +560,7 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
       },
     }),
     bindScreenCaptureTool(screen),
+    bindDeviceActionTool(device),
     // v0.5 manager orchestration (T4/T3): coordinator workflow saving and
     // dispatched-task tools. Role rules live inside the task tool layer;
     // the dispatcher re-checks them authoritatively.
@@ -567,8 +581,7 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
       dispatch: (input) => tasks.dispatch(input),
       listForBot: async (botId, filter) => {
         const statusFilter = filter.status !== undefined ? { status: filter.status } : {};
-        const rootFilter =
-          filter.rootTaskId !== undefined ? { rootTaskId: filter.rootTaskId } : {};
+        const rootFilter = filter.rootTaskId !== undefined ? { rootTaskId: filter.rootTaskId } : {};
         const merged = new Map<string, Task>();
         for (const task of [
           ...listTasks(db, { fromBotId: botId, ...statusFilter, ...rootFilter, limit: 100 }),
@@ -605,6 +618,18 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
             };
           }
           return screen.authorize(caller, mode, options);
+        }
+        if (tool === "device_action") {
+          const kind = (params as { kind?: unknown }).kind;
+          if (kind !== "pointer" && kind !== "key") {
+            return {
+              allowed: false,
+              code: "INVALID_INPUT",
+              reason: "device action kind is invalid",
+              decision: "denied",
+            };
+          }
+          return device.authorize(caller, kind, options);
         }
         const input = tool === "mcp_call" ? McpInvokeInputSchema.parse(params) : undefined;
         if (input) mcp.check(input, caller);
@@ -655,7 +680,9 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
     async shutdown(): Promise<void> {
       if (closed) return;
       closed = true;
+      clearInterval(triggerTimer);
       screen.close();
+      device.close();
       permissions.close();
       mcp.close();
       questions.close();
@@ -669,6 +696,9 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
           await chat.disposeAll();
         } finally {
           db.close();
+          // Preserve interrupted-run recovery, then drain the app-owned
+          // workflow children before Windows releases their workspace cwd.
+          await engine.abandonInflight();
         }
       }
     },
@@ -688,11 +718,17 @@ function resolveScreenBackend(options: HostOptions): {
   if (process.platform !== "win32") {
     return { backend: unavailableScreenBackend(), supported: false };
   }
-  const require = createRequire(import.meta.url);
-  const entry = require.resolve("@deepseek-bot/exec-daemon");
+  const modulePath = fileURLToPath(import.meta.url);
+  const bundled = basename(modulePath) === "main.js";
+  const assets = bundled
+    ? join(dirname(modulePath), "screen-assets")
+    : join(dirname(modulePath), "..", "..", "exec-daemon");
   return {
     backend: createScreenBackend({
-      resourcesDirectory: join(dirname(entry), "..", "dist", "ocr"),
+      resourcesDirectory: bundled ? join(assets, "ocr") : join(assets, "dist", "ocr"),
+      helperScriptPath: bundled
+        ? join(assets, "win32-capture.ps1")
+        : join(assets, "assets", "win32-capture.ps1"),
     }),
     supported: true,
   };

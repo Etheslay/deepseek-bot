@@ -8,6 +8,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
+import { fileURLToPath } from "node:url";
 import { afterAll, describe, expect, it } from "vitest";
 import { createHost, DEFAULT_MODEL_PROFILE_ID, type DeepSeekBotHost } from "./host.js";
 import { evaluateTriggerRules } from "./triggers.js";
@@ -39,6 +40,10 @@ async function makeHost(): Promise<DeepSeekBotHost> {
   roots.push(root);
   const host = await createHost({
     dataRoot: root,
+    dshBin: fileURLToPath(
+      new URL("../../harness-adapter/src/testing/fake-harness.mjs", import.meta.url),
+    ),
+    childEnv: (env) => ({ ...env, FAKE_SCENARIO: "ok" }),
     resolveApiKey: async () => "sk-test-not-used",
     triggers: { intervalMs: 3_600_000 }, // keep the poll out of the test's way
   });
@@ -47,7 +52,10 @@ async function makeHost(): Promise<DeepSeekBotHost> {
 }
 
 /** A one-bot target workflow through the public surface. */
-async function seedWorkflow(host: DeepSeekBotHost, name: string): Promise<{
+async function seedWorkflow(
+  host: DeepSeekBotHost,
+  name: string,
+): Promise<{
   workflowId: string;
   botId: string;
   revision: string;
@@ -98,7 +106,15 @@ function seedFailedRun(
     .run(
       runId,
       JSON.stringify({ kind: "manual", idempotencyKey: randomUUID() }),
-      JSON.stringify({ id: sourceWorkflowId, revision: randomUUID(), name: "src", schemaVersion: "0.1", nodes: [], edges: [], limits: { maxConcurrentNodes: 2 } }),
+      JSON.stringify({
+        id: sourceWorkflowId,
+        revision: randomUUID(),
+        name: "src",
+        schemaVersion: "0.1",
+        nodes: [],
+        edges: [],
+        limits: { maxConcurrentNodes: 2 },
+      }),
       randomUUID(),
       at,
       at,
@@ -107,7 +123,12 @@ function seedFailedRun(
     .prepare(
       "INSERT INTO events (event_id, run_id, sequence, timestamp, type, payload_json) VALUES (?, ?, 0, ?, 'run.failed', ?);",
     )
-    .run(randomUUID(), runId, eventTimestamp, JSON.stringify({ reason: "boom", errorCode: "RUNTIME_UNAVAILABLE" }));
+    .run(
+      randomUUID(),
+      runId,
+      eventTimestamp,
+      JSON.stringify({ reason: "boom", errorCode: "RUNTIME_UNAVAILABLE" }),
+    );
   return runId;
 }
 

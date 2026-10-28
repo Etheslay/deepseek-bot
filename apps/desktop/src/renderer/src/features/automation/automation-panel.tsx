@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useState, type JSX } from "react";
 import { METHOD_CONTRACTS } from "@deepseek-bot/contracts";
 import { type MessageKey, type Notice, noticeText, t, useLanguage } from "../../i18n.js";
+import { CustomSelect } from "../../components/custom-select.js";
 
 type TriggerRule = {
   id: string;
@@ -132,53 +133,60 @@ function TriggerRules(): JSX.Element {
   }
 
   return (
-    <div>
-      <div>
+    <div className="automation-rules">
+      <div className="automation-form">
         <input
+          className="settings-select automation-field automation-rule-name"
           aria-label={t("automation.ruleNameField")}
           value={name}
           placeholder={t("automation.ruleNamePlaceholder")}
           onChange={(event) => setName(event.target.value)}
         />
-        <select
-          aria-label={t("automation.targetWorkflowField")}
+        <CustomSelect
+          className="automation-field"
+          ariaLabel={t("automation.targetWorkflowField")}
           value={workflowId}
-          onChange={(event) => setWorkflowId(event.target.value)}
-        >
-          <option value="">{t("automation.selectWorkflowOption")}</option>
-          {workflows.map((workflow) => (
-            <option key={workflow.id} value={workflow.id}>
-              {workflow.name}
-            </option>
-          ))}
-        </select>
-        <select
-          aria-label={t("automation.triggerEventField")}
+          options={[
+            { value: "", label: t("automation.selectWorkflowOption") },
+            ...workflows.map((workflow) => ({ value: workflow.id, label: workflow.name })),
+          ]}
+          onChange={(next) => setWorkflowId(next)}
+        />
+        <CustomSelect
+          className="automation-field"
+          ariaLabel={t("automation.triggerEventField")}
           value={eventType}
-          onChange={(event) => setEventType(event.target.value as TriggerRule["eventType"])}
-        >
-          <option value="run.failed">{eventLabel("run.failed")}</option>
-          <option value="run.completed">{eventLabel("run.completed")}</option>
-        </select>
-        <button type="button" disabled={busy} onClick={() => void save()}>
+          options={[
+            { value: "run.failed", label: eventLabel("run.failed") },
+            { value: "run.completed", label: eventLabel("run.completed") },
+          ]}
+          onChange={(next) => setEventType(next as TriggerRule["eventType"])}
+        />
+        <button className="pill-btn automation-save" type="button" disabled={busy} onClick={() => void save()}>
           {t("automation.saveRule")}
         </button>
       </div>
-      {notice !== null ? <div role="status">{noticeText(notice)}</div> : null}
-      {(rules ?? []).map((rule) => (
-        <div key={rule.id}>
-          <span>
-            {t("automation.ruleEventSummary", [rule.name, eventLabel(rule.eventType)])}
-          </span>
-          <span>{rule.enabled ? t("automation.statusEnabled") : t("automation.statusDisabled")}</span>
-          <button type="button" disabled={busy} onClick={() => void toggle(rule)}>
-            {rule.enabled ? t("automation.disable") : t("automation.enable")}
-          </button>
-          <button type="button" disabled={busy} onClick={() => void remove(rule.id)}>
-            {t("shell.delete")}
-          </button>
-        </div>
-      ))}
+      {notice !== null ? <div className="automation-notice" role="status">{noticeText(notice)}</div> : null}
+      <div className="automation-rule-list">
+        {(rules ?? []).map((rule) => (
+          <div className="automation-rule-row" key={rule.id}>
+            <span className="automation-rule-label">
+              {t("automation.ruleEventSummary", [rule.name, eventLabel(rule.eventType)])}
+            </span>
+            <span className="automation-rule-state">
+              {rule.enabled ? t("automation.statusEnabled") : t("automation.statusDisabled")}
+            </span>
+            <span className="automation-rule-actions">
+              <button className="pill-btn" type="button" disabled={busy} onClick={() => void toggle(rule)}>
+                {rule.enabled ? t("automation.disable") : t("automation.enable")}
+              </button>
+              <button className="pill-btn" type="button" disabled={busy} onClick={() => void remove(rule.id)}>
+                {t("shell.delete")}
+              </button>
+            </span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -223,27 +231,35 @@ function ReviewQueue(): JSX.Element {
   }
 
   return (
-    <div>
-      <div>{t("automation.reviewQueueTitle")}</div>
-      {notice !== null ? <div role="status">{noticeText(notice)}</div> : null}
-      {(firings ?? []).map((firing) => (
-        <div key={firing.id}>
-          <span>
-            {t("automation.firingEventSummary", [
-              firing.ruleName,
-              eventLabel(firing.eventType),
-              firing.reason === "missed" ? t("automation.missedCatchUp") : "",
-            ])}
-          </span>
-          <button type="button" disabled={busy} onClick={() => void decide(firing.id, "start")}>
-            {t("automation.start")}
-          </button>
-          <button type="button" disabled={busy} onClick={() => void decide(firing.id, "dismiss")}>
-            {t("automation.dismiss")}
-          </button>
+    <div className="automation-queue">
+      <div className="automation-queue-title">{t("automation.reviewQueueTitle")}</div>
+      {notice !== null ? <div className="automation-notice" role="status">{noticeText(notice)}</div> : null}
+      <div className="automation-queue-list">
+        {(firings ?? []).map((firing) => (
+          <div className="automation-queue-row" key={firing.id}>
+            <span className="automation-rule-label">
+              {t("automation.firingEventSummary", [
+                firing.ruleName,
+                eventLabel(firing.eventType),
+                firing.reason === "missed" ? t("automation.missedCatchUp") : "",
+              ])}
+            </span>
+            <span className="automation-rule-actions">
+              <button className="pill-btn" type="button" disabled={busy} onClick={() => void decide(firing.id, "start")}>
+                {t("automation.start")}
+              </button>
+              <button className="pill-btn" type="button" disabled={busy} onClick={() => void decide(firing.id, "dismiss")}>
+                {t("automation.dismiss")}
+              </button>
+            </span>
+          </div>
+        ))}
+      </div>
+      {firings !== null && firings.length === 0 ? (
+        <div className="automation-queue-empty" role="status">
+          {t("automation.queueEmpty")}
         </div>
-      ))}
-      {firings !== null && firings.length === 0 ? <div role="status">{t("automation.queueEmpty")}</div> : null}
+      ) : null}
     </div>
   );
 }

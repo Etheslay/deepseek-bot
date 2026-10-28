@@ -9,6 +9,7 @@ import {
 } from "@deepseek-bot/agent-tools";
 import { stableStringify } from "@deepseek-bot/runtime";
 import type { McpService, McpCatalogTool } from "./mcp.js";
+import { listenOnPrivateHttpPort } from "@deepseek-bot/harness-adapter";
 
 const APPLICATION_TOOLS = [
   "list_bots",
@@ -304,10 +305,7 @@ export async function startApplicationToolServer(
       response.removeListener("close", disconnect);
     }
   }
-  await new Promise<void>((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(0, "127.0.0.1", resolve);
-  });
+  await listenOnPrivateHttpPort(server);
   const address = server.address();
   if (address === null || typeof address === "string")
     throw new Error("application tools server did not bind");

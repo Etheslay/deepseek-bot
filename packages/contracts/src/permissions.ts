@@ -20,6 +20,7 @@ export const CAPABILITY_IDS = [
   "fs.write",
   "exec.shell",
   "screen.capture",
+  "device.action",
   "connector.invoke",
   "mcp.call",
 ] as const;
@@ -37,7 +38,7 @@ export function defaultPermissionMode(capability: CapabilityId): PermissionMode 
     capability === "memory.read"
   )
     return "allow";
-  return capability === "screen.capture" ? "deny" : "ask";
+  return capability === "screen.capture" || capability === "device.action" ? "deny" : "ask";
 }
 
 /**
@@ -49,7 +50,11 @@ export function defaultPermissionMode(capability: CapabilityId): PermissionMode 
  */
 export function requiresPerActionApproval(capability: CapabilityId): boolean {
   return (
-    capability === "app.start_run" || capability === "exec.shell" || capability === "screen.capture" || capability === "mcp.call"
+    capability === "app.start_run" ||
+    capability === "exec.shell" ||
+    capability === "screen.capture" ||
+    capability === "device.action" ||
+    capability === "mcp.call"
   );
 }
 

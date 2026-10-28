@@ -53,6 +53,7 @@ import {
 import { WorkflowIssueSchema } from "./workflow.js";
 import { PERMISSION_METHODS } from "./permissions.js";
 import { SCREEN_METHODS } from "./screen.js";
+import { DEVICE_METHODS } from "./device.js";
 
 export const MAX_MESSAGE_BYTES = 1_048_576;
 
@@ -142,6 +143,16 @@ export const METHODS = [
   "trigger.delete",
   "trigger.firing.list",
   "trigger.firing.decide",
+  "eventRule.list",
+  "eventRule.save",
+  "eventRule.enable",
+  "eventRule.disable",
+  "eventRule.record.list",
+  "eventRule.review",
+  "eventRule.review.list",
+  "eventRule.review.approve",
+  "eventRule.review.deny",
+  "eventRule.state.list",
   "grant.create",
   "grant.list",
   "grant.revoke",
@@ -171,6 +182,8 @@ export const METHODS = [
   "screen.results.list",
   "screen.result.read",
   "screen.result.delete",
+  "device.action.request",
+  "device.action.list",
 ] as const;
 
 export type Method = (typeof METHODS)[number];
@@ -1110,6 +1123,192 @@ export const METHOD_CONTRACTS = {
       runId: UuidSchema.nullable(),
     }),
   },
+  /**
+   * Local event rules for one bot (D20). Trusted desktop methods, not model
+   * tools. A new rule is off and does not require review. An enabled rule
+   * starts one run for one matching local event, unless `eventRule.review`
+   * was called: then the event becomes one pending item and no run starts
+   * until `eventRule.review.approve`. Deny records a skip and starts
+   * nothing. The same event cannot enqueue or start twice. A disabled rule
+   * records a skip and does not enter the queue. Enabling, disabling, or
+   * switching a rule to review appends one local state row when that flag
+   * changes; a repeat call that leaves the flag as it is appends nothing.
+   * `eventRule.state.list` returns those rows for one bot, newest first.
+   * Nothing in this group opens a network connection or a remote relay.
+   * `trigger.*` is unchanged.
+   */
+  "eventRule.list": {
+    request: z.object({ botId: UuidSchema }).strict(),
+    response: z.object({
+      rules: z.array(
+        z.object({
+          id: UuidSchema,
+          botId: UuidSchema,
+          name: NonEmptyStringSchema(TEXT_LIMITS.name),
+          workflowId: UuidSchema,
+          eventType: z.enum(["run.failed", "run.completed"]),
+          enabled: z.boolean(),
+          review: z.boolean(),
+          at: IsoDateTimeUtcSchema,
+          updatedAt: IsoDateTimeUtcSchema,
+        }),
+      ),
+    }),
+  },
+  "eventRule.save": {
+    request: z
+      .object({
+        botId: UuidSchema,
+        rule: z
+          .object({
+            id: UuidSchema.optional(),
+            name: z.string().trim().min(1).max(TEXT_LIMITS.name),
+            workflowId: UuidSchema,
+            eventType: z.enum(["run.failed", "run.completed"]),
+          })
+          .strict(),
+      })
+      .strict(),
+    response: z.object({
+      id: UuidSchema,
+      botId: UuidSchema,
+      name: NonEmptyStringSchema(TEXT_LIMITS.name),
+      workflowId: UuidSchema,
+      eventType: z.enum(["run.failed", "run.completed"]),
+      enabled: z.boolean(),
+      review: z.boolean(),
+      at: IsoDateTimeUtcSchema,
+      updatedAt: IsoDateTimeUtcSchema,
+    }),
+  },
+  "eventRule.enable": {
+    request: z.object({ botId: UuidSchema, id: UuidSchema }).strict(),
+    response: z.object({
+      id: UuidSchema,
+      botId: UuidSchema,
+      name: NonEmptyStringSchema(TEXT_LIMITS.name),
+      workflowId: UuidSchema,
+      eventType: z.enum(["run.failed", "run.completed"]),
+      enabled: z.literal(true),
+      review: z.boolean(),
+      at: IsoDateTimeUtcSchema,
+      updatedAt: IsoDateTimeUtcSchema,
+    }),
+  },
+  "eventRule.disable": {
+    request: z.object({ botId: UuidSchema, id: UuidSchema }).strict(),
+    response: z.object({
+      id: UuidSchema,
+      botId: UuidSchema,
+      name: NonEmptyStringSchema(TEXT_LIMITS.name),
+      workflowId: UuidSchema,
+      eventType: z.enum(["run.failed", "run.completed"]),
+      enabled: z.literal(false),
+      review: z.boolean(),
+      at: IsoDateTimeUtcSchema,
+      updatedAt: IsoDateTimeUtcSchema,
+    }),
+  },
+  "eventRule.record.list": {
+    request: z
+      .object({
+        botId: UuidSchema,
+        ruleId: UuidSchema.optional(),
+        outcome: z.enum(["started", "duplicate", "skipped"]).optional(),
+        limit: z.int().min(1).max(100).default(50),
+      })
+      .strict(),
+    response: z.object({
+      records: z.array(
+        z.object({
+          id: UuidSchema,
+          ruleId: UuidSchema,
+          eventId: UuidSchema,
+          outcome: z.enum(["started", "duplicate", "skipped"]),
+          runId: UuidSchema.nullable(),
+          reason: z.string().min(1).max(500),
+          at: IsoDateTimeUtcSchema,
+        }),
+      ),
+    }),
+  },
+  "eventRule.review": {
+    request: z.object({ botId: UuidSchema, id: UuidSchema }).strict(),
+    response: z.object({
+      id: UuidSchema,
+      botId: UuidSchema,
+      name: NonEmptyStringSchema(TEXT_LIMITS.name),
+      workflowId: UuidSchema,
+      eventType: z.enum(["run.failed", "run.completed"]),
+      enabled: z.boolean(),
+      review: z.literal(true),
+      at: IsoDateTimeUtcSchema,
+      updatedAt: IsoDateTimeUtcSchema,
+    }),
+  },
+  "eventRule.review.list": {
+    request: z
+      .object({
+        botId: UuidSchema,
+        ruleId: UuidSchema.optional(),
+        limit: z.int().min(1).max(100).default(50),
+      })
+      .strict(),
+    response: z.object({
+      items: z.array(
+        z.object({
+          id: UuidSchema,
+          ruleId: UuidSchema,
+          eventId: UuidSchema,
+          status: z.literal("pending"),
+          at: IsoDateTimeUtcSchema,
+        }),
+      ),
+    }),
+  },
+  "eventRule.review.approve": {
+    request: z.object({ botId: UuidSchema, id: UuidSchema }).strict(),
+    response: z.object({
+      id: UuidSchema,
+      ruleId: UuidSchema,
+      eventId: UuidSchema,
+      status: z.literal("approved"),
+      runId: UuidSchema,
+      at: IsoDateTimeUtcSchema,
+      decidedAt: IsoDateTimeUtcSchema,
+    }),
+  },
+  "eventRule.review.deny": {
+    request: z.object({ botId: UuidSchema, id: UuidSchema }).strict(),
+    response: z.object({
+      id: UuidSchema,
+      ruleId: UuidSchema,
+      eventId: UuidSchema,
+      status: z.literal("denied"),
+      runId: z.null(),
+      at: IsoDateTimeUtcSchema,
+      decidedAt: IsoDateTimeUtcSchema,
+    }),
+  },
+  "eventRule.state.list": {
+    request: z
+      .object({
+        botId: UuidSchema,
+        limit: z.int().min(1).max(100).default(50),
+      })
+      .strict(),
+    response: z.object({
+      states: z.array(
+        z.object({
+          id: UuidSchema,
+          ruleId: UuidSchema,
+          botId: UuidSchema,
+          state: z.enum(["enabled", "disabled", "review"]),
+          at: IsoDateTimeUtcSchema,
+        }),
+      ),
+    }),
+  },
   "grant.create": {
     request: z.object({
       capability: z.string().min(1).max(64),
@@ -1192,6 +1391,7 @@ export const METHOD_CONTRACTS = {
   },
   ...PERMISSION_METHODS,
   ...SCREEN_METHODS,
+  ...DEVICE_METHODS,
 } as const satisfies Record<
   Method,
   { request: z.ZodType; response: z.ZodType }

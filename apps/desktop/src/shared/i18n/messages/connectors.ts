@@ -34,6 +34,8 @@ export const connectorsMessages = {
   "connectors.noBotsToGrant": { zh: "没有可授权的机器人", en: "No bots available to grant" },
   "connectors.noToolsReturned": { zh: "服务未返回可用工具", en: "The service returned no tools" },
   "connectors.readFailed": { zh: "连接器读取失败", en: "Failed to read connectors" },
+  "connectors.registerLabel": { zh: "登记连接器", en: "Register a connector" },
+  "connectors.namePlaceholder": { zh: "连接器名称", en: "Connector name" },
   "connectors.register": { zh: "注册", en: "Register" },
   "connectors.registered": { zh: "已登记连接器", en: "Connector registered" },
   "connectors.registerFailed": { zh: "连接器注册失败", en: "Failed to register the connector" },

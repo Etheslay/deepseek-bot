@@ -54,3 +54,4 @@ export {
   type ProfilePatchPaths,
   type AppToolProfileOptions,
 } from "./profile-assets.js";
+export { listenOnPrivateHttpPort } from "./loopback.js";

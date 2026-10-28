@@ -5,6 +5,7 @@ import {
   assertValidLanguagePreference,
   assertValidTitleBarOverlayColors,
   type AppInfo,
+  type HardwareAccelerationStatus,
   type UpdateStatus,
 } from "../../shared/ipc-channels.js";
 import type { LanguagePreference } from "../../shared/i18n/types.js";
@@ -46,6 +47,10 @@ export type IpcHandlers = {
   checkUpdates: () => Promise<UpdateStatus>;
   /** D24: download the update and restart into the installer. */
   downloadAndInstallUpdate: () => Promise<UpdateStatus>;
+  /** D24: summaries of existing backups in the data root. */
+  listBackups: () => import("../../shared/ipc-channels.js").BackupSummary[];
+  /** D24: read or toggle the hardware-acceleration preference. */
+  hardwareAcceleration: (enabled: unknown) => Promise<HardwareAccelerationStatus>;
   /** D22: mirror the UI language preference so tray/notifications match. */
   setLanguage: (preference: LanguagePreference) => void;
   /** D22: replace the per-bot tray state (validated + normalized in main). */
@@ -150,6 +155,19 @@ export function registerIpcHandlers(
     wrap(IPC_CHANNELS.UPDATES_DOWNLOAD_INSTALL, () =>
       handlers.downloadAndInstallUpdate(),
     ),
+  );
+  ipcMain.handle(IPC_CHANNELS.BACKUPS_LIST, (event: IpcMainInvokeEvent) => {
+    assertAllowedChannel(IPC_CHANNELS.BACKUPS_LIST);
+    assertAuthorizedSender(event, isAuthorized);
+    return handlers.listBackups();
+  });
+  ipcMain.handle(
+    IPC_CHANNELS.APP_HARDWARE_ACCELERATION,
+    (event: IpcMainInvokeEvent, enabled: unknown) => {
+      assertAllowedChannel(IPC_CHANNELS.APP_HARDWARE_ACCELERATION);
+      assertAuthorizedSender(event, isAuthorized);
+      return handlers.hardwareAcceleration(enabled);
+    },
   );
   ipcMain.handle(
     IPC_CHANNELS.I18N_SET_LANGUAGE,

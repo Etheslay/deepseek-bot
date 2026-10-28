@@ -26,6 +26,12 @@ import {
 } from "./chrome-bookmarks.js";
 import { DATA_ROOT_DIR_NAME, HOST_EVENT_MISSED, SYSTEM_EVENT_WINDOW_FOCUS } from "../shared/ipc-channels.js";
 import { pickKnowledgeFile } from "./knowledge-import.js";
+import { listBackups, type RestoreOutcome } from "./backups.js";
+import {
+  applyHardwareAccelerationPreference,
+  getHardwareAcceleration,
+  setHardwareAcceleration,
+} from "./hardware-acceleration.js";
 
 let mainWindow: BrowserWindow | null = null;
 let trayController: TrayController | null = null;
@@ -240,7 +246,34 @@ function registerShellIpc(win: BrowserWindow): void {
         if (hostClient === null) {
           return Promise.reject(new Error("host process is not running"));
         }
+        if (method === "data.restore") {
+          // The restore handler replaces the database on disk; the running
+          // Host is dead afterwards (handlers.ts). Replace the child before
+          // the renderer sees the result, so follow-up calls hit the fresh
+          // process instead of failing with "host process has exited".
+          return hostClient
+            .call(method, payload)
+            .then(async () => {
+              await restartHost();
+              return { restored: true, hostRestarted: true } satisfies RestoreOutcome;
+            })
+            .catch((error: unknown) => {
+              // A refused restore leaves the current Host intact; surface the
+              // stable error (active runs, checksum mismatch, …) untouched.
+              return Promise.reject(error);
+            });
+        }
         return hostClient.call(method, payload);
+      },
+      listBackups: () => listBackups(resolveDataRoot()),
+      hardwareAcceleration: (enabled: unknown) => {
+        if (enabled === undefined) {
+          return Promise.resolve(getHardwareAcceleration());
+        }
+        if (typeof enabled !== "boolean") {
+          return Promise.reject(new Error(tr("d24.hardwareAccelNotBoolean")));
+        }
+        return Promise.resolve(setHardwareAcceleration(enabled));
       },
       showWindow: () => {
         win.show();
@@ -310,7 +343,66 @@ function denyAllPermissions(): void {
   );
 }
 
+/**
+ * Spawn the Host child and bind it to the shell (missed-notice forwarding).
+ * Re-entrant: `data.restore` invalidates the running Host (its database
+ * handle is replaced on disk), so the main process shuts it down and calls
+ * this again over the restored data.
+ */
+function startHost(): void {
+  // The Host owns the database, engine, scheduler and the pinned Harness
+  // adapter (D12). It starts with the shell and dies with it; renderer
+  // contract calls forward through the HOST_CALL channel. The entry ships
+  // as an extraResource when packaged and falls back to the monorepo build
+  // in development.
+  const hostEntryCandidates = [
+    join(process.resourcesPath, "host", "main.js"),
+    join(app.getAppPath(), "..", "..", "packages", "host", "dist", "main.js"),
+  ];
+  // The bundled Host still resolves the pinned Harness package through
+  // NODE_PATH in a source checkout (the packaged app ships it in resources).
+  const devHarnessModules = join(
+    app.getAppPath(),
+    "..",
+    "..",
+    "packages",
+    "harness-adapter",
+    "node_modules",
+  );
+  hostClient = spawnHostProcess({
+    entryPath: hostEntryCandidates.find((candidate) => existsSync(candidate)) ?? hostEntryCandidates[0]!,
+    dataRoot: resolveDataRoot(),
+    decryptCredential,
+    childEnv: (parent) =>
+      existsSync(devHarnessModules)
+        ? {
+            NODE_PATH: [devHarnessModules, parent["NODE_PATH"]].filter(Boolean).join(delimiter),
+          }
+        : {},
+  });
+  hostClient.onMissed((notices) => {
+    if (mainWindow !== null && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send(HOST_EVENT_MISSED, notices);
+    }
+  });
+}
+
+/**
+ * Replace the Host child after a successful data.restore. Pending calls on
+ * the old client fail fast with RUNTIME_UNAVAILABLE; the fresh process opens
+ * the restored database.
+ */
+async function restartHost(): Promise<void> {
+  const previous = hostClient;
+  hostClient = null;
+  await previous?.shutdown();
+  startHost();
+}
+
 if (gotLock) {
+  // Chromium's toggle only counts before app.ready (hardware-acceleration.ts).
+  applyHardwareAccelerationPreference();
+
   app.whenReady().then(() => {
     if (process.platform === "win32") {
       app.setAppUserModelId("com.deepseekbot.desktop");
@@ -324,41 +416,7 @@ if (gotLock) {
 
     denyAllPermissions();
 
-    // The Host owns the database, engine, scheduler and the pinned Harness
-    // adapter (D12). It starts with the shell and dies with it; renderer
-    // contract calls forward through the HOST_CALL channel. The entry ships
-    // as an extraResource when packaged and falls back to the monorepo build
-    // in development.
-    const hostEntryCandidates = [
-      join(process.resourcesPath, "host", "main.js"),
-      join(app.getAppPath(), "..", "..", "packages", "host", "dist", "main.js"),
-    ];
-    // The bundled Host still resolves the pinned Harness package through
-    // NODE_PATH in a source checkout (the packaged app ships it in resources).
-    const devHarnessModules = join(
-      app.getAppPath(),
-      "..",
-      "..",
-      "packages",
-      "harness-adapter",
-      "node_modules",
-    );
-    hostClient = spawnHostProcess({
-      entryPath: hostEntryCandidates.find((candidate) => existsSync(candidate)) ?? hostEntryCandidates[0]!,
-      dataRoot: resolveDataRoot(),
-      decryptCredential,
-      childEnv: (parent) =>
-        existsSync(devHarnessModules)
-          ? {
-              NODE_PATH: [devHarnessModules, parent["NODE_PATH"]].filter(Boolean).join(delimiter),
-            }
-          : {},
-    });
-    hostClient.onMissed((notices) => {
-      if (mainWindow !== null && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send(HOST_EVENT_MISSED, notices);
-      }
-    });
+    startHost();
 
     mainWindow = createMainWindow();
     // D22: one tray whose icon mirrors the active bot's avatar; the renderer

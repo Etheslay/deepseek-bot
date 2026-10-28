@@ -1,4 +1,13 @@
-import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import {
+  lstat,
+  mkdir,
+  mkdtemp,
+  readFile,
+  realpath,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -54,7 +63,7 @@ describe("screen backend", () => {
     await writeFile(outside, ONE_PIXEL);
     const output = path.join(directory, "out");
     await mkdir(output);
-    await symlink(outside, path.join(output, "capture.png"));
+    await captureLink(outside, path.join(output, "capture.png"));
     let calls = 0;
     const backend = backendWith(resources, {
       async run() {
@@ -136,7 +145,7 @@ describe("screen backend", () => {
 
     const escaped = backendWith(resources, {
       async run() {
-        await symlink(outside, path.join(output, "capture.png"));
+        await captureLink(outside, path.join(output, "capture.png"));
         return JSON.stringify({ ok: true, width: 1, height: 1 });
       },
     });
@@ -228,6 +237,19 @@ function backendWith(
   extra: Partial<ScreenBackendOptions> = {},
 ) {
   return createScreenBackend({ resourcesDirectory, helperRunner, ...extra });
+}
+
+async function captureLink(outsideFile: string, link: string): Promise<void> {
+  if (process.platform === "win32") {
+    // Junctions exercise the same lstat reparse-point rejection without requiring
+    // Windows Developer Mode or the privilege needed to create file symlinks.
+    const outsideDirectory = `${outsideFile}.directory`;
+    await mkdir(outsideDirectory);
+    await symlink(outsideDirectory, link, "junction");
+  } else {
+    await symlink(outsideFile, link);
+  }
+  expect((await lstat(link)).isSymbolicLink()).toBe(true);
 }
 
 function hangingHelper(): HelperRunner {

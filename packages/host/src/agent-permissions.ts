@@ -51,6 +51,7 @@ const CAPABILITIES: Readonly<Record<string, readonly CapabilityId[]>> = {
   connector_invoke: ["connector.invoke"],
   mcp_call: ["mcp.call"],
   screen_capture: ["screen.capture"],
+  device_action: ["device.action"],
 };
 function digest(call: Omit<PermissionCall, "actionDigest">): string {
   return createHash("sha256").update(stableStringify(call)).digest("hex");

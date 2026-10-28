@@ -91,7 +91,8 @@
 | 头像打磨（Grok Ball 视线与节奏） | 已交付 | `feature/gaze-avatar` → PR #61 `cc4a379`、#62 `5533ea6` | [B-AVATAR-02-report](reports/B-AVATAR-02-report.md) |
 | D25 全局搜索 | 已交付（host 检索按计划后接） | 同上 → `0f20970` | [D25-report](reports/D25-report.md) |
 | D26 聊天附件 | **切片交付，任务未完成** | 同上 → `0f20970` | [D26-report](reports/D26-report.md) |
-| D24 设置与更新 | **切片交付，任务未完成**（备份保险库在途，见 §10） | 同上 → `0f20970` | [D24-report](reports/D24-report.md) |
+| D24 设置与更新 | **切片交付，任务未完成**（备份保险库见下一行） | 同上 → `0f20970` | [D24-report](reports/D24-report.md) |
+| D24 备份/恢复与设置收尾 | **切片交付**：设置分区化（保险库/用量/电脑/更新全部真实可用）、`backups:list` 桌面通道（只读 manifest）、`data.restore` 后 Host 子进程重启、硬件加速偏好真实开关。实机安装版验证与更新链路仍 UNVERIFIED | `feature/settings-vault`（见 PR） | [D24-data-report](reports/D24-data-report.md) |
 | D17 技能与模板 | **已交付（渲染层闭环）**：模板库 + 技能定义/复用/版本化 + 统一文件导入导出（契约校验）。工作流模板、Host 注入与能力强制留后续 | `feature/skills-templates` → `292c3b8`、PR #48 `2ecb2f9` | [D17-report](reports/D17-report.md) |
 | D18 记忆写入 / 检索 / 删除 | 已交付 | `feature/memory-knowledge` → PR #57 `7de305b` | [D18-memory-report](reports/D18-memory-report.md) |
 | D18 知识导入（.txt/.md，16 KiB 上限） | 已交付 | `feature/knowledge-import` → PR #59 `9805b6a` | [D18-knowledge-import-report](reports/D18-knowledge-import-report.md) |
@@ -99,9 +100,16 @@
 | D19 连接器登记与启停 | 已交付（自定义 MCP、凭据启用未做） | `feature/connector-registry` → PR #60 `20d3ab2` | [D19-connector-registry-report](reports/D19-connector-registry-report.md) |
 | D19 连接器调用与本地 SD 生图 | 已交付（视觉理解未做） | `feature/connector-invoke` → PR #65 `73ae475` | [D19-connector-invoke-report](reports/D19-connector-invoke-report.md) |
 | D20 事件自动化：触发规则与评审队列 | 已交付 | `feature/automation-triggers` → PR #66 `3afea90` | [D20-triggers-report](reports/D20-triggers-report.md) |
+| D20 本地事件规则：保存/列出/启停，命中一次启动一个运行 | 切片交付（评审队列界面、聊天通知条、桌面屏幕未做） | `feature/event-automation-rules-844b` | [D20-event-rules-report](reports/D20-event-rules-report.md) |
+| D20 本地事件评审：命中入队，批准启动一次，拒绝记跳过 | 切片交付（无桌面界面、无聊天通知条） | `feature/event-review-queue-0e27` | [D20-event-review-report](reports/D20-event-review-report.md) |
+| D20 本地事件规则状态记录：启停与改为评审各记一条，可按 bot 列出 | 切片交付（无桌面界面、无聊天通知条） | `feature/event-rule-state-history-d3c8` | [D20-event-rule-state-report](reports/D20-event-rule-state-report.md) |
+| D20 桌面评审与状态 | **切片交付**：设置页为选定的一个 bot 显示规则当前状态（启用、停用、评审）。待评审可批准或拒绝：批准走既有 `eventRule.review.approve` 并启动一次运行，拒绝走既有 `eventRule.review.deny` 并记下一次跳过。状态记录在同一页从新到旧显示。无聊天通知条，不改聊天授权，不移动鼠标、不发送按键。Linux / Node 22 上 lint、typecheck、桌面 472 与 host 事件规则 3 通过。GitHub Actions 未跑 | `feature/event-rule-desktop-review-4519` | [D20-desktop-review-report](reports/D20-desktop-review-report.md) |
 | D28 产物画布共编侧车 | 已交付 | `feature/canvas-cowrite` → PR #64 `2d5a5e3` | [D28-report](reports/D28-report.md) |
-| D21 本地执行守护 | **切片进行中**：契约、Windows 后端与 Host 网关已在 develop；桌面设置页只做单窗口截图/OCR 的启用、选择、仅本次审批和本机预览。真实窗口、打包 Electron、GitHub Actions 未跑 | `feature/screen-desktop-settings-48af` | [D21-desktop-report](reports/D21-desktop-report.md) |
-| D22 系统集成与双语 | **已交付，待负责人自审合入**：全量中英双语（18 域 738 条 key + AST 扫描防回归守卫）、单托盘随活跃 bot + 逐 bot 图标菜单、系统通知与设置（总开关 / 仅非前台 / 按 bot 静音 / 测试通知）、Chrome **书签**只读导入（预览→导入→导出→删除）。托盘渲染与点击、Windows 通知弹出、真实 Chrome 配置、打包版 AppUserModelId 属实机未验证项 | `feature/system-integration` → 待开 PR（base `develop`，head `8f5bcda`） | [D22-report](reports/D22-report.md) |
+| D21 本地执行守护 | **截图/OCR 主体已合入**（#70/#74/#77/#81/#83）；设备输入仍未执行。原桌面报告的 Windows 验收缺口由下一行跟进 | `feature/screen-desktop-settings-48af` → PR #83 | [D21-desktop-report](reports/D21-desktop-report.md) |
+| D21 Windows 集成修复与验收 | **已合入 develop（PR #93 `5cd86ca`）**：修复 Host 分发资源、OCR bundle、取消/清单竞态、目录链接、HTTP 端口与关闭进程；本机全量 1374 通过、2 跳过，真实窗口及 Electron 全链路通过。GitHub CI 因账户额度未执行 | `feature/screen-windows-acceptance` | [D21-windows-acceptance-report](reports/D21-windows-acceptance-report.md) |
+| D21 设备动作批准闸门 | **已合入 develop（PR #88）**：默认关闭。策略为每次询问时，一次请求需要一次精确的仅本次审批才接受，结果只有 id 和时间。不移动鼠标、不发送按键、不调用 exec daemon。无单独桌面界面，无网络。真实键鼠与 GitHub Actions 未跑 | `feature/device-action-approval-ffd6` | [D21-device-action-report](reports/D21-device-action-report.md) |
+| D21 设备动作本地记录 | **切片进行中**：一次精确审批后写入一条本地记录（id、bot id、动作名、时间），按 bot 从新到旧列出。拒绝、未启用、复用或未知动作名不写入。未知动作名在审批前拒绝。不移动鼠标、不发送按键、不调用 exec daemon。无桌面界面，无网络。真实键鼠与 GitHub Actions 未跑 | `feature/device-action-record-07ab` | [D21-device-action-record-report](reports/D21-device-action-record-report.md) |
+| D22 系统集成与双语 | **已合入 develop（PR #75 `9db1ae9`）**：全量中英双语（20 域 853 条 key + AST 扫描防回归守卫；计数为本次同步在合流后的树上实测）、单托盘随活跃 bot + 逐 bot 图标菜单、系统通知与设置（总开关 / 仅非前台 / 按 bot 静音 / 测试通知）、Chrome **书签**只读导入（预览→导入→导出→删除）。托盘渲染与点击、Windows 通知弹出、真实 Chrome 配置、打包版 AppUserModelId 属实机未验证项；负责人自审记录仍待本人填写 | `feature/system-integration` → PR #75 | [D22-report](reports/D22-report.md) |
 | D23 平台验收 | 未开始（依赖 D13、D14–D22 全部完成） | — | — |
 
 补记说明：B 线四项与 D17 模板库切片在合入时**未写交付报告、PR 自审记录未填**（两份 PR 清单各仅勾选 2/5）；相应报告于 2026-10-25 事后补记，**不追认事前完成自审**，自审结论仍留空待负责人签署。B 线四项挤在一条串行分支经单个 PR 合入，偏离"一任务一分支"，lockfile 与 CI 配置改动亦未拆独立小 PR；D17 技能库部分已改从最新 develop 单独切分支。后续任务（含 D24、D26 的剩余部分）同样单独切分支，不再堆叠。各任务的手测截图（`reports/assets/d14|d17|d24|d25|d26/`）仍缺，列为待补。
@@ -118,8 +126,8 @@
 | A2 | D16 权限三层 | 三档策略、聊天内授权、审计（复用 D14 卡片组件） |
 | A3 | D18 记忆与知识 | 写入/检索/删除，默认不跨 bot；独立知识表 + 本地向量检索 + 保留策略（`feature/knowledge-base`），见 [知识导入报告](reports/D18-knowledge-import-report.md)、[知识检索报告](reports/D18-knowledge-search-report.md) |
 | A4 | D19 连接器与 MCP | 登记与本地 SD 调用已合入（PR #65）；本分支交付无凭据本机 HTTP MCP 的按 bot 白名单、聊天单次审批与审计，见 [MCP 报告](reports/D19-mcp-http-report.md)。stdio、凭据注入和视觉接入待后续 |
-| A5 | D20 事件自动化 | 规则、评审队列、重复防护（`feature/automation-triggers`：规则 + 评审队列 + 通知条后端） |
-| A6 | D21 本地执行守护 | 契约、Windows OCR 与 Host 网关已在 develop。桌面设置页提供默认关闭、逐次授权的单窗口截图和本机预览；设备动作与真实窗口验收未做 |
+| A5 | D20 事件自动化 | 评审队列已合入（PR #66）。本地自动启动切片：一个 bot 的规则可保存、列出、启停，默认关闭，命中一次启动一个运行（`feature/event-automation-rules-844b`）。本地评审切片：规则可设为评审，命中只入队，批准启动一次，拒绝记跳过（`feature/event-review-queue-0e27`）。状态记录切片：启用、停用或改为评审且状态变化时追加一条，按 bot 从新到旧列出（`feature/event-rule-state-history-d3c8`）。桌面切片：设置页为选定 bot 显示启用/停用/评审、待评审批准或拒绝，以及从新到旧的状态记录（`feature/event-rule-desktop-review-4519`）。无聊天通知条 |
+| A6 | D21 本地执行守护 | 契约、Windows OCR 与 Host 网关已在 develop。桌面设置页提供默认关闭、逐次授权的单窗口截图和本机预览。设备动作在每次询问下接受一次精确审批；通过后写入一条本地记录（id、bot id、动作名、时间），可按 bot 从新到旧列出。拒绝、未启用、复用或未知动作名不写入，也不执行输入；真实窗口与真实键鼠未做 |
 
 **B 线（Destinyian · 桌面与体验）**：
 
@@ -251,6 +259,22 @@
 - 工作区垃圾：主工作区根目录有一个 0 字节的 `$null` 文件（10-26 17:35 由误用的重定向产生），可直接删除；
 - 死工作区：`deepseek-bot-avatar-ball`、`deepseek-bot-reaction-pill`、已合入的 `deepseek-bot-d28` 三个工作区可清理（先确认其中没有未跟踪的截图或日志）；
 - 手测截图：D14 / D17 / D24 / D25 / D26 的 `reports/assets/…` 仍缺；
-- 未完成的计划项：**D21 本地执行守护**（Etheslay：桌面设置页在功能分支，真实窗口与设备动作未做）、**D23 平台验收**（你，依赖 D13 与 D14–D22 全部完成）。
+- 未完成的计划项：**D21 本地执行守护**（Etheslay：桌面设置页在功能分支；设备动作批准闸门已合入 develop（PR #88）。本片 `feature/device-action-record-07ab` 在一次精确审批后写入本地记录，真实窗口与真实键鼠未做）、**D23 平台验收**（你，依赖 D13 与 D14–D22 全部完成）。
 
 
+
+
+## 11. UI 冻结基线（负责人确认，所有窗口必须保持）
+
+以下 8 项为负责人确认满意的 UI 基线（2026-10-27）。任何窗口的后续改动**不得回退或破坏**这些项；重构/合并时逐项核对：
+
+1. **整体 UI**：Grok 风格界面层（贴底对齐、顶部半模糊渐隐、简洁行通知）；
+2. **气泡**：bot 回复无气泡纯文本 + 用户气泡当前样式；
+3. **消息往来查看**：交付通知/往来摘要点击打开配对聊天记录视图（关闭聊天返回），不是跳 bot；
+4. **居中提示**：交付通知、往来摘要等系统行居中显示；
+5. **点击查看聊天记录**：同 3，点击对象是聊天记录而非会话切换；
+6. **无闪电按钮**：composer 无独立技能按钮，技能入口在 ＋ 菜单；
+7. **卡片配色**：选项卡片当前配色保持；
+8. **选项卡配色**：角色/语气选项卡当前配色保持。
+
+改动涉及以上任一项时，PR 描述必须逐项核对并在自审记录里声明“冻结基线未破坏”。

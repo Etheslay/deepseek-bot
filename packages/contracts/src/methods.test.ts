@@ -27,7 +27,7 @@ describe("method whitelist", () => {
   it("defines a contract for every whitelisted method and nothing else", () => {
     const contractMethods = Object.keys(METHOD_CONTRACTS).sort();
     expect(contractMethods).toEqual([...METHODS].sort());
-    expect(METHODS).toHaveLength(91);
+    expect(METHODS).toHaveLength(103);
   });
 
   it("covers every method group from CONTRACTS §3", () => {
@@ -40,6 +40,8 @@ describe("method whitelist", () => {
       "connector",
       "creation",
       "data",
+      "device",
+      "eventRule",
       "events",
       "grant",
       "group",
@@ -399,6 +401,121 @@ describe("parseRequest", () => {
         "memory.retention.set",
       ).success,
     ).toBe(true);
+  });
+});
+
+describe("eventRule methods", () => {
+  const botId = "10000000-0000-4000-8000-000000000001";
+  const workflowId = "20000000-0000-4000-8000-000000000002";
+
+  it("accepts save, list, enable, disable, and the record list", () => {
+    const saved = parseRequest(
+      envelope("eventRule.save", {
+        botId,
+        rule: { name: "on failure", workflowId, eventType: "run.failed" },
+      }),
+      "eventRule.save",
+    );
+    expect(saved.success).toBe(true);
+    expect(parseRequest(envelope("eventRule.list", { botId }), "eventRule.list").success).toBe(true);
+    expect(
+      parseRequest(envelope("eventRule.enable", { botId, id: workflowId }), "eventRule.enable").success,
+    ).toBe(true);
+    expect(
+      parseRequest(envelope("eventRule.disable", { botId, id: workflowId }), "eventRule.disable").success,
+    ).toBe(true);
+    const listed = parseRequest(
+      envelope("eventRule.record.list", { botId, outcome: "skipped" }),
+      "eventRule.record.list",
+    );
+    expect(listed.success).toBe(true);
+    if (listed.success) {
+      expect(listed.payload.limit).toBe(50);
+    }
+  });
+
+  it("rejects an enabled flag, a remote target, and unknown fields", () => {
+    expect(
+      parseRequest(
+        envelope("eventRule.save", {
+          botId,
+          rule: { name: "on failure", workflowId, eventType: "run.failed", enabled: true },
+        }),
+        "eventRule.save",
+      ).success,
+    ).toBe(false);
+    expect(
+      parseRequest(
+        envelope("eventRule.save", {
+          botId,
+          rule: { name: "on failure", workflowId, eventType: "run.failed" },
+          relay: "https://example.invalid/hook",
+        }),
+        "eventRule.save",
+      ).success,
+    ).toBe(false);
+    expect(
+      parseRequest(
+        envelope("eventRule.record.list", { botId, outcome: "remote" }),
+        "eventRule.record.list",
+      ).success,
+    ).toBe(false);
+    expect(
+      parseRequest(
+        envelope("eventRule.save", {
+          botId,
+          rule: { name: "on failure", workflowId, eventType: "run.failed", review: true },
+        }),
+        "eventRule.save",
+      ).success,
+    ).toBe(false);
+  });
+
+  it("accepts setting a rule to review, listing pending items, and one decision", () => {
+    const reviewId = "30000000-0000-4000-8000-000000000003";
+    expect(
+      parseRequest(envelope("eventRule.review", { botId, id: workflowId }), "eventRule.review").success,
+    ).toBe(true);
+    const listed = parseRequest(
+      envelope("eventRule.review.list", { botId }),
+      "eventRule.review.list",
+    );
+    expect(listed.success).toBe(true);
+    if (listed.success) {
+      expect(listed.payload.limit).toBe(50);
+    }
+    expect(
+      parseRequest(
+        envelope("eventRule.review.approve", { botId, id: reviewId }),
+        "eventRule.review.approve",
+      ).success,
+    ).toBe(true);
+    expect(
+      parseRequest(
+        envelope("eventRule.review.deny", { botId, id: reviewId }),
+        "eventRule.review.deny",
+      ).success,
+    ).toBe(true);
+    expect(
+      parseRequest(
+        envelope("eventRule.review", { botId, id: workflowId, relay: "https://example.invalid/hook" }),
+        "eventRule.review",
+      ).success,
+    ).toBe(false);
+  });
+
+  it("lists state history for one bot and rejects a remote field", () => {
+    const listed = parseRequest(envelope("eventRule.state.list", { botId }), "eventRule.state.list");
+    expect(listed.success).toBe(true);
+    if (listed.success) {
+      expect(listed.payload.limit).toBe(50);
+    }
+    expect(
+      parseRequest(
+        envelope("eventRule.state.list", { botId, relay: "https://example.invalid/hook" }),
+        "eventRule.state.list",
+      ).success,
+    ).toBe(false);
   });
 });
 

@@ -29,6 +29,8 @@ export async function buildOcrResources(outDir) {
   await mkdir(path.join(outDir, "core"), { recursive: true });
   await mkdir(path.join(outDir, "lang"), { recursive: true });
   await mkdir(path.join(outDir, "licenses"), { recursive: true });
+  // The upstream core .js files use CommonJS, including inside an ESM Host.
+  await writeFile(path.join(outDir, "package.json"), JSON.stringify({ type: "commonjs" }));
 
   const tesseractRequire = createRequire(path.join(resolved["tesseract.js"], "package.json"));
   const wasmDetect = tesseractRequire.resolve("wasm-feature-detect");

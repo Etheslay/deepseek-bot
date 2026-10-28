@@ -11,6 +11,7 @@ const POLICIES = [
   { capability: "app.start_run", mode: "ask" },
   { capability: "exec.shell", mode: "ask" },
   { capability: "screen.capture", mode: "deny" },
+  { capability: "device.action", mode: "deny" },
 ];
 
 const GRANT = {
@@ -97,20 +98,74 @@ async function renderPanel(): Promise<HTMLDivElement> {
   return container;
 }
 
-function selectByLabel(container: ParentNode, capability: string): HTMLSelectElement {
-  const select = container.querySelector(`[aria-label="${capability} 策略"]`);
-  if (!(select instanceof HTMLSelectElement)) {
-    throw new Error(`missing select for ${capability}`);
+/** The policy control is a CustomSelect trigger (a button), not a native select. */
+function controlByLabel(container: ParentNode, capability: string): HTMLButtonElement {
+  const trigger = container.querySelector(`button[aria-label="${capability} 策略"]`);
+  if (!(trigger instanceof HTMLButtonElement)) {
+    throw new Error(`missing policy control for ${capability}`);
   }
-  return select;
+  return trigger;
 }
 
-async function choose(select: HTMLSelectElement, value: string): Promise<void> {
+const MODE_LABELS: Record<string, string> = {
+  allow: "始终允许",
+  ask: "每次询问",
+  deny: "从不允许",
+};
+
+function modeOfLabel(label: string): string {
+  const entry = Object.entries(MODE_LABELS).find(([, text]) => text === label);
+  return entry ? entry[0] : label;
+}
+
+function menuOf(trigger: HTMLButtonElement): HTMLElement | null {
+  const box = trigger.closest(".custom-select");
+  return box instanceof HTMLElement ? box.querySelector<HTMLElement>(".custom-select-menu") : null;
+}
+
+async function openMenu(trigger: HTMLButtonElement): Promise<HTMLElement> {
   await act(async () => {
-    const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")?.set;
-    setter?.call(select, value);
-    select.dispatchEvent(new Event("change", { bubbles: true }));
+    trigger.dispatchEvent(new MouseEvent("click", { bubbles: true }));
   });
+  const menu = menuOf(trigger);
+  if (menu === null) {
+    throw new Error("the policy dropdown did not open");
+  }
+  return menu;
+}
+
+/** The mode the closed control currently displays. */
+function shownMode(trigger: HTMLButtonElement): string {
+  const label = (trigger.textContent ?? "").replace("▾", "").trim();
+  return modeOfLabel(label);
+}
+
+async function choose(container: ParentNode, capability: string, mode: string): Promise<void> {
+  const trigger = controlByLabel(container, capability);
+  const menu = await openMenu(trigger);
+  const option = [...menu.querySelectorAll<HTMLButtonElement>(".custom-select-item")].find(
+    (item) => (item.textContent ?? "").replace("✓", "").trim() === MODE_LABELS[mode],
+  );
+  if (option === undefined) {
+    throw new Error(`no option for ${mode} on ${capability}`);
+  }
+  await act(async () => {
+    option.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  });
+}
+
+/** The mode ids the control offers, read from its open menu. */
+async function optionIds(container: ParentNode, capability: string): Promise<string[]> {
+  const trigger = controlByLabel(container, capability);
+  const menu = await openMenu(trigger);
+  const ids = [...menu.querySelectorAll<HTMLElement>(".custom-select-item")].map((item) =>
+    modeOfLabel((item.textContent ?? "").replace("✓", "").trim()),
+  );
+  // Close it again so later assertions read the trigger, not an open list.
+  await act(async () => {
+    trigger.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  });
+  return ids;
 }
 
 describe("permissions settings panel", () => {
@@ -118,7 +173,7 @@ describe("permissions settings panel", () => {
     const calls = installHost();
     const container = await renderPanel();
     await vi.waitFor(() => {
-      expect(selectByLabel(container, "app.create_group").value).toBe("ask");
+      expect(shownMode(controlByLabel(container, "app.create_group"))).toBe("ask");
     });
     expect(calls.map((call) => call.method)).toEqual([
       "permission.policy.list",
@@ -129,26 +184,25 @@ describe("permissions settings panel", () => {
     expect(container.textContent).toContain("本会话");
     expect(container.textContent).toContain("1/5");
     expect(container.textContent).not.toContain("app.read");
-    expect(container.querySelectorAll("button")).toHaveLength(1);
+    // One issued grant, so exactly one revoke action — the dropdown triggers are
+    // buttons too now, so count by what they do rather than by tag.
+    expect(
+      [...container.querySelectorAll("button")].filter((b) => b.textContent?.includes("撤销")),
+    ).toHaveLength(1);
   });
 
   it("keeps fixed capabilities constrained and saves allow/ask/deny modes", async () => {
     const calls = installHost();
     const container = await renderPanel();
     await vi.waitFor(() => {
-      expect(selectByLabel(container, "app.start_run").disabled).toBe(true);
+      expect(controlByLabel(container, "app.start_run").disabled).toBe(true);
     });
-    expect(
-      [...selectByLabel(container, "screen.capture").options].map((option) => option.value),
-    ).toEqual(["ask", "deny"]);
-    expect(
-      [...selectByLabel(container, "exec.shell").options].map((option) => option.value),
-    ).toEqual(["ask", "deny"]);
-    expect(
-      [...selectByLabel(container, "app.create_group").options].map((option) => option.value),
-    ).toEqual(["allow", "ask", "deny"]);
+    expect(await optionIds(container, "screen.capture")).toEqual(["ask", "deny"]);
+    expect(await optionIds(container, "device.action")).toEqual(["ask", "deny"]);
+    expect(await optionIds(container, "exec.shell")).toEqual(["ask", "deny"]);
+    expect(await optionIds(container, "app.create_group")).toEqual(["allow", "ask", "deny"]);
 
-    await choose(selectByLabel(container, "app.create_group"), "allow");
+    await choose(container, "app.create_group", "allow");
     await vi.waitFor(() => {
       expect(calls).toContainEqual({
         method: "permission.policy.set",
@@ -161,11 +215,15 @@ describe("permissions settings panel", () => {
   it("revokes an issued grant by grantId", async () => {
     const calls = installHost();
     const container = await renderPanel();
+    // The revoke button is no longer the first button in the panel: each policy
+    // row now renders a dropdown trigger, so find it by what it does.
+    const revokeButton = (): HTMLButtonElement | undefined =>
+      [...container.querySelectorAll("button")].find((b) => b.textContent?.includes("撤销"));
     await vi.waitFor(() => {
-      expect(container.querySelector("button")?.textContent).toBe("撤销");
+      expect(revokeButton()?.textContent).toBe("撤销");
     });
     await act(async () => {
-      container.querySelector("button")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      revokeButton()?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     await vi.waitFor(() => {
       expect(calls).toContainEqual({
