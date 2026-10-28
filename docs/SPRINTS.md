@@ -184,7 +184,7 @@
 | 聊天 | 回复仍是"（占位回复）"夹具数据；横幅标注"静态占位" | **已实现**：chat.send/history/cancel 真实链路（D30 + PR #97/#103），夹具仅存于离线演示模式 | ~~Renderer↔Host 映射~~ 聊天部分已落地；剩余界面态见 **GAP_AUDIT G1'** |
 | 聊天 | ＋ 菜单"添加附件" | **已实现**（D26）：`attachment.begin/append/commit` 上传进工作区 + 模型工具 `read_workspace_file`（PR #106/#111） | ~~D26~~ 已完成，见 [GAP_AUDIT](GAP_AUDIT.md) §1.1 G8 |
 | 聊天 | 麦克风按钮 | 占位仍在渲染层；后端已备（`voice.status/transcribe/speak`，whisper.cpp+SAPI 全本地，PR #113） | **D27'** 语音桌面 UI，见 [GAP_AUDIT](GAP_AUDIT.md) §5 |
-| 顶栏 | 搜索圆钮 | **已实现**（D25）：`search.global` Host 一体检索（PR #117），消息命中回有界摘要 | ~~D25~~ 已完成，见 [GAP_AUDIT](GAP_AUDIT.md) §1.1 G10 |
+| 顶栏 | 搜索圆钮 | **部分实现**：Ctrl+K 浮层已有但只过滤渲染层本地索引；Host `search.global` 已合入（PR #117）而浮层尚未调用（渲染层 grep 零命中） | **D25 后半（G10'）**，见 [GAP_AUDIT](GAP_AUDIT.md) §2 |
 | 顶栏 | 最近会话 / 产物 popover | 会话部分已读真实数据（PR #103 stored-session）；产物 popover 本次刷新未逐项复核 | 同 [GAP_AUDIT](GAP_AUDIT.md) G1'/G10 |
 | 设置 | 分类"电脑 / 保险库 / 用量与账单 / 更新" | **已实现**（D24）：备份/恢复/保险库（PR #78）、用量统计（PR #119）、应用内更新（`main/updates.ts`） | ~~D24~~ 已完成 |
 | 设置 | 强调色 / 语言 / 硬件加速 / 通知 | **已实现**：强调色+持久化（D24）、语言/通知/托盘/Chrome 导入（D22，PR #75）、硬件加速（`b57d46b`） | ~~D24~~/~~D22~~ 已完成 |
