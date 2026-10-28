@@ -117,12 +117,29 @@ export function createScreenService(options: {
   const catalog = new Map<string, CatalogEntry>();
   const selected = new Map<string, Snapshot>();
   const ops = new Map<string, Operation>();
+  const resultMutations = new Map<string, Promise<void>>();
   const lifetime = new AbortController();
   let busy = false;
   let closed = false;
 
   function reject(code: ToolRejectionError["code"], message: string): never {
     throw new ToolRejectionError(code, message);
+  }
+
+  async function mutateResults<T>(botId: string, mutate: () => Promise<T>): Promise<T> {
+    const previous = resultMutations.get(botId) ?? Promise.resolve();
+    let release!: () => void;
+    const current = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    resultMutations.set(botId, current);
+    await previous;
+    try {
+      return await mutate();
+    } finally {
+      release();
+      if (resultMutations.get(botId) === current) resultMutations.delete(botId);
+    }
   }
 
   function enabled(): boolean {
@@ -180,6 +197,7 @@ export function createScreenService(options: {
   }
 
   async function resultsOf(botId: string): Promise<ScreenResult[]> {
+    await assertOutputDirectories(botId);
     const file = path.join(root, botId, "manifest.json");
     let bytes: Buffer;
     try {
@@ -204,20 +222,55 @@ export function createScreenService(options: {
     ) {
       reject("RUNTIME_UNAVAILABLE", "screen results are unavailable");
     }
-    return (parsed as { results: unknown[] }).results.map((entry) => {
+    const validated = (parsed as { results: unknown[] }).results.map((entry) => {
       const result = ScreenResultSchema.safeParse(entry);
       if (!result.success) reject("RUNTIME_UNAVAILABLE", "screen results are unavailable");
       return result.data;
     });
+    const available: ScreenResult[] = [];
+    for (const result of validated) {
+      try {
+        await lstat(path.join(root, botId, result.id));
+        available.push(result);
+      } catch (error) {
+        // A failed manifest rollback may leave metadata after the cancelled
+        // image directory was removed. Never restore that as a valid result;
+        // the next successful mutation also repairs the manifest.
+        if (!isMissing(error)) reject("RUNTIME_UNAVAILABLE", "screen results are unavailable");
+      }
+    }
+    return available;
+  }
+
+  async function assertOutputDirectories(botId: string): Promise<void> {
+    // The data root may itself be reached through a user-chosen directory
+    // alias, but screen-outputs and the bot directory must not redirect data.
+    for (const directory of [root, path.join(root, botId)]) {
+      try {
+        const info = await lstat(directory);
+        if (info.isSymbolicLink() || !info.isDirectory()) {
+          reject("UNAUTHORIZED_PATH", "screen output path is not a directory");
+        }
+      } catch (error) {
+        if (isMissing(error)) continue;
+        if (error instanceof ToolRejectionError) throw error;
+        reject("RUNTIME_UNAVAILABLE", "screen outputs are unavailable");
+      }
+    }
   }
 
   async function writeManifest(botId: string, results: readonly ScreenResult[]): Promise<void> {
+    await assertOutputDirectories(botId);
     const directory = path.join(root, botId);
     await mkdir(directory, { recursive: true });
     const next = path.join(directory, `.manifest-${randomUUID()}.json`);
     const dest = path.join(directory, "manifest.json");
-    await writeFile(next, JSON.stringify({ results }), "utf8");
-    await replaceFile(next, dest);
+    try {
+      await writeFile(next, JSON.stringify({ results }), "utf8");
+      await replaceFile(next, dest);
+    } finally {
+      await rm(next, { force: true }).catch(() => undefined);
+    }
   }
 
   function statusOf(botId: string): {
@@ -371,14 +424,30 @@ export function createScreenService(options: {
         hasOcr: mode === "ocr",
       });
       const published = path.join(root, botId, resultId);
-      await replaceFile(temp, published);
-      try {
+      await mutateResults(botId, async () => {
+        context.revalidateAuthorization?.();
         const prior = await resultsOf(botId);
-        await writeManifest(botId, [result, ...prior].slice(0, MAX_RESULTS));
-      } catch (error) {
-        await rm(published, { recursive: true, force: true }).catch(() => undefined);
-        throw error;
-      }
+        if (prior.length >= MAX_RESULTS) {
+          reject("INVALID_INPUT", "delete a screen result before capturing another");
+        }
+        await replaceFile(temp, published);
+        try {
+          await writeManifest(botId, [result, ...prior]);
+          // Cancellation and policy/target changes can arrive during disk I/O.
+          context.revalidateAuthorization?.();
+          if (controller.signal.aborted) reject("CANCELLED", "screen capture was cancelled");
+        } catch (error) {
+          try {
+            await writeManifest(botId, prior);
+          } catch {
+            // Keep the original authorization/error result stable even when
+            // restoring the manifest fails. Never retain cancelled bytes.
+          } finally {
+            await rm(published, { recursive: true, force: true }).catch(() => undefined);
+          }
+          throw error;
+        }
+      });
       return result;
     } catch (error) {
       await rm(temp, { recursive: true, force: true }).catch(() => undefined);
@@ -502,16 +571,18 @@ export function createScreenService(options: {
 
     async deleteResult(botId, id) {
       liveBot(botId);
-      const results = await resultsOf(botId);
-      if (!results.some((item) => item.id === id)) {
-        reject("INVALID_INPUT", "screen result was not found");
-      }
-      const directory = await resultDirectory(root, botId, id);
-      await writeManifest(
-        botId,
-        results.filter((item) => item.id !== id),
-      );
-      await rm(directory, { recursive: true, force: true });
+      await mutateResults(botId, async () => {
+        const results = await resultsOf(botId);
+        if (!results.some((item) => item.id === id)) {
+          reject("INVALID_INPUT", "screen result was not found");
+        }
+        const directory = await resultDirectory(root, botId, id);
+        await writeManifest(
+          botId,
+          results.filter((item) => item.id !== id),
+        );
+        await rm(directory, { recursive: true, force: true });
+      });
       return { deleted: true };
     },
 

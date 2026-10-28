@@ -17,9 +17,8 @@
  * holds the replaced database); the caller restarts the process.
  */
 import { randomUUID } from "node:crypto";
-import { createRequire } from "node:module";
 import { existsSync, mkdirSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createScreenBackend, type ScreenBackend } from "@deepseek-bot/exec-daemon";
 import { methodContract, type Method, type Task, type ToolPolicy } from "@deepseek-bot/contracts";
@@ -697,6 +696,9 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
           await chat.disposeAll();
         } finally {
           db.close();
+          // Preserve interrupted-run recovery, then drain the app-owned
+          // workflow children before Windows releases their workspace cwd.
+          await engine.abandonInflight();
         }
       }
     },
@@ -716,11 +718,17 @@ function resolveScreenBackend(options: HostOptions): {
   if (process.platform !== "win32") {
     return { backend: unavailableScreenBackend(), supported: false };
   }
-  const require = createRequire(import.meta.url);
-  const entry = require.resolve("@deepseek-bot/exec-daemon");
+  const modulePath = fileURLToPath(import.meta.url);
+  const bundled = basename(modulePath) === "main.js";
+  const assets = bundled
+    ? join(dirname(modulePath), "screen-assets")
+    : join(dirname(modulePath), "..", "..", "exec-daemon");
   return {
     backend: createScreenBackend({
-      resourcesDirectory: join(dirname(entry), "..", "dist", "ocr"),
+      resourcesDirectory: bundled ? join(assets, "ocr") : join(assets, "dist", "ocr"),
+      helperScriptPath: bundled
+        ? join(assets, "win32-capture.ps1")
+        : join(assets, "assets", "win32-capture.ps1"),
     }),
     supported: true,
   };

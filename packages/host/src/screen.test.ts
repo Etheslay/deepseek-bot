@@ -1,6 +1,18 @@
 import { randomUUID } from "node:crypto";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  renameSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+  type PathLike,
+} from "node:fs";
 import { readdir, writeFile } from "node:fs/promises";
+import * as fsPromises from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -14,6 +26,18 @@ import { PNG } from "pngjs";
 import { createHost, type DeepSeekBotHost } from "./host.js";
 import { startApplicationToolServer } from "./app-tool-channel.js";
 
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs/promises")>();
+  return {
+    ...actual,
+    lstat: vi.fn(actual.lstat),
+    realpath: vi.fn(actual.realpath),
+    readFile: vi.fn(actual.readFile),
+    writeFile: vi.fn(actual.writeFile),
+    rename: vi.fn(actual.rename),
+  };
+});
+
 const TITLE = "UNIQUE_WINDOW_TITLE_ZZZ";
 const OCR = "UNIQUE_OCR_TEXT_ZZZ";
 const HWND = "hwnd-secret-value";
@@ -21,8 +45,167 @@ const hosts: DeepSeekBotHost[] = [];
 const roots: string[] = [];
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   for (const host of hosts.splice(0)) await host.shutdown().catch(() => undefined);
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
+});
+
+it.each(["cancel", "disable", "clear-target", "rollback-failure"] as const)(
+  "removes only the new capture on %s during manifest publication",
+  async (action) => {
+    const { host, bot } = await setup();
+    await prepare(host, bot.id);
+    const first = host.handleMethod("screen.request", { botId: bot.id, mode: "image" });
+    await approve(host, await pending(host, bot.id));
+    const prior = (await first) as ScreenResult;
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let reached!: () => void;
+    const publishing = new Promise<void>((resolve) => {
+      reached = resolve;
+    });
+    const rename = fsPromises.rename;
+    let manifestRenames = 0;
+    vi.spyOn(fsPromises, "rename").mockImplementation(async (source, dest) => {
+      if (String(source).includes(".manifest-")) {
+        manifestRenames += 1;
+        if (action === "rollback-failure" && manifestRenames > 1) {
+          throw new Error("private-output-path-SECRET restore failed");
+        }
+        reached();
+        await held;
+      }
+      await rename(source, dest);
+    });
+    const running = host.handleMethod("screen.request", { botId: bot.id, mode: "image" });
+    const outcome = running.then(
+      (value) => ({ value }),
+      (error) => ({ error }),
+    );
+    await approve(host, await pending(host, bot.id));
+    await publishing;
+    if (action === "cancel" || action === "rollback-failure") {
+      expect(await host.handleMethod("screen.cancel", { botId: bot.id })).toEqual({
+        cancelled: true,
+      });
+    } else if (action === "disable") {
+      await host.handleMethod("permission.policy.set", {
+        capability: "screen.capture",
+        mode: "deny",
+      });
+    } else {
+      await host.handleMethod("screen.target.set", { botId: bot.id, id: null });
+    }
+    release();
+    const settled = await outcome;
+    expect(settled).toMatchObject({
+      error: {
+        code:
+          action === "cancel" || action === "rollback-failure" ? "CANCELLED" : "UNAUTHORIZED_PATH",
+      },
+    });
+    expect(JSON.stringify(settled)).not.toContain("SECRET");
+    expect(await host.handleMethod("screen.results.list", { botId: bot.id })).toEqual({
+      results: [prior],
+    });
+    expect((await readdir(join(host.layout.screenOutputs, bot.id))).sort()).toEqual(
+      [prior.id, "manifest.json"].sort(),
+    );
+  },
+);
+
+it.each(["root", "bot"] as const)(
+  "rejects a linked %s output directory before capture writes outside it",
+  async (level) => {
+    const { host, bot, fake } = await setup();
+    await prepare(host, bot.id);
+    const outside = mkdtempSync(join(tmpdir(), "dsb-screen-outside-"));
+    roots.push(outside);
+    mkdirSync(host.layout.screenOutputs, { recursive: true });
+    const target =
+      level === "root" ? host.layout.screenOutputs : join(host.layout.screenOutputs, bot.id);
+    rmSync(target, { recursive: true, force: true });
+    symlinkSync(outside, target, process.platform === "win32" ? "junction" : "dir");
+    const request = host.handleMethod("screen.request", { botId: bot.id, mode: "image" });
+    let settled = false;
+    const result = request
+      .then(
+        (value) => ({ value }),
+        (error) => ({ error }),
+      )
+      .finally(() => {
+        settled = true;
+      });
+    await vi.waitFor(async () => {
+      if (settled) return;
+      const { approvals } = (await host.handleMethod("permission.approval.list", {
+        botId: bot.id,
+      })) as { approvals: AppApproval[] };
+      const approval = approvals.find((item) => item.status === "pending");
+      expect(approval).toBeDefined();
+      await approve(host, approval!);
+    });
+    expect(await result).toMatchObject({ error: { code: "UNAUTHORIZED_PATH" } });
+    expect(fake.state.captureCount).toBe(0);
+    expect(await readdir(outside)).toEqual([]);
+  },
+);
+
+it("serializes deletion with capture publication without losing either manifest change", async () => {
+  const { host, bot } = await setup();
+  await prepare(host, bot.id);
+  const first = host.handleMethod("screen.request", { botId: bot.id, mode: "image" });
+  await approve(host, await pending(host, bot.id));
+  const prior = (await first) as ScreenResult;
+  // Use real disk operations with resolved promises so one event-loop turn
+  // deterministically drains a competing mutation up to its rename barrier.
+  vi.spyOn(fsPromises, "lstat").mockImplementation((async (file: PathLike) =>
+    lstatSync(file)) as typeof fsPromises.lstat);
+  vi.spyOn(fsPromises, "realpath").mockImplementation((async (file: PathLike) =>
+    realpathSync(file)) as typeof fsPromises.realpath);
+  vi.spyOn(fsPromises, "readFile").mockImplementation((async (file: PathLike) =>
+    readFileSync(file)) as typeof fsPromises.readFile);
+  vi.spyOn(fsPromises, "writeFile").mockImplementation((async (
+    file: PathLike,
+    data: string | Uint8Array,
+  ) => writeFileSync(file, data)) as typeof fsPromises.writeFile);
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let reached!: () => void;
+  const publishing = new Promise<void>((resolve) => {
+    reached = resolve;
+  });
+  let manifestRenames = 0;
+  vi.spyOn(fsPromises, "rename").mockImplementation(async (source, dest) => {
+    if (String(source).includes(".manifest-")) {
+      manifestRenames += 1;
+      if (manifestRenames === 1) {
+        reached();
+        await held;
+      }
+    }
+    renameSync(source, dest);
+  });
+  const capture = host.handleMethod("screen.request", { botId: bot.id, mode: "image" });
+  await approve(host, await pending(host, bot.id));
+  await publishing;
+  const deletion = host.handleMethod("screen.result.delete", { botId: bot.id, id: prior.id });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  const overlappingRenames = manifestRenames;
+  release();
+  const current = (await capture) as ScreenResult;
+  await deletion;
+  expect(overlappingRenames).toBe(1);
+  expect(await host.handleMethod("screen.results.list", { botId: bot.id })).toEqual({
+    results: [current],
+  });
+  expect((await readdir(join(host.layout.screenOutputs, bot.id))).sort()).toEqual(
+    [current.id, "manifest.json"].sort(),
+  );
 });
 
 function tinyPng(): Buffer {
@@ -536,7 +719,11 @@ describe("screen host gateway", () => {
     ).rejects.toMatchObject({ code: "INVALID_INPUT" });
     const preview = join(host.layout.screenOutputs, bot.id, result.id, "preview.jpg");
     rmSync(preview);
-    symlinkSync(join(root, "outside.txt"), preview, "file");
+    symlinkSync(
+      process.platform === "win32" ? root : join(root, "outside.txt"),
+      preview,
+      process.platform === "win32" ? "junction" : "file",
+    );
     await expect(
       host.handleMethod("screen.result.read", { botId: bot.id, id: result.id }),
     ).rejects.toMatchObject({ code: "UNAUTHORIZED_PATH" });
@@ -545,14 +732,18 @@ describe("screen host gateway", () => {
     const elsewhere = join(root, "elsewhere");
     writeFileSync(join(root, "outside.txt"), "pixels");
     mkdirSyncSafe(elsewhere);
-    symlinkSync(elsewhere, directory, "dir");
+    symlinkSync(elsewhere, directory, process.platform === "win32" ? "junction" : "dir");
     await expect(
       host.handleMethod("screen.result.read", { botId: bot.id, id: result.id }),
     ).rejects.toMatchObject({ code: "UNAUTHORIZED_PATH" });
 
     const manifest = join(host.layout.screenOutputs, bot.id, "manifest.json");
     rmSync(manifest);
-    symlinkSync(join(root, "outside.txt"), manifest, "file");
+    symlinkSync(
+      process.platform === "win32" ? root : join(root, "outside.txt"),
+      manifest,
+      process.platform === "win32" ? "junction" : "file",
+    );
     await expect(host.handleMethod("screen.results.list", { botId: bot.id })).rejects.toMatchObject(
       { code: "UNAUTHORIZED_PATH" },
     );
@@ -577,7 +768,7 @@ describe("screen host gateway", () => {
     roots.push(real, linkParent);
     const link = join(linkParent, "data");
     try {
-      symlinkSync(real, link, "dir");
+      symlinkSync(real, link, process.platform === "win32" ? "junction" : "dir");
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "EPERM") {
         context.skip();
@@ -612,6 +803,7 @@ describe("screen host gateway", () => {
     }));
     const directory = join(host.layout.screenOutputs, bot.id);
     mkdirSyncSafe(directory);
+    for (const result of results) mkdirSyncSafe(join(directory, result.id));
     writeFileSync(join(directory, "manifest.json"), JSON.stringify({ results }));
     await expect(
       host.handleMethod("screen.request", { botId: bot.id, mode: "image" }),

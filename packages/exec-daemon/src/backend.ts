@@ -48,6 +48,8 @@ export interface ScreenBackend {
 
 export interface ScreenBackendOptions {
   resourcesDirectory: string;
+  /** Trusted application asset path; never accepted in model/desktop requests. */
+  helperScriptPath?: string;
   captureTimeoutMs?: number;
   ocrTimeoutMs?: number;
   /** Test seam. Production uses the fixed PowerShell helper and bundled OCR worker. */
@@ -61,7 +63,7 @@ export function createScreenBackend(options: ScreenBackendOptions): ScreenBacken
   const ocrTimeoutMs = options.ocrTimeoutMs ?? OCR_TIMEOUT_MS;
   assertTimeout(captureTimeoutMs);
   assertTimeout(ocrTimeoutMs);
-  const helper = options.helperRunner ?? createPowerShellRunner();
+  const helper = options.helperRunner ?? createPowerShellRunner(options.helperScriptPath);
   const ocrEngine = options.ocrEngine;
   const lifetime = new AbortController();
   let closed = false;
