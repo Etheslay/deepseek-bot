@@ -3,7 +3,6 @@ import { createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { act } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { CAPABILITY_IDS, defaultPermissionMode } from "@deepseek-bot/contracts";
 import { PermissionChatCards } from "../../src/renderer/src/features/permissions/permission-chat.js";
 
 const BOT = "22222222-2222-4222-8222-222222222222";
@@ -53,37 +52,7 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-const GRANT = {
-  id: "66666666-6666-4666-8666-666666666666",
-  capability: "app.create_group",
-  botId: BOT,
-  mode: "allow",
-  scope: "session",
-  sessionId: `chat:${BOT}`,
-  generation: 1,
-  approvalId: null,
-  maxUses: 5,
-  uses: 0,
-  expiresAt: "2026-10-26T08:00:00.000Z",
-  createdAt: "2026-10-26T06:00:00.000Z",
-  revokedAt: null,
-};
-
-function issuedGrant(payload: { botId?: string; capability?: string; scope?: string }) {
-  const permanent = payload.scope === "permanent";
-  return {
-    ...GRANT,
-    botId: payload.botId ?? BOT,
-    capability: payload.capability ?? GRANT.capability,
-    scope: payload.scope ?? "session",
-    sessionId: permanent ? null : `chat:${payload.botId ?? BOT}`,
-    generation: permanent ? null : 1,
-    maxUses: permanent ? null : 5,
-    expiresAt: permanent ? null : GRANT.expiresAt,
-  };
-}
-
-function installHost(approvals: unknown[], grants: unknown[] = []): Call[] {
+function installHost(approvals: unknown[]): Call[] {
   const calls: Call[] = [];
   window.deepseekBot = {
     host: {
@@ -95,19 +64,6 @@ function installHost(approvals: unknown[], grants: unknown[] = []): Call[] {
             approval: { ...APPROVAL, status: "consumed", decidedAt: "2026-10-26T06:01:00.000Z" },
             grants: [],
           };
-        }
-        if (method === "permission.policy.list") {
-          return {
-            policies: CAPABILITY_IDS.map((capability) => ({
-              capability,
-              mode: defaultPermissionMode(capability),
-            })),
-          };
-        }
-        if (method === "permission.grant.list") return { grants };
-        if (method === "permission.grant.issue") return { grant: issuedGrant(payload as never) };
-        if (method === "permission.grant.revoke") {
-          return { grant: { ...GRANT, revokedAt: "2026-10-26T07:00:00.000Z" } };
         }
         throw new Error(`unexpected method ${method}`);
       },
@@ -134,6 +90,17 @@ function labels(container: ParentNode): string[] {
 }
 
 describe("chat permission cards", () => {
+  it("renders nothing without pending approvals and never polls grants or policies", async () => {
+    const calls = installHost([]);
+    const container = await renderCards();
+    await vi.waitFor(() => {
+      expect(calls.length).toBeGreaterThan(0);
+    });
+    expect(calls.every((call) => call.method === "permission.approval.list")).toBe(true);
+    expect(container.querySelector(".permission-chat-grant")).toBeNull();
+    expect(container.textContent).not.toContain("给这个 bot 授予一项能力");
+  });
+
   it("previews the MCP service, tool and exact arguments with only single-use approval", async () => {
     const params = {
       definitionId: "internal-definition",
@@ -289,76 +256,6 @@ describe("chat permission cards", () => {
         scope: "once",
       },
     });
-    });
-  });
-
-  it("grants one ask capability for this bot and hides per-action capabilities", async () => {
-    const calls = installHost([]);
-    const container = await renderCards();
-    await vi.waitFor(() => {
-      expect(container.querySelector("[data-scope='session']")).not.toBeNull();
-    });
-    const trigger = container.querySelector<HTMLButtonElement>(
-      ".permission-chat-grant .custom-select-trigger",
-    );
-    await act(async () => {
-      trigger?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-    // CustomSelect portals its menu to document.body, so the options are not
-    // descendants of the rendered container — query the document instead.
-    const values = [...document.querySelectorAll(".custom-select-item")].map((item) =>
-      item.getAttribute("data-value"),
-    );
-    expect(values).toContain("app.create_group");
-    expect(values).toContain("memory.write");
-    for (const blocked of ["app.read", "app.start_run", "exec.shell", "screen.capture", "device.action", "mcp.call"]) {
-      expect(values).not.toContain(blocked);
-    }
-    const button = container.querySelector<HTMLButtonElement>("[data-scope='session']");
-    await act(async () => {
-      button?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-    await vi.waitFor(() => {
-      expect(calls).toContainEqual({
-        method: "permission.grant.issue",
-        payload: { botId: BOT, capability: "app.create_group", scope: "session" },
-      });
-    });
-    expect(calls.some((call) => call.method === "grant.create" || call.method === "policy.set")).toBe(
-      false,
-    );
-  });
-
-  it("revokes one grant for the open bot and ignores another bot's grant", async () => {
-    const other = "33333333-3333-4333-8333-333333333333";
-    const calls = installHost(
-      [],
-      [
-        GRANT,
-        {
-          ...GRANT,
-          id: "77777777-7777-4777-8777-777777777777",
-          botId: other,
-          capability: "app.update_bot",
-        },
-      ],
-    );
-    const container = await renderCards();
-    await vi.waitFor(() => {
-      expect(container.querySelector(`[data-grant-id="${GRANT.id}"]`)).not.toBeNull();
-    });
-    expect(container.textContent).not.toContain("修改 bot");
-    expect(calls).toContainEqual({ method: "permission.grant.list", payload: { botId: BOT } });
-    await act(async () => {
-      container
-        .querySelector<HTMLButtonElement>(`[data-grant-id="${GRANT.id}"]`)
-        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-    await vi.waitFor(() => {
-      expect(calls).toContainEqual({
-        method: "permission.grant.revoke",
-        payload: { grantId: GRANT.id },
-      });
     });
   });
 });

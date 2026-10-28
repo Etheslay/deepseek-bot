@@ -1,48 +1,24 @@
 /**
- * Chat authorization for the open bot.
- * Pending tool calls still go through permission.approval.decide.
- * The same card can grant or revoke one capability for this bot. Session
- * grants use the existing chat session, five uses and two hours. Per-action
- * capabilities stay on the once-only approval card.
+ * Chat authorization for the open bot: pending tool-call approvals only.
+ * Each card goes through permission.approval.decide with choices of
+ * once-only, this session (five uses and two hours) or permanent, plus
+ * deny. Per-action capabilities stay on the once-only card. There is no
+ * always-visible grant card in the chat any more — proactive grants,
+ * policy edits and revocation live in Settings → Permissions.
  */
-import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from "react";
+import { useCallback, useEffect, useRef, useState, type JSX } from "react";
 import {
-  CAPABILITY_IDS,
   PERMISSION_METHODS,
-  defaultPermissionMode,
   requiresPerActionApproval,
   type AppApproval,
   type CapabilityId,
-  type CapabilityPolicy,
   type PermissionDecisionRequest,
-  type PermissionGrant,
 } from "@deepseek-bot/contracts";
 import { t, useLanguage, type MessageKey } from "../../i18n.js";
-import { CustomSelect } from "../../components/custom-select.js";
 import { capabilityLabel } from "./capability-labels.js";
 
 const SESSION_USES = 5;
 const SESSION_MINUTES = 120;
-
-const GRANT_SCOPE_LABEL_KEYS = {
-  once: "permissions.scopeOnce",
-  session: "shell.scopeSession",
-  permanent: "permissions.scopePermanent",
-} as const;
-
-function isRevocableGrant(
-  grant: PermissionGrant,
-): grant is PermissionGrant & { scope: keyof typeof GRANT_SCOPE_LABEL_KEYS } {
-  return grant.scope === "once" || grant.scope === "session" || grant.scope === "permanent";
-}
-
-function chatGrantCapabilities(policies: readonly CapabilityPolicy[]): CapabilityId[] {
-  return CAPABILITY_IDS.filter((capability) => {
-    if (requiresPerActionApproval(capability)) return false;
-    const mode = policies.find((policy) => policy.capability === capability)?.mode;
-    return (mode ?? defaultPermissionMode(capability)) === "ask";
-  });
-}
 
 type GrantChoice = "once" | "session" | "permanent";
 type CardChoice = GrantChoice | "deny";
@@ -127,75 +103,28 @@ function BotPermissionChatCards(props: {
   // Re-renders on a language switch: the stored notice is a message key.
   useLanguage();
   const [approvals, setApprovals] = useState<AppApproval[] | null>(null);
-  const [grants, setGrants] = useState<PermissionGrant[] | null>(null);
-  const [policies, setPolicies] = useState<CapabilityPolicy[] | null>(null);
-  const [selected, setSelected] = useState<CapabilityId | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
-  const [grantNotice, setGrantNotice] = useState<Notice | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [grantBusy, setGrantBusy] = useState(false);
   const active = useRef(true);
   const loadSequence = useRef(0);
-  const eligible = useMemo(
-    () => (policies === null ? [] : chatGrantCapabilities(policies)),
-    [policies],
-  );
-
-  useEffect(() => {
-    setSelected((current) =>
-      current !== null && eligible.includes(current) ? current : (eligible[0] ?? null),
-    );
-  }, [eligible]);
 
   const load = useCallback(async (): Promise<void> => {
     const sequence = ++loadSequence.current;
-    const [approvalResult, grantResult, policyResult] = await Promise.allSettled([
-      window.deepseekBot.host.call("permission.approval.list", { botId }),
-      window.deepseekBot.host.call("permission.grant.list", { botId }),
-      window.deepseekBot.host.call("permission.policy.list", {}),
-    ]);
-    if (!active.current || sequence !== loadSequence.current) return;
-    if (approvalResult.status === "fulfilled") {
-      try {
-        const parsed = PERMISSION_METHODS["permission.approval.list"].response.parse(
-          approvalResult.value,
-        );
-        setApprovals(
-          parsed.approvals.filter(
-            (approval) => approval.status === "pending" && approval.botId === botId,
-          ),
-        );
-        setNotice((current) =>
-          current?.key === "permissions.approvalListLoadFailed" ? null : current,
-        );
-      } catch {
-        setNotice({ key: "permissions.approvalListLoadFailed" });
-      }
-    } else {
+    try {
+      const response = await window.deepseekBot.host.call("permission.approval.list", { botId });
+      if (!active.current || sequence !== loadSequence.current) return;
+      const parsed = PERMISSION_METHODS["permission.approval.list"].response.parse(response);
+      setApprovals(
+        parsed.approvals.filter(
+          (approval) => approval.status === "pending" && approval.botId === botId,
+        ),
+      );
+      setNotice((current) =>
+        current?.key === "permissions.approvalListLoadFailed" ? null : current,
+      );
+    } catch {
+      if (!active.current || sequence !== loadSequence.current) return;
       setNotice({ key: "permissions.approvalListLoadFailed" });
-    }
-    if (grantResult.status === "fulfilled" && policyResult.status === "fulfilled") {
-      try {
-        const parsedGrants = PERMISSION_METHODS["permission.grant.list"].response.parse(
-          grantResult.value,
-        );
-        const parsedPolicies = PERMISSION_METHODS["permission.policy.list"].response.parse(
-          policyResult.value,
-        );
-        setGrants(
-          parsedGrants.grants.filter(
-            (grant) => grant.botId === botId && grant.revokedAt === null && isRevocableGrant(grant),
-          ),
-        );
-        setPolicies(parsedPolicies.policies);
-        setGrantNotice((current) =>
-          current?.key === "permissions.chatGrantLoadFailed" ? null : current,
-        );
-      } catch {
-        setGrantNotice({ key: "permissions.chatGrantLoadFailed" });
-      }
-    } else {
-      setGrantNotice({ key: "permissions.chatGrantLoadFailed" });
     }
   }, [botId]);
 
@@ -242,55 +171,7 @@ function BotPermissionChatCards(props: {
       });
   };
 
-  const grantCapability = (scope: "session" | "permanent"): void => {
-    if (selected === null || grantBusy) return;
-    const capability = selected;
-    setGrantBusy(true);
-    void window.deepseekBot.host
-      .call("permission.grant.issue", { botId, capability, scope })
-      .then((response) => {
-        PERMISSION_METHODS["permission.grant.issue"].response.parse(response);
-        if (!active.current) return;
-        setGrantNotice({
-          key: "permissions.chatGrantIssued",
-          params: [capabilityLabel(capability)],
-        });
-        return load();
-      })
-      .catch(() => {
-        if (active.current) setGrantNotice({ key: "permissions.chatGrantFailed" });
-      })
-      .finally(() => {
-        if (active.current) setGrantBusy(false);
-      });
-  };
-
-  const revokeGrant = (grantId: string): void => {
-    if (grantBusy) return;
-    setGrantBusy(true);
-    void window.deepseekBot.host
-      .call("permission.grant.revoke", { grantId })
-      .then((response) => {
-        PERMISSION_METHODS["permission.grant.revoke"].response.parse(response);
-        if (!active.current) return;
-        setGrantNotice({ key: "permissions.grantRevoked" });
-        return load();
-      })
-      .catch(() => {
-        if (active.current) setGrantNotice({ key: "permissions.revokeFailed" });
-      })
-      .finally(() => {
-        if (active.current) setGrantBusy(false);
-      });
-  };
-
-  const showGrant = grants !== null && policies !== null;
-  if (
-    (approvals === null || approvals.length === 0) &&
-    notice === null &&
-    !showGrant &&
-    grantNotice === null
-  ) {
+  if ((approvals === null || approvals.length === 0) && notice === null) {
     return null;
   }
 
@@ -357,76 +238,6 @@ function BotPermissionChatCards(props: {
         );
       })}
       {notice !== null ? <p className="sys-line">{t(notice.key, notice.params ?? [])}</p> : null}
-      {showGrant ? (
-        <section
-          className="permission-chat-grant choice-card"
-          aria-label={t("permissions.chatGrantTitle")}
-        >
-          <div className="choice-question">{t("permissions.chatGrantTitle")}</div>
-          {selected !== null ? (
-            <>
-              <CustomSelect
-                className="permission-chat-grant-capability"
-                value={selected}
-                options={eligible.map((capability) => ({
-                  value: capability,
-                  label: capabilityLabel(capability),
-                }))}
-                ariaLabel={t("permissions.chatGrantCapability")}
-                disabled={grantBusy}
-                onChange={(next) => {
-                  if ((CAPABILITY_IDS as readonly string[]).includes(next)) {
-                    setSelected(next as CapabilityId);
-                  }
-                }}
-              />
-              <p className="choice-answered">
-                {t("permissions.sessionGrant", [SESSION_USES, SESSION_MINUTES / 60])}
-              </p>
-              <p className="choice-answered">{t("permissions.permanentGrant")}</p>
-              <div className="choice-options">
-                <button
-                  type="button"
-                  className="choice-option"
-                  data-scope="session"
-                  disabled={grantBusy}
-                  onClick={() => grantCapability("session")}
-                >
-                  {t("permissions.chatGrantSession")}
-                </button>
-                <button
-                  type="button"
-                  className="choice-option"
-                  data-scope="permanent"
-                  disabled={grantBusy}
-                  onClick={() => grantCapability("permanent")}
-                >
-                  {t("permissions.chatGrantPermanent")}
-                </button>
-              </div>
-            </>
-          ) : null}
-          {grants?.filter(isRevocableGrant).map((grant) => (
-            <div className="choice-options" key={grant.id}>
-              <p className="choice-answered">
-                {capabilityLabel(grant.capability)} · {t(GRANT_SCOPE_LABEL_KEYS[grant.scope])}
-              </p>
-              <button
-                type="button"
-                className="choice-option"
-                data-grant-id={grant.id}
-                disabled={grantBusy}
-                onClick={() => revokeGrant(grant.id)}
-              >
-                {t("permissions.revoke")}
-              </button>
-            </div>
-          ))}
-        </section>
-      ) : null}
-      {grantNotice !== null ? (
-        <p className="sys-line">{t(grantNotice.key, grantNotice.params ?? [])}</p>
-      ) : null}
     </div>
   );
 }
