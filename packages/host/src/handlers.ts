@@ -98,6 +98,7 @@ import {
   listPermissionPolicies,
   setPermissionPolicy,
   listPermissionGrants,
+  issuePermissionGrant,
   revokePermissionGrant,
   listPermissionApprovals,
   listPermissionAudit,
@@ -347,6 +348,21 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
         context.permissions.cancelMcp({ botId: grant.botId });
       }
       return { grant };
+    },
+    "permission.grant.issue": (payload) => {
+      requireLiveBot(db, payload.botId);
+      return {
+        grant: issuePermissionGrant(
+          db,
+          {
+            botId: payload.botId,
+            capability: payload.capability,
+            scope: payload.scope,
+            sessionId: payload.scope === "session" ? chatSessionIdFor(payload.botId) : null,
+          },
+          context.permissions.generation,
+        ),
+      };
     },
     "permission.approval.list": (payload) => ({
       approvals: listPermissionApprovals(db, {

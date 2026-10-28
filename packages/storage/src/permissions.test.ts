@@ -378,3 +378,148 @@ it("archives the owner before dispatch and blocks policy allow from authorizing 
     storage.revalidatePermissionAuthorization(changed.db, changed.call, authorization),
   ).toThrow();
 });
+
+describe("chat capability grant", () => {
+  const issue = (
+    fx: ReturnType<typeof fixture>,
+    capability: import("@deepseek-bot/contracts").CapabilityId = "app.create_group",
+    scope: "session" | "permanent" = "session",
+    sessionId: string | null = "s1",
+    generation = 1,
+  ) =>
+    storage.issuePermissionGrant(
+      fx.db,
+      { botId: fx.bot.id, capability, scope, sessionId: scope === "session" ? sessionId : null },
+      generation,
+    );
+
+  it("issues one session grant the gateway consumes, then stops after revoke", () => {
+    const fx = fixture();
+    const grant = issue(fx);
+    expect(grant).toMatchObject({
+      capability: "app.create_group",
+      botId: fx.bot.id,
+      scope: "session",
+      sessionId: "s1",
+      generation: 1,
+      approvalId: null,
+      maxUses: 5,
+      uses: 0,
+      mode: "allow",
+      revokedAt: null,
+    });
+    expect(grant.expiresAt).toBe(new Date(fx.clock.now().getTime() + 120 * 60_000).toISOString());
+    expect(issue(fx).id).toBe(grant.id);
+    const call = {
+      ...fx.call,
+      invocationId: randomUUID(),
+      tool: "create_group",
+      capabilities: ["app.create_group"] as import("@deepseek-bot/contracts").CapabilityId[],
+      sessionId: "s1",
+    };
+    const authorization = storage.authorizePermissionCall(fx.db, call);
+    expect(authorization).toMatchObject({ allowed: true, grantIds: [grant.id] });
+    expect(storage.listPermissionGrants(fx.db, { generation: 1 })[0]?.uses).toBe(1);
+    expect(issue(fx).uses).toBe(1);
+    expect(
+      storage.authorizePermissionCall(fx.db, {
+        ...call,
+        invocationId: randomUUID(),
+        sessionId: "other-session",
+      }).code,
+    ).toBe("APPROVAL_REQUIRED");
+    storage.revokePermissionGrant(fx.db, grant.id);
+    expect(() => storage.revalidatePermissionAuthorization(fx.db, call, authorization)).toThrow();
+    expect(
+      storage.authorizePermissionCall(fx.db, { ...call, invocationId: randomUUID() }).code,
+    ).toBe("APPROVAL_REQUIRED");
+    expect(
+      storage
+        .listPermissionAudit(fx.db, { botId: fx.bot.id })
+        .some((row) => row.decision === "grant.issued" && row.grantIds[0] === grant.id),
+    ).toBe(true);
+    expect(JSON.stringify(storage.listPermissionAudit(fx.db, { botId: fx.bot.id }))).not.toContain(
+      "preview-only",
+    );
+  });
+
+  it("expires a session grant with its TTL and host generation, and keeps a permanent grant", () => {
+    const fx = fixture();
+    const session = issue(fx);
+    fx.clock.advanceMs(120 * 60_000 + 1);
+    expect(
+      storage.authorizePermissionCall(fx.db, {
+        ...fx.call,
+        invocationId: randomUUID(),
+        capabilities: ["app.create_group"],
+        sessionId: "s1",
+      }).allowed,
+    ).toBe(false);
+    expect(storage.listPermissionGrants(fx.db, { generation: 1 })).toEqual([]);
+    const renewed = issue(fx);
+    expect(renewed.id).not.toBe(session.id);
+    const permanent = issue(fx, "app.create_bot", "permanent");
+    storage.expirePermissionState(fx.db, 2);
+    expect(storage.listPermissionGrants(fx.db, { generation: 2 }).map((grant) => grant.id)).toEqual(
+      [permanent.id],
+    );
+    expect(
+      storage.authorizePermissionCall(fx.db, {
+        ...fx.call,
+        invocationId: randomUUID(),
+        capabilities: ["app.create_bot"],
+        sessionId: "anywhere",
+        generation: 2,
+      }).allowed,
+    ).toBe(true);
+  });
+
+  it("refuses per-action capabilities, non-ask policies and an archived bot", () => {
+    const fx = fixture();
+    for (const capability of [
+      "app.start_run",
+      "exec.shell",
+      "screen.capture",
+      "device.action",
+      "mcp.call",
+    ] as const) {
+      expect(() => issue(fx, capability)).toThrow();
+    }
+    storage.setPermissionPolicy(fx.db, { capability: "device.action", mode: "ask" });
+    expect(() => issue(fx, "device.action")).toThrow();
+    storage.setPermissionPolicy(fx.db, { capability: "app.create_group", mode: "deny" });
+    expect(() => issue(fx)).toThrow();
+    expect(() =>
+      storage.issuePermissionGrant(
+        fx.db,
+        {
+          botId: fx.bot.id,
+          capability: "app.create_bot",
+          scope: "permanent",
+          sessionId: "not-allowed",
+        },
+        1,
+      ),
+    ).toThrow();
+    const allowed = fixture();
+    storage.setPermissionPolicy(allowed.db, { capability: "app.create_bot", mode: "allow" });
+    expect(() => issue(allowed, "app.create_bot")).toThrow();
+    const archived = fixture();
+    const granted = issue(archived);
+    storage.setPermissionPolicy(archived.db, { capability: "app.create_group", mode: "deny" });
+    expect(
+      storage.authorizePermissionCall(archived.db, {
+        ...archived.call,
+        invocationId: randomUUID(),
+        capabilities: ["app.create_group"],
+        sessionId: "s1",
+      }),
+    ).toMatchObject({ allowed: false, code: "UNAUTHORIZED_PATH" });
+    expect(storage.listPermissionGrants(archived.db, { generation: 1 })[0]?.id).toBe(granted.id);
+    storage.archiveBot(archived.db, {
+      id: archived.bot.id,
+      expectedRevision: archived.bot.revision,
+    });
+    expect(() => issue(archived, "app.create_bot")).toThrow();
+  });
+});
