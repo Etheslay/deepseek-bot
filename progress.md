@@ -1,5 +1,14 @@
 # 工作记录
 
+## 2026-10-29：GAP_AUDIT 三次刷新与在途台账清点（纯文档）
+
+- 开工时本地 develop 落后 1 提交，fetch 后快进至 `3e21112`（PR #136 互通派发、#137 原始人模式已合入，远程 feature 分支已删）；工作区干净，本轮未改任何代码、未装依赖、未发起 API 请求。
+- 逐项核实 #124–#137 交付：G3（#125）、G9'（#129）、G10'（#126）、G11'（#127）、D20'（#134/#135）关闭；证据为各交付报告加 `git grep`（`packages/host/src/chat-gate.ts` 在库、`host-service.ts:341` 直调 `search.global`、`ui.state` 全仓零命中等）。G1'（等拍板 #1）、G4（无 Key 授权）保持开放；D21' 依 D21-windows-acceptance 报告（PR #93 真机证据）收窄为真实键鼠复核。
+- 更新 `docs/GAP_AUDIT.md`（三次刷新总览、缺口地图、§2/§4/§5/§7/§8）与 `docs/SPRINTS.md`（§4 补 7 行执行记录、§7 搜索圆钮行改已完成、§10 台账重写为 2026-10-29 清点）；`progress.md`/`task_plan.md` 同步。
+- 如实登记：各新交付报告自审栏留空（含 #136/#137 任务书 §6），合并不等于自审已签署；AI 不代签。
+- 验证：纯 Markdown 改动，未运行 pnpm 测试（无代码路径变更）；执行 `git diff --check` 与两份文档的本地链接存在性检查，结果见 PR 验证证据表。
+- 分支 `feature/docs-audit-refresh-8029`（自 develop `3e21112`）；推送与 PR 由负责人确认。
+
 ## 2026-10-26：D15 `web_search` 提交推送授权
 
 - 用户明确授权提交并推送本片，提供PR title和comment，不代填本人自审或合并。

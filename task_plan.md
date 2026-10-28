@@ -1,5 +1,10 @@
 # 项目规范化工作计划
 
+## 2026-10-29：文档刷新（GAP_AUDIT 三次刷新 + SPRINTS 台账清点）
+
+- 范围：仅文档；无应用源码、无依赖安装、无 API 请求。分支 `feature/docs-audit-refresh-8029`，基线 origin/develop `3e21112`。
+- 内容：登记 #125–#137 关闭的审计项（G3/G9'/G10'/G11'/D20'），收窄 D21'，重写 SPRINTS §10 台账（当前无在途任务分支）；G1'/G4 保持开放，自审签署欠账如实扩大登记、不代签。
+
 ## 2026-10-26：D16 权限与授权后端
 
 - 分支：feature/permissions-grants，基线 origin/develop b693c5b（含 D15 搜索与 Destinyian 最新合并）。
