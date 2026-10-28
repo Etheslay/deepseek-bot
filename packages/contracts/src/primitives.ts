@@ -88,4 +88,8 @@ export const TEXT_LIMITS = {
   digestHex: 64,
   /** One knowledge document (D18): independent of the 4k memory note cap. */
   knowledgeText: 100_000,
+  /** One whisper.cpp transcript (D27): speech output, not a stored note. */
+  voiceTranscript: 4_000,
+  /** One spoken-aloud text (D27): keeps one SAPI run inside the timeout. */
+  voiceSpeakText: 2_000,
 } as const;

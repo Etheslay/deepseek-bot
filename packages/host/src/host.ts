@@ -116,6 +116,12 @@ import {
 import { createScreenService, unavailableScreenBackend, type ScreenService } from "./screen.js";
 import { createDeviceActionService } from "./device.js";
 import { createDeviceInputService } from "./device-input.js";
+import {
+  createVoiceService,
+  type VoiceService,
+  type VoiceSpeakRunner,
+  type VoiceTranscribeRunner,
+} from "./voice.js";
 import { TaskDispatcher } from "./task-dispatcher.js";
 import { evaluateTriggerRules } from "./triggers.js";
 import { invokeConnector } from "./connectors.js";
@@ -170,6 +176,19 @@ export interface HostOptions {
   readonly deviceInput?: {
     readonly backend: DeviceInputBackend;
   };
+  /**
+   * D27 local voice configuration. whisper.cpp paths are local user choices
+   * (environment in production); injected runners replace the real whisper
+   * and SAPI processes in tests. Speech never leaves the machine.
+   */
+  readonly voice?: {
+    readonly whisperBin?: string;
+    readonly whisperModel?: string;
+    readonly transcribeTimeoutMs?: number;
+    readonly speakTimeoutMs?: number;
+    readonly runTranscribe?: VoiceTranscribeRunner;
+    readonly runSpeak?: VoiceSpeakRunner;
+  };
 }
 
 export interface DeepSeekBotHost {
@@ -199,6 +218,8 @@ export interface DeepSeekBotHost {
   readonly mcp: McpService;
   /** In-process screen target, lock, and local artifacts. Desktop uses the contract methods. */
   readonly screen: ScreenService;
+  /** D27 local voice backend (whisper.cpp transcription + Windows SAPI speech). */
+  readonly voice: VoiceService;
   /** Trusted in-process human controls. Never registered as model capabilities. */
   readonly userQuestions: UserQuestionControls;
   /**
@@ -335,6 +356,7 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
     now,
     backend: deviceInputBackend,
   });
+  const voice = createVoiceService(options.voice ?? {});
 
   // The executor and the bridge reference each other (child env ← bridge
   // address; bridge asks → executor session registry), so the bridge handle
@@ -514,6 +536,7 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
     screen,
     device,
     deviceInput,
+    voice,
     chat,
     attachments,
     userQuestions: questions,
@@ -587,6 +610,7 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
       screen.close();
       device.close();
       deviceInput.close();
+      voice.close();
       attachmentStore.close();
       permissions.close();
     }
@@ -795,6 +819,7 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
     agentTools,
     mcp,
     screen,
+    voice,
     userQuestions: {
       listPending: (callerId) => questions.listPending(callerId),
       answer: (requestId, callerId, answer) => questions.answer(requestId, callerId, answer),
@@ -813,6 +838,7 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
       device.close();
       attachmentStore.close();
       deviceInput.close();
+      voice.close();
       permissions.close();
       mcp.close();
       questions.close();

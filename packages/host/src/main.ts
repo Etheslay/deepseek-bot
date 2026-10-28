@@ -32,6 +32,19 @@ const host = await createHost({
   ...(process.env.DEEPSEEK_BOT_SEARXNG_URL !== undefined
     ? { webSearch: { endpoint: process.env.DEEPSEEK_BOT_SEARXNG_URL } }
     : {}),
+  ...(process.env.DEEPSEEK_BOT_WHISPER_BIN !== undefined ||
+  process.env.DEEPSEEK_BOT_WHISPER_MODEL !== undefined
+    ? {
+        voice: {
+          ...(process.env.DEEPSEEK_BOT_WHISPER_BIN !== undefined
+            ? { whisperBin: process.env.DEEPSEEK_BOT_WHISPER_BIN }
+            : {}),
+          ...(process.env.DEEPSEEK_BOT_WHISPER_MODEL !== undefined
+            ? { whisperModel: process.env.DEEPSEEK_BOT_WHISPER_MODEL }
+            : {}),
+        },
+      }
+    : {}),
 });
 const controller = startStdioHost({
   host,
