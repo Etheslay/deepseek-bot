@@ -297,6 +297,84 @@ describe("voice speak", () => {
   });
 });
 
+describe("voice config", () => {
+  it("applies a new configuration live at the service level", () => {
+    const { bin, model } = makeConfiguredFiles();
+    const service = createVoiceService();
+    expect(service.status().transcribe.available).toBe(false);
+    service.setConfig({ whisperBin: bin, whisperModel: model });
+    expect(service.config()).toEqual({ whisperBin: bin, whisperModel: model });
+    expect(service.status().transcribe).toEqual({ available: true, reason: null });
+    service.setConfig({ whisperBin: null, whisperModel: null });
+    expect(service.config()).toEqual({ whisperBin: null, whisperModel: null });
+    expect(service.status().transcribe).toEqual({
+      available: false,
+      reason: "whisper.cpp binary is not configured",
+    });
+  });
+
+  it("persists the config in the settings KV and restores it on reopen", async () => {
+    const root = mkdtempSync(join(tmpdir(), "dsb-voice-config-host-"));
+    roots.push(root);
+    const seedBin = join(root, "seed.exe");
+    const seedModel = join(root, "seed.bin");
+    writeFileSync(seedBin, "fake");
+    writeFileSync(seedModel, "fake");
+    const first = await createHost({
+      dataRoot: root,
+      resolveApiKey: async () => "test-key",
+      voice: { whisperBin: seedBin, whisperModel: seedModel },
+    });
+    hosts.push(first);
+    // The environment-seeded boot default is visible through config.get.
+    expect(await first.handleMethod("voice.config.get", {})).toEqual({
+      whisperBin: seedBin,
+      whisperModel: seedModel,
+    });
+    const userBin = join(root, "user-cli.exe");
+    const userModel = join(root, "user-model.bin");
+    writeFileSync(userBin, "fake");
+    writeFileSync(userModel, "fake");
+    const stored = (await first.handleMethod("voice.config.set", {
+      whisperBin: userBin,
+      whisperModel: userModel,
+    })) as { whisperBin: string; whisperModel: string };
+    expect(stored).toEqual({ whisperBin: userBin, whisperModel: userModel });
+    expect((await first.handleMethod("voice.status", {})) as { transcribe: { available: boolean } })
+      .toMatchObject({ transcribe: { available: true } });
+    await first.shutdown();
+    hosts.pop();
+    // A reopened host without options.voice restores the KV over nothing.
+    const second = await createHost({
+      dataRoot: root,
+      resolveApiKey: async () => "test-key",
+    });
+    hosts.push(second);
+    expect(await second.handleMethod("voice.config.get", {})).toEqual({
+      whisperBin: userBin,
+      whisperModel: userModel,
+    });
+    // Clearing writes null and survives a reopen too.
+    await second.handleMethod("voice.config.set", { whisperBin: null, whisperModel: null });
+    await second.shutdown();
+    hosts.pop();
+    const third = await createHost({
+      dataRoot: root,
+      resolveApiKey: async () => "test-key",
+      voice: { whisperBin: seedBin, whisperModel: seedModel },
+    });
+    hosts.push(third);
+    // The stored null is authoritative over the environment seed.
+    expect(await third.handleMethod("voice.config.get", {})).toEqual({
+      whisperBin: null,
+      whisperModel: null,
+    });
+    expect(
+      (await third.handleMethod("voice.status", {})) as { transcribe: { available: boolean } },
+    ).toMatchObject({ transcribe: { available: false } });
+  });
+});
+
 describe("voice handlers", () => {
   it("serves voice.status, voice.transcribe and voice.speak over the contract surface", async () => {
     const { bin, model } = makeConfiguredFiles();

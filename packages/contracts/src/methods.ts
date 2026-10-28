@@ -233,6 +233,8 @@ export const METHODS = [
   "voice.status",
   "voice.transcribe",
   "voice.speak",
+  "voice.config.get",
+  "voice.config.set",
   "usage.summary",
 ] as const;
 
