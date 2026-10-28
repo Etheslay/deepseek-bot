@@ -24,13 +24,14 @@
   --shadow-2: 0 12px 34px rgba(0, 0, 0, 0.45);
   --shadow-3: 0 14px 44px rgba(0, 0, 0, 0.55);
   --shadow-4: 0 18px 60px rgba(0, 0, 0, 0.5);
-  /* Dropdown option states. Same black/white pair as the per-bot mute switch. */
-  --dropdown-hover-bg: #000;
-  --dropdown-hover-fg: #fff;
-  --dropdown-hover-border: #4a4a52;
-  --dropdown-selected-bg: #fff;
-  --dropdown-selected-fg: #000;
-  --dropdown-focus: #fff;
+  /* Dropdown option states. Dark-gray wash on the raised menu, light text.
+     A chosen row is not a white bar. */
+  --dropdown-hover-bg: rgba(127, 127, 127, 0.1);
+  --dropdown-hover-fg: var(--text);
+  --dropdown-hover-border: transparent;
+  --dropdown-selected-bg: rgba(127, 127, 127, 0.14);
+  --dropdown-selected-fg: var(--text);
+  --dropdown-focus: transparent;
 }
 
 :root[data-theme="light"] {
@@ -53,13 +54,14 @@
   --shadow-2: 0 12px 34px rgba(30, 30, 45, 0.13);
   --shadow-3: 0 14px 44px rgba(30, 30, 45, 0.15);
   --shadow-4: 0 18px 60px rgba(30, 30, 45, 0.18);
-  /* Swap the pair so a chosen row stays visible on a white menu. */
-  --dropdown-hover-bg: #fff;
-  --dropdown-hover-fg: #000;
-  --dropdown-hover-border: #000;
-  --dropdown-selected-bg: #000;
-  --dropdown-selected-fg: #fff;
-  --dropdown-focus: #000;
+  /* The open menu stays the dark gray panel in both themes, so these
+     tokens do not flip to a white sheet or a black selected row. */
+  --dropdown-hover-bg: rgba(127, 127, 127, 0.1);
+  --dropdown-hover-fg: #ececf1;
+  --dropdown-hover-border: transparent;
+  --dropdown-selected-bg: rgba(127, 127, 127, 0.14);
+  --dropdown-selected-fg: #ececf1;
+  --dropdown-focus: transparent;
 }
 
 * {
@@ -1321,6 +1323,12 @@ body {
   padding: 0.35rem 1rem;
 }
 
+/* Appearance: nudge the accent chips, language dropdown, and theme trigger
+   right together so their shared right edge sits closer to the card. */
+.settings-card.appearance-card {
+  padding-right: calc(1rem - 12px);
+}
+
 .settings-row {
   display: flex;
   align-items: center;
@@ -2467,6 +2475,7 @@ select option {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 0;
   font: inherit;
   font-size: 12.5px;
   color: var(--text);
@@ -2488,6 +2497,11 @@ select option {
 }
 
 .select-arrow {
+  flex: 0 0 auto;
+  /* Button contents stay inline in Electron, so flex gap on the trigger
+     never separates the word from the chevron. The margin does, on every
+     pill including the shrink-wrapped permissions ones. */
+  margin-inline-start: 1.5rem;
   color: var(--muted);
   font-size: 11px;
 }
@@ -2495,8 +2509,10 @@ select option {
 /* The menu is portaled to body and fixed-positioned by the component
    (viewport flip when the modal bottom would clip it). */
 .custom-select-menu {
-  background: var(--raised);
-  border: 1px solid var(--line);
+  /* Same dark raised panel in light theme. --raised flips to white there. */
+  background: #1d1d21;
+  color: #ececf1;
+  border: 1px solid #2a2a30;
   border-radius: 16px;
   padding: 0.25rem;
   box-shadow: var(--shadow-1);
@@ -2512,7 +2528,7 @@ select option {
   gap: 0.5rem;
   font: inherit;
   font-size: 12.5px;
-  color: var(--text);
+  color: #ececf1;
   background: transparent;
   border: none;
   border-radius: 12px;
@@ -6983,14 +6999,11 @@ button.msg-attachment-file {
 
 /* ---------- dropdown-option-selection ----------
    One treatment for every dropdown option that can look chosen, hovered, or
-   focused: the custom listbox, a native <option>, and text selection inside
-   either. Colours come only from --dropdown-*, the same black/white pair as
-   the per-bot mute switch. A chosen row is the solid "on" colour and wins
-   over hover. A hovered row is the solid "off" colour. Focus is a monochrome
-   ring, never the system blue. Native <option> rules repeat the fill with an
-   inset shadow because Chromium paints its popup highlight under author
-   backgrounds; Windows' native popup ignores option CSS, which is why the
-   remaining controls use CustomSelect. */
+   focused. The panel stays the raised dark gray. Chosen and hovered rows use
+   the same neutral gray wash as before the black/white pass — light text on
+   that gray, never a white row. The chosen wash wins over hover. Native
+   <option> rules repeat the fill with an inset shadow because Chromium paints
+   its popup highlight under author backgrounds. */
 select,
 .custom-select-menu {
   accent-color: var(--dropdown-selected-bg);
@@ -7017,8 +7030,7 @@ select option:active {
 }
 
 .custom-select-item:focus-visible {
-  outline: 2px solid var(--dropdown-focus);
-  outline-offset: -2px;
+  outline: none;
 }
 
 .custom-select-item.current,
@@ -7054,21 +7066,16 @@ select option:checked:active {
 
 .custom-select-item.current:focus-visible,
 .custom-select-item[aria-selected="true"]:focus-visible {
-  outline: 2px solid var(--dropdown-selected-fg);
-  outline-offset: -2px;
+  outline: none;
 }
 
 .custom-select-item::selection,
-select option::selection {
-  background: var(--dropdown-focus);
-  color: var(--dropdown-selected-fg);
-}
-
 .custom-select-item.current::selection,
 .custom-select-item[aria-selected="true"]::selection,
+select option::selection,
 select option:checked::selection {
-  background: var(--dropdown-selected-fg);
-  color: var(--dropdown-selected-bg);
+  background: var(--dropdown-selected-bg);
+  color: var(--dropdown-selected-fg);
 }
 
 .custom-select-trigger:focus-visible,
@@ -8256,11 +8263,17 @@ select:focus-visible {
 .settings-row .custom-select {
   flex: 0 0 auto;
   min-width: 132px;
-  /* The min-width box is already flush with the row end (the accent chips).
-     A shrink-wrapped trigger was left-aligned inside that box, so 主题 and
-     语言 sat left of the rightmost chip. Pin the closed control to that edge. */
+  /* Pin a shrink-wrapped trigger to the right of this box. */
   display: flex;
   justify-content: flex-end;
+}
+
+/* Appearance dropdowns only: the row padding and the card's remaining right
+   padding still hold 主题 and 语言 inside the card. Cancel both so the closed
+   triggers sit on the card's right edge. The open menu measures the trigger,
+   so its right edge moves with them. Accent chips stay where they are. */
+.appearance-card .settings-row .custom-select {
+  margin-right: calc(-0.2rem - (1rem - 12px));
 }
 
 .settings-row .custom-select-trigger {
@@ -8268,6 +8281,18 @@ select:focus-visible {
   height: auto;
   padding: 0.35rem 0.6rem;
   font-size: 0.9rem;
+}
+
+/* The appearance row label stays outside the pill. The closed theme trigger
+   fills its box so 深色 / 浅色 are not packed against the arrow. */
+.appearance-theme-label {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.settings-row .custom-select.theme-select .custom-select-trigger {
+  width: 100%;
+  padding-inline: 0.85rem;
 }
 
 .settings-row .custom-select-menu {
