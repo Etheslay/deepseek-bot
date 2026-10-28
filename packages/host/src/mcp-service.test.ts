@@ -22,7 +22,10 @@ const cleanup: (() => Promise<void> | void)[] = [];
 afterEach(async () => {
   for (const action of cleanup.splice(0).reverse()) await action();
 });
-async function setup(options?: { catalogTimeoutMs?: number }) {
+async function setup(options?: {
+  catalogTimeoutMs?: number;
+  resolveCredential?: (credentialRef: string) => Promise<string>;
+}) {
   const root = mkdtempSync(join(tmpdir(), "dsb-mcp-service-"));
   cleanup.push(() => rmSync(root, { recursive: true, force: true }));
   const db = openDatabase(ensureDataLayout(root).dbFile);
@@ -32,7 +35,11 @@ async function setup(options?: { catalogTimeoutMs?: number }) {
   let calls = 0;
   let listGate: Promise<void> | undefined;
   let lists = 0;
+  const authorizations: Array<string | undefined> = [];
   const server: Server = createServer(async (req, res) => {
+    authorizations.push(
+      typeof req.headers.authorization === "string" ? req.headers.authorization : undefined,
+    );
     if (req.method !== "POST") {
       res.writeHead(405).end();
       return;
@@ -153,6 +160,7 @@ async function setup(options?: { catalogTimeoutMs?: number }) {
     catalog,
     input,
     calls: () => calls,
+    authorizations: () => authorizations,
     lists: () => lists,
     delayLists: (gate: Promise<void>) => {
       listGate = gate;
@@ -381,5 +389,26 @@ describe("MCP authorization and output boundary", () => {
     await rejected;
     expect(checks).toBe(1);
     expect(f.calls()).toBe(0);
+  });
+  it("injects a resolved HTTP credential and does not echo a resolver failure", async () => {
+    const secret = "service-mcp-token";
+    const ref = `cred:${randomUUID()}`;
+    const f = await setup({
+      resolveCredential: async (credentialRef) => {
+        if (credentialRef !== ref) throw new Error(`leak ${secret}`);
+        return secret;
+      },
+    });
+    f.db.raw.prepare("UPDATE connectors SET credential_ref = ? WHERE id = ?").run(ref, f.connector.id);
+    f.grant();
+    const catalog = await f.catalog();
+    expect(catalog.tools).toHaveLength(1);
+    expect(JSON.stringify(catalog)).not.toContain(secret);
+    expect(f.authorizations().some((value) => value === `Bearer ${secret}`)).toBe(true);
+    f.db.raw
+      .prepare("UPDATE connectors SET credential_ref = ? WHERE id = ?")
+      .run(`cred:${randomUUID()}`, f.connector.id);
+    await expect(f.service.discover(f.connector.id)).rejects.toThrow("MCP credential is unavailable");
+    await expect(f.service.discover(f.connector.id)).rejects.not.toThrow(/service-mcp-token|leak/u);
   });
 });

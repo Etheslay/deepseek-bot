@@ -7,9 +7,17 @@
  * fixture for settings and bots; chat/workflow/run views stay on the fixture
  * until their contract methods exist (see docs/AGENT_PLATFORM.md).
  */
-import type { Bot, ErrorCode, Task } from "@deepseek-bot/contracts";
+import {
+  MAX_ATTACHMENT_CHUNK_BYTES,
+  METHOD_CONTRACTS,
+  type Bot,
+  type ErrorCode,
+  type Task,
+} from "@deepseek-bot/contracts";
+import { bytesToBase64 } from "../features/chat/attachments.js";
 import {
   ServiceError,
+  type AttachmentUploadResult,
   type BotDraft,
   type ChatHistoryRow,
   type DesktopService,
@@ -25,6 +33,11 @@ import {
   storedSessionBotId,
 } from "./stored-session.js";
 import { t } from "../i18n.js";
+import {
+  encodeBase64,
+  sha256Hex,
+  splitAttachmentChunks,
+} from "../features/chat/attachments.js";
 
 type HostBridge = {
   host: { call: (method: string, payload: unknown) => Promise<unknown> };
@@ -164,6 +177,32 @@ export function createHostService(bridge: HostBridge): DesktopService {
         return { artifact: artifact.value, version: version.value };
       },
     },
+    attachments: {
+      // D26: one begin call, 512 KiB base64 chunks, one commit — the Host
+      // verifies size and sha256 before the file enters the workspace.
+      upload: async (botId, { name, bytes }): Promise<AttachmentUploadResult> => {
+        const digest = await crypto.subtle.digest("SHA-256", bytes as unknown as ArrayBuffer);
+        const sha256 = [...new Uint8Array(digest)]
+          .map((byte) => byte.toString(16).padStart(2, "0"))
+          .join("");
+        const begun = (await artifactCall("attachment.begin", {
+          botId,
+          name,
+          size: bytes.byteLength,
+          sha256,
+        })) as { uploadId: string };
+        for (let offset = 0; offset < bytes.byteLength; offset += MAX_ATTACHMENT_CHUNK_BYTES) {
+          const chunk = bytes.subarray(offset, Math.min(offset + MAX_ATTACHMENT_CHUNK_BYTES, bytes.byteLength));
+          await artifactCall("attachment.append", {
+            uploadId: begun.uploadId,
+            chunkBase64: bytesToBase64(chunk),
+          });
+        }
+        return (await artifactCall("attachment.commit", {
+          uploadId: begun.uploadId,
+        })) as AttachmentUploadResult;
+      },
+    },
     chat: {
       // One logical chat per bot. The open thread reads the same rows.
       listSessions: async (botId) => {
@@ -180,6 +219,40 @@ export function createHostService(bridge: HostBridge): DesktopService {
         };
       },
       history: async (botId, limit = 100) => readHistory(botId, limit),
+      importAttachment: async (botId, file) => {
+        if (file.bytes.byteLength === 0) {
+          throw new ServiceError("INVALID_INPUT", t("shell.attachmentEmpty", [file.name]));
+        }
+        const checksum = await sha256Hex(file.bytes);
+        const chunks = splitAttachmentChunks(file.bytes);
+        const uploadId = crypto.randomUUID();
+        let imported: {
+          relativePath: string;
+          mediaType: string;
+          size: number;
+          checksum: string;
+        } | null = null;
+        for (let index = 0; index < chunks.length; index += 1) {
+          const response = METHOD_CONTRACTS["chat.attach"].response.parse(
+            await bridge.host.call("chat.attach", {
+              botId,
+              uploadId,
+              name: file.name,
+              mediaType: file.mediaType,
+              size: file.bytes.byteLength,
+              checksum,
+              index,
+              count: chunks.length,
+              data: encodeBase64(chunks[index]!),
+            }),
+          );
+          if (response.status === "imported") imported = response;
+        }
+        if (imported === null) {
+          throw new ServiceError("INVALID_INPUT", t("shell.attachmentImportFailed", [file.name]));
+        }
+        return imported;
+      },
       stream: (botId, text, handlers) => {
         let cancelled = false;
         const sessionId = `chat:${botId}`;

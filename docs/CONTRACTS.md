@@ -1,12 +1,14 @@
-# 接口与数据契约 v0.8
+# 接口与数据契约 v0.9
 
 本文件定义本项目前后端契约，不是 DeepSeek Harness 官方 API。状态：v0.1 已冻结（2026-10-23，D00 验收记录见 D00 Issue）；v0.2 为 D15 写层扩展；v0.3（2026-10-26，D16 后端）新增人类权限控制方法；v0.4（2026-10-26，D28 共编侧车）新增 `artifacts.*` 方法组；v0.5（2026-10-26，manager-orchestration，TASK_MANAGER_ORCHESTRATION.md）新增 bot 协调者角色、`task.*` 方法组、`task.status` 任务事件与能力 `app.dispatch_task`，`protocolVersion` 升至 0.5，继续接受 0.1–0.4 发送方。工作流文档 `schemaVersion` 保持 0.1（存量数据可读）。后续变更按 §7 提升版本并由变更负责人自审同步使用方。可执行实现位于 `packages/contracts/`：schema、§7 夹具与双方共用契约测试见 [packages/contracts/README.md](../packages/contracts/README.md)。所有字段均需后端校验，TypeScript 类型不能替代运行时校验。
 
 v0.5（D19 MCP HTTP 契约片）新增连接器类型、MCP 工具发现与逐机器人精确工具授权方法，以及独立能力 `mcp.call`。该契约片不代表 MCP Host、存储迁移、桌面设置或真实服务联调已经完成。
 
-v0.6（D21 指定窗口截图与本地 OCR 契约片）新增 `screen.*` 受信桌面方法与结果元数据。该契约片将 `protocolVersion` 升至 0.7，继续接受当时 0.1–0.6 发送方；工作流 `schemaVersion` 仍为 0.1。Windows 采集、离线 OCR 与 Host 网关已在 develop；桌面设置页调用这些方法做本机预览。这不代表真实窗口、打包 Electron 或发布验收已经完成。实现依据见 [D21 设计](superpowers/specs/2026-10-27-local-screen-sensing-design.md)。
+v0.6（D21 指定窗口截图与本地 OCR 契约片）新增 `screen.*` 受信桌面方法与结果元数据。v0.7 起 `protocolVersion` 接受管理编排；v0.8 增加 `mcp-stdio` 与 `connector.setCommand`。Windows 采集、离线 OCR 与 Host 网关已在 develop；桌面设置页调用这些方法做本机预览。这不代表真实窗口、打包 Electron 或发布验收已经完成。实现依据见 [D21 设计](superpowers/specs/2026-10-27-local-screen-sensing-design.md)。
 
-v0.8（D27 本地语音后端切片）新增 `voice.status` / `voice.transcribe` / `voice.speak` 三个受信桌面方法：whisper.cpp 本地转写与 Windows SAPI 本地播报，全本地、无网络、不产生模型工具。当前 `protocolVersion` 为 0.8，继续接受 0.1–0.7 发送方；工作流 `schemaVersion` 仍为 0.1。语音录制（按住说话/自动断句）与播放接线归桌面后续联调。
+D26 附件理解闭环在当前协议上追加仅受信桌面的 `attachment.begin` / `attachment.append` / `attachment.commit`，不另升 `protocolVersion`；模型侧新增工具 `read_workspace_file`（能力映射 `fs.read`，走 D16 网关检查点）。网关导入仍走 `chat.attach` 与模型工具 `read`。
+
+v0.9（D27 本地语音后端切片）新增 `voice.status` / `voice.transcribe` / `voice.speak` 三个受信桌面方法：whisper.cpp 本地转写与 Windows SAPI 本地播报，全本地、无网络、不产生模型工具。当前 `protocolVersion` 为 0.9，继续接受 0.1–0.8 发送方；工作流 `schemaVersion` 仍为 0.1。语音录制（按住说话/自动断句）与播放接线归桌面后续联调。
 
 ## 1. 通用规则
 
@@ -40,7 +42,7 @@ v0.8（D27 本地语音后端切片）新增 `voice.status` / `voice.transcribe`
 | ScreenResult | id, mode(image\|ocr), at, width, height, hasOcr | v0.6：严格元数据对象；id 为 UUID，at 为 UTC ISO，每边整数 1–8192；不含路径、窗口标题、图像或 OCR 正文 |
 | ScreenStatus | supported, enabled, target, busy | v0.6：布尔状态；target 为 null 或 `{id: UUID, title: string≤512}`，id 是当前 Host 代次的不透明窗口 token |
 | CapabilityPolicy | capability, mode | v0.3；全局 allow/ask/deny 默认策略，受高风险能力限制 |
-| ConnectorKind | sd-webui / mcp-http | v0.5；register 省略 kind 时默认 sd-webui；现有连接器响应 kind 可选以兼容旧 Host，后续实现应始终输出类型；旧记录按 sd-webui 解释 |
+| ConnectorKind | sd-webui / mcp-http / mcp-stdio | v0.5 起 HTTP，v0.8 起 stdio；register 省略 kind 时默认 sd-webui；响应 kind 可选以兼容旧 Host，后续实现应始终输出类型；旧记录按 sd-webui 解释 |
 | McpTool | name, description?, inputSchema | v0.5；name 为 1–200 字符精确名称，description ≤4000 字符，inputSchema 为 JSON 对象（record unknown）；发现最多 200 项，不把远端描述当指令或授权 |
 | McpServerGrant | serverId, allowedTools | 单个服务器的精确工具白名单，最多 200 个唯一名称；名称 1–200 字符，禁止 `*`/`?` 通配符，不进行大小写或空白归一化；空数组表示不允许该服务器的工具 |
 | PermissionGrant | id, capability, botId, mode, scope, sessionId, generation, approvalId, maxUses, uses, expiresAt, createdAt, revokedAt | v0.3；scope=policy 为全局策略行，其余为 bot 专属 once/session/permanent 授权；计数在执行前原子扣减 |
@@ -51,7 +53,7 @@ v0.8（D27 本地语音后端切片）新增 `voice.status` / `voice.transcribe`
 
 ## 3. 方法边界
 
-v0.5 的 MCP 控制方法只供受信桌面调用，不能注册为模型工具。`mcp-http` 后续传输仅使用本机 HTTP 回环端点，允许 `/mcp` 等路径；端点的 scheme、回环主机、凭据与重定向等检查由 Host 实现承担，当前契约仍只校验 endpoint 字符串长度与形状字段。`connector.register` 和 `connector.setEndpoint` 不因配置地址而自动调用服务。
+v0.5 的 MCP 控制方法只供受信桌面调用，不能注册为模型工具。`mcp-http` 仅使用本机 HTTP 回环端点，允许 `/mcp` 等路径。`mcp-stdio` 只保存本机命令和参数数组，不保存 shell 字符串。凭据列仍是 `cred:<uuid>`；登记方法不解析密文。发现和调用时 Host 才通过既有凭据通道注入，HTTP 使用 Bearer，stdio 写入指定环境变量，不进入参数数组。端点、命令和重定向检查由 Host 实现承担。`connector.register`、`connector.setEndpoint` 和 `connector.setCommand` 不因配置而自动调用服务。
 
 MCP 实际调用使用独立能力 `mcp.call`，默认 `ask`，禁止全局 `allow` 与 session/permanent 授权；只允许绑定精确动作、代次与一次消费的 once 审批。`deny` 可全面禁用。既有 `connector.invoke` 策略或授权不能替代该审批；`ToolPolicy.mcp` 的服务器/工具白名单也是独立门槛，不能代替人类逐次批准。此规则本片落实为能力和授权 schema，Host 执行检查与错误路径将在后续实现片完成。
 
@@ -75,7 +77,8 @@ MCP 实际调用使用独立能力 `mcp.call`，默认 `ask`，禁止全局 `all
 | permission.grant.issue | 人类为当前 bot 授予一项能力 | 请求只有 botId、capability、scope（session 或 permanent）。会话由 Host 绑定 `chat:<botId>`、当前代次、默认 5 次 / 120 分钟；永久不带会话、次数或期限。逐次能力与非 ask 策略拒绝。仍有效的同一授权再次发放时返回原记录。协议仍为 0.7 |
 | permission.approval.list / decide | v0.3 人类读取精确动作/批准或拒绝 | 列表默认 pending；决定必须匹配 approvalId、expectedActionDigest、代次、期限；scope 默认 once，session 可指定 maxUses/ttlMinutes；一次消费 |
 | permission.audit.list | v0.3 人类按 botId、afterSequence 查询追加式审计 | 默认最多 50，最高 100；模型不能写入/删除或调用控制方法 |
-| connector.mcp.discover | v0.5 受信桌面契约：`{id: UUID}` → `{tools: McpTool[], at: UTC ISO}` | 请求严格字段；最多 200 个工具。Host 后续负责启用状态、mcp-http 类型、端点与远端响应验证 |
+| connector.setCommand | v0.8 受信桌面契约：`{id, command, args?}` → 连接器 | 只替换 stdio 命令和参数。不启动进程，不读取凭据 |
+| connector.mcp.discover | v0.5 受信桌面契约：`{id: UUID}` → `{tools: McpTool[], at: UTC ISO}` | 请求严格字段；最多 200 个工具。Host 负责启用状态、传输类型、端点或命令，以及响应验证 |
 | connector.mcp.grants.get | v0.5 受信桌面契约：`{botId: UUID}` → `{servers: McpServerGrant[]}` | 请求严格字段；返回最多 50 个服务器，仅当前 bot 的授权 |
 | connector.mcp.grants.set | v0.5 受信桌面契约：`{botId: UUID, id: UUID, allowedTools: string[]}` → `{servers: McpServerGrant[]}` | 仅替换指定 bot 与连接器的工具白名单；最多 200 个唯一精确名称，空数组清空；不得扩大其他服务器权限。后续 Host 校验名称确实存在于该服务器的发现结果 |
 | screen.status | v0.6：`{botId: UUID}` → `ScreenStatus` | 仅受信桌面；不能凭读取状态取得采集授权 |
@@ -90,13 +93,14 @@ MCP 实际调用使用独立能力 `mcp.call`，默认 `ask`，禁止全局 `all
 | device.action.list | v0.7：`{botId: UUID, limit?: 1–100}` → `{records: {id, botId, action: pointer\|key, at}[]}` | 一次精确审批通过后写入的本地记录。按该 bot 从新到旧列出，默认 50，最多 100。另一个 bot 看不到。拒绝、策略不是 ask、同一张审批再用，都不在此列表。不移动鼠标、不发送按键 |
 | device.action.input | v0.7：`{botId: UUID, input: pointer\|key}` → `{id: UUID, at: UTC ISO, kind: pointer\|key}` | 一次精确仅本次审批后执行一次输入。pointer 为 move 或 click，button 为 left/right/middle，x/y 为 0–8192 的整数。key 为允许列表中的一个名字，action 只能是 tap，并带 shift/ctrl/alt 布尔值。不接受命令、路径、自由文本或 Windows 键。响应没有坐标和路径。当前系统没有输入辅助进程时，在审批前拒绝 |
 | device.action.input.list | v0.7：`{botId: UUID, limit?: 1–100}` → `{records: {id, botId, at, input}[]}` | 已执行输入的本地产物索引，按该 bot 从新到旧，默认 50，最多 100。不含文件系统路径。拒绝、未执行、另一个 bot 的产物都不在此列表 |
-| voice.status | v0.8：`{}` → `{transcribe: {available, reason\|null}, speak: {available, reason\|null}}` | 仅受信桌面；只汇报本机可用性（whisper.cpp 二进制/模型是否已配置且存在、SAPI 是否在 Windows），不启动任何进程 |
-| voice.transcribe | v0.8：`{audioBase64: string≤900000}` → `{text: string≤4000, seconds: 0–20}` | 用用户自备的 whisper.cpp 把一段 16 kHz 单声道 16-bit PCM WAV 剪辑转成文本。全本地：无网络、无模型调用、无云端转写。临时音频文件在运行结束后删除，不进备份；格式、时长（≤20 秒）或大小不符拒绝且不落盘。不产生模型工具 |
-| voice.speak | v0.8：`{text: string≤2000}` → `{spoken: true}` | 用 Windows SAPI 把一段文本朗读出声。Host 调用固定参数的 PowerShell 脚本（文本以 base64 传入，不经 shell 字符串拼接），120 秒超时终止；非 Windows 拒绝。不产生模型工具 |
+| voice.status | v0.9：`{}` → `{transcribe: {available, reason\|null}, speak: {available, reason\|null}}` | 仅受信桌面；只汇报本机可用性（whisper.cpp 二进制/模型是否已配置且存在、SAPI 是否在 Windows），不启动任何进程 |
+| voice.transcribe | v0.9：`{audioBase64: string≤900000}` → `{text: string≤4000, seconds: 0–20}` | 用用户自备的 whisper.cpp 把一段 16 kHz 单声道 16-bit PCM WAV 剪辑转成文本。全本地：无网络、无模型调用、无云端转写。临时音频文件在运行结束后删除，不进备份；格式、时长（≤20 秒）或大小不符拒绝且不落盘。不产生模型工具 |
+| voice.speak | v0.9：`{text: string≤2000}` → `{spoken: true}` | 用 Windows SAPI 把一段文本朗读出声。Host 调用固定参数的 PowerShell 脚本（文本以 base64 传入，不经 shell 字符串拼接），120 秒超时终止；非 Windows 拒绝。不产生模型工具 |
 | memory.list / write / delete | v0.3 人类查看、写入和删除当前 bot 的记忆 | 只作用于 payload.botId；空查询返回最近记录，默认 20、最多 50；删除未命中返回 INVALID_INPUT，不暴露其他 bot 的记录 |
 | memory.retention.get / set | v0.3 保留策略（记忆 + 知识共用）：retentionDays / memoryMaxPerBot / knowledgeMaxPerBot | 0 = 不限制（默认）；损坏值按 0 读——损坏的设置只会让清理变保守；Host 启动与每次写入后执行清扫 |
 | knowledge.list / write / delete | v0.3 当前 bot 的独立知识文档（迁移 `0010-knowledge-docs`） | 正文上限 100000 字（独立于 4000 字记忆）；list 只回摘要（不回正文，1 MiB 消息上限安全）；删除 bot 域隔离同记忆 |
 | knowledge.search | v0.3 本地向量检索：CJK 双字 + 拉丁词 TF-IDF 余弦 + 精确短语加分 | 每次查询即时分窗计算（480 字窗、100 字重叠），不预存向量、不引模型；score≤0 不返回，默认 5 条最多 10 条；数百条满幅文档内为设计边界（用 knowledgeMaxPerBot 约束） |
+| attachment.begin / append / commit | v0.7 附件上传（D26 收尾，仅受信桌面；协议仍为 0.7） | begin 严格校验 `{botId, name, size ≤ 2 MiB, sha256}`，name 必须是单个路径段（禁分隔符/控制字符/首部点号）；append 每块解码后 ≤ 512 KiB（分块绕过 1 MiB envelope 上限，总量不得超声明 size）；commit 校验字节与 sha256 后原子移入该 bot 工作区 `attachments/`，重名追加 `-1`、`-2` 后缀不覆盖；暂存区在数据根 `cache/attachments-staging/`，启动清扫、失败即删、关机清空；未知/归档 bot 拒绝。模型侧读取走 `read_workspace_file`（能力 `fs.read`，默认 ask），路径夹紧在工作区、拒绝隐藏项/目录/二进制/超过 768 KiB 的文件，不截断 |
 | artifacts.list / read / save / versions / versionContent / revert | v0.4 产物共编侧车：bot 工作区文件的列出、读取、保存、版本、版本内容与回退 | 路径必须相对且不穿越（`RelativeArtifactPathSchema` + realpath 夹紧）；内联内容 ≤ 768 KiB（1 MiB envelope 内留 JSON 转义余量），超限显式拒绝不截断；save 携带 expectedChecksum 时文件已变返回 REVISION_CONFLICT；save/revert 恒追加 author=user 版本，未入账的 bot 写入由 list/read/versions 先补记为 author=bot 版本；每文件保留最近 50 版 |
 | task.dispatch / list / cancel | v0.5 任务派发（manager-orchestration） | dispatch 仅由模型工具 `dispatch_task` 经网关到达，请求携带发起者 fromBotId；Host 重验协调者规则（角色/同组/非自身）并执行排队上限（默认 10）；`chain` 预声明 T7 交接链：简单路径（botId 不重复、不含自身）、同组、全链 ≤ 4 跳（Host 可配 2–4，默认 3）；一次审批覆盖整条链，逐跳执行前重验（撤销/deny 即停，剩余跳标 skipped）。list 按 fromBotId/toBotId/rootTaskId/status 过滤；cancel 仅人类：queued 直接取消、running 转 chat.cancel 语义，queued 同链跳级联取消 |
 
@@ -160,6 +164,14 @@ NodeRun：`pending → running ↔ waiting_approval → succeeded / failed / can
 `device.action` 默认 deny。只能改为 ask，或保持 deny，不能 allow，也不接受会话或永久授权。`device.action.request` 请求 `{botId, kind: pointer|key}`，响应只有 `{id, at}`。一次请求对应一次精确 `actionDigest` 的仅本次审批。拒绝、策略不是 ask，或同一张审批用第二次，都不返回接受结果。模型工具 `device_action` 只接受 `kind`，可信 bot 身份由 Host 绑定。动作名只有 `pointer` 和 `key`；其他名字在创建审批前拒绝。一次接受会在本机数据库留下一条记录：id、bot id、动作名、时间。`device.action.list` 按该 bot 从新到旧列出这些记录，默认 50，最多 100。拒绝、策略不是 ask、同一张审批再用，都不写入。记录随元数据备份。这条请求路径不包含坐标、按键名、鼠标移动、击键或 exec daemon 调用。协议仍为 0.7，旧发送方仍被接受。
 
 `device.action.input` 是同一能力上的真实输入路径。请求带 `botId` 和一份有界 `input`：指针是 `move` 或 `click`，按钮是 `left`、`right` 或 `middle`，坐标是 0–8192 的整数；按键是允许列表中的一个名字，动作只能是 `tap`，并显式带上 `shift`、`ctrl`、`alt`。不接受命令、路径、自由文本、按住不放，或 Windows 键。审批摘要覆盖整份 input。范围只能是 once。通过后 Host 调用 exec daemon 的固定参数数组，不经过 shell 命令字符串。成功后的响应只有 `{id, at, kind}`。本机 `device-outputs/<botId>/` 留下对应 JSON 和清单，`device.action.input.list` 按该 bot 从新到旧列出，默认 50，最多 100，不含路径。拒绝、策略不是 ask、同一张审批再用、未知按键，或辅助进程不可用，都不执行，也不留下成功产物。产物不进入元数据备份。模型工具 `device_input` 走同一闸门，不进入聊天应用工具目录。
+
+## D26 聊天附件进入工作区
+
+`chat.attach` 不提升协议版本（当时 `protocolVersion` 为 0.8）。新增受信方法 `chat.attach`。桌面把一个附件按块交给 Host：单文件不超过 2 MiB，每块原始字节 192 KiB，最多 16 块。块齐并且校验和一致之后，Host 以绑定该 bot 的调用方调用网关工具 `import_attachment`（能力 `fs.write`，默认 ask）。审批预览只有名称、媒体类型、体积、校验和与 uploadId，不含文件正文。拒绝或失败不写盘。
+
+写入路径是工作区 `attachments/<安全文件名>`。只保留文件名，去掉路径，并拒绝 `..` 与隐藏段。模型工具 `read`（能力 `fs.read`，默认 ask）的参数只有工作区相对路径 `file_path`。文本返回内容，超过 32000 字符时截断；光栅图片和其它二进制只返回类型与体积，不返回像素。`import_attachment` 不进入模型目录。`read` 经 `/read` 注册，并在聊天会话里盖过同名的 harness 工具。`tool.invoke` 不能导入附件。
+
+默认工作区 `55555555-5555-4555-8555-555555555555` 仍是各默认 bot 共用的一个目录。获得读授权的 bot 可以读到这个目录里的附件。本片不提供跨 bot 的文件系统隔离。产物预览沿用既有 `artifacts.read`：文本可打开，HTML 与二进制仍按 QA-14 拦截。
 
 ## D27 本地语音边界（实现要求）
 

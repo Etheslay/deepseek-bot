@@ -10,6 +10,7 @@
  */
 import { useCallback, useEffect, useRef, useState, type JSX } from "react";
 import { METHOD_CONTRACTS } from "@deepseek-bot/contracts";
+import { CustomSelect } from "../../components/custom-select.js";
 import { eventLabel } from "../automation/automation-panel.js";
 import { formatDateTime, noticeText, t, useLanguage, type Notice } from "../../i18n.js";
 
@@ -100,19 +101,13 @@ export function EventRuleSettings(): JSX.Element {
           <>
             <div className="settings-row">
               <span>{t("eventrule.botLabel")}</span>
-              <select
-                className="settings-select"
-                aria-label={t("eventrule.botLabel")}
+              <CustomSelect
                 value={botId}
+                options={bots.map((bot) => ({ value: bot.id, label: bot.name }))}
+                ariaLabel={t("eventrule.botLabel")}
                 disabled={bots.length === 0}
-                onChange={(event) => setBotId(event.target.value)}
-              >
-                {bots.map((bot) => (
-                  <option key={bot.id} value={bot.id}>
-                    {bot.name}
-                  </option>
-                ))}
-              </select>
+                onChange={setBotId}
+              />
             </div>
             {bots.length === 0 ? <p role="status">{t("eventrule.noBots")}</p> : null}
             {botId !== "" ? <EventRuleBotPanel key={botId} botId={botId} /> : null}

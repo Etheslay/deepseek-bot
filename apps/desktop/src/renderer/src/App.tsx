@@ -67,7 +67,10 @@ import { exportConversation } from "./features/chat/export-conversation.js";
 import type { MentionTable } from "./features/chat/mentions.js";
 import {
   attachmentAccept,
+  buildAttachmentContext,
   classifyAttachment,
+  composeAttachmentBlocks,
+  composeAttachmentPrompt,
   formatAttachmentSize,
   MAX_ATTACHMENT_BYTES,
   type AttachmentDraft,
@@ -171,9 +174,18 @@ type Msg = {
   /** Multi-bot delivery: stacked avatar chips, clickable per bot. */
   deliverTo?: number[];
   peerKey?: number;
-  /** Files sent with the message (D26 renderer slice). */
+  /** Files sent with the message (D26; path = workspace-relative after upload). */
   attachments?:
-    | { name: string; size: number; kind: "text" | "image" | "binary"; dataUrl?: string }[]
+    | {
+        name: string;
+        size: number;
+        kind: "text" | "image" | "binary";
+        dataUrl?: string;
+        /** Workspace path from attachment.commit. */
+        path?: string;
+        /** Same workspace path; opens the artifact preview. */
+        relativePath?: string;
+      }[]
     | undefined;
   /** Choice card the bot put to the user (D14 interaction slice). */
   choices?: {
@@ -2005,6 +2017,16 @@ const logout = (): void => {
               onTalkTo={(otherKey) => talkTo(selectedBot, otherKey)}
               onCopy={(text) => void copyText(text)}
               onNotify={(message) => setToast(message)}
+              onOpenAttachment={(relativePath) => {
+                const bot = bots.find((item) => item.key === selectedBot);
+                if (bot === undefined || selectedBot === null) return;
+                setCanvas({
+                  botKey: selectedBot,
+                  botId: bot.bot.id,
+                  botName: bot.bot.name,
+                  path: relativePath,
+                });
+              }}
               skillContext={(botId) => buildSkillContext(botId, skillLibrary)}
               onOpenBot={(botKey) => {
                 const target = bots.find((b) => b.key === botKey);
@@ -2902,6 +2924,7 @@ function MessageBubble({
   onRegenerate,
   canEditResend,
   onEditResend,
+  onOpenAttachment,
 }: {
   msg: Msg;
   accent: string;
@@ -2919,6 +2942,8 @@ function MessageBubble({
   /** G6: only the latest user message offers 编辑重发 (prefills the composer). */
   canEditResend?: boolean;
   onEditResend?: (text: string) => void;
+  /** Workspace path from the gateway import. Opens the artifact preview. */
+  onOpenAttachment?: (relativePath: string) => void;
 }): JSX.Element {
   const isUser = msg.from === "user";
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -2975,26 +3000,75 @@ function MessageBubble({
               {t("shell.quotedMessage", [msg.quote.name, msg.quote.text])}
             </div>
           )}
-          {msg.attachments && msg.attachments.length > 0 && (
+              {msg.attachments && msg.attachments.length > 0 && (
             <div className="msg-attachments">
-              {msg.attachments.map((file) =>
-                file.kind === "image" && file.dataUrl ? (
-                  <img
-                    key={file.name}
-                    className="msg-attachment-image"
-                    src={file.dataUrl}
-                    alt={file.name}
-                    draggable={false}
-                  />
-                ) : (
-                  <span className="msg-attachment-file" key={file.name}>
+              {msg.attachments.map((file) => {
+                const previewPath = file.relativePath ?? file.path;
+                const preview =
+                  previewPath !== undefined
+                    ? () => onOpenAttachment?.(previewPath)
+                    : undefined;
+                const stored =
+                  file.path !== undefined ? (
+                    <span className="msg-attachment-path">
+                      {t("shell.attachmentStoredPath", [file.path])}
+                    </span>
+                  ) : null;
+                const fileBody = (
+                  <>
                     <span className="msg-attachment-name">{file.name}</span>
                     <span className="msg-attachment-size">
                       {formatAttachmentSize(file.size)}
                     </span>
+                    {stored}
+                  </>
+                );
+                if (file.kind === "image" && file.dataUrl) {
+                  const image = (
+                    <>
+                      <img
+                        className="msg-attachment-image"
+                        src={file.dataUrl}
+                        alt={file.name}
+                        draggable={false}
+                      />
+                      {file.path !== undefined && (
+                        <span className="msg-attachment-path">
+                          {t("shell.attachmentStoredPath", [file.path])}
+                        </span>
+                      )}
+                    </>
+                  );
+                  return preview ? (
+                    <button
+                      key={previewPath ?? file.name}
+                      type="button"
+                      className="msg-attachment-open"
+                      aria-label={t("shell.openAttachmentPreview", [file.name])}
+                      onClick={preview}
+                    >
+                      {image}
+                    </button>
+                  ) : (
+                    <span key={file.name}>{image}</span>
+                  );
+                }
+                return preview ? (
+                  <button
+                    key={previewPath ?? file.name}
+                    type="button"
+                    className="msg-attachment-file"
+                    aria-label={t("shell.openAttachmentPreview", [file.name])}
+                    onClick={preview}
+                  >
+                    {fileBody}
+                  </button>
+                ) : (
+                  <span className="msg-attachment-file" key={file.name}>
+                    {fileBody}
                   </span>
-                ),
-              )}
+                );
+              })}
             </div>
           )}
           {isUser ? (
@@ -3181,6 +3255,7 @@ function BotsPlaceholder({
   onApprovalPending,
   skillContext,
   onAnswerSeedCard,
+  onOpenAttachment,
 }: {
   bots: UiBot[];
   groups: Group[];
@@ -3215,6 +3290,7 @@ function BotsPlaceholder({
    * switching bots and coming back used to re-expand an answered card.
    */
   onAnswerSeedCard: (botKey: number, msgId: number, text: string) => void;
+  onOpenAttachment: (relativePath: string) => void;
 }): JSX.Element {
   const service = useService();
   const [draft, setDraft] = useState("");
@@ -3388,20 +3464,30 @@ function BotsPlaceholder({
         onNotify(t("shell.attachmentTooLarge", [file.name]));
         continue;
       }
+      if (file.size === 0) {
+        onNotify(t("shell.attachmentEmpty", [file.name]));
+        continue;
+      }
+      const bytes = new Uint8Array(await file.arrayBuffer());
       const kind = classifyAttachment(file.type, file.name);
+      const draft: AttachmentDraft = {
+        name: file.name,
+        size: file.size,
+        mime: file.type,
+        bytes,
+        file,
+      };
       if (kind === "text") {
-        drafts.push({ name: file.name, size: file.size, mime: file.type, text: await file.text() });
+        draft.text = new TextDecoder().decode(bytes);
       } else if (kind === "image") {
-        const dataUrl = await new Promise<string>((resolve, reject) => {
+        draft.dataUrl = await new Promise<string>((resolve, reject) => {
           const reader = new FileReader();
           reader.onload = () => resolve(String(reader.result));
           reader.onerror = () => reject(reader.error);
           reader.readAsDataURL(file);
         });
-        drafts.push({ name: file.name, size: file.size, mime: file.type, dataUrl });
-      } else {
-        onNotify(t("shell.previewUnsupported", [file.name]));
       }
+      drafts.push(draft);
     }
     if (drafts.length > 0) {
       setPendingFiles((prev) => [...prev, ...drafts]);
@@ -3489,18 +3575,69 @@ function BotsPlaceholder({
       answerClarify(clarify, text);
       return;
     }
-    const outgoing: NonNullable<Msg["attachments"]> = pendingFiles.map((f) => ({
-      name: f.name,
-      size: f.size,
-      kind: classifyAttachment(f.mime, f.name),
-      ...(f.dataUrl !== undefined ? { dataUrl: f.dataUrl } : {}),
-    }));
-    onSend(text, outgoing.length > 0 ? outgoing : undefined, pendingMeta ?? undefined);
+    void sendWithAttachments(text);
+  };
+
+  /**
+   * Closure upload (attachment.begin/append/commit) runs before the turn.
+   * Small text stays inline; larger files point at read_workspace_file.
+   * The same path is named for the gateway `read` tool and opens the
+   * artifact preview. chat.attach remains on the service. A failed upload
+   * aborts the send and keeps the draft.
+   */
+  const sendWithAttachments = async (text: string): Promise<void> => {
+    const files = pendingFiles;
+    const meta = pendingMeta ?? undefined;
+    const outgoing: NonNullable<Msg["attachments"]> = [];
+    const pointers: string[] = [];
+    for (const file of files) {
+      if (file.bytes === undefined) {
+        continue;
+      }
+      const kind = classifyAttachment(file.mime, file.name);
+      try {
+        const uploaded = await service.attachments.upload(me.bot.id, {
+          name: file.name,
+          bytes: file.bytes,
+        });
+        outgoing.push({
+          name: file.name,
+          size: file.size,
+          kind,
+          ...(file.dataUrl !== undefined ? { dataUrl: file.dataUrl } : {}),
+          path: uploaded.path,
+          relativePath: uploaded.path,
+        });
+        pointers.push(
+          ...composeAttachmentBlocks([
+            {
+              name: file.name,
+              size: file.size,
+              mime: file.mime,
+              kind,
+              ...(file.text !== undefined ? { text: file.text } : {}),
+              path: uploaded.path,
+            },
+          ]),
+          buildAttachmentContext({
+            name: file.name,
+            size: file.size,
+            relativePath: uploaded.path,
+          }),
+        );
+      } catch (error) {
+        const code = (error as { code?: string }).code;
+        const detail = code ?? (error instanceof Error ? error.message : String(error));
+        onNotify(t("shell.attachmentUploadFailed", [file.name, detail]));
+        return;
+      }
+    }
+    onSend(text, outgoing.length > 0 ? outgoing : undefined, meta);
     setPendingMeta(null);
     setPendingFiles([]);
     setFailedText(text);
     setDraft("");
-    startChatStream(text);
+    startChatStream(composeAttachmentPrompt(text, pointers));
   };
 
   /** G6: 重新生成 — re-ask the latest user question as a new labelled turn. */
@@ -3649,6 +3786,7 @@ function BotsPlaceholder({
                   onRegenerate={regenerate}
                   canEditResend={m.id === lastUserMsgId}
                   onEditResend={editResend}
+                  onOpenAttachment={onOpenAttachment}
                 />
               )}
             </Fragment>

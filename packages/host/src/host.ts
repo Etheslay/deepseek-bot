@@ -16,7 +16,7 @@
  * and closes the database. A data restore tears the host down (the engine
  * holds the replaced database); the caller restarts the process.
  */
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { existsSync, mkdirSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -44,6 +44,7 @@ import {
   type RunningApprovalBridge,
 } from "@deepseek-bot/harness-adapter";
 import { ChatManager } from "./chat.js";
+import { createAttachmentStore, readWorkspaceFileText } from "./attachments.js";
 import { createWorkspaceArtifacts } from "./artifacts.js";
 import {
   EngineError,
@@ -85,6 +86,7 @@ import {
   bindTaskTools,
   bindWorkflowTools,
   bindWriteTools,
+  bindWorkspaceFileTool,
   type UserQuestionControls,
 } from "@deepseek-bot/agent-tools";
 import {
@@ -98,6 +100,7 @@ import {
   bindScreenCaptureTool,
   bindDeviceActionTool,
   bindDeviceInputTool,
+  bindAttachmentTools,
   bindWebSearchTool,
   type ToolCaller,
   type ToolNetworkPermissions,
@@ -105,6 +108,11 @@ import {
   type WebSearchResult,
 } from "@deepseek-bot/agent-tools";
 import { startApplicationToolServer } from "./app-tool-channel.js";
+import {
+  AttachmentByteStore,
+  createAttachmentIngress,
+  createWorkspaceAttachmentFiles,
+} from "./workspace-attachments.js";
 import { createScreenService, unavailableScreenBackend, type ScreenService } from "./screen.js";
 import { createDeviceActionService } from "./device.js";
 import { createDeviceInputService } from "./device-input.js";
@@ -325,7 +333,9 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
   });
   const bootGeneration = incrementBootGeneration(db);
   const permissions = new AgentPermissionService(db, bootGeneration);
-  const mcp = new McpService(db, layout.connectorOutputs);
+  const mcp = new McpService(db, layout.connectorOutputs, {
+    resolveCredential: (credentialRef) => options.resolveApiKey(credentialRef),
+  });
   const patches = writeProfilePatches(layout.harnessHome);
   const now = options.now ?? (() => new Date());
   const screenChoice = resolveScreenBackend(options);
@@ -434,6 +444,9 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
     now,
     locale: () => uiLocale.current,
   });
+  // D26: chunked trusted-desktop uploads stage under cache/ and commit into
+  // the bot workspace's attachments/ directory (shutdown sweeps strays).
+  const attachmentStore = createAttachmentStore({ db, cacheDir: layout.cache });
 
   const engine = new WorkflowEngine({
     db,
@@ -486,6 +499,25 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
 
   let closed = false;
   const agentToolsHolder: { current?: ToolGateway } = {};
+  const attachmentFiles = createWorkspaceAttachmentFiles(db);
+  const attachmentBytes = new AttachmentByteStore();
+  const attachments = createAttachmentIngress({
+    db,
+    bytes: attachmentBytes,
+    files: attachmentFiles,
+    now,
+    call: (caller, params) => {
+      const gateway = agentToolsHolder.current;
+      if (gateway === undefined) {
+        throw new EngineError({
+          code: "RUNTIME_UNAVAILABLE",
+          message: "agent tools gateway is not ready yet",
+          retryable: false,
+        });
+      }
+      return gateway.call(caller, "import_attachment", params);
+    },
+  });
   const questions = new AskUserCoordinator();
   const context: HostContext = {
     db,
@@ -501,6 +533,7 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
     deviceInput,
     voice,
     chat,
+    attachments,
     userQuestions: questions,
     webSearch: {
       currentEndpoint: () => webSearch.currentEndpoint(),
@@ -517,6 +550,7 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
     },
     tasks,
     locale: uiLocale,
+    attachmentUploads: attachmentStore,
     get agentTools(): ToolGateway {
       if (agentToolsHolder.current === undefined) {
         throw new Error("agent tools gateway is not ready yet");
@@ -572,6 +606,7 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
       device.close();
       deviceInput.close();
       voice.close();
+      attachmentStore.close();
       permissions.close();
     }
     const validated = contract.response.safeParse(result);
@@ -641,6 +676,11 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
     }),
     bindScreenCaptureTool(screen),
     bindDeviceActionTool(device),
+    // D26 closure: chat attachments land in the bot workspace; the bot reads
+    // them back through this tool (capability fs.read, D08/D16 governed).
+    bindWorkspaceFileTool({
+      read: (botId, relativePath) => readWorkspaceFileText(db, botId, relativePath),
+    }),
     bindDeviceInputTool(deviceInput),
     // v0.5 manager orchestration (T4/T3): coordinator workflow saving and
     // dispatched-task tools. Role rules live inside the task tool layer;
@@ -678,6 +718,19 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
               : 1,
         );
         return { tasks: ordered.slice(Math.max(0, ordered.length - filter.limit)) };
+      },
+    }),
+    ...bindAttachmentTools({
+      importFile(botId, input) {
+        const bytes = attachmentBytes.take(input.uploadId, botId);
+        const checksum = createHash("sha256").update(bytes).digest("hex");
+        if (bytes.byteLength !== input.size || checksum !== input.checksum) {
+          throw new ToolRejectionError("INVALID_INPUT", "staged attachment does not match the request");
+        }
+        return attachmentFiles.write(botId, input.name, bytes);
+      },
+      readFile(botId, relativePath) {
+        return attachmentFiles.read(botId, relativePath);
       },
     }),
   ]) {
@@ -777,6 +830,7 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
       clearInterval(triggerTimer);
       screen.close();
       device.close();
+      attachmentStore.close();
       deviceInput.close();
       voice.close();
       permissions.close();

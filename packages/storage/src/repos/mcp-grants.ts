@@ -44,8 +44,9 @@ export function setBotMcpGrant(
   }
   return runInTransaction(db.raw, () => {
     const bot = activeBot(db, input.botId);
-    if (getConnector(db, input.connectorId).kind !== "mcp-http")
-      throw invalidInput("connector must be MCP HTTP");
+    const kind = getConnector(db, input.connectorId).kind;
+    if (kind !== "mcp-http" && kind !== "mcp-stdio")
+      throw invalidInput("connector must be MCP");
     const current = getToolPolicy(db, bot.toolPolicyId);
     if (current === undefined) throw invalidInput("tool policy was not found");
     const servers = current.mcp.servers.filter((server) => server.serverId !== input.connectorId);

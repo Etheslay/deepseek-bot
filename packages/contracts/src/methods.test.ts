@@ -27,7 +27,10 @@ describe("method whitelist", () => {
   it("defines a contract for every whitelisted method and nothing else", () => {
     const contractMethods = Object.keys(METHOD_CONTRACTS).sort();
     expect(contractMethods).toEqual([...METHODS].sort());
-    expect(METHODS).toHaveLength(110);
+    // develop is 112 (chat.attach, connector.setCommand, device.action.input
+    // and device.action.input.list plus the attachment.begin/append/commit
+    // closure); the voice backend adds voice.status/transcribe/speak.
+    expect(METHODS).toHaveLength(115);
   });
 
   it("covers every method group from CONTRACTS §3", () => {
@@ -35,6 +38,7 @@ describe("method whitelist", () => {
     expect([...groups].sort()).toEqual([
       "approval",
       "artifacts",
+      "attachment",
       "bot",
       "chat",
       "connector",
@@ -65,7 +69,7 @@ describe("method whitelist", () => {
 });
 
 describe("protocol version", () => {
-  it("accepts v0.8 and previous v0.1–v0.7 senders", () => {
+  it("accepts v0.9 and previous v0.1–v0.8 senders", () => {
     expect(isProtocolVersionSupported("0.2")).toBe(true);
     expect(isProtocolVersionSupported("0.1")).toBe(true);
     expect(isProtocolVersionSupported("0.3")).toBe(true);
@@ -74,12 +78,13 @@ describe("protocol version", () => {
     expect(isProtocolVersionSupported("0.6")).toBe(true);
     expect(isProtocolVersionSupported("0.7")).toBe(true);
     expect(isProtocolVersionSupported("0.8")).toBe(true);
+    expect(isProtocolVersionSupported("0.9")).toBe(true);
     expect(isProtocolVersionSupported("1.0")).toBe(false);
   });
 
   it("rejects unknown or higher protocol versions outright", () => {
     const result = RequestEnvelopeSchema.safeParse({
-    protocolVersion: "0.9",
+    protocolVersion: "1.0",
       requestId: REQUEST_ID,
       method: "bot.list",
       payload: {},
@@ -403,6 +408,76 @@ describe("parseRequest", () => {
         "memory.retention.set",
       ).success,
     ).toBe(true);
+  });
+});
+
+describe("attachment methods", () => {
+  const botId = "10000000-0000-4000-8000-000000000001";
+  const uploadId = "30000000-0000-4000-8000-000000000003";
+
+  it("accepts begin, append and commit with sane payloads", () => {
+    expect(
+      parseRequest(
+        envelope("attachment.begin", {
+          botId,
+          name: "报告.md",
+          size: 12,
+          sha256: "a".repeat(64),
+        }),
+        "attachment.begin",
+      ).success,
+    ).toBe(true);
+    expect(
+      parseRequest(
+        envelope("attachment.append", { uploadId, chunkBase64: Buffer.from("abc").toString("base64") }),
+        "attachment.append",
+      ).success,
+    ).toBe(true);
+    expect(
+      parseRequest(envelope("attachment.commit", { uploadId }), "attachment.commit").success,
+    ).toBe(true);
+  });
+
+  it("rejects traversal names, oversized files, and oversized chunks", () => {
+    expect(
+      parseRequest(
+        envelope("attachment.begin", {
+          botId,
+          name: "sub/dir.md",
+          size: 12,
+          sha256: "a".repeat(64),
+        }),
+        "attachment.begin",
+      ).success,
+    ).toBe(false);
+    expect(
+      parseRequest(
+        envelope("attachment.begin", {
+          botId,
+          name: ".hidden.md",
+          size: 12,
+          sha256: "a".repeat(64),
+        }),
+        "attachment.begin",
+      ).success,
+    ).toBe(false);
+    expect(
+      parseRequest(
+        envelope("attachment.begin", {
+          botId,
+          name: "big.md",
+          size: 2 * 1024 * 1024 + 1,
+          sha256: "a".repeat(64),
+        }),
+        "attachment.begin",
+      ).success,
+    ).toBe(false);
+    expect(
+      parseRequest(
+        envelope("attachment.append", { uploadId, chunkBase64: "x".repeat(700_001) }),
+        "attachment.append",
+      ).success,
+    ).toBe(false);
   });
 });
 

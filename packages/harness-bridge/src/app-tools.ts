@@ -17,6 +17,9 @@ export const APPLICATION_TOOL_NAMES = [
   "save_workflow",
   "dispatch_task",
   "list_tasks",
+  // D26: chat attachments land in the bot workspace; the bot reads them
+  // back through this tool (keep in lockstep with the Host list).
+  "read_workspace_file",
 ] as const;
 
 // Allow ten minutes for human approval plus two minutes for the service call.
@@ -222,6 +225,24 @@ function screenTools(value: unknown): ToolSchema[] {
   ];
 }
 
+function readTool(value: unknown): ToolSchema {
+  if (
+    !object(value) ||
+    !object(value.tool) ||
+    value.tool.name !== "read" ||
+    typeof value.tool.description !== "string" ||
+    !object(value.tool.parameters) ||
+    value.tool.parameters.type !== "object"
+  ) {
+    throw new Error("invalid catalog");
+  }
+  return {
+    name: "read",
+    description: value.tool.description,
+    parameters: value.tool.parameters,
+  };
+}
+
 function webSearchTool(value: unknown): ToolSchema {
   if (
     !object(value) ||
@@ -332,6 +353,9 @@ export async function applyApplicationTools(ctx: ApplicationToolContext): Promis
     const webSearch = webSearchTool(
       await request(origin, token, "/web-search", AbortSignal.timeout(STARTUP_TIMEOUT_MS)),
     );
+    const read = readTool(
+      await request(origin, token, "/read", AbortSignal.timeout(STARTUP_TIMEOUT_MS)),
+    );
     let screen: ToolSchema[] = [];
     try {
       screen = screenTools(
@@ -419,35 +443,47 @@ export async function applyApplicationTools(ctx: ApplicationToolContext): Promis
     bindRemote(askUser, "/ask-user/call", ASK_USER_TIMEOUT_MS);
     for (const schema of memory) bindRemote(schema, "/memory/call", CALL_TIMEOUT_MS);
     for (const schema of connectors) bindRemote(schema, "/connectors/call", CONNECTOR_TIMEOUT_MS);
-    // Harness already publishes a global web_search. A second global name
-    // aborts plugin startup, so the chat tool is registered on each agent and
-    // shadows that built-in for the session.
-    try {
-      bindRemote(webSearch, "/web-search/call", CALL_TIMEOUT_MS);
-    } catch (error) {
-      if (!alreadyRegistered(error)) throw error;
-      ctx.on?.("agent/created", (payload: unknown) => {
-        if (!object(payload) || !object(payload.agent)) return;
-        const agentCtx = payload.agent.ctx;
-        if (
-          !object(agentCtx) ||
-          !object(agentCtx.tools) ||
-          typeof agentCtx.tools.register !== "function"
-        ) {
-          return;
-        }
-        const scoped = agentCtx.tools as {
-          register(definition: ApplicationToolDefinition): () => void;
-        };
-        try {
-          bindRemote(webSearch, "/web-search/call", CALL_TIMEOUT_MS, (definition) =>
-            scoped.register(definition),
-          );
-        } catch (shadowError) {
-          if (!alreadyRegistered(shadowError)) throw shadowError;
-        }
-      });
-    }
+    // Harness already publishes global web_search and read. A second global
+    // name aborts plugin startup, so those chat tools register on each agent
+    // and shadow the built-in for the session. One listener covers every
+    // name that failed the global register.
+    const shadows: Array<{ schema: ToolSchema; path: string; timeoutMs: number }> = [];
+    let shadowHooked = false;
+    const registerChatTool = (schema: ToolSchema, path: string, timeoutMs: number): void => {
+      try {
+        bindRemote(schema, path, timeoutMs);
+      } catch (error) {
+        if (!alreadyRegistered(error)) throw error;
+        shadows.push({ schema, path, timeoutMs });
+        if (shadowHooked) return;
+        shadowHooked = true;
+        ctx.on?.("agent/created", (payload: unknown) => {
+          if (!object(payload) || !object(payload.agent)) return;
+          const agentCtx = payload.agent.ctx;
+          if (
+            !object(agentCtx) ||
+            !object(agentCtx.tools) ||
+            typeof agentCtx.tools.register !== "function"
+          ) {
+            return;
+          }
+          const scoped = agentCtx.tools as {
+            register(definition: ApplicationToolDefinition): () => void;
+          };
+          for (const shadow of shadows) {
+            try {
+              bindRemote(shadow.schema, shadow.path, shadow.timeoutMs, (definition) =>
+                scoped.register(definition),
+              );
+            } catch (shadowError) {
+              if (!alreadyRegistered(shadowError)) throw shadowError;
+            }
+          }
+        });
+      }
+    };
+    registerChatTool(webSearch, "/web-search/call", CALL_TIMEOUT_MS);
+    registerChatTool(read, "/read/call", CALL_TIMEOUT_MS);
     for (const schema of screen) bindRemote(schema, "/screen/call", CALL_TIMEOUT_MS);
     const mcpStart = unregister.length;
     try {

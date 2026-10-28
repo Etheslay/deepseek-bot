@@ -90,7 +90,8 @@
 | D14 渲染片 + 交互片 | 已交付（mermaid 砍除，验收部分达成） | `feature/chat-experience` → `feature/settings-updates` → `0f20970` | [D14-report](reports/D14-report.md) |
 | 头像打磨（Grok Ball 视线与节奏） | 已交付 | `feature/gaze-avatar` → PR #61 `cc4a379`、#62 `5533ea6` | [B-AVATAR-02-report](reports/B-AVATAR-02-report.md) |
 | D25 全局搜索 | 已交付（host 检索按计划后接） | 同上 → `0f20970` | [D25-report](reports/D25-report.md) |
-| D26 聊天附件 | **切片交付，任务未完成** | 同上 → `0f20970` | [D26-report](reports/D26-report.md) |
+| D26 聊天附件 | **切片交付（渲染层）；D26 收尾（附件理解闭环）另见 [D26 附件读取报告](reports/D26-attachment-read-report.md)**：附件分片上传进 bot 工作区 `attachments/`、模型工具 `read_workspace_file`（fs.read 授权）按需读取、阈值注入（≤16 KiB 文本内联，超限走工具）、图片/二进制卡片说明 | 同上 → `0f20970`；收尾在 `feature/attachment-read-closure` | [D26-report](reports/D26-report.md)、[D26-attachment-read-report](reports/D26-attachment-read-report.md) |
+| D26 附件经网关进工作区 | **已在 develop（PR #106）**。`chat.attach` 与 `fs.write` 审批写入工作区，模型用 `read` 读取。本分支与理解闭环并存；自审记录仍以原报告为准，此处不补签 | `feature/d26-gateway-attachments` | [D26-gateway-attachments-report](reports/D26-gateway-attachments-report.md) |
 | D24 设置与更新 | **切片交付，任务未完成**（备份保险库见下一行） | 同上 → `0f20970` | [D24-report](reports/D24-report.md) |
 | D24 备份/恢复与设置收尾 | **切片交付**：设置分区化（保险库/用量/电脑/更新全部真实可用）、`backups:list` 桌面通道（只读 manifest）、`data.restore` 后 Host 子进程重启、硬件加速偏好真实开关。实机安装版验证与更新链路仍 UNVERIFIED | `feature/settings-vault`（见 PR） | [D24-data-report](reports/D24-data-report.md) |
 | D17 技能与模板 | **已交付（渲染层闭环）**：模板库 + 技能定义/复用/版本化 + 统一文件导入导出（契约校验）。工作流模板、Host 注入与能力强制留后续 | `feature/skills-templates` → `292c3b8`、PR #48 `2ecb2f9` | [D17-report](reports/D17-report.md) |
@@ -100,6 +101,7 @@
 | D18 独立知识表 + 本地向量检索 + 保留策略 | 已交付 | `feature/knowledge-base` → PR #63 `ae0c6be` | [D18-knowledge-search-report](reports/D18-knowledge-search-report.md) |
 | D19 连接器登记与启停 | 已交付（自定义 MCP、凭据启用未做） | `feature/connector-registry` → PR #60 `20d3ab2` | [D19-connector-registry-report](reports/D19-connector-registry-report.md) |
 | D19 连接器调用与本地 SD 生图 | 已交付（视觉理解未做） | `feature/connector-invoke` → PR #65 `73ae475` | [D19-connector-invoke-report](reports/D19-connector-invoke-report.md) |
+| D19 stdio MCP 与凭据注入 | 切片交付（视觉理解未做；负责人自审未填） | `feature/d19-stdio-credentials` | [D19-stdio-credentials-report](reports/D19-stdio-credentials-report.md) |
 | D20 事件自动化：触发规则与评审队列 | 已交付 | `feature/automation-triggers` → PR #66 `3afea90` | [D20-triggers-report](reports/D20-triggers-report.md) |
 | D20 本地事件规则：保存/列出/启停，命中一次启动一个运行 | 切片交付（评审队列界面、聊天通知条、桌面屏幕未做） | `feature/event-automation-rules-844b` | [D20-event-rules-report](reports/D20-event-rules-report.md) |
 | D20 本地事件评审：命中入队，批准启动一次，拒绝记跳过 | 切片交付（无桌面界面、无聊天通知条） | `feature/event-review-queue-0e27` | [D20-event-review-report](reports/D20-event-review-report.md) |
@@ -127,7 +129,7 @@
 | A1 | D15 工具网关 | 读层 → 写层（创建草案/批量撤销/头像自动分配）→ `ask_user` → 内置 `web_search`（免费源） |
 | A2 | D16 权限三层 | 三档策略、聊天内授权、审计（复用 D14 卡片组件） |
 | A3 | D18 记忆与知识 | 写入/检索/删除，默认不跨 bot；独立知识表 + 本地向量检索 + 保留策略（`feature/knowledge-base`），见 [知识导入报告](reports/D18-knowledge-import-report.md)、[知识检索报告](reports/D18-knowledge-search-report.md) |
-| A4 | D19 连接器与 MCP | 登记与本地 SD 调用已合入（PR #65）；本分支交付无凭据本机 HTTP MCP 的按 bot 白名单、聊天单次审批与审计，见 [MCP 报告](reports/D19-mcp-http-report.md)。stdio、凭据注入和视觉接入待后续 |
+| A4 | D19 连接器与 MCP | 登记与本地 SD 调用已合入（PR #65）；无凭据本机 HTTP MCP 已合入，见 [MCP 报告](reports/D19-mcp-http-report.md)。`feature/d19-stdio-credentials` 增加本机 stdio MCP，并在发现和调用时注入 `cred:` 引用。视觉理解仍等模型可用 |
 | A5 | D20 事件自动化 | 评审队列已合入（PR #66）。本地自动启动切片：一个 bot 的规则可保存、列出、启停，默认关闭，命中一次启动一个运行（`feature/event-automation-rules-844b`）。本地评审切片：规则可设为评审，命中只入队，批准启动一次，拒绝记跳过（`feature/event-review-queue-0e27`）。状态记录切片：启用、停用或改为评审且状态变化时追加一条，按 bot 从新到旧列出（`feature/event-rule-state-history-d3c8`）。桌面切片：设置页为选定 bot 显示启用/停用/评审、待评审批准或拒绝，以及从新到旧的状态记录（`feature/event-rule-desktop-review-4519`）。无聊天通知条 |
 | A6 | D21 本地执行守护 | 契约、Windows OCR 与 Host 网关已在 develop。桌面设置页提供默认关闭、逐次授权的单窗口截图和本机预览。设备动作在每次询问下接受一次精确审批；通过后写入一条本地记录（id、bot id、动作名、时间），可按 bot 从新到旧列出。`device.action.request` 仍不执行输入。`feature/d21-device-input` 在另一次精确审批后，由 exec daemon 执行一次有界指针或按键，产物只留在本机 `device-outputs`。这台 Linux 环境没有执行真实 Windows 键鼠，也没有复核真实窗口截图/OCR |
 

@@ -45,6 +45,15 @@ src/renderer/src/services/
 - **安全边界**：路径经 `RelativeArtifactPathSchema` + realpath 夹紧，写不越工作区；内联读/写上限 768 KiB（超限显式拒绝，文件仍可列与回看版本）；text/html 与二进制不进编辑器、不内联渲染（QA-14）；Markdown 预览走 D14 本地安全渲染链。
 - **并发**：save 携带编辑基准 `expectedChecksum`，文件已被 bot 改动时返回 `REVISION_CONFLICT`，UI 提示重新加载而非静默覆盖。
 
+## 附件（D26）
+
+两条路径都在。聊天发送走理解闭环；网关导入仍是独立的 `chat.attach` 入口。
+
+- **理解闭环**：＋ 菜单/拖拽选中的非空文件（≤ 2 MiB）在发送前经 `attachment.begin/append/commit` 进入当前 bot 工作区 `attachments/`。重名加后缀，不覆盖。暂存与失败清理见 [CONTRACTS](CONTRACTS.md) attachment 行。上传失败中止发送并保留草稿。文件不进数据库，产物面板与画布把它当普通工作区文件列出。
+- **bot 如何看到闭环附件**：消息同时带工作区路径。文本 ≤ 16 KiB 以内联围栏注入（fence 安全、4000 字截断，并受 `chat.send` 的 4000 字上限裁剪）；更大的文本不内联，并提示 `read_workspace_file`。图片与二进制只给路径和说明。能放下时另附一句，让模型用 `read` 读取同一路径。卡片显示“已存工作区 <路径>”，点击打开产物侧车。图片缩略图留在卡片上。
+- **工具网关**：`service.chat.importAttachment` 仍分块调用 `chat.attach`。真实 Host 在 `fs.write` 为 ask 时等待审批，通过后才写入工作区 `attachments/`。夹具服务写入内存工作区，不模拟审批。审批预览不含正文。模型工具 `read`（能力 `fs.read`）读取该路径：文本可截断，图片和其它二进制只返回类型与体积。
+- **安全边界**：模型不选择上传路径。`read_workspace_file` 夹紧在工作区内，拒绝 `../`、隐藏项、目录、二进制和超过 768 KiB 的文件，不截断。默认 bot 共用一个工作区目录，读授权通过后可以看到该目录里的附件。
+
 ## 设置（FR-01 前端）
 
 - API Key **只写不读**：password 输入、保存后占位符仅显示“已配置（输入新值覆盖）”，明文永不回显；真实加密存储由 D04/D08 接线。

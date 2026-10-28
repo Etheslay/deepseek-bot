@@ -89,10 +89,12 @@ import {
   registerConnector,
   setConnectorEnabled,
   setConnectorEndpoint,
+  setConnectorCommand,
   getBotMcpGrants,
   setBotMcpGrant,
   updateBot,
   type BotPatch,
+  type ConnectorRow,
   type DataLayout,
   type OpenedDatabase,
   listPermissionPolicies,
@@ -112,6 +114,7 @@ import type { DeviceActionService } from "./device.js";
 import type { DeviceInputService } from "./device-input.js";
 import type { VoiceService } from "./voice.js";
 import type { WorkspaceArtifacts } from "./artifacts.js";
+import type { AttachmentStore } from "./attachments.js";
 import {
   DEFAULT_MODEL_PROFILE_ID,
   SEARXNG_ENDPOINT_SETTING,
@@ -122,6 +125,7 @@ import {
   type UiLocale,
 } from "./host.js";
 import { chatSessionIdFor, type ChatManager } from "./chat.js";
+import type { AttachmentIngress } from "./workspace-attachments.js";
 import { KNOWN_CAPABILITIES, policyKey, readPolicy, type PolicyLevel } from "./permissions.js";
 import { type TaskDispatcher } from "./task-dispatcher.js";
 import { createGrant, listGrants, revokeGrant, type GrantRow } from "@deepseek-bot/storage";
@@ -173,6 +177,10 @@ export interface HostContext {
   };
   /** v0.5 manager orchestration: dispatched-task queue + executor. */
   readonly tasks: TaskDispatcher;
+  /** D26 trusted-desktop attachment uploads staging into the bot workspace. */
+  readonly attachmentUploads: AttachmentStore;
+  /** D26: stage a chat attachment, then import it through the tool gateway. */
+  readonly attachments: AttachmentIngress;
   /**
    * Live UI language holder (settings.update { ui.locale }). Delivery notices,
    * handoff framing and the ask_user fallback label come out in this language.
@@ -343,6 +351,22 @@ function requireGroup(db: OpenedDatabase, groupId: string): void {
   if (group.archivedAt !== null) {
     throw invalid("group is archived", { groupId });
   }
+}
+
+function connectorPayload<E extends boolean>(row: ConnectorRow, enabled?: E) {
+  return {
+    id: row.id,
+    kind: row.kind,
+    name: row.name,
+    enabled: (enabled ?? row.enabled) as E,
+    credentialRef: row.credentialRef,
+    endpoint: row.endpoint,
+    command: row.command,
+    args: [...row.args],
+    credentialEnv: row.credentialEnv,
+    at: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
 }
 
 /**
@@ -819,6 +843,22 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
       })),
     }),
 
+    "chat.attach": async (payload) => {
+      try {
+        return await context.attachments.accept(payload);
+      } catch (error) {
+        if (error instanceof EngineError) throw error;
+        if (error instanceof ToolRejectionError) {
+          throw new EngineError({
+            code: error.code,
+            message: error.message,
+            retryable: false,
+          });
+        }
+        throw error;
+      }
+    },
+
     "chat.cancel": (payload) => {
       const cancelled = chat.cancel(payload.sessionId);
       const botId = payload.sessionId.startsWith("chat:")
@@ -942,6 +982,24 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
       const bot = requireLiveBot(db, payload.botId);
       return { searches: context.searchResults.list(bot.id) };
     },
+
+    "attachment.begin": (payload) => {
+      const bot = requireLiveBot(db, payload.botId);
+      const uploadId = context.attachmentUploads.begin(
+        bot.id,
+        payload.name,
+        payload.size,
+        payload.sha256,
+      );
+      return { uploadId };
+    },
+
+    "attachment.append": (payload) => {
+      const received = context.attachmentUploads.append(payload.uploadId, payload.chunkBase64);
+      return { received };
+    },
+
+    "attachment.commit": (payload) => context.attachmentUploads.commit(payload.uploadId),
 
     "memory.list": (payload) => {
       const bot = requireLiveBot(db, payload.botId);
@@ -1298,16 +1356,7 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
     "voice.speak": (payload) => context.voice.speak(payload.text),
 
     "connector.list": () => ({
-      connectors: listConnectors(db).map((row) => ({
-        id: row.id,
-        kind: row.kind,
-        name: row.name,
-        enabled: row.enabled,
-        credentialRef: row.credentialRef,
-        endpoint: row.endpoint,
-        at: row.createdAt,
-        updatedAt: row.updatedAt,
-      })),
+      connectors: listConnectors(db).map((row) => connectorPayload(row)),
     }),
 
     "connector.register": (payload) => {
@@ -1316,63 +1365,41 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
         kind: payload.kind,
         ...(payload.credentialRef !== undefined ? { credentialRef: payload.credentialRef } : {}),
         ...(payload.endpoint !== undefined ? { endpoint: payload.endpoint } : {}),
+        ...(payload.command !== undefined ? { command: payload.command } : {}),
+        ...(payload.args !== undefined ? { args: payload.args } : {}),
+        ...(payload.credentialEnv !== undefined ? { credentialEnv: payload.credentialEnv } : {}),
       });
-      return {
-        id: row.id,
-        kind: row.kind,
-        name: row.name,
-        enabled: false as const,
-        credentialRef: row.credentialRef,
-        endpoint: row.endpoint,
-        at: row.createdAt,
-        updatedAt: row.updatedAt,
-      };
+      return connectorPayload(row, false);
     },
 
     "connector.enable": (payload) => {
       const row = setConnectorEnabled(db, { id: payload.id, enabled: true });
-      return {
-        id: row.id,
-        kind: row.kind,
-        name: row.name,
-        enabled: true as const,
-        credentialRef: row.credentialRef,
-        endpoint: row.endpoint,
-        at: row.createdAt,
-        updatedAt: row.updatedAt,
-      };
+      return connectorPayload(row, true);
     },
 
     "connector.disable": (payload) => {
       const row = setConnectorEnabled(db, { id: payload.id, enabled: false });
       context.mcp.invalidate({ connectorId: payload.id });
       context.permissions.cancelMcp({ connectorId: payload.id });
-      return {
-        id: row.id,
-        kind: row.kind,
-        name: row.name,
-        enabled: false as const,
-        credentialRef: row.credentialRef,
-        endpoint: row.endpoint,
-        at: row.createdAt,
-        updatedAt: row.updatedAt,
-      };
+      return connectorPayload(row, false);
     },
 
     "connector.setEndpoint": (payload) => {
       const row = setConnectorEndpoint(db, { id: payload.id, endpoint: payload.endpoint });
       context.mcp.invalidate({ connectorId: payload.id });
       context.permissions.cancelMcp({ connectorId: payload.id });
-      return {
-        id: row.id,
-        kind: row.kind,
-        name: row.name,
-        enabled: row.enabled,
-        credentialRef: row.credentialRef,
-        endpoint: row.endpoint,
-        at: row.createdAt,
-        updatedAt: row.updatedAt,
-      };
+      return connectorPayload(row);
+    },
+
+    "connector.setCommand": (payload) => {
+      const row = setConnectorCommand(db, {
+        id: payload.id,
+        command: payload.command,
+        args: payload.args,
+      });
+      context.mcp.invalidate({ connectorId: payload.id });
+      context.permissions.cancelMcp({ connectorId: payload.id });
+      return connectorPayload(row);
     },
 
     "artifacts.list": (payload) => context.artifacts.list(payload.botId),

@@ -110,23 +110,25 @@ export function NotificationSettingsPanel(props: {
           <span className="settings-soon">{t("d22.notifyNoBots")}</span>
         ) : (
           <ul className="notify-bot-list" aria-label={t("d22.notifyPerBot")}>
-            {props.bots.map((bot) => (
-              <li key={bot.id} className="notify-bot">
-                <span className="notify-bot-name">{bot.name}</span>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={!muted.has(bot.id)}
-                  className={"settings-switch" + (muted.has(bot.id) ? "" : " on")}
-                  onClick={() => toggleBot(bot.id, muted.has(bot.id))}
-                >
-                  <span className="settings-switch-knob" aria-hidden="true" />
-                  <span className="notify-bot-state">
-                    {muted.has(bot.id) ? t("d22.notifyMute") : t("d22.notifyUnmute")}
-                  </span>
-                </button>
-              </li>
-            ))}
+            {props.bots.map((bot) => {
+              // Fixed track: white and aria-checked mean muted. The knob only slides inside it.
+              const isMuted = muted.has(bot.id);
+              return (
+                <li key={bot.id} className="notify-bot">
+                  <span className="notify-bot-name">{bot.name}</span>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={isMuted}
+                    aria-label={`${bot.name} ${t("d22.notifyMute")}`}
+                    className={isMuted ? "notify-mute-switch on" : "notify-mute-switch"}
+                    onClick={() => toggleBot(bot.id, isMuted)}
+                  >
+                    <span className="notify-mute-knob" aria-hidden="true" />
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>

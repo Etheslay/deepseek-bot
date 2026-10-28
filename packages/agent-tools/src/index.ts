@@ -14,6 +14,14 @@ export {
 export { ToolRegistry, ToolGateway, type ToolGatewayOptions } from "./gateway.js";
 export { JsonlAuditSink, MemoryAuditSink } from "./audit.js";
 export { bindReadTools, type ContractCaller } from "./read-tools.js";
+export {
+  bindAttachmentTools,
+  ImportAttachmentInputSchema,
+  ReadWorkspaceInputSchema,
+  type AttachmentWorkspace,
+  type ImportedAttachment,
+  type WorkspaceRead,
+} from "./attachments.js";
 export { bindWriteTools } from "./write-tools.js";
 export {
   AskUserCoordinator,
@@ -73,4 +81,11 @@ export {
   type ListTasksInput,
 } from "./task-tools.js";
 export { bindWorkflowTools } from "./workflow-tools.js";
+export {
+  bindWorkspaceFileTool,
+  WorkspaceFileInputSchema,
+  WorkspaceFilePathSchema,
+  type WorkspaceFileContent,
+  type WorkspaceFileReader,
+} from "./workspace-file.js";
 export * from "./mcp.js";

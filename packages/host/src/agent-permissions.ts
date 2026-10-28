@@ -53,6 +53,13 @@ const CAPABILITIES: Readonly<Record<string, readonly CapabilityId[]>> = {
   screen_capture: ["screen.capture"],
   device_action: ["device.action"],
   device_input: ["device.action"],
+  // D26 closure: chat attachment reads ride the same D08/D16 checkpoint as
+  // native filesystem reads; policy defaults to ask, audit records the path.
+  read_workspace_file: ["fs.read"],
+  // D26 gateway: importing a chat attachment writes the bot workspace;
+  // reading it back is the model `read` tool. Both default to ask.
+  import_attachment: ["fs.write"],
+  read: ["fs.read"],
 };
 function digest(call: Omit<PermissionCall, "actionDigest">): string {
   return createHash("sha256").update(stableStringify(call)).digest("hex");

@@ -25,7 +25,7 @@
 | `apps/desktop/src/renderer/` | 聊天内卡片、授权弹层、设置页、渲染器 | 直接读写密钥 | Destinyian |
 | `packages/contracts/` | 新方法、实体、事件与版本迁移 | 业务状态 | Etheslay 主责并自审 |
 
-现有模块边界不变：桌面主进程只经白名单 IPC 与渲染层通信，Host 持有数据库与子进程，Harness 适配层不向 UI 暴露上游对象。连接器的登记、类型和按 bot 授权持久化放在 `packages/storage`，HTTP MCP 客户端与输出校验由 Host 持有，`packages/agent-tools` 网关执行单次审批与审计。Harness 只接收本轮授权工具的 schema，管理方法只对桌面设置开放。现阶段沿用这些模块，不新建 `packages/connectors/`。本地 SD 调用已由 PR #65 交付，本分支增加无凭据本机 HTTP MCP；stdio、凭据注入和视觉理解仍待后续。详见 [MCP 报告](reports/D19-mcp-http-report.md)。
+现有模块边界不变：桌面主进程只经白名单 IPC 与渲染层通信，Host 持有数据库与子进程，Harness 适配层不向 UI 暴露上游对象。连接器的登记、类型和按 bot 授权持久化放在 `packages/storage`，HTTP MCP 客户端与输出校验由 Host 持有，`packages/agent-tools` 网关执行单次审批与审计。Harness 只接收本轮授权工具的 schema，管理方法只对桌面设置开放。现阶段沿用这些模块，不新建 `packages/connectors/`。本地 SD 调用已由 PR #65 交付，无凭据本机 HTTP MCP 已合入。`feature/d19-stdio-credentials` 增加 stdio MCP，并在发现与调用时注入凭据引用；视觉理解仍待模型可用。详见 [MCP 报告](reports/D19-mcp-http-report.md) 与 [stdio 与凭据报告](reports/D19-stdio-credentials-report.md)。
 
 ## 3. 数据流
 
