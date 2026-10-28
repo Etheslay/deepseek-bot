@@ -29,6 +29,7 @@
 | `fs.read` / `fs.write` | 工作目录文件读写 | 中 | D08 路径策略 + 审批 |
 | `exec.shell` | 执行本地命令 | 高 | 每次询问 |
 | `screen.capture` | 窗口截图 / OCR | 高 | 从不允许（需显式开启） |
+| `device.action` | 接受一次指针或按键动作 | 高 | 从不允许（需显式开启）；接受后只返回 id 与时间，并留下一条本地记录，不执行输入 |
 | `connector.invoke` | 调用 Stable Diffusion 连接器 | 中 | 每次询问 |
 | `mcp.call` | 调用已授权的本机 MCP 工具 | 中 | 每次询问；只接受单次审批 |
 | `network.search` / D08 `network.request` | web_search 向受信配置的 SearXNG 端点提交搜索 | 中 | D16 每次询问，另需 D08 网络策略放行；缺少受信权限句柄拒绝 |
@@ -59,7 +60,7 @@ v0.5 manager-orchestration（TASK_MANAGER_ORCHESTRATION.md §3.4）：新增模�
 | 每次询问 | 网关弹出审批卡，用户允许后执行 |
 | 从不允许 | 网关拒绝，向模型返回可解释原因 |
 
-默认值：app.read / interaction.ask_user 允许，screen.capture 拒绝，其余询问。app.start_run 固定 ask；exec.shell / screen.capture / mcp.call 只能 ask 或 deny，这四项不接受会话/永久授权。策略由受信 permission.policy.set 修改并持久化。设置页按同一约束展示：启动运行只读为每次询问，本地命令、屏幕感知和 MCP 不提供始终允许。
+默认值：app.read / interaction.ask_user 允许，screen.capture 与 device.action 拒绝，其余询问。app.start_run 固定 ask；exec.shell / screen.capture / mcp.call / device.action 只能 ask 或 deny，这几项不接受会话或永久授权。策略由受信 permission.policy.set 修改并持久化。设置页按同一约束展示：启动运行只读为每次询问，本地命令、屏幕感知、MCP 和设备动作不提供始终允许。
 
 策略 deny 优先于已有授权。写操作和 network.search 即使策略 allow 也须绑定有效 bot；匿名只可使用策略 allow 的读/提问。网关没有检查器、未知能力或无效身份均拒绝。
 
@@ -87,7 +88,7 @@ sequenceDiagram
     B-->>U: 回执卡片（已创建）+ 撤销按钮
 ```
 
-授权卡字段固定：能力列表、作用域（本次/会话/永久）、次数上限、过期时间、申请理由。当前聊天卡片列出该 bot 的 pending 审批：申请理由用工具名，能力用中文名。本会话按契约默认 5 次、2 小时；永久不限次数。`app.start_run` / `exec.shell` / `screen.capture` / `mcp.call` 以及没有 sessionId 的审批不提供更长授权。决定调用 `permission.approval.decide`，并带回精确 `actionDigest`。
+授权卡字段固定：能力列表、作用域（本次/会话/永久）、次数上限、过期时间、申请理由。当前聊天卡片列出该 bot 的 pending 审批：申请理由用工具名，能力用中文名。本会话按契约默认 5 次、2 小时；永久不限次数。`app.start_run` / `exec.shell` / `screen.capture` / `mcp.call` / `device.action` 以及没有 sessionId 的审批不提供更长授权。决定调用 `permission.approval.decide`，并带回精确 `actionDigest`。
 
 ## 5. 设置页
 
@@ -106,6 +107,8 @@ sequenceDiagram
 设置页只改变默认策略；聊天内授权是临时叠加，过期回到默认。两者共用同一张 grant 表，差异在 `scope`。页面列出 `permission.policy.list` 返回的全部能力。授权记录来自 `permission.grant.list`，不把 `scope=policy` 的全局策略行当成可撤销授权；撤销调用 `permission.grant.revoke`。上面草图里的「本地数据：位置 / 打开目录」仍未接在这一页。
 
 同一节下面的「屏幕与窗口感知」使用同一条 `screen.capture` 策略。开关只写成每次询问或从不允许，不提供始终允许。用户先选 bot，再刷新窗口并选定一个；截图和截图并识别各自调用 `screen.request`。等待审批时，这张卡只有「仅本次」和「拒绝」。缩略图是 `screen.result.read` 返回的 JPEG data URL，识别文本按转义文本显示，两者都不写入聊天。删除要再确认一次。换 bot 或换目标窗口之后，上一次请求的响应不会写进新的面板。
+
+设备动作使用同一套策略表里的 `device.action`。默认拒绝。改为每次询问后，受信方法 `device.action.request` 或模型工具 `device_action` 才等待一张仅本次审批。批准后的结果只有 id 和时间，并在本机留下一条记录：id、bot id、动作名（`pointer` 或 `key`）、时间。`device.action.list` 按该 bot 从新到旧列出。拒绝、把策略改回拒绝、再次使用同一张审批，或动作名不在这两组里，都不写入。未知动作名在产生审批前拒绝。这一片不移动鼠标、不发送按键、不调用 exec daemon，也没有单独的桌面页面。设置页会多出这一行，因为它列出全部能力。
 
 ## 6. 审计与撤销
 
@@ -131,5 +134,22 @@ D08 已实现：路径规范化与包含校验、策略评估、一次性审批�
 - “从不允许”必须在网关层拒绝，不能只靠 UI 隐藏；
 - `app.start_run` 不得配置为始终允许；
 - 屏幕截图/OCR 默认关闭，采集内容不出本机；
+- 设备动作默认关闭；未改为每次询问、没有一次精确的仅本次审批，或动作名不是 `pointer` / `key` 时，不接受，也不写本地记录。本片不执行输入；
 - 审计与撤销记录不能由模型修改；
 - 任何绕过路径（例如直接写数据库、直接调用 IPC）都视为缺陷。
+
+
+## 9. 角色与派发：聊天给予，无身份牌（设计裁决，2026-10-27）
+
+负责人裁决：**取消"协调者"身份牌模式**（角色选择器、侧栏徽标、每组至多一个协调者等一并移除）。bot 之间的身份与权限**纯靠用户在聊天里给予**，便利性优先；操控电脑类能力的硬门槛不因任何"任命"放松。
+
+规则：
+
+1. **默认能力**：每个 bot 的能力 = 设置页三档策略所授予的集合，无任何默认角色；
+2. **聊天给予**：用户在聊天里说"你当总监 / 这事交给你"时，网关把被点名 bot 需要的**应用类能力**（创建分组、创建 bot、修改工作流、派发任务）以正式 grant 形式授予——发起引用用户消息、可审计、可撤销；应用类授予默认免确认（用户打字即授权）；
+3. **红线不松动**：`exec.shell` / `screen.capture` / 设备动作 / `app.start_run` 等**操控电脑类能力不可通过聊天授予**——无论用户在聊天里如何"任命"，这些能力保持默认每次询问，逐次审批；
+4. **模型不能自授**：授予必须由用户消息触发（网关记录发起消息引用）；bot 不得通过对话话术为其它 bot 或自己追加能力——模型只能提议（ask_user 卡片），由用户点击确认；
+5. **无 UI 身份标记**：侧栏/聊天不显示角色徽标；派发关系只体现在交付通知与审计里；
+6. **撤销**：用户可随时在授权记录里撤销某次聊天授予，撤销即时生效。
+
+落点：移除 bot 表单角色选择器与侧栏徽标（编排线）；`ask_user` 卡片复用为"任命确认卡"（列出将获得的能力清单）；grant 表增加 `grantedVia: "chat" | "settings"` 标记。

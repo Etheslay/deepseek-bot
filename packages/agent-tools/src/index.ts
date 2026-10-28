@@ -57,6 +57,12 @@ export {
   type ScreenCaptureStore,
 } from "./screen.js";
 export {
+  bindDeviceActionTool,
+  DeviceActionInputSchema,
+  type DeviceActionResult,
+  type DeviceActionStore,
+} from "./device.js";
+export {
   bindTaskTools,
   DispatchTaskInputSchema,
   ListTasksInputSchema,

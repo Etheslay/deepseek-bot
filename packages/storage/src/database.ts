@@ -724,6 +724,23 @@ CREATE TABLE event_rule_states (
 CREATE INDEX event_rule_states_bot ON event_rule_states(bot_id, created_at);
 `,
   },
+  {
+    // D21 device-action records: one exact once approval appends one row
+    // (id, bot, action name, time). A denial, a disabled policy, a reused
+    // approval, or an unknown action name does not. No pointer, key, or
+    // exec-daemon side effect.
+    id: 19,
+    name: "0019-device-action-records",
+    sql: /* sql */ `
+CREATE TABLE device_action_records (
+  id TEXT PRIMARY KEY,
+  bot_id TEXT NOT NULL REFERENCES bots(id),
+  action TEXT NOT NULL CHECK (action IN ('pointer', 'key')),
+  created_at TEXT NOT NULL
+);
+CREATE INDEX device_action_records_bot ON device_action_records(bot_id, created_at);
+`,
+  },
 
 ];
 

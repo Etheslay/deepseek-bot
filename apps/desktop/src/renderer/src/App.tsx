@@ -18,6 +18,7 @@ import { MemoryPanel } from "./features/memory/memory-panel.js";
 import { SearchSettings } from "./features/search/search-settings.js";
 import { ConnectorSettings } from "./features/connectors/connector-settings.js";
 import { AutomationPanel } from "./features/automation/automation-panel.js";
+import { EventRuleSettings } from "./features/event-rules/event-rule-settings.js";
 import { PermissionsPanel } from "./features/permissions/permissions-panel.js";
 import { ScreenSettings } from "./features/screen/screen-settings.js";
 import { BotForm } from "./features/bots/bot-form.js";
@@ -100,6 +101,13 @@ import {
   saveTemplate,
   type BotTemplate,
 } from "./features/templates/bot-templates.js";
+import {
+  applySkill,
+  deleteSkill,
+  listSkills,
+  upsertSkill,
+  type Skill,
+} from "./features/skills/skill-store.js";
 import { BotSkillsPicker } from "./features/skills/bot-skills-picker.js";
 import { SkillsPanel } from "./features/skills/skills-panel.js";
 import {
@@ -2443,6 +2451,8 @@ const logout = (): void => {
                 <SearchSettings />
                 <ConnectorSettings />
                 <AutomationPanel />
+                {/* Per-bot eventRule state, pending review, and history. */}
+                <EventRuleSettings />
                 <div className="settings-section-title">{t("shell.skillsSection")}</div>
                 <div className="settings-card">
                   <SkillsPanel
@@ -3103,6 +3113,8 @@ function BotsPlaceholder({
   const [clarify, setClarify] = useState<ClarifyTarget | null>(null);
   const [memoryOpen, setMemoryOpen] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<AttachmentDraft[]>([]);
+  const [skills, setSkills] = useState<Skill[]>(() => listSkills(window.localStorage));
+  const [skillMenuOpen, setSkillMenuOpen] = useState(false);
   /** G6: a pending 编辑重发 labels the next sent user bubble. */
   const [pendingMeta, setPendingMeta] = useState<Msg["meta"] | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -3119,6 +3131,31 @@ function BotsPlaceholder({
     }
     return table;
   }, [bots]);
+  const applySkillToDraft = (skill: Skill): void => {
+    setDraft((prev) => applySkill(skill, prev));
+    setSkillMenuOpen(false);
+  };
+
+  const saveDraftAsSkill = (): void => {
+    const prompt = draft.trim();
+    if (prompt.length === 0) {
+      onNotify(t("skills.saveNeedsContent"));
+      return;
+    }
+    const name = t("skills.appliedLabel", [skills.length + 1]);
+    const result = upsertSkill(window.localStorage, { name, prompt });
+    if (result.ok) {
+      setSkills(listSkills(window.localStorage));
+      onNotify(t("skills.savedVersioned", [result.skill.name, result.skill.version]));
+    } else {
+      onNotify(result.reason === "limit" ? t("skills.limitReachedShort") : t("skills.emptyContent"));
+    }
+    setSkillMenuOpen(false);
+  };
+
+  const removeSkill = (id: string): void => {
+    setSkills(deleteSkill(window.localStorage, id));
+  };
 
   /* The old local-only handleChoice from the skills branch is deliberately not
      taken: this branch answers choice cards through the shared chat stream
@@ -3438,9 +3475,9 @@ function BotsPlaceholder({
                             key={key}
                             type="button"
                             className="stack-avatar"
-                            title={t("shell.openSessionWith", [target?.bot.name ?? "?"])}
-                            aria-label={t("shell.openSessionWith", [target?.bot.name ?? "?"])}
-                            onClick={() => onOpenBot(key)}
+                            title={t("shell.viewExchangesWith", [target?.bot.name ?? "?"])}
+                            aria-label={t("shell.viewExchangesWith", [target?.bot.name ?? "?"])}
+                            onClick={() => setDetailOther(key)}
                           >
                             <AvatarView
                               avatar={target?.avatar ?? me.avatar}
@@ -3650,6 +3687,49 @@ function BotsPlaceholder({
       />
       <div className="composer">
         <div className="composer-menu-wrap">
+          {skillMenuOpen && (
+            <>
+              <div className="menu-overlay" onClick={() => setSkillMenuOpen(false)} />
+              <div className="composer-menu skills-menu" role="menu" aria-label={t("skills.menuLabel")}>
+                {skills.length === 0 && (
+                  <div className="menu-item skills-empty">{t("skills.emptyHint")}</div>
+                )}
+                {skills.map((skill) => (
+                  <div className="skill-row" key={skill.id}>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="menu-item skill-apply"
+                      title={t("skills.applyAria", [skill.name, skill.version])}
+                      onClick={() => applySkillToDraft(skill)}
+                    >
+                      <span className="skill-name">{skill.name}</span>
+                      <span className="skill-version">v{skill.version}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="skill-remove"
+                      aria-label={t("skills.removeAria", [skill.name])}
+                      onClick={() => removeSkill(skill.id)}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+                <div className="menu-sep" />
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="menu-item"
+                  disabled={draft.trim().length === 0}
+                  onClick={saveDraftAsSkill}
+                >
+                  <MenuIcon d="M5 4h9l5 5v11H5zM14 4v5h5" />
+                  {t("skills.saveCurrentAria")}
+                </button>
+              </div>
+            </>
+          )}
           <button
             type="button"
             className="composer-plus"
@@ -3674,6 +3754,18 @@ function BotsPlaceholder({
                 >
                   <MenuIcon d="M21 12.5 12.5 21a5 5 0 0 1-7-7l8-8a3.5 3.5 0 0 1 5 5l-8 8a1.8 1.8 0 0 1-2.5-2.5L15 4.5" />
                   {t("shell.addAttachment")}
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="menu-item"
+                  onClick={() => {
+                    setPlusOpen(false);
+                    setSkillMenuOpen(true);
+                  }}
+                >
+                  <MenuIcon d="M13 2 4.5 12.5 H11 L9.5 21 L19 9.5 H12 Z" />
+                  {t("skills.menuLabel")}
                 </button>
                 <button
                   type="button"

@@ -27,6 +27,7 @@ const CAPABILITY_LABEL_KEYS = {
   "fs.write": "permissions.writeWorkspaceFiles",
   "exec.shell": "permissions.executeLocalCommand",
   "screen.capture": "permissions.screenAndWindowAwareness",
+  "device.action": "permissions.deviceAction",
   "connector.invoke": "permissions.invokeConnector",
   "app.dispatch_task": "permissions.dispatchTask",
   "mcp.call": "permissions.mcpCall",

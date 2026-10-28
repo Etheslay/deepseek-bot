@@ -21,6 +21,8 @@ export type ExportableMessage = {
 
 /** Characters Windows filenames reject, plus control chars. */
 function safeFileName(name: string): string {
+  /* eslint-disable-next-line no-control-regex -- the point is to strip control
+     characters from a user-visible bot name before it becomes a filename */
   return name.replace(/[/\\:*?"<>|\u0000-\u001f]/g, "_").trim() || "bot";
 }
 
