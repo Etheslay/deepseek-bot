@@ -26,7 +26,7 @@ type CustomSelectProps = {
  * always set ("auto" for the inactive sides) so the inline styles fully
  * override the legacy absolute-positioning rules in styles.css.
  */
-type MenuPlacement = {
+export type MenuPlacement = {
   top: number | "auto";
   bottom: number | "auto";
   left: number | "auto";
@@ -35,6 +35,35 @@ type MenuPlacement = {
   maxWidth: number;
 };
 
+type TriggerBox = {
+  left: number;
+  right: number;
+  bottom: number;
+  width: number;
+};
+
+/**
+ * Place the portaled menu against the trigger. Settings rows pin to the
+ * trigger's right edge so the open list shares the closed control's edge
+ * (the same edge as the accent chips). Elsewhere, a trigger in the right
+ * half of the viewport does the same; one in the left half grows rightward.
+ */
+export function placeCustomSelectMenu(
+  rect: TriggerBox,
+  viewportWidth: number,
+  pinToRightEdge: boolean,
+): MenuPlacement {
+  const anchorRight = pinToRightEdge || rect.left + rect.width / 2 > viewportWidth / 2;
+  return {
+    top: rect.bottom + 4,
+    bottom: "auto",
+    left: anchorRight ? "auto" : rect.left,
+    right: anchorRight ? viewportWidth - rect.right : "auto",
+    minWidth: rect.width,
+    maxWidth: anchorRight ? rect.right - 8 : viewportWidth - rect.left - 8,
+  };
+}
+
 /**
  * 自绘下拉：原生 select 在 Windows 上无法去掉系统蓝色选中高亮，
  * 这里用按钮 + 弹层实现。选中/悬停颜色只来自 styles.css 里的
@@ -42,8 +71,8 @@ type MenuPlacement = {
  *
  * 弹层经 portal 渲染到 body：设置弹窗等内容区自带滚动容器，内联 absolute
  * 菜单在底部行会被裁掉（语言三档只剩一档可选）。改为固定定位按触发钮实时
- * 计算，视口下缘放不下时向上翻；右半屏的触发钮（设置行）菜单向左展开，
- * 与原 `.settings-row` 规则行为一致。
+ * 计算，视口下缘放不下时向上翻。设置行的菜单与触发钮右缘对齐，
+ * 其余右半屏的触发钮同样向左展开。
  */
 export function CustomSelect({
   value,
@@ -72,15 +101,8 @@ export function CustomSelect({
     if (rect === undefined) {
       return;
     }
-    const anchorRight = rect.left + rect.width / 2 > window.innerWidth / 2;
-    setPlacement({
-      top: rect.bottom + 4,
-      bottom: "auto",
-      left: anchorRight ? "auto" : rect.left,
-      right: anchorRight ? window.innerWidth - rect.right : "auto",
-      minWidth: rect.width,
-      maxWidth: anchorRight ? rect.right - 8 : window.innerWidth - rect.left - 8,
-    });
+    const pinToRightEdge = triggerRef.current?.closest(".settings-row") != null;
+    setPlacement(placeCustomSelectMenu(rect, window.innerWidth, pinToRightEdge));
     setOpen(true);
   };
 
