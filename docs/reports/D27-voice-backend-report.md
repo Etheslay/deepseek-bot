@@ -8,7 +8,7 @@ D27（本地语音：whisper.cpp 转写 + Windows TTS 播报，全免费全本�
 
 | 块 | 实现 |
 | --- | --- |
-| 契约 v0.8 | 受信桌面方法 `voice.status` / `voice.transcribe` / `voice.speak`（附加式；继续接受 0.1–0.7 发送方，工作流 `schemaVersion` 仍 0.1）。`TEXT_LIMITS` 新增 `voiceTranscript` 4000 / `voiceSpeakText` 2000。剪辑边界：16 kHz、单声道、16-bit PCM WAV、≤20 秒、base64 ≤900,000 字符（1 MiB 消息信封内） |
+| 契约 v0.9 | 受信桌面方法 `voice.status` / `voice.transcribe` / `voice.speak`（附加式；继续接受 0.1–0.8 发送方，工作流 `schemaVersion` 仍 0.1）。`TEXT_LIMITS` 新增 `voiceTranscript` 4000 / `voiceSpeakText` 2000。剪辑边界：16 kHz、单声道、16-bit PCM WAV、≤20 秒、base64 ≤900,000 字符（1 MiB 消息信封内） |
 | 转写 | `packages/host/src/voice.ts`：严格解析 WAV（RIFF/fmt/data 分块走查有界）→ 写临时剪辑（`%TEMP%\deepseek-bot-voice-*`）→ 调用户自备 whisper.cpp（`-m model -f clip.wav -nt -np` 固定参数数组、无 shell、隐藏窗口）→ 返回 `{text, seconds}`。120 秒超时终止；运行结束即删临时目录（Windows 文件锁下短重试，宁可留下系统临时目录也不让失败外泄）。二进制/模型经 `DEEPSEEK_BOT_WHISPER_BIN` / `DEEPSEEK_BOT_WHISPER_MODEL` 配置（`main.ts` 接线） |
 | 播报 | Windows SAPI（`System.Speech`）：固定 PowerShell 脚本经 `-EncodedCommand` 执行，文本以 base64 传入，不经 shell 字符串拼接；120 秒超时；非 Windows 拒绝 |
 | 可用性 | `voice.status` 只读汇报两侧可用性与短原因（未配置/未找到/平台不符），不启动任何进程 |
@@ -23,7 +23,7 @@ D27（本地语音：whisper.cpp 转写 + Windows TTS 播报，全免费全本�
 | --- | --- |
 | `pnpm lint` | 退出 0 |
 | `pnpm typecheck` | 退出 0 |
-| contracts `vitest run` | 140 通过（新增 `voice.test.ts` 6 例；`screen.test.ts` 协议锚点随 0.8 同步） |
+| contracts `vitest run` | 140 通过（新增 `voice.test.ts` 6 例；`screen.test.ts` 协议锚点随 0.9 同步） |
 | host `vitest run src/voice.test.ts` | 17 通过（WAV 解析、限额拒绝、串行队列、deadline、关闭清理、handler 接线、模型目录无 voice） |
 | `pnpm test`（全仓并行） | contracts 140、storage 200、desktop 55 文件、runtime、agent-tools、exec-daemon、harness-adapter/bridge、shared 全绿；host 并行出现 4 个文件级时序失败（chat×2、mcp-chat×1、real-app-tools×1、task-dispatch×1，均为 harness initialize 15 秒超时 / `waitFor` 超时家族）。chat+mcp-chat 隔离复跑 17/17 通过；real-app-tools+task-dispatch 隔离复跑 16/16 通过。改动前基线同规模并行同样出现 2 个同族失败——本机并行负载下的既有抖动，非本片引入 |
 | `git diff --check` | 退出 0 |
