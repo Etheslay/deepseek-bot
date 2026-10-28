@@ -13,6 +13,12 @@ describe("appearance theme label", () => {
     expect(shellMessages["shell.themeLight"].zh).toBe("浅色");
   });
 
+  it("keeps a clear gap between the label and the chevron on every trigger", () => {
+    const rule = css.slice(css.indexOf(".custom-select-trigger {"), css.indexOf(".custom-select-trigger:hover"));
+    expect(rule).toMatch(/gap:\s*1rem;/);
+    expect(rule).toContain("justify-content: space-between");
+  });
+
   it("keeps that label outside a full-width theme pill", () => {
     const app = readFileSync(join(process.cwd(), "src/renderer/src/App.tsx"), "utf8");
     expect(app).toContain('className="appearance-theme-label">{t("shell.theme")}');
