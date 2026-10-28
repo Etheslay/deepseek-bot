@@ -18,6 +18,13 @@ import {
   type WorkflowEditorState,
 } from "./workflow-reducer.js";
 import type { WorkflowImportResult, WorkflowSummary } from "./workflow-service.js";
+import {
+  deleteWorkflowTemplate,
+  listWorkflowTemplates,
+  MAX_WORKFLOW_TEMPLATES,
+  saveWorkflowTemplate,
+  type WorkflowTemplate,
+} from "./template/workflow-templates.js";
 import { collectIssues, inspectorFieldId } from "./validation/issues.js";
 import { t } from "../../i18n.js";
 
@@ -56,6 +63,8 @@ export type WorkflowEditorController = {
   importResult: WorkflowImportResult | null;
   importBusy: boolean;
   exportJson: string | null;
+  templatesOpen: boolean;
+  templates: WorkflowTemplate[];
   nodeEls: React.RefObject<Map<string, HTMLElement>>;
   dispatch: Dispatch<WorkflowEditorAction>;
   addNode: (nodeType: NodeType) => void;
@@ -80,6 +89,11 @@ export type WorkflowEditorController = {
   confirmImport: () => void;
   openExport: () => void;
   closeExport: () => void;
+  saveAsTemplate: () => void;
+  openTemplates: () => void;
+  closeTemplates: () => void;
+  applyTemplate: (id: string) => void;
+  removeTemplate: (id: string) => void;
   deleteSelection: () => void;
   showToast: (message: string) => void;
 };
@@ -104,6 +118,8 @@ export function useWorkflowEditor(): WorkflowEditorController {
   const [importResult, setImportResult] = useState<WorkflowImportResult | null>(null);
   const [importBusy, setImportBusy] = useState(false);
   const [exportJson, setExportJson] = useState<string | null>(null);
+  const [templatesOpen, setTemplatesOpen] = useState(false);
+  const [templates, setTemplates] = useState<WorkflowTemplate[]>([]);
   const nodeEls = useRef<Map<string, HTMLElement>>(new Map());
 
   const showToast = useCallback((message: string) => {
@@ -465,6 +481,56 @@ export function useWorkflowEditor(): WorkflowEditorController {
 
   const closeExport = useCallback(() => setExportJson(null), []);
 
+  /**
+   * G11': the local template shelf. Saving stores the schema-normalized
+   * draft (contract-invalid drafts are refused); applying loads it back as
+   * an unsaved draft — the same inert path as template import. No id/revision
+   * is carried over, so applying never hijacks another workflow's identity.
+   */
+  const saveAsTemplate = useCallback(() => {
+    const result = saveWorkflowTemplate(window.localStorage, {
+      name: state.draft.name,
+      workflow: state.draft,
+    });
+    if (result.ok) {
+      setToast(t("workflow.templateSaved"));
+      return;
+    }
+    setToast(
+      result.reason === "limit"
+        ? t("workflow.templateSaveLimit", [MAX_WORKFLOW_TEMPLATES])
+        : result.reason === "duplicate"
+          ? t("workflow.templateDuplicateName")
+          : t("workflow.templateSaveInvalid"),
+    );
+  }, [state.draft]);
+
+  const openTemplates = useCallback(() => {
+    setTemplates(listWorkflowTemplates(window.localStorage));
+    setTemplatesOpen(true);
+  }, []);
+
+  const closeTemplates = useCallback(() => setTemplatesOpen(false), []);
+
+  const applyTemplate = useCallback(
+    (id: string) => {
+      const template = templates.find((item) => item.id === id);
+      if (template === undefined) {
+        return;
+      }
+      dispatch({ type: "load", draft: template.workflow, from: null });
+      setTemplatesOpen(false);
+      setConflict(false);
+      setRemoteResult(null);
+      setToast(t("workflow.templateLoaded"));
+    },
+    [templates],
+  );
+
+  const removeTemplate = useCallback((id: string) => {
+    setTemplates(deleteWorkflowTemplate(window.localStorage, id));
+  }, []);
+
   const deleteSelection = useCallback(() => {
     if (state.selection?.kind === "node") {
       dispatch({ type: "removeNode", nodeId: state.selection.nodeId });
@@ -516,6 +582,8 @@ export function useWorkflowEditor(): WorkflowEditorController {
     importResult,
     importBusy,
     exportJson,
+    templatesOpen,
+    templates,
     nodeEls,
     dispatch,
     addNode,
@@ -540,6 +608,11 @@ export function useWorkflowEditor(): WorkflowEditorController {
     confirmImport,
     openExport,
     closeExport,
+    saveAsTemplate,
+    openTemplates,
+    closeTemplates,
+    applyTemplate,
+    removeTemplate,
     deleteSelection,
     showToast,
   };
