@@ -98,7 +98,7 @@ describe("chat web_search", () => {
     const { endpoint, requests } = await searchEndpoint();
     const { host, request, bot, sessionId } = await setup();
     const catalog = (await (await request("/app-tools")).json()) as { tools: Array<{ name: string }> };
-    expect(catalog.tools).toHaveLength(11);
+    expect(catalog.tools).toHaveLength(12); // D26 adds read_workspace_file to the catalog
     expect(catalog.tools.map((tool) => tool.name)).not.toContain("web_search");
     expect(
       await (

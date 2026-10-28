@@ -44,6 +44,7 @@ import {
   type RunningApprovalBridge,
 } from "@deepseek-bot/harness-adapter";
 import { ChatManager } from "./chat.js";
+import { createAttachmentStore, readWorkspaceFileText } from "./attachments.js";
 import { createWorkspaceArtifacts } from "./artifacts.js";
 import {
   EngineError,
@@ -85,6 +86,7 @@ import {
   bindTaskTools,
   bindWorkflowTools,
   bindWriteTools,
+  bindWorkspaceFileTool,
   type UserQuestionControls,
 } from "@deepseek-bot/agent-tools";
 import {
@@ -420,6 +422,9 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
     now,
     locale: () => uiLocale.current,
   });
+  // D26: chunked trusted-desktop uploads stage under cache/ and commit into
+  // the bot workspace's attachments/ directory (shutdown sweeps strays).
+  const attachmentStore = createAttachmentStore({ db, cacheDir: layout.cache });
 
   const engine = new WorkflowEngine({
     db,
@@ -522,6 +527,7 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
     },
     tasks,
     locale: uiLocale,
+    attachmentUploads: attachmentStore,
     get agentTools(): ToolGateway {
       if (agentToolsHolder.current === undefined) {
         throw new Error("agent tools gateway is not ready yet");
@@ -576,6 +582,7 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
       screen.close();
       device.close();
       deviceInput.close();
+      attachmentStore.close();
       permissions.close();
     }
     const validated = contract.response.safeParse(result);
@@ -645,6 +652,11 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
     }),
     bindScreenCaptureTool(screen),
     bindDeviceActionTool(device),
+    // D26 closure: chat attachments land in the bot workspace; the bot reads
+    // them back through this tool (capability fs.read, D08/D16 governed).
+    bindWorkspaceFileTool({
+      read: (botId, relativePath) => readWorkspaceFileText(db, botId, relativePath),
+    }),
     bindDeviceInputTool(deviceInput),
     // v0.5 manager orchestration (T4/T3): coordinator workflow saving and
     // dispatched-task tools. Role rules live inside the task tool layer;
@@ -793,6 +805,7 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
       clearInterval(triggerTimer);
       screen.close();
       device.close();
+      attachmentStore.close();
       deviceInput.close();
       permissions.close();
       mcp.close();

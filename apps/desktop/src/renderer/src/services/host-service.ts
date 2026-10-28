@@ -7,9 +7,17 @@
  * fixture for settings and bots; chat/workflow/run views stay on the fixture
  * until their contract methods exist (see docs/AGENT_PLATFORM.md).
  */
-import { METHOD_CONTRACTS, type Bot, type ErrorCode, type Task } from "@deepseek-bot/contracts";
+import {
+  MAX_ATTACHMENT_CHUNK_BYTES,
+  METHOD_CONTRACTS,
+  type Bot,
+  type ErrorCode,
+  type Task,
+} from "@deepseek-bot/contracts";
+import { bytesToBase64 } from "../features/chat/attachments.js";
 import {
   ServiceError,
+  type AttachmentUploadResult,
   type BotDraft,
   type ChatHistoryRow,
   type DesktopService,
@@ -167,6 +175,32 @@ export function createHostService(bridge: HostBridge): DesktopService {
           throw new ServiceError("INVALID_INPUT", "artifacts.revert response failed schema");
         }
         return { artifact: artifact.value, version: version.value };
+      },
+    },
+    attachments: {
+      // D26: one begin call, 512 KiB base64 chunks, one commit — the Host
+      // verifies size and sha256 before the file enters the workspace.
+      upload: async (botId, { name, bytes }): Promise<AttachmentUploadResult> => {
+        const digest = await crypto.subtle.digest("SHA-256", bytes as unknown as ArrayBuffer);
+        const sha256 = [...new Uint8Array(digest)]
+          .map((byte) => byte.toString(16).padStart(2, "0"))
+          .join("");
+        const begun = (await artifactCall("attachment.begin", {
+          botId,
+          name,
+          size: bytes.byteLength,
+          sha256,
+        })) as { uploadId: string };
+        for (let offset = 0; offset < bytes.byteLength; offset += MAX_ATTACHMENT_CHUNK_BYTES) {
+          const chunk = bytes.subarray(offset, Math.min(offset + MAX_ATTACHMENT_CHUNK_BYTES, bytes.byteLength));
+          await artifactCall("attachment.append", {
+            uploadId: begun.uploadId,
+            chunkBase64: bytesToBase64(chunk),
+          });
+        }
+        return (await artifactCall("attachment.commit", {
+          uploadId: begun.uploadId,
+        })) as AttachmentUploadResult;
       },
     },
     chat: {

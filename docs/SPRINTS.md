@@ -90,8 +90,8 @@
 | D14 渲染片 + 交互片 | 已交付（mermaid 砍除，验收部分达成） | `feature/chat-experience` → `feature/settings-updates` → `0f20970` | [D14-report](reports/D14-report.md) |
 | 头像打磨（Grok Ball 视线与节奏） | 已交付 | `feature/gaze-avatar` → PR #61 `cc4a379`、#62 `5533ea6` | [B-AVATAR-02-report](reports/B-AVATAR-02-report.md) |
 | D25 全局搜索 | 已交付（host 检索按计划后接） | 同上 → `0f20970` | [D25-report](reports/D25-report.md) |
-| D26 聊天附件 | **切片交付，任务未完成** | 同上 → `0f20970` | [D26-report](reports/D26-report.md) |
-| D26 附件经网关进工作区 | **切片进行中，未合入**。卡片仍在；文件经 `chat.attach` 与 `fs.write` 审批写入工作区，模型用 `read` 读取。未合并，自审未填 | `feature/d26-gateway-attachments` | [D26-gateway-attachments-report](reports/D26-gateway-attachments-report.md) |
+| D26 聊天附件 | **切片交付（渲染层）；D26 收尾（附件理解闭环）另见 [D26 附件读取报告](reports/D26-attachment-read-report.md)**：附件分片上传进 bot 工作区 `attachments/`、模型工具 `read_workspace_file`（fs.read 授权）按需读取、阈值注入（≤16 KiB 文本内联，超限走工具）、图片/二进制卡片说明 | 同上 → `0f20970`；收尾在 `feature/attachment-read-closure` | [D26-report](reports/D26-report.md)、[D26-attachment-read-report](reports/D26-attachment-read-report.md) |
+| D26 附件经网关进工作区 | **已在 develop（PR #106）**。`chat.attach` 与 `fs.write` 审批写入工作区，模型用 `read` 读取。本分支与理解闭环并存；自审记录仍以原报告为准，此处不补签 | `feature/d26-gateway-attachments` | [D26-gateway-attachments-report](reports/D26-gateway-attachments-report.md) |
 | D24 设置与更新 | **切片交付，任务未完成**（备份保险库见下一行） | 同上 → `0f20970` | [D24-report](reports/D24-report.md) |
 | D24 备份/恢复与设置收尾 | **切片交付**：设置分区化（保险库/用量/电脑/更新全部真实可用）、`backups:list` 桌面通道（只读 manifest）、`data.restore` 后 Host 子进程重启、硬件加速偏好真实开关。实机安装版验证与更新链路仍 UNVERIFIED | `feature/settings-vault`（见 PR） | [D24-data-report](reports/D24-data-report.md) |
 | D17 技能与模板 | **已交付（渲染层闭环）**：模板库 + 技能定义/复用/版本化 + 统一文件导入导出（契约校验）。工作流模板、Host 注入与能力强制留后续 | `feature/skills-templates` → `292c3b8`、PR #48 `2ecb2f9` | [D17-report](reports/D17-report.md) |

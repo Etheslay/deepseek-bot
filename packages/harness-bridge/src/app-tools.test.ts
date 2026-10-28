@@ -14,6 +14,7 @@ const names = [
   "save_workflow",
   "dispatch_task",
   "list_tasks",
+  "read_workspace_file",
 ];
 interface Definition {
   name: string;
@@ -231,7 +232,7 @@ describe("application tool plugin", () => {
   ])("fails closed on an invalid optional MCP directory and preserves readiness", async (mcp) => {
     const { ctx, tools, calls } = await fixture({ mcp });
     await apply(ctx);
-    expect(tools).toHaveLength(18); // read is the D26 workspace file tool
+    expect(tools).toHaveLength(19); // catalog includes read_workspace_file; read is registered beside it
     expect(tools.some((tool) => tool.name.startsWith("mcp__"))).toBe(false);
     expect(calls).toEqual([{ tools: names }]);
   });
@@ -239,7 +240,7 @@ describe("application tool plugin", () => {
   it("keeps regular tools ready when the MCP endpoint is unavailable", async () => {
     const { ctx, tools, calls } = await fixture({ mcpStatus: 503 });
     await apply(ctx);
-    expect(tools).toHaveLength(18); // read is the D26 workspace file tool
+    expect(tools).toHaveLength(19); // catalog includes read_workspace_file; read is registered beside it
     expect(calls).toEqual([{ tools: names }]);
   });
 
@@ -253,7 +254,7 @@ describe("application tool plugin", () => {
     try {
       const { ctx, tools, calls } = await fixture({ mcpSlow: true });
       await apply(ctx);
-      expect(tools).toHaveLength(18); // read is the D26 workspace file tool
+      expect(tools).toHaveLength(19); // catalog includes read_workspace_file; read is registered beside it
       expect(calls).toEqual([{ tools: names }]);
     } finally {
       timeout.mockRestore();

@@ -67,9 +67,9 @@ import { exportConversation } from "./features/chat/export-conversation.js";
 import type { MentionTable } from "./features/chat/mentions.js";
 import {
   attachmentAccept,
-  attachmentMediaType,
   buildAttachmentContext,
   classifyAttachment,
+  composeAttachmentBlocks,
   composeAttachmentPrompt,
   formatAttachmentSize,
   MAX_ATTACHMENT_BYTES,
@@ -174,14 +174,16 @@ type Msg = {
   /** Multi-bot delivery: stacked avatar chips, clickable per bot. */
   deliverTo?: number[];
   peerKey?: number;
-  /** Files sent with the message (D26 renderer slice). */
+  /** Files sent with the message (D26; path = workspace-relative after upload). */
   attachments?:
     | {
         name: string;
         size: number;
         kind: "text" | "image" | "binary";
         dataUrl?: string;
-        /** Workspace path written by the tool gateway. Opens the artifact preview. */
+        /** Workspace path from attachment.commit. */
+        path?: string;
+        /** Same workspace path; opens the artifact preview. */
         relativePath?: string;
       }[]
     | undefined;
@@ -3001,30 +3003,45 @@ function MessageBubble({
               {msg.attachments && msg.attachments.length > 0 && (
             <div className="msg-attachments">
               {msg.attachments.map((file) => {
+                const previewPath = file.relativePath ?? file.path;
                 const preview =
-                  file.relativePath !== undefined
-                    ? () => onOpenAttachment?.(file.relativePath!)
+                  previewPath !== undefined
+                    ? () => onOpenAttachment?.(previewPath)
                     : undefined;
+                const stored =
+                  file.path !== undefined ? (
+                    <span className="msg-attachment-path">
+                      {t("shell.attachmentStoredPath", [file.path])}
+                    </span>
+                  ) : null;
                 const fileBody = (
                   <>
                     <span className="msg-attachment-name">{file.name}</span>
                     <span className="msg-attachment-size">
                       {formatAttachmentSize(file.size)}
                     </span>
+                    {stored}
                   </>
                 );
                 if (file.kind === "image" && file.dataUrl) {
                   const image = (
-                    <img
-                      className="msg-attachment-image"
-                      src={file.dataUrl}
-                      alt={file.name}
-                      draggable={false}
-                    />
+                    <>
+                      <img
+                        className="msg-attachment-image"
+                        src={file.dataUrl}
+                        alt={file.name}
+                        draggable={false}
+                      />
+                      {file.path !== undefined && (
+                        <span className="msg-attachment-path">
+                          {t("shell.attachmentStoredPath", [file.path])}
+                        </span>
+                      )}
+                    </>
                   );
                   return preview ? (
                     <button
-                      key={file.relativePath}
+                      key={previewPath ?? file.name}
                       type="button"
                       className="msg-attachment-open"
                       aria-label={t("shell.openAttachmentPreview", [file.name])}
@@ -3038,7 +3055,7 @@ function MessageBubble({
                 }
                 return preview ? (
                   <button
-                    key={file.relativePath}
+                    key={previewPath ?? file.name}
                     type="button"
                     className="msg-attachment-file"
                     aria-label={t("shell.openAttachmentPreview", [file.name])}
@@ -3452,13 +3469,17 @@ function BotsPlaceholder({
         continue;
       }
       const bytes = new Uint8Array(await file.arrayBuffer());
+      const kind = classifyAttachment(file.type, file.name);
       const draft: AttachmentDraft = {
         name: file.name,
         size: file.size,
         mime: file.type,
         bytes,
+        file,
       };
-      if (classifyAttachment(file.type, file.name) === "image") {
+      if (kind === "text") {
+        draft.text = new TextDecoder().decode(bytes);
+      } else if (kind === "image") {
         draft.dataUrl = await new Promise<string>((resolve, reject) => {
           const reader = new FileReader();
           reader.onload = () => resolve(String(reader.result));
@@ -3554,53 +3575,68 @@ function BotsPlaceholder({
       answerClarify(clarify, text);
       return;
     }
-    const files = pendingFiles;
-    const meta = pendingMeta ?? undefined;
-    setPendingMeta(null);
-    setPendingFiles([]);
-    setDraft("");
-    void importAndSend(text, files, meta);
+    void sendWithAttachments(text);
   };
 
-  const importAndSend = async (
-    text: string,
-    files: AttachmentDraft[],
-    meta: Msg["meta"] | undefined,
-  ): Promise<void> => {
+  /**
+   * Closure upload (attachment.begin/append/commit) runs before the turn.
+   * Small text stays inline; larger files point at read_workspace_file.
+   * The same path is named for the gateway `read` tool and opens the
+   * artifact preview. chat.attach remains on the service. A failed upload
+   * aborts the send and keeps the draft.
+   */
+  const sendWithAttachments = async (text: string): Promise<void> => {
+    const files = pendingFiles;
+    const meta = pendingMeta ?? undefined;
     const outgoing: NonNullable<Msg["attachments"]> = [];
     const pointers: string[] = [];
-    try {
-      for (const file of files) {
-        const imported = await service.chat.importAttachment(me.bot.id, {
+    for (const file of files) {
+      if (file.bytes === undefined) {
+        continue;
+      }
+      const kind = classifyAttachment(file.mime, file.name);
+      try {
+        const uploaded = await service.attachments.upload(me.bot.id, {
           name: file.name,
-          mediaType: attachmentMediaType(file.mime, file.name),
           bytes: file.bytes,
         });
         outgoing.push({
           name: file.name,
           size: file.size,
-          kind: classifyAttachment(file.mime, file.name),
+          kind,
           ...(file.dataUrl !== undefined ? { dataUrl: file.dataUrl } : {}),
-          relativePath: imported.relativePath,
+          path: uploaded.path,
+          relativePath: uploaded.path,
         });
         pointers.push(
+          ...composeAttachmentBlocks([
+            {
+              name: file.name,
+              size: file.size,
+              mime: file.mime,
+              kind,
+              ...(file.text !== undefined ? { text: file.text } : {}),
+              path: uploaded.path,
+            },
+          ]),
           buildAttachmentContext({
             name: file.name,
             size: file.size,
-            relativePath: imported.relativePath,
+            relativePath: uploaded.path,
           }),
         );
+      } catch (error) {
+        const code = (error as { code?: string }).code;
+        const detail = code ?? (error instanceof Error ? error.message : String(error));
+        onNotify(t("shell.attachmentUploadFailed", [file.name, detail]));
+        return;
       }
-    } catch (error) {
-      setPendingFiles(files);
-      setDraft(text);
-      setPendingMeta(meta ?? null);
-      const detail = error instanceof Error ? error.message : "";
-      onNotify(t("shell.attachmentImportFailed", [detail || files[0]?.name || ""]));
-      return;
     }
     onSend(text, outgoing.length > 0 ? outgoing : undefined, meta);
+    setPendingMeta(null);
+    setPendingFiles([]);
     setFailedText(text);
+    setDraft("");
     startChatStream(composeAttachmentPrompt(text, pointers));
   };
 
