@@ -1,5 +1,10 @@
 # 项目规范化工作计划
 
+## 2026-10-29：在途切片合并前独立审查（授权执行）
+
+- 范围：只读审查三条 Destinyian 在途切片（context-meter / d14-mermaid / d17-skill-host-store），产出 [PREMERGE-REVIEW-2026-10-29](docs/reports/PREMERGE-REVIEW-2026-10-29.md)；不代替自审、不改分支、不代开 PR。
+- 2 条需归属人处理的发现（cm 并发断言 P2、d14 主题偏差 P3）+ 1 条 d17 备忘。
+
 ## 2026-10-29：DEVELOPMENT_PLAN §6 叙事一致性修正（纯文档）
 
 - 范围：仅文档。修正三处已被后续交付推翻的陈述（G3 / D18 收尾 / G11'），段末加权威指针（SPRINTS §4 + GAP_AUDIT）。
