@@ -6755,6 +6755,15 @@ select option {
   color: var(--muted);
 }
 
+/* A4: image chips carry an explicit "the model cannot read this" tag. */
+.attach-chip-flag {
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0 6px;
+  font-size: 0.7rem;
+}
+
 .attach-chip-remove {
   border: none;
   background: transparent;
@@ -6819,6 +6828,14 @@ button.msg-attachment-file {
 
 .msg-attachment-size {
   color: var(--muted);
+}
+
+/* A4: one muted line on bubbles that carried images — the file reached the
+   workspace but not the model. */
+.msg-attachments-hint {
+  flex-basis: 100%;
+  color: var(--muted);
+  font-size: 0.72rem;
 }
 
 /* ============================================================
