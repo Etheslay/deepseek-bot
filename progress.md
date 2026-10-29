@@ -1,5 +1,11 @@
 # 工作记录
 
+## 2026-10-29：THIRD_PARTY_NOTICES 直接依赖许可审计（纯文档）
+
+- 从本地 node_modules 实读 34 个工作区直接依赖的 license 字段：第三方全部为 MIT/BSD/Apache/MPL 宽松许可（无 GPL/AGPL），写入 THIRD_PARTY_NOTICES 新增「运行时直接依赖许可索引」节（版本为当日锁文件实测，锁文件仍为权威）。
+- 登记两条：d14 在途分支的 mermaid@12.2.0（MIT）合入时应补表；9 个内部包无 license 字段（根 private:true，未发布可接受，公开分发需负责人决定补法，不代改 package.json）。
+- 纯文档；`git diff --check` 通过。
+
 ## 2026-10-29：CONTRACTS.md 标题版本号对齐（纯文档）
 
 - 标题行仍写「接口与数据契约 v0.9」，而代码真值 `CONTRACT_VERSION = "0.10"`（PR #119 升版时漏改标题，正文 §0 已写 0.10）；标题对齐为 v0.10。全 docs 扫描无其他「当前版本」类漂移。
