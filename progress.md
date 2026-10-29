@@ -1,5 +1,10 @@
 # 工作记录
 
+## 2026-10-29：在途台账五更（纯文档）
+
+- PR #144 合入后：develop = `53c5093`；Destinyian 已为 context-meter 开 PR #138（零冲突），但合并前审查的两条发现（cm P2、d14 P3）需其先处理；台账改记录 PR 号与审查指向，弃逐次变动的「落后 N」精确计数（改提示口径，用 rev-list 随时可见）。
+- 纯 Markdown；`git diff --check` 与本地链接检查通过。
+
 ## 2026-10-29：三条在途切片合并前独立审查（授权执行）
 
 - 负责人授权对 context-meter / d14-mermaid / d17-skill-host-store 做只读审查：各建 `.worktrees/review-*` 只读 worktree（d14 按其锁文件在线拉 mermaid，其余离线装），读任务书/报告/关键 diff，独立复跑受影响包测试与全仓 lint/typecheck，结束后清理 worktree；三条分支 tip 未动。

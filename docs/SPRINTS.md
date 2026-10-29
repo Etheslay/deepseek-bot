@@ -248,14 +248,14 @@
 
 ## 10. 在途分支台账（2026-10-29 清点）
 
-清点基线：`origin/develop` = `5740049`（PR #142 开发计划注记修正合入后）。10-27 清点中列出的全部分支（reasoner-toggle、settings-vault、choice-card-answer、system-integration、manager-orchestration、mono-shape 及各切片）已全部合入或按 §8 拍板作废删除；`backup/pre-ui-merge` 等本地备份分支已不存在。冲突结论来自 `git merge-tree --write-tree origin/develop <分支>` 的**试算**，不代表已解决。
+清点基线：`origin/develop` = `53c5093`（PR #144 独立审查报告合入后）。10-27 清点中列出的全部分支（reasoner-toggle、settings-vault、choice-card-answer、system-integration、manager-orchestration、mono-shape 及各切片）已全部合入或按 §8 拍板作废删除；`backup/pre-ui-merge` 等本地备份分支已不存在。冲突结论来自 `git merge-tree --write-tree origin/develop <分支>` 的**试算**，不代表已解决；「落后 N」随 develop 演进持续增长，仅作变基紧迫度参考，不逐次更新。
 
 - **远程在途分支（均归属 Destinyian，AI 只登记不触碰）**：
-  - `feature/context-meter`——上下文用量圆环 + 历史 80% 自动折叠（任务书 `TASK_CONTEXT_METER.md` 与报告随分支提交）；已由归属人变基（force-push，新头 `7caf386`），领先 2 / 落后 8，对 develop **试算零冲突**，可由本人开 PR；
-  - `feature/d14-mermaid`（新增）——补齐 D14 砦除的聊天内 mermaid 流程图渲染（任务书 `TASK_D14_MERMAID.md` 与 D14-mermaid 报告随分支提交，SPRINTS §4 D14 行同步改写随分支）；领先 2 / 落后 8，试算零冲突；**引入 mermaid 依赖（pnpm-lock +837 行）**，属依赖面变更，合入前按流程复核 lockfile 与供应链；
-  - `feature/d17-skill-host-store`——技能库迁 Host 存储（`skillLibrary.get/save`，协议 v0.11；任务书 `TASK_D17_SKILL_HOST_STORE.md` 与报告随分支提交）；未变基，领先 3 / 落后 27，试算冲突 1 文件：`docs/CONTRACTS.md`（含 #140 补记的 chat.* 方法行区域），落后幅度持续扩大，建议尽快先变基再开 PR；
+  - `feature/context-meter`——上下文用量圆环 + 历史 80% 自动折叠（任务书 `TASK_CONTEXT_METER.md` 与报告随分支提交）；归属人已开 **PR #138**（对 develop 试算零冲突）；**合并前需处理[合并前审查](reports/PREMERGE-REVIEW-2026-10-29.md) §2.1 的 P2**（compressTurn 并发语义断言失实——改锁或改文档由归属人定）；
+  - `feature/d14-mermaid`（新增）——补齐 D14 砦除的聊天内 mermaid 流程图渲染（任务书 `TASK_D14_MERMAID.md` 与 D14-mermaid 报告随分支提交，SPRINTS §4 D14 行同步改写随分支）；试算零冲突；**引入 mermaid 依赖（pnpm-lock +837 行）**，属依赖面变更；**合并前需处理审查报告 §2.2 的 P3**（主题切换后新图仍用旧主题）；
+  - `feature/d17-skill-host-store`——技能库迁 Host 存储（`skillLibrary.get/save`，协议 v0.11；任务书 `TASK_D17_SKILL_HOST_STORE.md` 与报告随分支提交）；未变基，落后幅度最大，试算冲突 1 文件：`docs/CONTRACTS.md`（含 #140 补记的 chat.* 方法行区域），建议先变基再开 PR；审查 §2.3 备忘不阻塞；
   - 处置：由归属人本人自审（针对最新提交 SHA）后开 PR；
-- **已合入**：#142（开发计划注记修正）、#141（台账三更）、#140（chat.* 契约补记）、#139（文档刷新），均 2026-10-29；此前 #136（互通派发）与 #137（原始人模式）于 10-28 合入，远程 feature 分支随合并删除；
+- **已合入**：#144（独立审查报告）、#143（台账四更）、#142（开发计划注记修正）、#141（台账三更）、#140（chat.* 契约补记）、#139（文档刷新），均 2026-10-29；此前 #136（互通派发）与 #137（原始人模式）于 10-28 合入，远程 feature 分支随合并删除；
 - **本地**：33 个分支中未合入 develop 的只有 `archive/stage-plan-proposal` 与 `archive/stage-plan-push2`（2026-10-23 误署名事件的提案存档，按当时记录待负责人讨论——不合并、不推送、不删除）；
 - **工作区**（`git worktree list`）5 个活动项，其分支均已合入：`~/.codex/worktrees/d21-windows-acceptance`（`feature/screen-windows-acceptance`，PR #93）、`~/.codex/worktrees/resolve-pr65-connectors`（`feature/local-exec`）、`deepseek-bot-wt-connectors`（`feature/connector-registry`）、`deepseek-bot-wt-knowledge`（`feature/knowledge-import`）、`deepseek-bot-wt-memory`（`feature/memory-knowledge`，PR #57）——均属可清理死工作区，但可能含未跟踪本机数据，删除前需负责人逐个确认，本台账只登记不动手；
 - **主工作区残件**：根目录 `.tmp-d16-*` 日志与临时 electron 目录（`.gitignore` 覆盖、不入库）为 D16 会话遗留，可删；
