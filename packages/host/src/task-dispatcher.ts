@@ -456,8 +456,10 @@ export class TaskDispatcher {
     const running = markTaskRunning(this.db, task.id);
     this.emitStatus(running, "queued", "running");
     const sessionId = chatSessionIdFor(executor.id);
-    // History BEFORE the dispatch marker: the marker itself is the prompt.
-    const history = listChatMessages(this.db, executor.id, 20).map((row) => ({
+    // History BEFORE the dispatch marker, scoped to the default session: the
+    // marker (and the reply) land there, so extra chat sessions (G12) never
+    // leak into a dispatched task's replay.
+    const history = listChatMessages(this.db, executor.id, 20, sessionId).map((row) => ({
       role: row.role,
       text: row.text,
     }));

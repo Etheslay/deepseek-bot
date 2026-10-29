@@ -241,6 +241,7 @@ PR #159 以用户临时 Key（仅进程环境变量注入、用后即弃、不�
 ### G12 多会话管理
 **缺口**：D30 每 bot 单逻辑会话（`chat:<botId>`）；PR #103 已交付基于 `chat.history` 的**单会话**列表/打开（`stored-session.ts`，一个 bot 有消息即一个会话）。真正的多会话/重命名/清理仍未立项；Grok 对标存在多会话体验。
 **实现草案**：契约附加 `chat.session.list/open/new`（每 bot 多个 session，Host 侧 session id 由 `chat:<botId>:<n>` 扩展）；UI 为 bot 会话页头部加会话下拉/列表。**涉及 chat.send 语义扩展（activeSession），须契约负责人评审后再立任务书**。
+**状态（2026-10-29，feature/g12-multi-session）**：已按 TASK_G12_MULTI_SESSION.md 立项实现（契约 v0.12：`chat.session.list/create/rename/archive` + `chat.send/history/contextUsage` 可选 `sessionId`，缺省=默认会话 `chat:<botId>`，存量数据零改写；迁移 0024 只加 `chat_sessions` 元数据表与索引；渲染层侧栏会话子列表 + 新建/重命名/归档 + 发送归属会话）。待负责人审查合并后本条关闭。
 
 ### G13 上下文窗口可见性 —— **已完成（PR #138，2026-10-29 合入，超额交付计量+自动压缩），移入 §1.1**
 

@@ -28,6 +28,9 @@ export type ChatSessionView = {
   startedAt: string;
   replayEventCount: number;
   status: "active" | "ended";
+  /** G12: host session metadata. Absent on fixture/legacy shapes. */
+  archived?: boolean;
+  lastMessageAt?: string;
 };
 
 export type BotRoleDraft = "standard" | "coordinator";
@@ -127,6 +130,11 @@ export type StreamOptions = {
    * rows and history replay are unchanged. The fixture ignores the flag.
    */
   primitive?: boolean;
+  /**
+   * G12: storage session the turn belongs to. Omitted means the bot's
+   * default session — the pre-sessions single thread.
+   */
+  sessionId?: string;
 };
 
 export type StreamHandle = {
@@ -173,29 +181,41 @@ export interface DesktopService {
   };
   chat: {
     /**
-     * Host: the bot's stored chat (`chat:<botId>`) when that session has
-     * rows, otherwise an empty list. Fixture: seeded run sessions.
+     * G12: the bot's sessions (host metadata, newest activity first). The
+     * default session (`chat:<botId>`) is always present. Fixture: seeded
+     * run sessions.
      */
     listSessions(botId: string): Promise<ChatSessionView[]>;
+    /** G12: start an extra session for the bot (`cs:` id). */
+    createSession(botId: string, title?: string): Promise<ChatSessionView>;
+    /** G12: retitle a session; archived sessions reject the rename. */
+    renameSession(botId: string, sessionId: string, title: string): Promise<ChatSessionView>;
+    /** G12: archive a session (final, read-only); the default session refuses. */
+    archiveSession(botId: string, sessionId: string): Promise<ChatSessionView>;
     /**
-     * Host: that session's stored messages and an empty event list.
-     * Fixture: the run-event log and an empty message list.
+     * Host: that session's stored messages and an empty event list. The
+     * owning botId is passed explicitly — extra session ids (`cs:`) are not
+     * parseable back to a bot. Fixture: the run-event log and an empty
+     * message list.
      */
-    openSession(sessionId: string): Promise<{
+    openSession(botId: string, sessionId: string): Promise<{
       events: EventEnvelope[];
       messages: ChatHistoryRow[];
     }>;
     /**
      * chat.history: persisted host rows for one bot, including the v0.5
-     * dispatch markers and task notices. The fixture chat is local-only
-     * and returns an empty list.
+     * dispatch markers and task notices. `sessionId` scopes the read to one
+     * session; omitted means the default session. The fixture chat is
+     * local-only and returns an empty list.
      */
-    history(botId: string, limit?: number): Promise<ChatHistoryRow[]>;
+    history(botId: string, limit?: number, sessionId?: string): Promise<ChatHistoryRow[]>;
     /**
-     * chat.contextUsage: the gauge behind the composer context circle. The
-     * fixture has no Host meter and reports an empty gauge.
+     * chat.contextUsage: the gauge behind the composer context circle.
+     * `sessionId` scopes the meter to one session; omitted means the
+     * default session. The fixture has no Host meter and reports an empty
+     * gauge.
      */
-    contextUsage(botId: string): Promise<ContextUsageView>;
+    contextUsage(botId: string, sessionId?: string): Promise<ContextUsageView>;
     /**
      * Stage the picked bytes and import them through the tool gateway.
      * The real host waits for fs.write grant or approval before writing.

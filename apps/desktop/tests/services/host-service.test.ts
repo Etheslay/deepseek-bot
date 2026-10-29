@@ -184,6 +184,37 @@ describe("host-backed chat", () => {
     });
   });
 
+  it("sends into the requested storage session and cancels bot-scoped", async () => {
+    const { bridge, calls } = makeBridge({
+      "chat.send": () => ({
+        sessionId: "chat:x:turn",
+        messageId: "m",
+        text: "ok",
+        at: "2026-01-01T00:00:00.000Z",
+      }),
+      "chat.cancel": () => ({ cancelled: true }),
+    });
+    const service = createHostService(bridge);
+    const handle = service.chat.stream(
+      "bot-1",
+      "hi",
+      { onDelta: () => undefined, onTool: () => undefined },
+      { sessionId: "cs:44444444-4444-4444-8444-444444444444" },
+    );
+    handle.cancel();
+    await handle.finish();
+    // G12: the turn lands in the requested session; the cancel key stays the
+    // bot's default id because one turn per bot runs at a time.
+    expect(calls[0]).toMatchObject({
+      method: "chat.send",
+      payload: { botId: "bot-1", text: "hi", sessionId: "cs:44444444-4444-4444-8444-444444444444" },
+    });
+    expect(calls[calls.length - 1]).toEqual({
+      method: "chat.cancel",
+      payload: { sessionId: "chat:bot-1" },
+    });
+  });
+
   it("surfaces host failures as chat failures", async () => {
     const { bridge } = makeBridge({
       "chat.send": () => {
@@ -219,28 +250,42 @@ describe("host-backed chat", () => {
     ]);
   });
 
-  it("lists chat:<botId> and opens that session's messages", async () => {
+  it("lists host session metadata and opens one by (botId, sessionId)", async () => {
     const botId = "22222222-2222-4222-8222-222222222222";
-    const rows = [
-      {
-        id: "11111111-1111-4111-8111-111111111111",
-        botId,
-        sessionId: `chat:${botId}`,
-        role: "user" as const,
-        text: "remember this",
-        at: "2026-10-28T00:00:01.000Z",
-      },
-      {
-        id: "11111111-1111-4111-8111-111111111112",
-        botId,
-        sessionId: `chat:${botId}`,
-        role: "assistant" as const,
-        text: "stored reply",
-        at: "2026-10-28T00:00:02.000Z",
-      },
-    ];
+    const row = {
+      id: "11111111-1111-4111-8111-111111111111",
+      botId,
+      sessionId: `chat:${botId}`,
+      role: "user" as const,
+      text: "remember this",
+      at: "2026-10-28T00:00:01.000Z",
+    };
     const { bridge, calls } = makeBridge({
-      "chat.history": () => ({ messages: rows }),
+      // G12: the sidebar reads real session metadata; extra sessions carry
+      // `cs:` ids and travel beside the default one.
+      "chat.session.list": () => ({
+        sessions: [
+          {
+            sessionId: `chat:${botId}`,
+            botId,
+            title: "remember this",
+            archived: false,
+            messageCount: 1,
+            createdAt: "2026-10-28T00:00:01.000Z",
+            lastMessageAt: "2026-10-28T00:00:02.000Z",
+          },
+          {
+            sessionId: `cs:33333333-3333-4333-8333-333333333333`,
+            botId,
+            title: "新的会话",
+            archived: false,
+            messageCount: 0,
+            createdAt: "2026-10-28T00:10:00.000Z",
+            lastMessageAt: "2026-10-28T00:10:00.000Z",
+          },
+        ],
+      }),
+      "chat.history": () => ({ messages: [row] }),
     });
     const service = createHostService(bridge);
     await expect(service.chat.listSessions(botId)).resolves.toEqual([
@@ -249,44 +294,81 @@ describe("host-backed chat", () => {
         botId,
         title: "remember this",
         startedAt: "2026-10-28T00:00:01.000Z",
-        replayEventCount: 2,
+        replayEventCount: 1,
         status: "active",
+        archived: false,
+        lastMessageAt: "2026-10-28T00:00:02.000Z",
+      },
+      {
+        sessionId: `cs:33333333-3333-4333-8333-333333333333`,
+        botId,
+        title: "新的会话",
+        startedAt: "2026-10-28T00:10:00.000Z",
+        replayEventCount: 0,
+        status: "active",
+        archived: false,
+        lastMessageAt: "2026-10-28T00:10:00.000Z",
       },
     ]);
-    await expect(service.chat.openSession(`chat:${botId}`)).resolves.toEqual({
-      events: [],
-      messages: rows,
+    // openSession addresses the row by botId + session id; the read is scoped
+    // server-side, so the payload carries the session.
+    await expect(
+      service.chat.openSession(botId, `cs:33333333-3333-4333-8333-333333333333`),
+    ).resolves.toEqual({ events: [], messages: [row] });
+    expect(calls[1]).toEqual({
+      method: "chat.history",
+      payload: { botId, limit: 200, sessionId: `cs:33333333-3333-4333-8333-333333333333` },
     });
-    expect(calls).toEqual([
-      { method: "chat.history", payload: { botId, limit: 200 } },
-      { method: "chat.history", payload: { botId, limit: 200 } },
-    ]);
   });
 
-  it("returns an empty list when the bot has no stored messages", async () => {
+  it("returns an empty list when the host reports no sessions", async () => {
     const { bridge, calls } = makeBridge({
-      "chat.history": () => ({ messages: [] }),
+      "chat.session.list": () => ({ sessions: [] }),
     });
     const service = createHostService(bridge);
     await expect(service.chat.listSessions(bot.id)).resolves.toEqual([]);
-    await expect(service.chat.openSession(`chat:${bot.id}`)).resolves.toEqual({
-      events: [],
-      messages: [],
-    });
-    expect(calls).toEqual([
-      { method: "chat.history", payload: { botId: bot.id, limit: 200 } },
-      { method: "chat.history", payload: { botId: bot.id, limit: 200 } },
-    ]);
+    expect(calls).toEqual([{ method: "chat.session.list", payload: { botId: bot.id } }]);
   });
 
-  it("does not read history for a session id that is not chat:<botId>", async () => {
-    const { bridge, calls } = makeBridge({});
-    const service = createHostService(bridge);
-    await expect(service.chat.openSession("sess-success-run")).resolves.toEqual({
-      events: [],
-      messages: [],
+  it("createSession/renameSession/archiveSession round-trip the contract", async () => {
+    const session = {
+      sessionId: "cs:44444444-4444-4444-8444-444444444444",
+      botId: bot.id,
+      title: "新的会话",
+      archived: false,
+      messageCount: 0,
+      createdAt: "2026-10-29T00:00:00.000Z",
+      lastMessageAt: "2026-10-29T00:00:00.000Z",
+    };
+    const { bridge, calls } = makeBridge({
+      "chat.session.create": () => ({ session }),
+      "chat.session.rename": () => ({ session: { ...session, title: "周报整理" } }),
+      "chat.session.archive": () => ({
+        session: { ...session, title: "周报整理", archived: true },
+      }),
     });
-    expect(calls).toEqual([]);
+    const service = createHostService(bridge);
+    await expect(service.chat.createSession(bot.id)).resolves.toMatchObject({
+      sessionId: session.sessionId,
+      status: "active",
+    });
+    await expect(service.chat.renameSession(bot.id, session.sessionId, "周报整理")).resolves.toMatchObject({
+      title: "周报整理",
+    });
+    await expect(service.chat.archiveSession(bot.id, session.sessionId)).resolves.toMatchObject({
+      archived: true,
+      status: "ended",
+    });
+    expect(calls.map((call) => call.method)).toEqual([
+      "chat.session.create",
+      "chat.session.rename",
+      "chat.session.archive",
+    ]);
+    expect(calls[1]?.payload).toEqual({
+      botId: bot.id,
+      sessionId: session.sessionId,
+      title: "周报整理",
+    });
   });
 
   it("cancel forwards to chat.cancel", async () => {

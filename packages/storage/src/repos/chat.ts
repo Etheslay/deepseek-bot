@@ -64,13 +64,21 @@ export function listChatMessages(
   db: OpenedDatabase,
   botId: string,
   limit = 100,
+  /**
+   * G12: omit for the bot-wide read (every session — the pre-sessions
+   * behavior all existing callers keep); pass a session id to scope the
+   * replay/history read to that one thread.
+   */
+  sessionId?: string,
 ): ChatMessageRow[] {
   const rows = db.raw
     .prepare(
       "SELECT id, bot_id, session_id, role, text, meta_json, created_at FROM chat_messages " +
-        "WHERE bot_id = ? ORDER BY created_at ASC, rowid ASC LIMIT ?;",
+        (sessionId === undefined
+          ? "WHERE bot_id = ? ORDER BY created_at ASC, rowid ASC LIMIT ?;"
+          : "WHERE bot_id = ? AND session_id = ? ORDER BY created_at ASC, rowid ASC LIMIT ?;"),
     )
-    .all(botId, limit) as Array<{
+    .all(...(sessionId === undefined ? [botId, limit] : [botId, sessionId, limit])) as Array<{
     id: string;
     bot_id: string;
     session_id: string;

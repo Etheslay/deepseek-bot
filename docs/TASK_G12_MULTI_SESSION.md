@@ -24,7 +24,7 @@
 
 ### 4. 旧数据归入：默认会话，零行改写
 
-`chat_messages.session_id` 是 NOT NULL 且历史值恒为 `chat:<botId>`——即默认会话 id 本身。迁移 0024 **只新增 `chat_sessions` 元数据表与索引，不改写任何数据行、不修改任何历史迁移**；旧行天然属于默认会话。默认会话的元数据行由 Host 在 `chat.session.list` 与缺省 `chat.send` 时惰性物化（get-or-create，标题取首条用户消息一行，无消息时按 Host 语言取"新的会话 / New session"）。
+`chat_messages.session_id` 是 NOT NULL 且历史值恒为 `chat:<botId>`——即默认会话 id 本身。迁移 0024 **只新增 `chat_sessions` 元数据表与索引，不改写任何数据行、不修改任何历史迁移**；旧行天然属于默认会话。默认会话的元数据行由 Host 在 `chat.session.list` 与缺省 `chat.send` 时惰性物化（get-or-create）。会话显示标题在读取时派生：用户重命名的存储标题优先，否则取首条用户消息一行，无线索时按 Host 语言取「新的会话 / New session」；新建会话可带标题，不带则以派生标题展示。
 
 ## 契约（v0.12，纯增量）
 

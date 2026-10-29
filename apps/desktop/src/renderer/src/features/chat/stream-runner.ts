@@ -46,6 +46,11 @@ export function runChatStream(deps: {
   skills?: StreamOptions["skills"];
   /** 原始人模式: terse one-step prompt on the Host. Independent of skills. */
   primitive?: boolean;
+  /**
+   * G12: storage session the turn belongs to. Omitted means the bot's
+   * default session — the pre-sessions single thread.
+   */
+  sessionId?: string;
   forKey: number;
   update: StreamUpdater;
   onAssistant: (text: string) => void;
@@ -62,15 +67,19 @@ export function runChatStream(deps: {
    */
   onSettled?: (result: StreamResult) => void;
 }): StreamHandle {
-  const { stream, botId, text, skills, primitive, forKey, update, onAssistant, isCurrent, onSettled } = deps;
+  const { stream, botId, text, skills, primitive, sessionId, forKey, update, onAssistant, isCurrent, onSettled } = deps;
   let acc = "";
-  const options: StreamOptions | undefined =
-    (skills !== undefined && skills.length > 0) || primitive === true
-      ? {
-          ...(skills !== undefined && skills.length > 0 ? { skills } : {}),
-          ...(primitive === true ? { primitive: true } : {}),
-        }
-      : undefined;
+  const hasExtras =
+    (skills !== undefined && skills.length > 0) ||
+    primitive === true ||
+    sessionId !== undefined;
+  const options: StreamOptions | undefined = hasExtras
+    ? {
+        ...(skills !== undefined && skills.length > 0 ? { skills } : {}),
+        ...(primitive === true ? { primitive: true } : {}),
+        ...(sessionId !== undefined ? { sessionId } : {}),
+      }
+    : undefined;
   const handle = stream(botId, text, {
     onDelta: (chunk) => {
       acc += chunk;

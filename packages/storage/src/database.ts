@@ -848,6 +848,31 @@ CREATE TABLE event_rule_keys (
 CREATE INDEX event_rule_keys_claimed ON event_rule_keys(claimed_at);
 `,
   },
+  {
+    // G12 多会话 (TASK_G12_MULTI_SESSION.md): session METADATA only. The
+    // default session of a bot keeps the historical id `chat:<botId>` —
+    // every chat_messages row written before this migration already carries
+    // that id, so legacy threads join the default session with zero row
+    // rewrites. The default row itself is materialized lazily by the Host
+    // (get-or-create on chat.session.list / default chat.send). Extra
+    // sessions mint `cs:` ids; archiving stamps archived_at (final,
+    // read-only). The (bot_id, session_id, created_at) index serves the
+    // per-session replay/history reads.
+    id: 25,
+    name: "0025-chat-sessions",
+    sql: /* sql */ `
+CREATE TABLE chat_sessions (
+  id TEXT PRIMARY KEY,
+  bot_id TEXT NOT NULL REFERENCES bots(id),
+  title TEXT NOT NULL,
+  archived_at TEXT,
+  created_at TEXT NOT NULL,
+  last_message_at TEXT NOT NULL
+);
+CREATE INDEX chat_sessions_bot_recent ON chat_sessions(bot_id, last_message_at);
+CREATE INDEX chat_messages_bot_session ON chat_messages(bot_id, session_id, created_at);
+`,
+  },
 
 ];
 

@@ -43,4 +43,18 @@ export const chatMessages = {
   "chat.thinkReasoning": { zh: "正在深度思考", en: "Thinking it through" },
   "chat.thinkTool": { zh: "正在调用 {0}", en: "Calling {0}" },
   "chat.toolRequest": { zh: "工具请求", en: "Tool request" },
+  // G12 多会话.
+  "chat.newSession": { zh: "新建会话", en: "New chat" },
+  "chat.sessionUntitled": { zh: "新会话", en: "New session" },
+  "chat.sessionCreated": { zh: "已新建会话", en: "Session created" },
+  "chat.sessionCreateFailed": { zh: "创建会话失败，请重试。", en: "Failed to create the session; please try again." },
+  "chat.renameSession": { zh: "重命名会话", en: "Rename session" },
+  "chat.sessionRenamed": { zh: "会话已重命名", en: "Session renamed" },
+  "chat.sessionRenameFailed": { zh: "重命名失败，请重试。", en: "Failed to rename the session; please try again." },
+  "chat.archiveSession": { zh: "归档会话", en: "Archive session" },
+  "chat.sessionArchivedDone": { zh: "会话已归档", en: "Session archived" },
+  "chat.sessionArchiveFailed": { zh: "归档失败，请重试。", en: "Failed to archive the session; please try again." },
+  "chat.archivedMark": { zh: "已归档", en: "Archived" },
+  "chat.sessionListAria": { zh: "当前 bot 的会话列表", en: "Sessions of the current bot" },
+  "chat.sessionMenuAria": { zh: "会话操作菜单", en: "Session actions menu" },
 } satisfies Record<string, Message>;

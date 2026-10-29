@@ -76,7 +76,9 @@ describe("FixtureService bots", () => {
       }),
     ).toThrowError(/archived/);
     // History remains viewable.
-    await expect(service.chat.openSession("sess-success-run")).resolves.toBeDefined();
+    await expect(
+      service.chat.openSession(SESSION_BOT_A, "sess-success-run"),
+    ).resolves.toBeDefined();
   });
 });
 
@@ -115,10 +117,23 @@ describe("FixtureService chat", () => {
   });
 
   it("openSession replays contract-valid events from the fixture", async () => {
-    const { events } = await service.chat.openSession("sess-success-run");
+    const { events } = await service.chat.openSession(SESSION_BOT_A, "sess-success-run");
     expect(events.length).toBe(6);
     expect(events[0]?.type).toBe("run.created");
     expect(events.at(-1)?.type).toBe("run.completed");
+  });
+
+  it("createSession/renameSession/archiveSession mutate the preview store", async () => {
+    const created = await service.chat.createSession(SESSION_BOT_A);
+    expect(created.sessionId.startsWith("cs:")).toBe(true);
+    expect(created.archived).toBe(false);
+    const renamed = await service.chat.renameSession(SESSION_BOT_A, created.sessionId, "草稿线");
+    expect(renamed.title).toBe("草稿线");
+    const archived = await service.chat.archiveSession(SESSION_BOT_A, created.sessionId);
+    expect(archived.archived).toBe(true);
+    expect(archived.status).toBe("ended");
+    const sessions = await service.chat.listSessions(SESSION_BOT_A);
+    expect(sessions.find((s) => s.sessionId === created.sessionId)?.archived).toBe(true);
   });
 
   it("stream appends deltas, reports tool status, and completes", async () => {
