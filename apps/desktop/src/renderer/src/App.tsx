@@ -29,7 +29,7 @@ import { nextBotName } from "./features/bots/bot-names.js";
 import { CustomSelect } from "./components/custom-select.js";
 import type { BotDraft, ChatHistoryRow, ContextUsageView } from "./services/desktop-service.js";
 import { useService } from "./services/service-context.jsx";
-import { METHOD_CONTRACTS } from "@deepseek-bot/contracts";
+import { METHOD_CONTRACTS, VOICE_MAX_CLIP_SECONDS, type VoiceStatus } from "@deepseek-bot/contracts";
 import {
   emptyStream,
   failureMessage,
@@ -57,6 +57,10 @@ import {
 } from "./features/avatars/avatar-meta.js";
 import { ChoiceCard, type ChoiceOption } from "./features/questions/choice-card.js";
 import { answerSeedCard } from "./features/questions/choice-answer.js";
+import { bytesToBase64 } from "./features/chat/attachments.js";
+import { startClipRecorder, type ClipRecorder } from "./features/voice/clip-recorder.js";
+import { clipProblem, encodeWavPcm16 } from "./features/voice/wav.js";
+import { speakButton, transcribeButton } from "./features/voice/voice-ui.js";
 import {
   QuestionChatCards,
   type AnsweredQuestion,
@@ -2923,6 +2927,9 @@ function MessageBubble({
   canEditResend,
   onEditResend,
   onOpenAttachment,
+  onSpeak,
+  speaking,
+  voiceStatus,
 }: {
   msg: Msg;
   accent: string;
@@ -2942,8 +2949,14 @@ function MessageBubble({
   onEditResend?: (text: string) => void;
   /** Workspace path from the gateway import. Opens the artifact preview. */
   onOpenAttachment?: (relativePath: string) => void;
+  /** Voice: read this reply aloud through the Host's local speech engine. */
+  onSpeak?: (msgId: number, text: string) => void;
+  speaking?: boolean;
+  /** Gates the speak button; disabled with a reason when the engine is absent. */
+  voiceStatus?: VoiceStatus | null;
 }): JSX.Element {
   const isUser = msg.from === "user";
+  const speak = speakButton(voiceStatus ?? null, speaking === true);
   const [pickerOpen, setPickerOpen] = useState(false);
   const emojiBtnRef = useRef<HTMLButtonElement | null>(null);
   const pickerRef = useRef<HTMLDivElement | null>(null);
@@ -3187,6 +3200,33 @@ function MessageBubble({
             />
           </svg>
         </button>
+        {!isUser && onSpeak !== undefined && (
+          <button
+            type="button"
+            className={"msg-icon-btn" + (speaking === true ? " active" : "")}
+            data-action="speak"
+            title={t(speak.reasonKey ?? speak.labelKey)}
+            disabled={speak.disabled}
+            onClick={() => onSpeak(msg.id, msg.text)}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                d="M4 9.5h3l4-3.5v12l-4-3.5H4z"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinejoin="round"
+              />
+              <path
+                d="M15.5 8.5a5 5 0 0 1 0 7M18 6a8.5 8.5 0 0 1 0 12"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+              />
+            </svg>
+          </button>
+        )}
         {!isUser && canRegenerate === true && onRegenerate !== undefined && (
           <button
             type="button"
@@ -3311,6 +3351,17 @@ function BotsPlaceholder({
   const [failedText, setFailedText] = useState("");
   const [answeredQuestions, setAnsweredQuestions] = useState<AnsweredQuestionMap>({});
   const [clarify, setClarify] = useState<ClarifyTarget | null>(null);
+  /**
+   * Voice (D27 desktop slice): both halves are local and optional — the mic and
+   * the speak button stay disabled with a reason until `voice.status` says the
+   * whisper build or the system speech engine is present.
+   */
+  const [voiceStatus, setVoiceStatus] = useState<VoiceStatus | null>(null);
+  const [voicePhase, setVoicePhase] = useState<"idle" | "recording" | "transcribing">("idle");
+  const [voiceSeconds, setVoiceSeconds] = useState(0);
+  const [speakingId, setSpeakingId] = useState<number | null>(null);
+  const recorderRef = useRef<ClipRecorder | null>(null);
+  const voiceTickRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [memoryOpen, setMemoryOpen] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<AttachmentDraft[]>([]);
   const [skills, setSkills] = useState<Skill[]>(() => listSkills(window.localStorage));
@@ -3748,6 +3799,112 @@ function BotsPlaceholder({
     startChatStream(option.label);
   };
 
+  /** Ask the Host once whether the local whisper/TTS halves are usable. */
+  useEffect(() => {
+    void window.deepseekBot.host
+      .call("voice.status", {})
+      .then((response) =>
+        setVoiceStatus(METHOD_CONTRACTS["voice.status"].response.parse(response)),
+      )
+      .catch(() => setVoiceStatus(null));
+  }, []);
+
+  useEffect(
+    () => () => {
+      recorderRef.current?.cancel();
+      recorderRef.current = null;
+      if (voiceTickRef.current !== null) {
+        clearInterval(voiceTickRef.current);
+        voiceTickRef.current = null;
+      }
+    },
+    [],
+  );
+
+  const stopRecording = async (): Promise<void> => {
+    const recorder = recorderRef.current;
+    if (recorder === null) {
+      return;
+    }
+    recorderRef.current = null;
+    if (voiceTickRef.current !== null) {
+      clearInterval(voiceTickRef.current);
+      voiceTickRef.current = null;
+    }
+    setVoiceSeconds(0);
+    let samples: Float32Array;
+    try {
+      samples = await recorder.stop();
+    } catch {
+      samples = new Float32Array(0);
+    }
+    const problem = clipProblem(samples);
+    if (problem !== null) {
+      onNotify(
+        problem === "empty"
+          ? t("voice.emptyClip")
+          : t("voice.tooLong", [String(VOICE_MAX_CLIP_SECONDS)]),
+      );
+      setVoicePhase("idle");
+      return;
+    }
+    setVoicePhase("transcribing");
+    try {
+      const parsed = METHOD_CONTRACTS["voice.transcribe"].response.parse(
+        await window.deepseekBot.host.call("voice.transcribe", {
+          audioBase64: bytesToBase64(encodeWavPcm16(samples)),
+        }),
+      );
+      const text = parsed.text.trim();
+      if (text.length === 0) {
+        onNotify(t("voice.transcribedEmpty"));
+      } else {
+        setDraft((prev) => (prev.trim().length > 0 ? `${prev} ${text}` : text));
+      }
+    } catch {
+      onNotify(t("voice.transcribeFailed"));
+    } finally {
+      setVoicePhase("idle");
+    }
+  };
+
+  const toggleRecording = (): void => {
+    if (voicePhase === "recording") {
+      void stopRecording();
+      return;
+    }
+    if (voicePhase !== "idle") {
+      return;
+    }
+    void startClipRecorder()
+      .then((recorder) => {
+        recorderRef.current = recorder;
+        setVoicePhase("recording");
+        setVoiceSeconds(0);
+        voiceTickRef.current = setInterval(() => {
+          setVoiceSeconds((prev) => {
+            const next = prev + 1;
+            if (next >= VOICE_MAX_CLIP_SECONDS) {
+              void stopRecording();
+            }
+            return next;
+          });
+        }, 1000);
+      })
+      .catch(() => onNotify(t("voice.micDenied")));
+  };
+
+  const speakMessage = (msgId: number, text: string): void => {
+    if (speakingId !== null) {
+      return;
+    }
+    setSpeakingId(msgId);
+    void window.deepseekBot.host
+      .call("voice.speak", { text })
+      .catch(() => onNotify(t("voice.speakFailed")))
+      .finally(() => setSpeakingId(null));
+  };
+
   // G6: only the newest user question may regenerate and only the newest user
   // message may be edited-resent — older ones stay historical record.
   const lastBotMsgId = [...msgs].reverse().find((m) => m.from === "bot" && !m.system)?.id;
@@ -3856,6 +4013,9 @@ function BotsPlaceholder({
                   canEditResend={m.id === lastUserMsgId}
                   onEditResend={editResend}
                   onOpenAttachment={onOpenAttachment}
+                  onSpeak={speakMessage}
+                  speaking={speakingId === m.id}
+                  voiceStatus={voiceStatus}
                 />
               )}
             </Fragment>
@@ -4174,18 +4334,45 @@ function BotsPlaceholder({
           </button>
         </div>
         <ContextRing usage={contextUsage} />
-        <span className="composer-mic" title={t("shell.comingSoon")} aria-hidden="true">
-          <svg viewBox="0 0 24 24">
-            <rect x="9" y="3" width="6" height="11" rx="3" fill="none" stroke="currentColor" strokeWidth="1.8" />
-            <path
-              d="M5 11a7 7 0 0 0 14 0M12 18v3"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              strokeLinecap="round"
-            />
-          </svg>
-        </span>
+        {(() => {
+          const mic = transcribeButton(voiceStatus, voicePhase);
+          const title =
+            mic.reasonKey !== null
+              ? t(mic.reasonKey)
+              : voicePhase === "recording"
+                ? t("voice.recording", [String(voiceSeconds)])
+                : t("voice.record");
+          return (
+            <button
+              type="button"
+              className={
+                "composer-mic" + (voicePhase === "recording" ? " recording" : "")
+              }
+              title={title}
+              aria-label={title}
+              aria-pressed={voicePhase === "recording"}
+              disabled={mic.disabled}
+              onClick={toggleRecording}
+            >
+              {voicePhase === "recording" ? (
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <rect x="7" y="7" width="10" height="10" rx="2" fill="currentColor" />
+                </svg>
+              ) : (
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <rect x="9" y="3" width="6" height="11" rx="3" fill="none" stroke="currentColor" strokeWidth="1.8" />
+                  <path
+                    d="M5 11a7 7 0 0 0 14 0M12 18v3"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                  />
+                </svg>
+              )}
+            </button>
+          );
+        })()}
         <button type="button" className="send-btn" aria-label={t("shell.send")} disabled={!draft.trim() && pendingFiles.length === 0} onClick={send}>
           ↑
         </button>
