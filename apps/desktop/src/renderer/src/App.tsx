@@ -4151,6 +4151,7 @@ function BotsPlaceholder({
         <SearchResultCards botId={me.bot.id} />
         <PermissionChatCards
           botId={me.bot.id}
+          botName={me.bot.name}
           onPendingCount={(count) => onApprovalPending(me.bot.id, me.bot.name, count)}
         />
         <TaskFeedCards botId={me.bot.id} bots={bots} onOpenBot={onOpenBot} />
