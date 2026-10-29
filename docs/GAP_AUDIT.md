@@ -134,7 +134,7 @@ develop 一天合入 12 个 PR，原审计多项缺口就此关闭：#73 深度�
 
 **已补、不依赖拍板 #1**：
 - 已答选项卡：`question.answer` 在助手消息写入 `meta.kind = "choice"`（问题、展示选项、`answered`）。`historyThreadMessages` 恢复 `choices.answered`；卡片折叠，`canAnswerChoice` 对 `history: true` 或已有 `answered` 返回 false，不能再次作答。存量无该 meta 的提问行仍是纯文本。
-- 从 `chat.history` 装入的消息带 `history: true`（并保留 `origin: "history"`）。回放行的时间分隔使用更弱的样式，与本会话新消息区分。
+- 从 `chat.history` 装入的消息带 `history: true`（并保留 `origin: "history"`）。回放气泡整行比本会话新消息更弱（透明度 0.7，入场动画不会把它拉回 1），时间分隔同样更弱。已答卡不可再次提交。
 
 **需求**（沿第一次刷新 G1 的需求，范围收窄到剩余三项）：
 - 侧栏 bot/分组排列、选中态、界面偏好重启后恢复；快照不含任何密钥/敏感数据；
