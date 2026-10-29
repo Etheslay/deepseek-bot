@@ -811,6 +811,25 @@ CREATE UNIQUE INDEX tasks_from_idem
   WHERE idempotency_key IS NOT NULL;
 `,
   },
+  {
+    // Context meter (TASK_CONTEXT_METER.md): one compressed-history summary
+    // per bot session. `covers_message_id` is the watermark — the last
+    // chat_messages row folded into `summary`; later rows still replay
+    // verbatim. Rows in chat_messages are never deleted, so deleting the
+    // summary row restores the full replay.
+    id: 23,
+    name: "0023-chat-summaries",
+    sql: /* sql */ `
+CREATE TABLE chat_summaries (
+  bot_id TEXT NOT NULL REFERENCES bots(id),
+  session_id TEXT NOT NULL,
+  summary TEXT NOT NULL,
+  covers_message_id TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (bot_id, session_id)
+);
+`,
+  },
 
 ];
 
