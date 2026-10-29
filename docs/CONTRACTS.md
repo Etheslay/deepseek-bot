@@ -1,4 +1,4 @@
-# 接口与数据契约 v0.10
+# 接口与数据契约 v0.11
 
 本文件定义本项目前后端契约，不是 DeepSeek Harness 官方 API。状态：v0.1 已冻结（2026-10-23，D00 验收记录见 D00 Issue）；v0.2 为 D15 写层扩展；v0.3（2026-10-26，D16 后端）新增人类权限控制方法；v0.4（2026-10-26，D28 共编侧车）新增 `artifacts.*` 方法组；v0.5（2026-10-26，manager-orchestration，TASK_MANAGER_ORCHESTRATION.md）新增 bot 协调者角色、`task.*` 方法组、`task.status` 任务事件与能力 `app.dispatch_task`，`protocolVersion` 升至 0.5，继续接受 0.1–0.4 发送方。工作流文档 `schemaVersion` 保持 0.1（存量数据可读）。后续变更按 §7 提升版本并由变更负责人自审同步使用方。可执行实现位于 `packages/contracts/`：schema、§7 夹具与双方共用契约测试见 [packages/contracts/README.md](../packages/contracts/README.md)。所有字段均需后端校验，TypeScript 类型不能替代运行时校验。
 

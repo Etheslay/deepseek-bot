@@ -11,6 +11,7 @@
 | highlight.js@11.12.0 | BSD-3-Clause | 代码高亮（common 子集） |
 | katex@0.19.1 | MIT | 公式渲染 |
 | marked@18.1.1 | MIT | Markdown 解析 |
+| mermaid@12.2.0 | MIT | 聊天 mermaid 流程图本地渲染（动态 import 独立 chunk，PR #153） |
 | react@19.1.1 / react-dom@19.1.1 | MIT | 桌面 UI |
 | @modelcontextprotocol/client@2.2.0 | MIT | MCP 客户端（D19） |
 | ajv@8.20.0 / ajv-formats@3.0.1 | MIT | MCP schema 校验（D19） |
@@ -20,7 +21,7 @@
 | tesseract.js@7.0.0、tesseract.js-core@7.0.0 | Apache-2.0 | 本地 OCR（详见下文 D21 节） |
 
 - 全部为 MIT / BSD / Apache / MPL 宽松许可，无 GPL/AGPL 类强传染条款，符合 SPRINTS §9 消费红线。
-- 在途分支 `feature/d14-mermaid` 引入 mermaid@12.2.0（MIT，锁文件钉住）；合入时应补入本表。
+- mermaid@12.2.0（MIT，锁文件钉住）已随 PR #153 合入并入表。
 - 内部 `@deepseek-bot/*` 包为第一方，无第三方声明义务；发现项：9 个工作区包无 license 字段（根 package.json 为 private:true，未发布场景可接受），若将来公开分发需由负责人决定补法，本表不代改 package.json。
 
 ## D21 离线 OCR
