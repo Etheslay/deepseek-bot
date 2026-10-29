@@ -669,8 +669,9 @@ export const METHOD_CONTRACTS = {
           sessionId: z.string().min(1).max(128),
           role: z.enum(["user", "assistant"]),
           text: z.string(),
-          // v0.5: dispatch markers and task delivery notices (optional so
-          // pre-0.5 rows and callers keep parsing unchanged).
+          // Optional row marker. v0.5 dispatch / task_notice / automation, plus
+          // the answered choice card (kind "choice"). Absent on plain rows,
+          // so older callers keep parsing.
           meta: ChatMessageMetaSchema.optional(),
           at: IsoDateTimeUtcSchema,
         }),

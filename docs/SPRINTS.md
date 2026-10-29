@@ -207,13 +207,13 @@
 | 设置 | API Key 保存 / 测试连接 | 本次刷新未逐项复核；保险库 safeStorage 通道已备（PR #78） | 真实 Key 全链验收挂 [GAP_AUDIT](GAP_AUDIT.md) G4（未验证） |
 | 设置 | 全部设置项不持久化 | **已实现**（D24）：`deepseek-bot.settings.v2` 写本地存储 | ~~D24~~ 已完成 |
 | 侧栏 | 账户"退出登录" | 占位（无账号体系） | 维持占位（边界：不引入账户体系），D26 改为"本地资料"卡片 |
-| 全局 | bot / 分组 / 会话状态持久化 | **部分实现**：bot/分组/会话历史随 Host SQLite 持久化、`chat.history` 回放已接（PR #97/#103）；侧栏排列/选中态等界面态仍重启即失 | **GAP_AUDIT G1'**（拍板 #1 记录 ui.* 清单后开工） |
+| 全局 | bot / 分组 / 会话状态持久化 | **部分实现**：bot/分组/会话历史随 Host SQLite 持久化、`chat.history` 回放已接（PR #97/#103）；已答选项卡可从消息 meta 恢复，回放行带 `history: true`；侧栏排列/选中态等界面态仍重启即失 | **GAP_AUDIT G1'**（界面态仍等拍板 #1 的 ui.* 清单） |
 
 ## 8. 待拍板事项
 
 | # | 事项 | 需要 | 状态 |
 | --- | --- | --- | --- |
-| 1 | Renderer↔Host 真实数据接线方案（A/B/C/D 或组合） | 两负责人按 [映射提案](RENDERER_HOST_MAPPING.md) §3 达成一致 | 待拍板——D 步与聊天/历史 B 步已事实上线（PR #97/#103）；剩余 **ui.\*** 清单阻塞 G1' 界面态持久化（见 [GAP_AUDIT](GAP_AUDIT.md) §7.1） |
+| 1 | Renderer↔Host 真实数据接线方案（A/B/C/D 或组合） | 两负责人按 [映射提案](RENDERER_HOST_MAPPING.md) §3 达成一致 | 待拍板——D 步与聊天/历史 B 步已事实上线（PR #97/#103）；剩余 **ui.\*** 清单只阻塞 G1' 的界面态持久化（已答卡回放与 `history: true` 不依赖该清单，见 [GAP_AUDIT](GAP_AUDIT.md) §2） |
 | 2 | mono-shape 头像线与 develop 头像线（PR #18/#19）的分叉合并策略 | Destinyian 定基准 | **已定案（2026-10-27）：develop 头像线为基准，`feature/mono-shape` 作废并删除。** 该分支相对 develop 只有一个提交 `e74e570`（fix(desktop): let the mono avatar use any rounded shape），它改的 `MinimalAvatar` / `shapeIndex` / `{kind:"minimal"}` 已随 B-AVATAR-02 的头像重做全部移除（现网 0 命中），合并只会复活死类型。其意图（mono 换形状）至今仍未实现，但更前置的是：契约 `AvatarSchema` 只有 `shape` + `color`、没有 `kind`，mono 属渲染层 UI-only 值，**无法持久化**，重启后头像按 bot id 派生。若将来要黑白头像可留存，需要的是契约加字段（另立小 PR），不是给 mono 加形状 |
 
 ## 9. 对标缺口盘点（Grok Bot · GitHub 分发 · 本地优先）

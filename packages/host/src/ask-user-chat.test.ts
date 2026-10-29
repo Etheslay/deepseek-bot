@@ -123,7 +123,20 @@ describe("ask_user desktop answer return", () => {
     });
     expect(await host.handleMethod("chat.history", { botId: bot.id })).toMatchObject({
       messages: [
-        { role: "assistant", text: expect.stringContaining("Which first?") },
+        {
+          role: "assistant",
+          text: expect.stringContaining("Which first?"),
+          meta: {
+            kind: "choice",
+            question: "Which first?",
+            options: [
+              { id: "A", label: "Alpha" },
+              { id: "B", label: "Beta" },
+            ],
+            other: true,
+            answered: "Alpha",
+          },
+        },
         { id: answered.messageId, role: "user", text: "Alpha" },
       ],
     });
@@ -164,13 +177,22 @@ describe("ask_user desktop answer return", () => {
     })) as { text: string };
     await pending;
     const history = (await host.handleMethod("chat.history", { botId: bot.id })) as {
-      messages: Array<{ role: string; text: string }>;
+      messages: Array<{ role: string; text: string; meta?: { answered?: string } }>;
     };
     expect(history.messages).toHaveLength(2);
     expect(history.messages[0]).toMatchObject({ role: "assistant" });
     expect(history.messages[0]!.text).toContain("【向用户提问】整理什么？");
     expect(history.messages[0]!.text).toContain("D. 以上都不是");
     expect(history.messages[0]!.text).not.toContain("都不对");
+    expect(history.messages[0]!.meta).toEqual({
+      kind: "choice",
+      question: "整理什么？",
+      options: [
+        { id: "A", label: "整理桌面文件" },
+        { id: "D", label: "以上都不是" },
+      ],
+      answered: answered.text,
+    });
     expect(history.messages[1]).toMatchObject({ role: "user", text: answered.text });
   });
 
@@ -224,7 +246,16 @@ describe("ask_user desktop answer return", () => {
     });
     expect(await host.handleMethod("chat.history", { botId: bot.id })).toMatchObject({
       messages: [
-        { role: "assistant", text: expect.stringContaining("Which first?") },
+        {
+          role: "assistant",
+          text: expect.stringContaining("Which first?"),
+          meta: {
+            kind: "choice",
+            question: "Which first?",
+            answered: "Later today",
+            other: true,
+          },
+        },
         { role: "user", text: "Later today" },
       ],
     });

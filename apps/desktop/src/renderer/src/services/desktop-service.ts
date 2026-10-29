@@ -10,10 +10,10 @@ import type {
   ArtifactVersion,
   Bot,
   BotArtifact,
+  ChatMessageMeta,
   ChatSkillInjection,
   ErrorCode,
   EventEnvelope,
-  Task,
 } from "@deepseek-bot/contracts";
 import type { BackupSummary } from "../../../shared/ipc-channels.js";
 import type { WorkflowServiceApi } from "../features/workflow-editor/workflow-service.js";
@@ -49,16 +49,14 @@ export type AttachmentUploadResult = {
   checksum: string;
 };
 
-/** One persisted host chat row (chat.history) with its v0.5 meta marker. */
+/** One persisted host chat row (chat.history), including an optional meta marker. */
 export type ChatHistoryRow = {
   id: string;
   botId: string;
   sessionId: string;
   role: "user" | "assistant";
   text: string;
-  meta?:
-    | { kind: "dispatch"; taskId: string; fromBotId: string }
-    | { kind: "task_notice"; taskId: string; status: Task["status"]; resultSummary?: string };
+  meta?: ChatMessageMeta;
   at: string;
 };
 
@@ -218,7 +216,10 @@ export interface DesktopService {
    * model never picks the path; reads go through read_workspace_file (fs.read).
    */
   attachments: {
-    upload(botId: string, file: { name: string; bytes: Uint8Array }): Promise<AttachmentUploadResult>;
+    upload(
+      botId: string,
+      file: { name: string; bytes: Uint8Array },
+    ): Promise<AttachmentUploadResult>;
   };
   /**
    * D28 co-edit sidecar over one bot's workspace files. Read/save address a

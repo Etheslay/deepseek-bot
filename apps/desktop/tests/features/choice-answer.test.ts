@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { answerSeedCard } from "../../src/renderer/src/features/questions/choice-answer.js";
+import {
+  answerSeedCard,
+  canAnswerChoice,
+} from "../../src/renderer/src/features/questions/choice-answer.js";
 
 type Card = {
   id: number;
@@ -12,6 +15,27 @@ const messages: Card[] = [
   { id: 1.5, text: "想先试哪种能力？", choices: { question: "想先试哪种能力？" } },
   { id: 2, text: "后续消息" },
 ];
+
+describe("canAnswerChoice", () => {
+  it("allows an open card from this session", () => {
+    expect(canAnswerChoice({ choices: {} })).toBe(true);
+  });
+
+  it("refuses a card that already has an answer", () => {
+    expect(canAnswerChoice({ choices: { answered: "Alpha" } })).toBe(false);
+    expect(canAnswerChoice({ choices: { answered: "" } })).toBe(false);
+  });
+
+  it("refuses every card restored from history, answered or not", () => {
+    expect(canAnswerChoice({ history: true, choices: { answered: "Alpha" } })).toBe(false);
+    expect(canAnswerChoice({ history: true, choices: {} })).toBe(false);
+  });
+
+  it("ignores a row that is not a card", () => {
+    expect(canAnswerChoice({})).toBe(false);
+    expect(canAnswerChoice({ history: true })).toBe(false);
+  });
+});
 
 describe("answerSeedCard", () => {
   it("marks only the matching card as answered", () => {

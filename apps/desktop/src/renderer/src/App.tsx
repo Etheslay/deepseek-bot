@@ -56,7 +56,7 @@ import {
   type Avatar as AvatarKind,
 } from "./features/avatars/avatar-meta.js";
 import { ChoiceCard, type ChoiceOption } from "./features/questions/choice-card.js";
-import { answerSeedCard } from "./features/questions/choice-answer.js";
+import { answerSeedCard, canAnswerChoice } from "./features/questions/choice-answer.js";
 import { bytesToBase64 } from "./features/chat/attachments.js";
 import { startClipRecorder, type ClipRecorder } from "./features/voice/clip-recorder.js";
 import { clipProblem, encodeWavPcm16 } from "./features/voice/wav.js";
@@ -208,6 +208,11 @@ type Msg = {
    * composer. Absent means live (notices and older call sites).
    */
   origin?: ThreadOrigin;
+  /**
+   * True when this bubble was loaded from chat.history. Live composer turns
+   * leave it unset so the pane can tell a replay from a new message.
+   */
+  history?: boolean;
   /** G6: the message re-enters the thread as 重新生成 / 编辑后重发, weakly labelled. */
   meta?: "regenerate" | "edited_resend";
 };
@@ -1312,7 +1317,9 @@ export function App(): JSX.Element {
       time: message.time,
       system: false,
       origin: "history" as const,
+      history: message.history,
       ...(message.speakerKey !== undefined ? { speakerKey: message.speakerKey } : {}),
+      ...(message.choices !== undefined ? { choices: message.choices } : {}),
     }));
 
   /**
@@ -3059,8 +3066,12 @@ function MessageBubble({
     };
   }, [pickerOpen]);
 
+  const replayCard = msg.history === true && msg.choices !== undefined;
   return (
-    <div className={"msg-row" + (isUser ? " user" : " bot")}>
+    <div
+      className={"msg-row" + (isUser ? " user" : " bot") + (msg.history === true ? " replay" : "")}
+      {...(msg.history === true ? { "data-history": "true" } : {})}
+    >
       <div className="hover-wrap">
         <div
           className={"msg-bubble" + (isUser ? " user" : "")}
@@ -3147,7 +3158,7 @@ function MessageBubble({
               })}
             </div>
           )}
-          {isUser ? (
+          {replayCard ? null : isUser ? (
             msg.text
           ) : (
             <ChatMarkdown
@@ -3162,11 +3173,17 @@ function MessageBubble({
               options={msg.choices.options}
               fallback={msg.choices.other ? { id: "✎", label: t("shell.choiceOther") } : null}
               answered={msg.choices.answered}
-              disabled={lockedChoiceId === msg.id}
+              disabled={lockedChoiceId === msg.id || msg.history === true}
               hint={
                 lockedChoiceId === msg.id ? t("questions.explainBelowPlaceholder") : null
               }
-              onChoose={(option) => onChoice?.(msg.id, option)}
+              {...(canAnswerChoice(msg)
+                ? {
+                    onChoose: (option: ChoiceOption) => {
+                      onChoice?.(msg.id, option);
+                    },
+                  }
+                : {})}
             />
           )}
           {!isUser && EMOJIS.some((e) => (msg.reactions[e] ?? 0) > 0) && (
@@ -3853,6 +3870,10 @@ function BotsPlaceholder({
 
   /** Card rows answer with their own label — no prefix, plain text (FR-1). */
   const handleChoice = (msgId: number, option: ChoiceOption): void => {
+    const target = msgs.find((message) => message.id === msgId);
+    if (target === undefined || !canAnswerChoice(target)) {
+      return;
+    }
     if (option.id === "✎") {
       setClarify({ forKey: me.key, kind: "seed", msgId });
       inputRef.current?.focus();
@@ -4003,7 +4024,11 @@ function BotsPlaceholder({
             (!prev || prev.system || m.time - prev.time > 5 * 60 * 1000);
           return (
             <Fragment key={m.id}>
-              {showTime && <div className="chat-time">{formatChatTime(m.time)}</div>}
+              {showTime && (
+                <div className={"chat-time" + (m.history === true ? " replay" : "")}>
+                  {formatChatTime(m.time)}
+                </div>
+              )}
               {m.notice ? (
                 m.deliverTo ? (
                   <div className="deliver-notice" role="status">

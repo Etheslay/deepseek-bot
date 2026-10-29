@@ -19,6 +19,7 @@ import {
   WORKFLOW_SCHEMA_VERSION,
   validateWorkflowDraft,
   UuidSchema,
+  type ChatMessageMeta,
   type Method,
   type MethodRequest,
   type MethodResponse,
@@ -394,6 +395,21 @@ function formatAskedQuestion(request: AskUserRequest, locale: UiLocale): string 
       `${displayAskUserOption(option, locale).id}. ${displayAskUserOption(option, locale).label}`,
   );
   return ASKED_QUESTION_FRAMING[locale](request.question, lines.join("\n"));
+}
+
+/** Persisted with the question row so a reload restores a collapsed, locked card. */
+function askedChoiceMeta(
+  request: AskUserRequest,
+  locale: UiLocale,
+  answered: string,
+): Extract<ChatMessageMeta, { kind: "choice" }> {
+  return {
+    kind: "choice",
+    question: request.question,
+    options: request.options.map((option) => displayAskUserOption(option, locale)),
+    ...(request.allowOther ? { other: true } : {}),
+    answered,
+  };
 }
 
 function grantResponse(row: GrantRow): {
@@ -1141,11 +1157,13 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
         throw error;
       }
       if (pending !== undefined) {
+        const locale = context.locale.current;
         appendChatMessage(db, {
           botId: bot.id,
           sessionId: callerId,
           role: "assistant",
-          text: formatAskedQuestion(pending, context.locale.current),
+          text: formatAskedQuestion(pending, locale),
+          meta: askedChoiceMeta(pending, locale, result.text),
         });
       }
       const message = appendChatMessage(db, {
