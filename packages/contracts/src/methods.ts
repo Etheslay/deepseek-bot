@@ -143,6 +143,7 @@ export const METHODS = [
   "chat.history",
   "chat.cancel",
   "chat.status",
+  "chat.contextUsage",
   "task.dispatch",
   "task.list",
   "task.cancel",
@@ -690,6 +691,27 @@ export const METHOD_CONTRACTS = {
       stage: z.enum(["idle", "preparing", "thinking", "tool"]),
       toolName: z.string().min(1).max(64).optional(),
       startedAt: IsoDateTimeUtcSchema.optional(),
+    }),
+  },
+  /**
+   * Context meter (TASK_CONTEXT_METER.md): read-only usage gauge for the
+   * bot's single chat session. `percent` compares the context the NEXT turn
+   * would assemble against the host's context window: the last completed
+   * turn's real input tokens when available (estimated=false), otherwise a
+   * chars/4 estimate (estimated=true); after a background compression the
+   * estimate reflects the summarized prompt. `compressedAt` is when the
+   * active session summary was written; `compressing` reports a compression
+   * turn in flight. Read-only display data — it never gates a send.
+   */
+  "chat.contextUsage": {
+    request: z.object({ botId: UuidSchema }),
+    response: z.object({
+      percent: z.int().min(0).max(100),
+      usedTokens: z.int().min(0),
+      windowTokens: z.int().min(1),
+      estimated: z.boolean(),
+      compressedAt: IsoDateTimeUtcSchema.nullable(),
+      compressing: z.boolean(),
     }),
   },
   /**

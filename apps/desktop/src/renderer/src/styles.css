@@ -7520,6 +7520,55 @@ select:focus-visible {
   outline-offset: 2px;
 }
 
+/* ---------- 上下文圆圈（TASK_CONTEXT_METER.md） ----------
+   用量展示专用：不承载任何开关，悬停读百分比。 */
+.context-ring {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  flex: none;
+  cursor: default;
+}
+
+.context-ring svg {
+  width: 20px;
+  height: 20px;
+}
+
+.context-ring-track {
+  fill: none;
+  stroke: var(--border);
+  stroke-width: 2.4;
+}
+
+.context-ring-fill {
+  fill: none;
+  stroke: var(--accent, #3b82f6);
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  transition: stroke-dasharray 240ms ease;
+}
+
+.context-ring.warn .context-ring-fill {
+  stroke: var(--runs, #ec4899);
+}
+
+.context-ring-value {
+  position: absolute;
+  font-size: 0.42rem;
+  font-weight: 700;
+  color: var(--muted);
+  pointer-events: none;
+}
+
+.context-ring:focus-visible {
+  outline: 2px solid #8ab4ff;
+  outline-offset: 2px;
+}
+
 /* ---------- D24 保险库分区（备份/恢复） ---------- */
 .vault-note {
   margin: 0 0 8px;

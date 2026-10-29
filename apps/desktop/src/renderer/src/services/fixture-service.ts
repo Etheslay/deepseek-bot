@@ -386,6 +386,17 @@ export function createFixtureService(): DesktopService {
       // only against a real host).
       history: async (botId, limit) => fixtureChatHistory(botId, limit),
 
+      // No host meter in the browser preview: an honest empty gauge, not a
+      // fabricated percentage.
+      contextUsage: async () => ({
+        percent: 0,
+        usedTokens: 0,
+        windowTokens: 0,
+        estimated: true,
+        compressedAt: null,
+        compressing: false,
+      }),
+
       async importAttachment(botId, file) {
         requireBot(botId);
         if (file.bytes.byteLength === 0) {

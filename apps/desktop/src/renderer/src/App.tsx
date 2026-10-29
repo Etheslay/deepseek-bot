@@ -27,7 +27,7 @@ import { SettingsNav, type SettingsSectionKey } from "./features/settings/settin
 import { BotForm } from "./features/bots/bot-form.js";
 import { nextBotName } from "./features/bots/bot-names.js";
 import { CustomSelect } from "./components/custom-select.js";
-import type { BotDraft, ChatHistoryRow } from "./services/desktop-service.js";
+import type { BotDraft, ChatHistoryRow, ContextUsageView } from "./services/desktop-service.js";
 import { useService } from "./services/service-context.jsx";
 import { METHOD_CONTRACTS, VOICE_MAX_CLIP_SECONDS, type VoiceStatus } from "@deepseek-bot/contracts";
 import {
@@ -83,6 +83,7 @@ import {
   type AttachmentDraft,
 } from "./features/chat/attachments.js";
 import { GlobalSearch } from "./features/search/global-search.js";
+import { ContextRing } from "./features/chat/context-ring.js";
 import {
   deepThinkingTargetId,
   isDeepThinkingEnabled,
@@ -3373,6 +3374,47 @@ function BotsPlaceholder({
   const inputRef = useRef<HTMLInputElement | null>(null);
   const me = bots.find((b) => b.key === selectedBot);
 
+  /** Context circle (TASK_CONTEXT_METER.md): reload the gauge when the bot
+   * changes, after every settled turn, and once more while a background
+   * compression is running so the percentage drops as soon as it lands. */
+  const [contextUsage, setContextUsage] = useState<ContextUsageView | null>(null);
+  const contextUsageRequest = useRef(0);
+  const meBotId = me?.bot.id;
+  const refreshContextUsage = useCallback((): void => {
+    if (meBotId === undefined) {
+      return;
+    }
+    const requestId = contextUsageRequest.current + 1;
+    contextUsageRequest.current = requestId;
+    service.chat
+      .contextUsage(meBotId)
+      .then((view) => {
+        if (contextUsageRequest.current !== requestId) {
+          return;
+        }
+        setContextUsage(view);
+        if (view.compressing) {
+          setTimeout(() => {
+            if (contextUsageRequest.current !== requestId) {
+              return;
+            }
+            service.chat
+              .contextUsage(meBotId)
+              .then((later) => {
+                if (contextUsageRequest.current === requestId) {
+                  setContextUsage(later);
+                }
+              })
+              .catch(() => undefined);
+          }, 2_000);
+        }
+      })
+      .catch(() => undefined);
+  }, [service, meBotId]);
+  useEffect(() => {
+    refreshContextUsage();
+  }, [refreshContextUsage]);
+
   /** @Name chips link to any known bot; color follows its avatar. */
   const mentionTable = useMemo<MentionTable>(() => {
     const table: MentionTable = new Map();
@@ -3600,6 +3642,7 @@ function BotsPlaceholder({
         if (!settled) {
           onReplyCompleted(me.bot.id, me.bot.name);
         }
+        refreshContextUsage();
       },
     });
     streamRef.current = started;
@@ -4290,6 +4333,7 @@ function BotsPlaceholder({
             {t("reasoner.toggleLabel")}
           </button>
         </div>
+        <ContextRing usage={contextUsage} />
         {(() => {
           const mic = transcribeButton(voiceStatus, voicePhase);
           const title =

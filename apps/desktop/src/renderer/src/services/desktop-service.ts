@@ -76,6 +76,19 @@ export type GlobalSearchHitView = {
   at: string | null;
 };
 
+/**
+ * Context meter (TASK_CONTEXT_METER.md): one read-only gauge for the bot's
+ * chat session. Display data only — it never gates a send.
+ */
+export type ContextUsageView = {
+  percent: number;
+  usedTokens: number;
+  windowTokens: number;
+  estimated: boolean;
+  compressedAt: string | null;
+  compressing: boolean;
+};
+
 export type ToolStatus = {
   toolName: string;
   state: "requested" | "running" | "succeeded" | "failed";
@@ -173,6 +186,11 @@ export interface DesktopService {
      * and returns an empty list.
      */
     history(botId: string, limit?: number): Promise<ChatHistoryRow[]>;
+    /**
+     * chat.contextUsage: the gauge behind the composer context circle. The
+     * fixture has no Host meter and reports an empty gauge.
+     */
+    contextUsage(botId: string): Promise<ContextUsageView>;
     /**
      * Stage the picked bytes and import them through the tool gateway.
      * The real host waits for fs.write grant or approval before writing.

@@ -154,7 +154,7 @@ export class ChatManager {
     text: string,
     history: ReadonlyArray<ChatHistoryEntry> = [],
     skills: readonly ChatSkillInjection[] = [],
-    options: { primitive?: boolean } = {},
+    options: { primitive?: boolean; summary?: string } = {},
   ): Promise<TurnOutcome & { sessionId: string }> {
     if (this.closed)
       throw new EngineError({
@@ -293,7 +293,10 @@ export class ChatManager {
         );
         registered = true;
       }
-      const prompt = this.composePrompt(bot, text, history, skills, options.primitive === true);
+      const prompt = this.composePrompt(bot, text, history, skills, {
+        primitive: options.primitive === true,
+        ...(options.summary !== undefined ? { summary: options.summary } : {}),
+      });
       const outcome = await attempt.runTurn(sessionId, prompt, controller.signal, observeEvent);
       session.lastSessionId = sessionId;
       /*
@@ -338,6 +341,71 @@ export class ChatManager {
   }
 
   /**
+   * Context-meter compression turn (TASK_CONTEXT_METER.md): one bare model
+   * turn with the given prompt. Nothing lands in `chat_messages`, no
+   * approval gate is registered (the summarization prompt calls no tools),
+   * and the turn's own usage still flows through `onTurnUsage` — it is a
+   * real token cost and the billing page stays honest about it.
+   */
+  async compressTurn(bot: Bot, prompt: string): Promise<string> {
+    if (this.closed)
+      throw new EngineError({
+        code: "RUNTIME_UNAVAILABLE",
+        message: "chat runtime is closed",
+        retryable: false,
+      });
+    const controller = new AbortController();
+    let attempt: HarnessAttempt | null = null;
+    let turn: ApplicationToolTurn | null = null;
+    const sessionId = `chat-summary:${bot.id}:${randomUUID()}`;
+    try {
+      const inputs = await this.options.resolveBotInputs(bot);
+      this.tools.prepareProfile();
+      turn = this.tools.openTurn(
+        sessionId,
+        { id: chatSessionIdFor(bot.id), botId: bot.id, sessionId: chatSessionIdFor(bot.id) },
+        controller.signal,
+        [],
+      );
+      await turn.prepare?.();
+      const baseOptions = this.buildOptions(inputs);
+      attempt = new HarnessAttempt({ ...baseOptions, env: { ...baseOptions.env, ...turn.env } });
+      await attempt.start({
+        cwd: inputs.workspacePath,
+        provider: this.options.provider ?? "deepseek-official",
+        model: inputs.profile.model,
+        ...(inputs.profile.limits?.maxTokens !== undefined
+          ? { maxTokens: inputs.profile.limits.maxTokens }
+          : {}),
+      });
+      await turn.waitReady();
+      const turnUsage = new TurnUsageAccumulator();
+      const outcome = await attempt.runTurn(
+        sessionId,
+        prompt,
+        controller.signal,
+        (event: SessionEventEnvelope) => {
+          turnUsage.observe(event);
+        },
+      );
+      try {
+        this.onTurnUsage?.({
+          ...turnUsage.finish(prompt, outcome.finalResponse),
+          botId: bot.id,
+          sessionId,
+        });
+      } catch {
+        /* usage accounting is best-effort */
+      }
+      return outcome.finalResponse;
+    } finally {
+      controller.abort();
+      if (turn !== null) await turn.close();
+      if (attempt !== null) await attempt.dispose().catch(() => undefined);
+    }
+  }
+
+  /**
    * Live progress of a bot's turn, for the chat UI's status line. Only real
    * harness events feed it; when no turn is running the bot reports idle.
    */
@@ -373,14 +441,20 @@ export class ChatManager {
    * instructions, no history replay, only the explicitly attached skill block,
    * one terse directive and this message. Persisted rows and history replay
    * are untouched — the flag shapes this prompt only.
+   *
+   * `summary` (context meter) folds everything before a watermark into one
+   * digest block; the caller still passes only the post-watermark rows as
+   * `history`, so the replay shrinks without deleting anything.
    */
   private composePrompt(
     bot: Bot,
     text: string,
     history: ReadonlyArray<ChatHistoryEntry>,
     skills: readonly ChatSkillInjection[],
-    primitive = false,
+    opts: { primitive?: boolean; summary?: string } = {},
   ): string {
+    const primitive = opts.primitive === true;
+    const summary = opts.summary?.trim();
     const parts: string[] = [];
     if (!primitive && bot.instructions.trim().length > 0) {
       parts.push(bot.instructions.trim());
@@ -388,6 +462,9 @@ export class ChatManager {
     const skillBlock = composeSkillBlock(skills);
     if (skillBlock.length > 0) {
       parts.push(skillBlock);
+    }
+    if (!primitive && summary !== undefined && summary.length > 0) {
+      parts.push(`【更早对话摘要】\n${summary}`);
     }
     if (primitive) {
       parts.push("【原始人模式】只回答下面这一步：不铺垫、不复述上下文、不做总结；直接给最短可用的答案。");
