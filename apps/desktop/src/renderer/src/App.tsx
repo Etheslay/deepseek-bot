@@ -34,6 +34,7 @@ import {
   emptyStream,
   failureMessage,
 } from "./features/chat/chat-reducer.js";
+import { statusLabel } from "./features/chat/task-feed.js";
 import {
   runChatStream,
   type StreamStateForBot,
@@ -229,6 +230,11 @@ type AnsweredQuestionMap = Record<string, AnsweredQuestion>;
 
 type MenuState = { x: number; y: number; botKey: number };
 type DialogState = { type: "newGroup"; moveBot: number | null };
+
+/** 配对视图（两个 bot 之间的真实往来记录）：消息行或状态行。 */
+type PairRecord =
+  | { kind: "turn"; speakerKey: number; text: string; at: string }
+  | { kind: "notice"; text: string; at: string };
 
 function pairKeyOf(a: number, b: number): string {
   return a < b ? `${a}|${b}` : `${b}|${a}`;
@@ -3453,6 +3459,97 @@ function BotsPlaceholder({
   const inputRef = useRef<HTMLInputElement | null>(null);
   const me = bots.find((b) => b.key === selectedBot);
 
+  /**
+   * 配对视图的真实往来记录（点击消息往来/交付通知进入）：用 task.list + 双方
+   * chat.history 按 dispatch/task_notice 元数据分段装配，替代旧演练对话。
+   */
+  const [pairRecords, setPairRecords] = useState<PairRecord[] | null>(null);
+  useEffect(() => {
+    if (detailOther === null || me === undefined) {
+      if (detailOther === null) setPairRecords(null);
+      return;
+    }
+    const peer = bots.find((bot) => bot.key === detailOther);
+    if (peer === undefined) {
+      setPairRecords([]);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const [tasks, myRows, peerRows] = await Promise.all([
+          service.tasks.list({}),
+          service.chat.history(me.bot.id, 200),
+          service.chat.history(peer.bot.id, 200),
+        ]);
+        if (cancelled) return;
+        const who = (botId: string): { key: number; name: string } | null => {
+          if (botId === me.bot.id) return { key: me.key, name: me.bot.name };
+          if (botId === peer.bot.id) return { key: peer.key, name: peer.bot.name };
+          return null;
+        };
+        // 按 dispatch/task_notice 元数据把一侧聊天切成任务段：段内 =
+        // 派发指令（fromBot 说了什么）+ 工作者的回复；段外不计入。
+        const segment = (rows: ChatHistoryRow[]): Map<string, ChatHistoryRow[]> => {
+          const map = new Map<string, ChatHistoryRow[]>();
+          let current: string | null = null;
+          for (const row of rows) {
+            if (row.meta?.kind === "dispatch") current = row.meta.taskId;
+            if (row.meta?.kind === "task_notice") {
+              const list = map.get(row.meta.taskId) ?? [];
+              list.push(row);
+              map.set(row.meta.taskId, list);
+              continue;
+            }
+            if (current === null) continue;
+            const list = map.get(current) ?? [];
+            list.push(row);
+            map.set(current, list);
+          }
+          return map;
+        };
+        const rows: PairRecord[] = [];
+        const pairTasks = tasks.tasks
+          .filter(
+            (task) =>
+              (task.fromBotId === me.bot.id && task.toBotId === peer.bot.id) ||
+              (task.fromBotId === peer.bot.id && task.toBotId === me.bot.id),
+          )
+          .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+        for (const task of pairTasks) {
+          const manager = who(task.fromBotId);
+          const worker = who(task.toBotId);
+          if (manager === null || worker === null) continue;
+          const history = task.toBotId === peer.bot.id ? peerRows : myRows;
+          const segmentRows = segment(history).get(task.id) ?? [];
+          for (const row of segmentRows) {
+            if (row.meta?.kind === "task_notice") {
+              const summary =
+                row.meta.resultSummary !== undefined && row.meta.resultSummary.length > 0
+                  ? `：${row.meta.resultSummary}`
+                  : "";
+              rows.push({
+                kind: "notice",
+                text: `${statusLabel(row.meta.status)}${summary}`,
+                at: row.at,
+              });
+              continue;
+            }
+            const speaker = row.role === "assistant" ? worker : manager;
+            rows.push({ kind: "turn", speakerKey: speaker.key, text: row.text, at: row.at });
+          }
+        }
+        rows.sort((a, b) => a.at.localeCompare(b.at));
+        if (!cancelled) setPairRecords(rows);
+      } catch {
+        if (!cancelled) setPairRecords([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [detailOther, bots, me, service]);
+
   /** Context circle (TASK_CONTEXT_METER.md): reload the gauge when the bot
    * changes, after every settled turn, and once more while a background
    * compression is running so the percentage drops as soon as it lands. */
@@ -3546,7 +3643,7 @@ function BotsPlaceholder({
 
   if (detailOther !== null) {
     const peer = bots.find((bot) => bot.key === detailOther);
-    const turns = pairTranscripts[pairKeyOf(me.key, detailOther)] ?? [];
+    const records = pairRecords ?? [];
     return (
       <div className="pair-view">
         <header className="pair-head">
@@ -3558,61 +3655,71 @@ function BotsPlaceholder({
           </span>
         </header>
         <div className="pair-body">
-          {turns.map((turn) => {
-            const speaker = bots.find((bot) => bot.key === turn.speakerKey);
-            return (
-              <div className="pair-turn" key={turn.id}>
-                <AvatarView avatar={speaker?.avatar ?? me.avatar} variant="inline" size={30} />
-                <div className="pair-turn-main">
-                  <span
-                    className="pair-speaker"
-                    style={{ color: avatarColor(speaker?.avatar ?? me.avatar) }}
-                  >
-                    {speaker?.bot.name ?? "?"}
-                  </span>
-                  <div className="pair-bubble-row">
-                    <div className="msg-bubble">{turn.text}</div>
-                    <div className="pair-actions">
-                      <button
-                        type="button"
-                        className="msg-icon-btn"
-                        title={t("shell.quote")}
-                        aria-label={t("shell.quote")}
-                        onClick={() => {
-                          onPairQuote(speaker?.bot.name ?? "?", turn.text);
-                          setDetailOther(null);
-                        }}
-                      >
-                        <svg viewBox="0 0 24 24" aria-hidden="true">
-                          <path d="M9.5 14.5 4 9l5.5-5.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-                          <path d="M4 9h10a6 6 0 0 1 6 6v5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-                        </svg>
-                      </button>
-                      <button
-                        type="button"
-                        className="msg-icon-btn"
-                        title={t("shell.copy")}
-                        aria-label={t("shell.copy")}
-                        onClick={() => onCopy(turn.text)}
-                      >
-                        <svg viewBox="0 0 24 24" aria-hidden="true">
-                          <rect x="9" y="9" width="11" height="11" rx="2.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
-                          <path
-                            d="M5 15H4.5A1.5 1.5 0 0 1 3 13.5v-9A1.5 1.5 0 0 1 4.5 3h9A1.5 1.5 0 0 1 15 4.5V5"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="1.6"
-                            strokeLinecap="round"
-                          />
-                        </svg>
-                      </button>
+          {records.map((row, index) =>
+            row.kind === "notice" ? (
+              <div className="sys-line" key={`notice-${index}`}>
+                {row.text}
+              </div>
+            ) : (() => {
+              const speaker = bots.find((bot) => bot.key === row.speakerKey);
+              return (
+                <div className="pair-turn" key={`turn-${index}`}>
+                  <AvatarView avatar={speaker?.avatar ?? me.avatar} variant="inline" size={30} />
+                  <div className="pair-turn-main">
+                    <span
+                      className="pair-speaker"
+                      style={{ color: avatarColor(speaker?.avatar ?? me.avatar) }}
+                    >
+                      {speaker?.bot.name ?? "?"}
+                    </span>
+                    <div className="pair-bubble-row">
+                      <div className="msg-bubble">{row.text}</div>
+                      <div className="pair-actions">
+                        <button
+                          type="button"
+                          className="msg-icon-btn"
+                          title={t("shell.quote")}
+                          aria-label={t("shell.quote")}
+                          onClick={() => {
+                            onPairQuote(speaker?.bot.name ?? "?", row.text);
+                            setDetailOther(null);
+                          }}
+                        >
+                          <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M9.5 14.5 4 9l5.5-5.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                            <path d="M4 9h10a6 6 0 0 1 6 6v5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                          </svg>
+                        </button>
+                        <button
+                          type="button"
+                          className="msg-icon-btn"
+                          title={t("shell.copy")}
+                          aria-label={t("shell.copy")}
+                          onClick={() => onCopy(row.text)}
+                        >
+                          <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <rect x="9" y="9" width="11" height="11" rx="2.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
+                            <path
+                              d="M5 15H4.5A1.5 1.5 0 0 1 3 13.5v-9A1.5 1.5 0 0 1 4.5 3h9A1.5 1.5 0 0 1 15 4.5V5"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="1.6"
+                              strokeLinecap="round"
+                            />
+                          </svg>
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            );
-          })}
-          {turns.length === 0 && <div className="sys-line">{t("shell.noExchangesYet")}</div>}
+              );
+            })(),
+          )}
+          {records.length === 0 && (
+            <div className="sys-line">
+              {pairRecords === null ? t("shell.loadingRecords") : t("shell.noExchangesYet")}
+            </div>
+          )}
         </div>
         <div className="pair-foot">
           <button type="button" className="pill-btn" onClick={() => setDetailOther(null)}>

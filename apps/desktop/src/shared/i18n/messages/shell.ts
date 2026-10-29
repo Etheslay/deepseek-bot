@@ -113,6 +113,7 @@ export const shellMessages = {
   "shell.loggedOutPlaceholder": { zh: "已退出登录（占位，未接入账号系统）", en: "Signed out (placeholder, no account system yet)" },
   "shell.markRead": { zh: "标为已读", en: "Mark read" },
   "shell.markUnread": { zh: "标为未读", en: "Mark unread" },
+  "shell.loadingRecords": { zh: "正在读取往来记录…", en: "Loading the exchange history…" },
   "shell.me": { zh: "我", en: "Me" },
   "shell.messageActions": { zh: "消息操作", en: "Message actions" },
   "shell.messageBot": { zh: "给 {0} 发消息", en: "Message {0}" },

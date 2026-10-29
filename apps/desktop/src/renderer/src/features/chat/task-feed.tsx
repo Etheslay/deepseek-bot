@@ -36,7 +36,7 @@ function taskMoment(task: TaskView): string {
   return task.finishedAt ?? task.startedAt ?? task.createdAt;
 }
 
-function statusLabel(status: TaskView["status"]): string {
+export function statusLabel(status: TaskView["status"]): string {
   const keys: Record<TaskView["status"], string> = {
     queued: "runs.queued",
     running: "shell.toolRunning",
