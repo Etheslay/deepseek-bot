@@ -7,6 +7,11 @@
 - 发现：① cm P2——`compressTurn` 不取每 bot 忙锁，压缩与用户发送真并发，任务书/报告「新 sends 排队（RATE_LIMITED）」断言失实（改锁或改文档，归属人定）；② d14 P3——`initialize` 仅首次执行，主题切换后新图仍用旧主题，与任务书验收「渲染时刻主题决定配色」不符（补 initialize 或改文档）；③ d17 P3 备忘——App.tsx 两处直调 preload 绕过服务层（功能等价）。详见 [PREMERGE-REVIEW-2026-10-29](docs/reports/PREMERGE-REVIEW-2026-10-29.md)。
 - 报告随分支 `feature/premerge-review-973a`（自 develop `5740049`）入库；推送与 PR 由负责人确认。
 
+## 2026-10-29：在途台账四更（纯文档，最小刷新）
+
+- PR #142 合入后：develop = `5740049`；三条在途分支 tip 未动，落后计数刷新（context-meter 2/8、d14-mermaid 2/8、d17-skill-host-store 3/27）；冲突面复算：前两条零冲突，d17-store 仍 1 文件（CONTRACTS.md）。已合入行补 #141/#142。
+- 纯 Markdown；`git diff --check` 与本地链接检查通过。
+
 ## 2026-10-29：DEVELOPMENT_PLAN §6 叙事一致性修正（纯文档）
 
 - 三处被后续交付推翻的陈述修正：G3（原生聊天 D08 审批，PR #125）不再是“后续范围”；知识导入上限 16 KiB 已被 D18 收尾（PR #63，256 KiB 知识文档 + knowledge_search + 保留策略）取代；“工作流模板仍未做”改为 G11'（PR #127）已交付本地模板库。
