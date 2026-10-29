@@ -1,5 +1,13 @@
 # 工作记录
 
+## 2026-10-29：审查发现项处置两片 + 台账六次刷新（本地未推送）
+
+- 用户（Etheslay）要求重新定位进度并继续推进；origin/develop = `9d3ac5b`（PR #160），远程在途清零。盘点结论：G4 付费链验收（#159）与 D21' 真机指针/按键（#160）已由其它模型入档；Etheslay 线剩余为两项审查发现、#150/#151 报告补录决定、G1' ui.*（等拍板 #1）、语音实机联调、D13/D23 收官、大量自审签署。
+- `feature/d14-mermaid-theme-reinit`（`9058196`）：修 PREMERGE-REVIEW §2.2 P3——`mermaid.initialize` 原来只在懒加载执行一次，主题切换后新图沿用旧主题（缓存键却标新主题）。修复：新增 `initializedTheme` 跟踪，渲染取模块时主题不一致则重跑 initialize（strict 等配置不变）；切回曾用主题命中该主题缓存不触碰全局配置。新增测试钉住含缓存语义；desktop 74 文件 655 例、lint、typecheck、`git diff --check` 全绿；报告 `docs/reports/D14-mermaid-theme-report.md`。
+- `feature/context-meter-concurrency-docs`（`d9b89cd`）：处置 PREMERGE-REVIEW §2.1 P2，选「改文档」——核实 `compressTurn` 不读不设每 bot 忙锁（busy 仅约束 send，重入由 `compressingChats` 防护），任务书 §5 与报告 §4 的「忙锁下排队」断言改为如实记录真并发与限流/用量行交错/`chat.contextUsage` 最近行抖动风险；不改锁：静默后台维护回合不应把 RATE_LIMITED 递给用户，且审查已确认数据完整性不受影响（upsert 覆盖、水位快照）。
+- `feature/gap-audit-refresh6`：GAP_AUDIT 六次刷新（§0 六次总览、G4 归档+残留、缺口地图、§5 D21、§7.9 处置、§8 批次、红线行）；SPRINTS §4 修正两行过期「切片进行中」、补 D21 真机记录与两个本地切片行、§5 A6 更新、§10 六次清点；progress 本条。`git diff --check` 通过。
+- 两分支按用户指示**未推送**，PR 标题/内容已备；#150/#151 报告补录与拍板 #1（ui.* 清单）待用户定。
+
 ## 2026-10-29：在途清零收官（纯文档）
 
 - #152（D17' 技能库进 Host，协议 0.11）、#153（D14 mermaid 补齐）、#154（四次刷新）均合入，develop = `d1cb448`；远程在途分支清零。
