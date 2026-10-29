@@ -56,7 +56,12 @@ import {
   type Avatar as AvatarKind,
 } from "./features/avatars/avatar-meta.js";
 import { ChoiceCard, type ChoiceOption } from "./features/questions/choice-card.js";
-import { answerSeedCard, canAnswerChoice } from "./features/questions/choice-answer.js";
+import {
+  answerSeedCard,
+  canAnswerChoice,
+  findPendingChoiceCard,
+} from "./features/questions/choice-answer.js";
+import { onboardingCardFor } from "./features/bots/onboarding.js";
 import { ComposerMic } from "./features/voice/composer-mic.js";
 import { appendTranscript } from "./features/voice/hold-to-talk.js";
 import { speakButton } from "./features/voice/voice-ui.js";
@@ -105,6 +110,7 @@ import {
   type NotificationPrefs,
 } from "./features/settings/settings-store.js";
 import {
+  currentLanguage,
   formatFullDateTime,
   formatDate,
   formatTime,
@@ -1266,25 +1272,21 @@ export function App(): JSX.Element {
     setMenuDialog(null);
   };
 
+  /**
+   * Onboarding (对标学习): a freshly created bot greets the user by name and
+   * offers a choice card whose options are derived from the name — no model
+   * call, deterministic, and the trailing 「我自己说」/「其他」 always let the
+   * user answer in their own words. One message: greeting text with the card
+   * attached underneath.
+   */
   const welcomeThread = (botKey: number, botName: string): Msg[] => {
     const now = Date.now();
+    const card = onboardingCardFor(botName, currentLanguage());
     return [
       {
         id: botKey,
         from: "bot",
-        text: t("shell.welcomeMessage", [botName]),
-        quote: null,
-        reactions: {},
-        mine: [],
-        time: now,
-        system: false,
-        speakerKey: botKey,
-        origin: "seed",
-      },
-      {
-        id: botKey + 0.5,
-        from: "bot",
-        text: t("shell.welcomeChoicesHint", [botName]),
+        text: card.greeting,
         quote: null,
         reactions: {},
         mine: [],
@@ -1293,13 +1295,9 @@ export function App(): JSX.Element {
         speakerKey: botKey,
         origin: "seed",
         choices: {
-          question: t("shell.choicesQuestion"),
-          options: [
-            { id: "A", label: t("shell.choiceDeepThinking") },
-            { id: "B", label: t("shell.choiceDraftWorkflow") },
-            { id: "C", label: t("shell.choiceRunMonitor") },
-          ],
-          other: true,
+          question: card.question,
+          options: card.options,
+          other: card.other,
         },
       },
     ];
@@ -3771,6 +3769,13 @@ function BotsPlaceholder({
     if (clarify !== null && clarify.forKey === me.key && text) {
       answerClarify(clarify, text);
       return;
+    }
+    // Onboarding (对标学习): a free-text reply retires an open seed card —
+    // the card dims into its answered row instead of nagging, and the reply
+    // itself flows on as a normal turn.
+    const pendingCard = findPendingChoiceCard(msgs);
+    if (pendingCard !== undefined) {
+      onAnswerSeedCard(me.key, pendingCard.id, text);
     }
     void sendWithAttachments(text);
   };
