@@ -37,7 +37,7 @@ describe("transcribeButton", () => {
     expect(button.reasonKey).toBe("voice.transcribeUnavailable");
   });
 
-  it("becomes the stop button while recording", () => {
+  it("stays enabled and shows the recording label while a clip is open", () => {
     const button = transcribeButton(bothReady, "recording");
     expect(button.disabled).toBe(false);
     expect(button.labelKey).toBe("voice.recording");

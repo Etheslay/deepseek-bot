@@ -116,7 +116,7 @@ develop 一天合入 12 个 PR，原审计多项缺口就此关闭：#73 深度�
 | ~~G11'~~ | D17 工作流模板库 | PR #127；`features/workflow-editor/template/workflow-templates.ts` 冻结 schema 剥离走私策略字段 + Host 端不落库用例（[报告](reports/G11-workflow-template-library-report.md)） |
 | ~~D20'~~ | 聊天内自动化状态通知条 | PR #134/#135；meta 行（kind automation）+ `features/automation/chat-automation-notice.tsx`（错过明细/启停/待评审，20 秒轮询、静默降级，契约零改动）（[报告](reports/D20-chat-notice-report.md)） |
 | ~~G13~~ | 上下文用量可视 + 80% 自动压缩（超额） | PR #138；`chat.contextUsage` + 迁移 `0023-chat-summaries` + `compressTurn`（空工具面、无审批、用量照记）+ 渲染层 context-ring；历史行不删；**审查 §2.1 P2（并发断言）未处理随合并入库**；真实模型摘要质量与真机未验证（[报告](reports/CONTEXT_METER-report.md)） |
-| ~~D27'~~ | 语音桌面接线 | PR #151；`features/voice/`（wav 编码/clip-recorder/voice-ui 门控）+ App.tsx 麦克风（转写只填输入框不自动发送、20s 停）与逐条朗读按钮；「按住说话/自动断句」未做（现为点击录音 20 秒上限）；真机未验证 |
+| ~~D27'~~ | 语音桌面接线 | PR #151；`features/voice/`（wav 编码/clip-recorder/voice-ui 门控）+ 逐条朗读按钮。按住说话在 `feature/d27-hold-to-talk-220a`：松开后 `voice.transcribe` 只填输入框、不自动发送，20 秒上限与 `voice.status` 门控保留；自动断句未做；真机未验证 |
 | — | stream-pacer 流式回放节奏（无编号 UX 切片） | PR #150；`features/chat/stream-pacer.ts` 纯呈现层（按行/句自适应、≤7s），修 finish 即 resolve 与取消定时器泄漏；无入库报告 |
 | — | D17' 技能库进 Host（协议 0.11） | PR #152；`skillLibrary.get/save` + settings KV `skills.library.v1` 整库校验 + 一次性迁移（composer 数组形态绝不迁移）+ 降级读 localStorage；审查 §2.3 备忘未处理（不阻塞）；真机未验证（[报告](reports/D17-skill-host-store-report.md)） |
 | — | D14 补遗：本地 mermaid 渲染 | PR #153；strict + DOMPurify svg + shadow DOM、动态 import chunk、失败回退保原文；**审查 §2.2 P3 未处理随合并入库**；真机截图未做（[报告](reports/D14-mermaid-report.md)） |
@@ -204,7 +204,7 @@ Ctrl+K 浮层经 `search.global` 检索 Host 全库：250ms 防抖 + latest-ref�
 - **D20**：计划内切片全部交付——聊天内状态通知条与错过可见已由 PR #134/#135 补齐（触发器、规则、评审队列、规则状态历史、重复防护、桌面评审页此前已交付：PR #66/#84/#85/#87 + D20 各报告；"同一事件不第二次启动"由本地自动启动切片完成）；
 - **D21 剩余**：真实键鼠输入复核（真实窗口截图/OCR 已有真机证据：[D21-windows-acceptance 报告](reports/D21-windows-acceptance-report.md) §4，PR #93；D21-device-input 报告自记"没有在这台 Linux 环境上执行真实 Windows 键鼠或复核真实窗口截图/OCR"；输入闸门与本地记录已交付：PR #88/#89/#104；键鼠真机复核与真实设备动作验收合并排期）；
 - **D22**：全部完成（双语/托盘/通知/Chrome 导入 PR #75；硬件加速 `b57d46b`）；
-- **D27**：计划内切片全部交付——桌面语音接线由 PR #151 交付（麦克风录音转写只填输入框、逐条朗读、`voice.status` 门控禁用）；「按住说话/自动断句」交互未做（现为点击录音 20 秒上限），与原验收措辞的差异由归属人自审确认；
+- **D27**：计划内切片全部交付——桌面语音接线由 PR #151 交付（麦克风录音转写只填输入框、逐条朗读、`voice.status` 门控禁用）。按住说话由 `feature/d27-hold-to-talk-220a` 接上（松开填入输入框，不自动发送，20 秒上限保留）；自动断句仍未做，与原验收措辞的差异由归属人自审确认；
 - **D13 性能预算实测**（PRD §6：未测量不得宣称达标）、**D23 平台收官**：按 DEVELOPMENT_PLAN §9 顺延至阶段二收官，与发布验收合并执行。
 
 ## 6. P3：需拍板后立项的产品增量
