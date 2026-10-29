@@ -109,6 +109,7 @@
 | 上下文圆圈 + 80% 自动压缩（G13） | **已交付（PR #138）**：`chat.contextUsage` + 迁移 `0023-chat-summaries` + 后台压缩回合（无工具面、用量照记、历史行不删）；合并前审查 §2.1 P2（并发断言失实）待归属人处理（GAP_AUDIT §7.9） | `feature/context-meter` → PR #138 `a6c7cb5` | [CONTEXT_METER-report](reports/CONTEXT_METER-report.md) |
 | stream-pacer 流式回放节奏 | **已交付（PR #150）**：按行/句自适应回放（纯呈现层，契约零改动），修 finish 即 resolve 与取消定时器泄漏；无入库报告（PR 正文为准，GAP_AUDIT §7.9） | `feature/streaming-reply` → PR #150 `6659d29` | —（PR 正文） |
 | D27' 语音桌面接线 | **已交付（PR #151）**：麦克风转写只填输入框（20s 自动停）+ 逐条朗读按钮 + `voice.status` 门控；「按住说话/自动断句」未做；无入库报告 | `feature/voice-ui-wiring` → PR #151 `db64e01` | —（PR 正文） |
+| D27'' 按住说话 | **本分支**：麦克风改为按住录音、松开后 `voice.transcribe` 填入输入框（不自动发送）；保留 `voice.status` 门控与 20 秒上限；不自动断句，不改 Host 语音后端 | `feature/d27-hold-to-talk-220a` | —（PR 正文） |
 | D17' 技能库进 Host | **已交付（PR #152）**：`skillLibrary.get/save`（协议 0.11）、settings KV 行整库校验、一次性迁移（composer 数组形态绝不迁移）、降级读 localStorage；审查 §2.3 备忘未处理（不阻塞） | `feature/d17-skill-host-store` → PR #152 `cf22763` | [D17-skill-host-store-report](reports/D17-skill-host-store-report.md) |
 | D14 补遗：本地 mermaid 渲染 | **已交付（PR #153）**：strict + DOMPurify svg profile + shadow DOM 三层防线、动态 import 独立 chunk、失败回退保原文；**审查 §2.2 P3（主题切换后新图仍用旧主题）未处理随合并入库** | `feature/d14-mermaid` → PR #153 `6299994` | [D14-mermaid-report](reports/D14-mermaid-report.md) |
 | G3 原生聊天 D08 审批（后端） | **已交付（PR #125）**：ChatNativeGate 把桥转来的原生工具审批路由到 D16 检查点（fs/exec 能力 + 聊天网络缝 + mcp.call），ask 落既有 AppApproval 卡面（10 分钟 TTL、一次决定）；桌面渲染复用现链路，真实 Harness 端到端归 G4/真机 | `feature/g3-chat-native-approvals-9d4b` → PR #125 `473ec67` | [G3-chat-native-approvals-report](reports/G3-chat-native-approvals-report.md) |
@@ -199,7 +200,7 @@
 | 聊天 | 用户气泡颜色 | **已实现**：气泡按当前会话 bot 着色（D14 交付时未做，由 `fix/chat-user-bubble-bot-color` 补齐） | ~~D14~~ 已完成，见 [D14-report §5](reports/D14-report.md) |
 | 聊天 | 回复仍是"（占位回复）"夹具数据；横幅标注"静态占位" | **已实现**：chat.send/history/cancel 真实链路（D30 + PR #97/#103），夹具仅存于离线演示模式 | ~~Renderer↔Host 映射~~ 聊天部分已落地；剩余界面态见 **GAP_AUDIT G1'** |
 | 聊天 | ＋ 菜单"添加附件" | **已实现**（D26）：`attachment.begin/append/commit` 上传进工作区 + 模型工具 `read_workspace_file`（PR #106/#111） | ~~D26~~ 已完成，见 [GAP_AUDIT](GAP_AUDIT.md) §1.1 G8 |
-| 聊天 | 麦克风按钮 | **已实现**（PR #151）：录音→WAV→`voice.transcribe` 只填输入框不自动发送（20s 自动停），逐条回复朗读按钮（`voice.speak`），按 `voice.status` 门控禁用；「按住说话/自动断句」未做 | ~~D27'~~ 已完成，真机验收归第三批 |
+| 聊天 | 麦克风按钮 | **已实现**：按住录音、松开后 `voice.transcribe` 只填输入框不自动发送（仍 20s 上限），逐条回复朗读按钮（`voice.speak`），按 `voice.status` 门控禁用；自动断句未做 | D27'（PR #151）+ D27''（`feature/d27-hold-to-talk-220a`）；真机验收归第三批 |
 | 顶栏 | 搜索圆钮 | **已实现**：Ctrl+K 浮层经 `search.global` 检索 Host 全库（bot/工作流/跨 bot 消息/产物，四类命中导航，不可达降级本地；PR #117 + #126） | ~~D25 后半~~ 已完成，见 [D25-host-search-renderer-report](reports/D25-host-search-renderer-report.md) |
 | 顶栏 | 最近会话 / 产物 popover | 会话部分已读真实数据（PR #103 stored-session）；产物 popover 本次刷新未逐项复核 | 同 [GAP_AUDIT](GAP_AUDIT.md) G1'/G10 |
 | 设置 | 分类"电脑 / 保险库 / 用量与账单 / 更新" | **已实现**（D24）：备份/恢复/保险库（PR #78）、用量统计（PR #119）、应用内更新（`main/updates.ts`） | ~~D24~~ 已完成 |

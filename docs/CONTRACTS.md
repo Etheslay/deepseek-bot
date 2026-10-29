@@ -8,7 +8,7 @@ v0.6（D21 指定窗口截图与本地 OCR 契约片）新增 `screen.*` 受信�
 
 D26 附件理解闭环在当前协议上追加仅受信桌面的 `attachment.begin` / `attachment.append` / `attachment.commit`，不另升 `protocolVersion`；模型侧新增工具 `read_workspace_file`（能力映射 `fs.read`，走 D16 网关检查点）。网关导入仍走 `chat.attach` 与模型工具 `read`。
 
-v0.9（D27 本地语音后端切片）新增 `voice.status` / `voice.transcribe` / `voice.speak` 三个受信桌面方法：whisper.cpp 本地转写与 Windows SAPI 本地播报，全本地、无网络、不产生模型工具。语音录制（按住说话/自动断句）与播放接线归桌面后续联调。
+v0.9（D27 本地语音后端切片）新增 `voice.status` / `voice.transcribe` / `voice.speak` 三个受信桌面方法：whisper.cpp 本地转写与 Windows SAPI 本地播报，全本地、无网络、不产生模型工具。桌面按住说话把一段剪辑交给 `voice.transcribe` 并填入输入框（不自动发送）；逐条播放已接线。自动断句仍未做。
 
 v0.10 新增 `usage.summary`：把每个聊天回合的 token 用量聚合成「用量与账单」页需要的总量、按模型表、按本地日趋势与按 bot 分布。行由 Host 在回合结束时写入 `usage_events`（迁移 0021），渲染层只读。Harness 没上报用量时按字符数估算并标记 `estimated`，页面必须区分展示。当前 `protocolVersion` 为 0.10，继续接受 0.1–0.9 发送方；工作流 `schemaVersion` 仍为 0.1。
 
@@ -199,7 +199,7 @@ Host 把技能指令写成有界、围栏安全的提示块，放在 bot 指令�
 
 `voice.*` 全部仅供受信桌面调用：是用户按下了按钮，不是模型在调用——因此没有能力、没有授权、没有模型工具，模型目录永远不包含 voice 工具。`voice.transcribe` 只接受一段 16 kHz、单声道、16-bit PCM 的 WAV 剪辑，最多 20 秒，base64 编码后落在 1 MiB 消息信封内；Host 校验 RIFF 头、声道、采样率、位深与数据块长度，格式不符拒绝且不落盘，不重采样、不转换、不猜测格式。转写调用用户自备的 whisper.cpp 二进制与模型（环境变量 `DEEPSEEK_BOT_WHISPER_BIN` / `DEEPSEEK_BOT_WHISPER_MODEL` 配置）：固定参数数组、无 shell、隐藏窗口，120 秒超时终止；进程输出留在本机，错误只报稳定错误码与退出码，不回传进程输出。临时剪辑在运行结束后删除，不进数据库、不进备份；转写文本只返回一次，不持久化。
 
-`voice.speak` 用 Windows SAPI（`System.Speech`）朗读至多 2000 字的文本：固定 PowerShell 脚本、文本以 base64 传入 `-EncodedCommand`，不经 shell 字符串拼接；120 秒超时终止。`voice.status` 只读汇报两侧可用性与原因，不启动进程。语音任务一次一个：后续调用排队，不并发堆积语音进程；`close()` 中止进行中的任务并拒绝新任务。识别与合成都发生在本机，无云端转写、无遥测、无远程中继；麦克风采集（按住说话）、自动断句、播放接线与设置页归桌面后续联调。
+`voice.speak` 用 Windows SAPI（`System.Speech`）朗读至多 2000 字的文本：固定 PowerShell 脚本、文本以 base64 传入 `-EncodedCommand`，不经 shell 字符串拼接；120 秒超时终止。`voice.status` 只读汇报两侧可用性与原因，不启动进程。语音任务一次一个：后续调用排队，不并发堆积语音进程；`close()` 中止进行中的任务并拒绝新任务。识别与合成都发生在本机，无云端转写、无遥测、无远程中继。桌面麦克风为按住说话：松开后把这一段交给 `voice.transcribe` 并填入输入框，不自动发送，仍受 20 秒上限与 `voice.status` 门控；逐条播放已接线。自动断句与设置页麦克风项仍未做。
 
 ## 8. 库导出文件（协议面之外）
 
