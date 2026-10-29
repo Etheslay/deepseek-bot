@@ -1,5 +1,10 @@
 # 工作记录
 
+## 2026-10-29：在途台账三更（纯文档）
+
+- PR #140 合入后 fetch：develop 快进至 `fb69d7e`；远程在途分支变动：`feature/context-meter` 被归属人变基（新头 `7caf386`，试算零冲突）、新增 `feature/d14-mermaid`（D14 mermaid 补齐，含 pnpm-lock 依赖引入，试算零冲突）、`feature/d17-skill-host-store` 未变基已落后 23 提交（冲突 1 文件）。均登记进 SPRINTS §10，不触碰。
+- 纯 Markdown；未运行 pnpm 测试；执行 `git diff --check` 与本地链接检查。
+
 ## 2026-10-29：CONTRACTS.md 契约补记 + 在途台账二更（纯文档）
 
 - PR #139 合入后 fetch：develop 快进至 `faecb98`；发现两条新远程在途分支 `feature/context-meter`、`feature/d17-skill-host-store`（均为 Destinyian 的完整切片，含任务书与报告；冲突试算分别 3 文件 / 1 文件）——只登记进 SPRINTS §10，不触碰。
