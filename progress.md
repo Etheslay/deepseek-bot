@@ -1,5 +1,10 @@
 # 工作记录
 
+## 2026-10-29：BOT_WORKSPACE.md 陈旧口径修正（纯文档）
+
+- 该文档为 D05 交付文档但被 D26/D28 持续追加，新旧口径混杂。修正四处：①引言加时点注（夹具驱动为 D05 时口径，现聊天/历史走 host-service，夹具仅存离线演示模式）；②服务清单对齐现状（6 文件，host-service 为真实通道、新增 stored-session）；③测试用例计数改指向 TESTING.md（原文 22+5+7 例早已过期）；④「契约边界速查」表标记为 D05 历史口径不再维护，列出已推翻其「不能声称」列的交付（D30/#97/#103、D24/#78/#119、v0.2 分组），当前能力以 GAP_AUDIT 与 SPRINTS §4 为准。
+- 证据均对 develop `25723cb` 实测（services 目录文件清单、GAP_AUDIT §1.1）；纯文档；`git diff --check` 与链接检查通过。
+
 ## 2026-10-29：THIRD_PARTY_NOTICES 直接依赖许可审计（纯文档）
 
 - 从本地 node_modules 实读 34 个工作区直接依赖的 license 字段：第三方全部为 MIT/BSD/Apache/MPL 宽松许可（无 GPL/AGPL），写入 THIRD_PARTY_NOTICES 新增「运行时直接依赖许可索引」节（版本为当日锁文件实测，锁文件仍为权威）。
