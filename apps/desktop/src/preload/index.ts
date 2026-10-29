@@ -147,7 +147,26 @@ const api: DesktopBridge = {
       ipcRenderer.invoke(IPC_CHANNELS.APP_HARDWARE_ACCELERATION, enabled),
   },
   host: {
-    call: (method, payload) => ipcRenderer.invoke(IPC_CHANNELS.HOST_CALL, method, payload),
+    /**
+     * Humanized errors: the channel resolves an envelope ({ok, result|error})
+     * instead of throwing, so failures keep the Host's own message and stable
+     * code without Electron's "Error invoking remote method …" wrapping.
+     */
+    call: async (method, payload) => {
+      const outcome = (await ipcRenderer.invoke(IPC_CHANNELS.HOST_CALL, method, payload)) as
+        | { ok: true; result: unknown }
+        | {
+            ok: false;
+            error: { code: string; message: string; retryable: boolean };
+          };
+      if (outcome.ok) {
+        return outcome.result;
+      }
+      throw Object.assign(new Error(outcome.error.message), {
+        code: outcome.error.code,
+        retryable: outcome.error.retryable,
+      });
+    },
     onMissed: (listener) => {
       const handler = (_event: IpcRendererEvent, notices: HostMissedNotice[]): void =>
         listener(notices);
