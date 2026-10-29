@@ -1,20 +1,22 @@
 # 机器人工作区（D05）
 
-`apps/desktop` 的机器人工作区把 D02 的占位壳升级为可用前端：机器人管理、聊天（流式/工具/取消/失败）、会话历史回放、产物面板与设置接入。**所有数据来自 `@deepseek-bot/contracts` 的可执行 schema 校验；真实 Harness / API / 持久化分别属于 D06 / D12 / D04，本任务全部为夹具驱动占位，不冒充真实结果。**
+`apps/desktop` 的机器人工作区把 D02 的占位壳升级为可用前端：机器人管理、聊天（流式/工具/取消/失败）、会话历史回放、产物面板与设置接入。**所有数据来自 `@deepseek-bot/contracts` 的可执行 schema 校验；真实 Harness / API / 持久化分别属于 D06 / D12 / D04，本任务全部为夹具驱动占位，不冒充真实结果。**（上句为 D05 交付时口径；其后聊天运行时、历史与设置持久化已接真实 Host——PR #97/#103 起聊天/历史走 `host-service.ts`，夹具实现仅存于离线演示模式，详见文末速查注。）**
 
 ## 服务层（可替换）
 
 ```text
 src/renderer/src/services/
   desktop-service.ts     接口：bots / settings / chat / artifacts（含 UI-only ChatSessionView）
-  fixture-service.ts     唯一实现：读 packages/contracts/fixtures，内存态
-  contract-validation.ts BotSchema / ModelProfileSchema / ArtifactSchema / EventEnvelopeSchema 统一校验
-  service-context.tsx    React Context 注入；组件不直接 import 夹具
+  host-service.ts        真实实现：经 IPC 调 Host（PR #97/#103 起为默认通道）
+  fixture-service.ts     离线演示实现：读 packages/contracts/fixtures，内存态
+  stored-session.ts      每 bot 单会话视图（基于 chat.history）
+  contract-validation.ts 统一 schema 校验
+  service-context.tsx    React Context 注入
 ```
 
-- 组件通过 `useService()` 拿服务；未来换成 IPC/Host 实现时只动 services 目录。
+- 组件通过 `useService()` 拿服务；IPC/Host 实现已落地（`host-service.ts`），切换仍只动 services 目录。
 - 服务层所有出参先经 contracts schema 校验再返回；非法数据抛 `ServiceError`（稳定错误码）。
-- 夹具种子：3 个 Bot（含 1 个已归档）、2 个会话（success-run / cancel-run 事件回放）、2 个产物（markdown 可预览 / html 拦截）。
+- 夹具种子：3 个 Bot（含 1 个已归档）、2 个会话（success-run / cancel-run 事件回放）、2 个产物（markdown 可预览 / html 拦截）——仅离线演示模式使用。
 
 ## 机器人管理（FR-02 前端）
 
@@ -62,11 +64,13 @@ src/renderer/src/services/
 ## 命令与测试
 
 - 命令不变：`pnpm --filter @deepseek-bot/desktop dev / build / test / pack:dir`（见 [开发环境基线](DEVELOPMENT_SETUP.md)）。
-- 测试：`tests/services/`（服务层 22 例）、`tests/features/`（表单校验 5 例 + chat reducer 7 例）；主进程 IPC 测试不变。
+- 测试规模自 D05 起已随各切片大幅增长，以 [TESTING](TESTING.md) 与仓库当前用例为准（本文件不再维护用例计数）。
 
-## 契约边界速查
+## 契约边界速查（D05 历史口径，不再维护）
 
-| 能做（D05） | 不能声称 |
+下表保留 D05 交付时点口径。其后已落地并推翻其中「不能声称」列的有：聊天真实链路与历史持久化（D30，PR #97/#103）、设置持久化与保险库（D24，PR #78/#119；真实 Key 全链验收归 [GAP_AUDIT](GAP_AUDIT.md) G4）、分组契约与批量创建（v0.2）、夹具仅存离线演示模式。当前能力与缺口以 [GAP_AUDIT](GAP_AUDIT.md) 与 [SPRINTS §4](SPRINTS.md) 为准。
+
+| 能做（D05 当时） | 当时不能声称（现已大部落地） |
 | --- | --- |
 | 夹具驱动的流式/工具/取消/失败 UI | 真实 Harness 流式/取消（D06/D12） |
 | Key 表单 + 只写不读 + UNVERIFIED | Key 已安全保存 / 连接成功（D04/D08） |
