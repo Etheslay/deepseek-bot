@@ -1,5 +1,11 @@
 # 工作记录
 
+## 2026-10-29：DEVELOPMENT_PLAN §6 叙事一致性修正（纯文档）
+
+- 三处被后续交付推翻的陈述修正：G3（原生聊天 D08 审批，PR #125）不再是“后续范围”；知识导入上限 16 KiB 已被 D18 收尾（PR #63，256 KiB 知识文档 + knowledge_search + 保留策略）取代；“工作流模板仍未做”改为 G11'（PR #127）已交付本地模板库。
+- 段末加权威指针：其后交付以 SPRINTS §4 与 GAP_AUDIT 为准，本节不再逐段展开。
+- 纯 Markdown；`git diff --check` 与本地链接检查通过；未运行测试（无代码路径变更）。
+
 ## 2026-10-29：在途台账三更（纯文档）
 
 - PR #140 合入后 fetch：develop 快进至 `fb69d7e`；远程在途分支变动：`feature/context-meter` 被归属人变基（新头 `7caf386`，试算零冲突）、新增 `feature/d14-mermaid`（D14 mermaid 补齐，含 pnpm-lock 依赖引入，试算零冲突）、`feature/d17-skill-host-store` 未变基已落后 23 提交（冲突 1 文件）。均登记进 SPRINTS §10，不触碰。
