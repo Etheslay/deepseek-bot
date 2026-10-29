@@ -19,6 +19,9 @@ type MermaidModule = (typeof import("mermaid"))["default"];
 
 let currentTheme: "dark" | "light" = "dark";
 let modulePromise: Promise<MermaidModule> | null = null;
+/** Theme the loaded module was last initialized with; mermaid.render reads the
+ * global config, so a theme switch must re-initialize before the next render. */
+let initializedTheme: "dark" | "light" | null = null;
 let renderSeq = 0;
 /** Rendered-diagram cache keyed `theme\0source`: React may reset a message's
  * innerHTML on any commit, and re-enhancement must not re-run mermaid. */
@@ -31,16 +34,17 @@ export function setMermaidTheme(theme: "dark" | "light"): void {
 }
 
 async function loadMermaid(): Promise<MermaidModule> {
-  modulePromise ??= (async () => {
-    const mermaid = (await import("mermaid")).default;
+  modulePromise ??= (async () => (await import("mermaid")).default)();
+  const mermaid = await modulePromise;
+  if (initializedTheme !== currentTheme) {
     mermaid.initialize({
       startOnLoad: false,
       securityLevel: "strict",
       theme: currentTheme === "dark" ? "dark" : "default",
     });
-    return mermaid;
-  })();
-  return modulePromise;
+    initializedTheme = currentTheme;
+  }
+  return mermaid;
 }
 
 function cachedRender(key: string, source: string): Promise<string | null> {
