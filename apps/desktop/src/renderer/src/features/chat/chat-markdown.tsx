@@ -66,6 +66,10 @@ export function ChatMarkdown(props: {
         code.dataset.mermaidState = "done";
         const block = document.createElement("div");
         block.className = "mermaid-block";
+        // The theme redraw (./mermaid.ts) needs the source for the cache key
+        // and the mounted marker to find the block again.
+        block.dataset.mermaidSource = source;
+        block.dataset.mermaidMounted = "true";
         // The shadow root keeps the diagram's inline <style> tree-scoped.
         block.attachShadow({ mode: "open" }).innerHTML = svg;
         wrapper.replaceWith(block);
