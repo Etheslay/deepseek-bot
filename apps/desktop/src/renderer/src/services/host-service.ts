@@ -220,6 +220,10 @@ export function createHostService(bridge: HostBridge): DesktopService {
         };
       },
       history: async (botId, limit = 100) => readHistory(botId, limit),
+      contextUsage: async (botId) =>
+        METHOD_CONTRACTS["chat.contextUsage"].response.parse(
+          await bridge.host.call("chat.contextUsage", { botId }),
+        ),
       importAttachment: async (botId, file) => {
         if (file.bytes.byteLength === 0) {
           throw new ServiceError("INVALID_INPUT", t("shell.attachmentEmpty", [file.name]));

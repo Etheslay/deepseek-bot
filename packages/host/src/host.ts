@@ -192,6 +192,12 @@ export interface HostOptions {
     readonly runTranscribe?: VoiceTranscribeRunner;
     readonly runSpeak?: VoiceSpeakRunner;
   };
+  /**
+   * Context meter (TASK_CONTEXT_METER.md): the model context window the
+   * usage percentage divides by. One host-wide default (65,536); per-model
+   * windows are a documented follow-up.
+   */
+  readonly contextWindowTokens?: number;
 }
 
 export interface DeepSeekBotHost {
@@ -653,6 +659,8 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
     tasks,
     locale: uiLocale,
     attachmentUploads: attachmentStore,
+    contextWindowTokens: options.contextWindowTokens ?? 65_536,
+    compressingChats: new Set<string>(),
     get agentTools(): ToolGateway {
       if (agentToolsHolder.current === undefined) {
         throw new Error("agent tools gateway is not ready yet");

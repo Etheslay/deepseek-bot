@@ -14,6 +14,8 @@ v0.10 新增 `usage.summary`：把每个聊天回合的 token 用量聚合成「
 
 原始人模式在当前协议上为 `chat.send` 请求追加**可选** `primitive: boolean`（不另升 `protocolVersion`，旧发送方缺省即现状）：该回合 Host 组装最短提示——不带 bot persona 指令、不回放 `【最近对话】`，仅保留当轮显式附加的技能块并注入简短的"只答这一步"指令；`chat_messages` 落库与 `chat.history` 回放完全不受影响。
 
+上下文圆圈（TASK_CONTEXT_METER.md）在当前协议上新增受信只读方法 `chat.contextUsage`（不另升 `protocolVersion`）：返回该 bot 单会话的上下文用量 `{percent, usedTokens, windowTokens, estimated, compressedAt, compressing}`——分子优先取最近完成回合的真实 input tokens（无上报则 chars/4 估算并标 `estimated`），分母为 Host 配置的上下文窗口（默认 65,536）。Host 在用量 ≥80% 时自动后台压缩更早历史为一段摘要（新表 `chat_summaries`，迁移 0023：摘要 + 水位 `covers_message_id`），此后提示组装 = persona + 技能 + `【更早对话摘要】` + 水位后的行 + 当前消息；`chat_messages` 行不删除，删除摘要行即恢复全量回放。只读展示数据，不作为发送门槛。
+
 ## 1. 通用规则
 
 - ID 使用不可预测的 UUID；时间用 UTC ISO 8601，展示/调度另外保存 IANA 时区。
