@@ -102,6 +102,12 @@ export type ChatFailure = {
 export type StreamResult = {
   cancelled: boolean;
   failure: ChatFailure;
+  /**
+   * B6: the authoritative reply text from `chat.send`, present on the host
+   * path. The stream runner commits this over the accumulated deltas — live
+   * segments of a tool turn may include narration the reply does not carry.
+   */
+  text?: string;
 };
 
 export type StreamOptions = {

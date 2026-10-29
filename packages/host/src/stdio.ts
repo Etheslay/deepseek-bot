@@ -20,6 +20,7 @@
 import { createInterface } from "node:readline";
 import { randomUUID } from "node:crypto";
 import { RequestEnvelopeSchema, isWithinMessageSizeLimit, type Method } from "@deepseek-bot/contracts";
+import type { ChatStreamNotice } from "./chat.js";
 import type { DeepSeekBotHost } from "./host.js";
 import type { ScheduleMissNotice } from "@deepseek-bot/runtime";
 
@@ -38,6 +39,8 @@ export interface StdioHostController {
   readonly resolveCredential: (credentialRef: string) => Promise<string>;
   /** Push schedule.missed notices to the desktop (FR-08). */
   readonly notifyMissed: (notices: ReadonlyArray<ScheduleMissNotice>) => void;
+  /** B6: push one live assistant segment of a running chat turn. */
+  readonly notifyChatStream: (notice: ChatStreamNotice) => void;
 }
 
 interface PendingCredential {
@@ -87,6 +90,12 @@ export function startStdioHost(options: StdioHostOptions): StdioHostController {
   const notifyMissed = (notices: ReadonlyArray<ScheduleMissNotice>): void => {
     if (notices.length === 0) return;
     write({ jsonrpc: "2.0", method: "schedule.missed", params: { notices } });
+  };
+
+  // B6: the wire twin of schedule.missed — one server→client notification per
+  // live assistant segment. Consumers that predate the channel ignore it.
+  const notifyChatStream = (notice: ChatStreamNotice): void => {
+    write({ jsonrpc: "2.0", method: "chat.stream", params: notice });
   };
 
   const handleFrame = (record: Record<string, unknown>): void => {
@@ -204,5 +213,5 @@ export function startStdioHost(options: StdioHostOptions): StdioHostController {
     });
   });
 
-  return { done, resolveCredential, notifyMissed };
+  return { done, resolveCredential, notifyMissed, notifyChatStream };
 }

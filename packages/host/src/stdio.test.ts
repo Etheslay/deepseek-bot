@@ -122,6 +122,22 @@ describe("startStdioHost", () => {
     expect(response.result).toEqual({ bots: [] });
   });
 
+  it("pushes chat.stream notifications for live assistant segments", async () => {
+    const harness = await makeHarness();
+    harness.controller.notifyChatStream({
+      botId: "bot-1",
+      sessionId: "chat:bot-1:s1",
+      text: "live segment",
+    });
+    const frame = await harness.waitFor((candidate) => candidate.method === "chat.stream");
+    expect(frame.params).toEqual({
+      botId: "bot-1",
+      sessionId: "chat:bot-1:s1",
+      text: "live segment",
+    });
+    await harness.dispose();
+  });
+
   it("carries stable error codes for invalid envelopes and failed methods", async () => {
     const harness = await makeHarness();
     harness.send({ jsonrpc: "2.0", id: "bad", method: "contract/call", params: { method: "bot.list" } });

@@ -43,7 +43,7 @@ import {
   type DshSdkExecutorOptions,
   type RunningApprovalBridge,
 } from "@deepseek-bot/harness-adapter";
-import { ChatManager } from "./chat.js";
+import { ChatManager, type ChatStreamNotice } from "./chat.js";
 import { createAttachmentStore, readWorkspaceFileText } from "./attachments.js";
 import { createWorkspaceArtifacts } from "./artifacts.js";
 import {
@@ -151,6 +151,12 @@ export interface HostOptions {
   };
   /** Skip-and-notify hook (FR-08): surfaced to the UI by the caller. */
   readonly onMissed?: (notices: ReadonlyArray<ScheduleMissNotice>) => void;
+  /**
+   * B6 incremental streaming: each live assistant segment of a running chat
+   * turn, forwarded to the desktop for the streaming bubble. Best-effort —
+   * ChatManager already swallows sink errors.
+   */
+  readonly onTurnStream?: (notice: ChatStreamNotice) => void;
   /** Trusted SearXNG configuration. No key, default public endpoint or automatic requests. */
   readonly webSearch?: WebSearchOptions;
   /** v0.7 manager orchestration tuning (T7/Q3/Q6 defaults built in). */
@@ -509,6 +515,10 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
       } catch {
         /* usage accounting is best-effort */
       }
+    },
+    (notice) => {
+      /* B6: best-effort live streaming; the sink already swallows its own errors */
+      options.onTurnStream?.(notice);
     },
   );
   // v0.5 manager orchestration: dispatched-task queue + executor. The audit

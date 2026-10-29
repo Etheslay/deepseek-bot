@@ -43,6 +43,18 @@ export interface ScheduleMissedNotice {
   readonly reason: string;
 }
 
+/**
+ * B6: one live assistant segment of a running chat turn, pushed by the Host
+ * over the `chat.stream` notification (the wire twin of schedule.missed).
+ * The pinned harness settles a whole assistant message per model attempt, so
+ * a segment is a full message text, not a token delta.
+ */
+export interface ChatStreamNotice {
+  readonly botId: string;
+  readonly sessionId: string;
+  readonly text: string;
+}
+
 /** Error surfaced to the renderer for a failed host call (CONTRACTS §6 shape). */
 export class HostCallError extends Error {
   readonly code: string;
@@ -61,6 +73,7 @@ export class HostCallError extends Error {
 export interface HostProcessClient {
   call(method: Method, payload: unknown): Promise<unknown>;
   onMissed(listener: (notices: ReadonlyArray<ScheduleMissedNotice>) => void): () => void;
+  onChatStream(listener: (notice: ChatStreamNotice) => void): () => void;
   onStatus(listener: (status: HostProcessStatus) => void): () => void;
   /** Current process status (ready until the child exits). */
   readonly status: HostProcessStatus;
@@ -88,6 +101,7 @@ export function spawnHostProcess(options: HostProcessClientOptions): HostProcess
   let status: HostProcessStatus = "starting";
   const statusListeners = new Set<(status: HostProcessStatus) => void>();
   const missedListeners = new Set<(notices: ReadonlyArray<ScheduleMissedNotice>) => void>();
+  const chatStreamListeners = new Set<(notice: ChatStreamNotice) => void>();
   const pending = new Map<
     string,
     { resolve: (result: unknown) => void; reject: (error: Error) => void }
@@ -187,6 +201,22 @@ export function spawnHostProcess(options: HostProcessClientOptions): HostProcess
       }
       return;
     }
+    if (method === "chat.stream") {
+      const params = (record.params ?? {}) as Partial<ChatStreamNotice>;
+      if (
+        typeof params.botId === "string" &&
+        typeof params.sessionId === "string" &&
+        typeof params.text === "string"
+      ) {
+        const notice: ChatStreamNotice = {
+          botId: params.botId,
+          sessionId: params.sessionId,
+          text: params.text,
+        };
+        for (const listener of chatStreamListeners) listener(notice);
+      }
+      return;
+    }
     if (typeof id === "string" && pending.has(id)) {
       const waiter = pending.get(id)!;
       pending.delete(id);
@@ -246,6 +276,10 @@ export function spawnHostProcess(options: HostProcessClientOptions): HostProcess
     onMissed(listener): () => void {
       missedListeners.add(listener);
       return () => missedListeners.delete(listener);
+    },
+    onChatStream(listener): () => void {
+      chatStreamListeners.add(listener);
+      return () => chatStreamListeners.delete(listener);
     },
     onStatus(listener): () => void {
       statusListeners.add(listener);

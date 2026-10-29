@@ -79,6 +79,20 @@ describe("spawnHostProcess", () => {
     expect(client.onMissed(notices)).toBeTypeOf("function");
   });
 
+  it("forwards chat.stream notifications to listeners", async () => {
+    const client = makeClient(async () => "unused");
+    const notices = vi.fn();
+    const unsubscribe = client.onChatStream(notices);
+    await vi.waitFor(() => expect(notices).toHaveBeenCalled(), { timeout: 5_000 });
+    expect(notices.mock.calls[0]?.[0]).toEqual({
+      botId: "bot-1",
+      sessionId: "chat:bot-1:s1",
+      text: "live segment",
+    });
+    unsubscribe();
+    expect(client.onChatStream(notices)).toBeTypeOf("function");
+  });
+
   it("shuts the host down gracefully", async () => {
     const client = makeClient(async () => "unused");
     await expect(client.shutdown()).resolves.toBeUndefined();
