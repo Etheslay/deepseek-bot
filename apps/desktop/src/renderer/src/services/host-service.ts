@@ -15,6 +15,7 @@ import {
   type Task,
 } from "@deepseek-bot/contracts";
 import { bytesToBase64 } from "../features/chat/attachments.js";
+import { planPacing } from "../features/chat/stream-pacer.js";
 import {
   ServiceError,
   type AttachmentUploadResult,
@@ -259,6 +260,9 @@ export function createHostService(bridge: HostBridge): DesktopService {
       },
       stream: (botId, text, handlers, options) => {
         let cancelled = false;
+        /** Pending inter-chunk timer and the resolver it belongs to (see cancel). */
+        let pacingTimer: ReturnType<typeof setTimeout> | null = null;
+        let stopPacing: (() => void) | null = null;
         const sessionId = `chat:${botId}`;
         const skills = options?.skills;
         const primitive = options?.primitive === true;
@@ -271,13 +275,31 @@ export function createHostService(bridge: HostBridge): DesktopService {
         }
         const done = bridge.host
           .call("chat.send", payload)
-          .then((response) => {
+          .then(async (response) => {
             const reply = (response as { text: string }).text;
-            if (!cancelled) {
-              const chunks = reply.match(/[\s\S]{1,32}/g) ?? [reply];
-              for (const chunk of chunks) {
-                handlers.onDelta(chunk);
+            if (cancelled) {
+              return { cancelled: true, failure: null } satisfies StreamResult;
+            }
+            // The Host answers with the whole reply, so the bubble is a replay:
+            // slice it per line (long) or per sentence (short) and advance at an
+            // interval derived from the length. See features/chat/stream-pacer.ts.
+            const plan = planPacing(reply);
+            for (let index = 0; index < plan.chunks.length; index += 1) {
+              if (cancelled) {
+                return { cancelled: true, failure: null } satisfies StreamResult;
               }
+              handlers.onDelta(plan.chunks[index] ?? "");
+              if (index === plan.chunks.length - 1) {
+                break;
+              }
+              await new Promise<void>((resolve) => {
+                stopPacing = resolve;
+                pacingTimer = setTimeout(() => {
+                  pacingTimer = null;
+                  stopPacing = null;
+                  resolve();
+                }, plan.intervalMs);
+              });
             }
             return { cancelled, failure: null } satisfies StreamResult;
           })
@@ -292,6 +314,14 @@ export function createHostService(bridge: HostBridge): DesktopService {
         return {
           cancel: () => {
             cancelled = true;
+            // Release a replay that is waiting between two chunks, otherwise the
+            // finish promise would never settle and the bubble would stay busy.
+            if (pacingTimer !== null) {
+              clearTimeout(pacingTimer);
+              pacingTimer = null;
+            }
+            stopPacing?.();
+            stopPacing = null;
             void bridge.host.call("chat.cancel", { sessionId }).catch(() => undefined);
           },
           finish: () => done,
