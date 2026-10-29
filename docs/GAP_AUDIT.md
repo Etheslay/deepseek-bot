@@ -7,7 +7,8 @@
 | 第二次刷新 | 2026-10-28，基线 `origin/develop` = `81a0924`（PR #121）；对照第一次刷新基线 `b22ca88`（PR #89）之间合入的 #90–#121，未完成项逐个经 `git grep` 对 develop 重新核实后保留任务书原文并更新证据 |
 | 刷新勘误（同日第二提交，基线 `968aa0b` = PR #123） | ① **G2 已由 PR #123 交付**（`feature/g2-bridge-staging-e8f4`，启动即 staging 桥包），移入 §1.1——本刷新首提交仍标开放，特此更正；② **G10 降级为部分完成**：Host 侧 `search.global` 已合入（#117），但渲染层 Ctrl+K 浮层仍只过滤渲染层本地索引（`global-search.tsx` 经 `filterSearch`，全渲染层 grep `search.global` 零调用），余项立为 **G10'**；③ D27 追加：whisper 配置已持久化进 settings KV（PR #118/#123） |
 | 第三次刷新 | 2026-10-29，基线 `origin/develop` = `3e21112`（PR #136/#137）；对照第二次刷新基线 `968aa0b`（PR #123）之后合入的 #124–#137，关闭 **G3、G9'、G10'、G11'、D20'**，并把 D21' 收窄为真实键鼠复核；已完成项逐个经 `git grep` 与交付报告核实 |
-| 已完成并归档 | 第一次刷新已归档 G5/G9（大部）；本次归档 **G6、G7、G8、G10、G14、G11（能力强制部分）、D19（除视觉理解）、D21（真机复核除外）、D22、D27（后端）**、拍板 #2；第三次刷新归档 **G3、G9'、G10'、G11'、D20'**，见 §1.1 |
+| 第四次刷新 | 2026-10-29，基线 `origin/develop` = `db64e01`（PR #150/#151）；对照三次刷新后合入的 #138/#143–#151，关闭 **G13（#138 超额交付：计量+自动压缩）、D27'（#151 语音桌面接线）**；#150 为无编号 UX 切片；#138 的审查 P2 未处理即合入，转入治理债 §7.9；已完成项经代码与 PR 正文核实 |
+| 已完成并归档 | 第一次刷新已归档 G5/G9（大部）；本次归档 **G6、G7、G8、G10、G14、G11（能力强制部分）、D19（除视觉理解）、D21（真机复核除外）、D22、D27（后端）**、拍板 #2；第三次刷新归档 **G3、G9'、G10'、G11'、D20'**，第四次刷新归档 **G13、D27'**，见 §1.1 |
 | 红线 | 遵守 AGENTS.md 与 SPRINTS 三铁律；契约变更小型独立 PR 先行；未运行检查不得声称通过；不伪造自审；消费红线（零订阅、数据本地）见 SPRINTS §9；**付费真实 Key 验收（G4）在负责人明确授权前不执行** |
 | 状态 | 待两位负责人评审、认领与拍板 |
 
@@ -54,6 +55,17 @@ develop 一天合入 12 个 PR，原审计多项缺口就此关闭：#73 深度�
 
 双语系统核实（第一次刷新记录，仍有效）：语言切换在 设置 → 通用 → 外观 → 语言，持久化于 `deepseek-bot.settings.v2`，Host 文案随 `settings.update { patch: { "ui.locale" } }` 同步（`feature/host-dispatch-bilingual` 线，CONTRACTS.md settings.update 行已补记）。
 
+### 10-29 四次刷新总览（968aa0b → db64e01，PR #138/#143–#151）
+
+| PR | 内容 | 关闭的审计项 |
+| --- | --- | --- |
+| #138 `feature/context-meter`（`a6c7cb5`） | 上下文用量圆环 + 80% 自动压缩：迁移 `0023-chat-summaries`、受信方法 `chat.contextUsage`、`ChatManager.compressTurn`（空工具面、无审批、用量照记）、渲染层 context-ring；**历史行不删**，删摘要行即恢复全量回放 | **G13 ✅（超额：原设想仅可见性，交付含计量+自动压缩）**；审查 §2.1 P2 未处理即合入（见 §7.9） |
+| #143/#145/#146/#147/#148/#149 文档系列 | 台账刷新 ×3、PREMERGE-REVIEW 入库、D22 断链、CONTRACTS 标题对齐 0.10、直接依赖许可索引、BOT_WORKSPACE 口径修正 | 治理债 §7.8 ✅；§7.4 体检全绿 |
+| #150 `feature/streaming-reply`（`6659d29`） | stream-pacer：长回复按行/句自适应回放节奏（纯呈现层，契约零改动），修 finish 即 resolve 与取消不释放定时器 | —（无 D 编号 UX 切片；PR 正文即交付描述，无入库报告 → §7.9） |
+| #151 `feature/voice-ui-wiring`（`db64e01`） | D27' 语音桌面接线：麦克风录音→WAV→`voice.transcribe`（只填输入框不自动发送，20s 自动停）、逐条回复朗读按钮（`voice.speak`）、按 `voice.status` 门控禁用 | **D27' ✅**（「按住说话/自动断句」交互未做；真机未验证） |
+
+双语系统核实（第一次刷新记录，仍有效）：
+
 ## 1. 缺口地图（总览）
 
 优先级定义：**P0** 数据完整性/安全（不修就是缺陷）；**P1** 用户每天碰到的标配（对标承诺已立未兑现）；**P2** 计划内切片收尾；**P3** 需拍板后才立项的产品增量。
@@ -63,9 +75,7 @@ develop 一天合入 12 个 PR，原审计多项缺口就此关闭：#73 深度�
 | G1' | 界面状态持久化与回放补全（G1 剩余） | P0 | B（UI）+ A（ui.* 服务） | 拍板 #1（ui.* 清单） |
 | G4 | 付费真实 Key 全链验收 | P0 | A+B | 负责人提供临时 Key 并授权费用 |
 | D21' | 真实 Windows 键鼠输入复核（真实窗口截图/OCR 已有真机证据：[D21-windows-acceptance 报告](reports/D21-windows-acceptance-report.md) §4，PR #93） | P2 | A | 真机 |
-| D27' | 语音桌面 UI（按住说话/自动断句/播放接线） | P2 | B | 无 |
 | G12 | 多会话管理（会话列表已上，多会话未立） | P3 | A+B | 拍板（新契约面） |
-| G13 | 上下文窗口可见性 | P3 | A+B | 无（建议与 G12 同拍板） |
 | — | D19 剩余（视觉理解，等模型）/ D13 性能预算实测 / D23 平台收官 | 见 §5 | 按原计划 | — |
 | — | 治理债（拍板 #1/自审签署/截图/CONTRACTS.md 文档滞后） | 持续 | 双方 | §7 |
 
@@ -96,6 +106,9 @@ develop 一天合入 12 个 PR，原审计多项缺口就此关闭：#73 深度�
 | ~~G10'~~ | Ctrl+K 浮层接 Host 检索 | PR #126；`host-service.ts` 直调 `search.global`（limit 20）、`global-search.tsx` 250ms 防抖 + 过期丢弃 + 四类导航 + 失败降级本地（[报告](reports/D25-host-search-renderer-report.md)） |
 | ~~G11'~~ | D17 工作流模板库 | PR #127；`features/workflow-editor/template/workflow-templates.ts` 冻结 schema 剥离走私策略字段 + Host 端不落库用例（[报告](reports/G11-workflow-template-library-report.md)） |
 | ~~D20'~~ | 聊天内自动化状态通知条 | PR #134/#135；meta 行（kind automation）+ `features/automation/chat-automation-notice.tsx`（错过明细/启停/待评审，20 秒轮询、静默降级，契约零改动）（[报告](reports/D20-chat-notice-report.md)） |
+| ~~G13~~ | 上下文用量可视 + 80% 自动压缩（超额） | PR #138；`chat.contextUsage` + 迁移 `0023-chat-summaries` + `compressTurn`（空工具面、无审批、用量照记）+ 渲染层 context-ring；历史行不删；**审查 §2.1 P2（并发断言）未处理随合并入库**；真实模型摘要质量与真机未验证（[报告](reports/CONTEXT_METER-report.md)） |
+| ~~D27'~~ | 语音桌面接线 | PR #151；`features/voice/`（wav 编码/clip-recorder/voice-ui 门控）+ App.tsx 麦克风（转写只填输入框不自动发送、20s 停）与逐条朗读按钮；「按住说话/自动断句」未做（现为点击录音 20 秒上限）；真机未验证 |
+| — | stream-pacer 流式回放节奏（无编号 UX 切片） | PR #150；`features/chat/stream-pacer.ts` 纯呈现层（按行/句自适应、≤7s），修 finish 即 resolve 与取消定时器泄漏；无入库报告 |
 
 ---
 
@@ -178,7 +191,7 @@ Ctrl+K 浮层经 `search.global` 检索 Host 全库：250ms 防抖 + latest-ref�
 - **D20**：计划内切片全部交付——聊天内状态通知条与错过可见已由 PR #134/#135 补齐（触发器、规则、评审队列、规则状态历史、重复防护、桌面评审页此前已交付：PR #66/#84/#85/#87 + D20 各报告；"同一事件不第二次启动"由本地自动启动切片完成）；
 - **D21 剩余**：真实键鼠输入复核（真实窗口截图/OCR 已有真机证据：[D21-windows-acceptance 报告](reports/D21-windows-acceptance-report.md) §4，PR #93；D21-device-input 报告自记"没有在这台 Linux 环境上执行真实 Windows 键鼠或复核真实窗口截图/OCR"；输入闸门与本地记录已交付：PR #88/#89/#104；键鼠真机复核与真实设备动作验收合并排期）；
 - **D22**：全部完成（双语/托盘/通知/Chrome 导入 PR #75；硬件加速 `b57d46b`）；
-- **D27 剩余**：桌面语音 UI——按住说话、自动断句、播放接线（后端 `voice.status/transcribe/speak` 已合入 PR #113，CONTRACTS.md v0.9 段注明"语音录制与播放接线归桌面后续联调"；渲染层 grep whisper/按住 零命中）；
+- **D27**：计划内切片全部交付——桌面语音接线由 PR #151 交付（麦克风录音转写只填输入框、逐条朗读、`voice.status` 门控禁用）；「按住说话/自动断句」交互未做（现为点击录音 20 秒上限），与原验收措辞的差异由归属人自审确认；
 - **D13 性能预算实测**（PRD §6：未测量不得宣称达标）、**D23 平台收官**：按 DEVELOPMENT_PLAN §9 顺延至阶段二收官，与发布验收合并执行。
 
 ## 6. P3：需拍板后立项的产品增量
@@ -187,7 +200,9 @@ Ctrl+K 浮层经 `search.global` 检索 Host 全库：250ms 防抖 + latest-ref�
 **缺口**：D30 每 bot 单逻辑会话（`chat:<botId>`）；PR #103 已交付基于 `chat.history` 的**单会话**列表/打开（`stored-session.ts`，一个 bot 有消息即一个会话）。真正的多会话/重命名/清理仍未立项；Grok 对标存在多会话体验。
 **实现草案**：契约附加 `chat.session.list/open/new`（每 bot 多个 session，Host 侧 session id 由 `chat:<botId>:<n>` 扩展）；UI 为 bot 会话页头部加会话下拉/列表。**涉及 chat.send 语义扩展（activeSession），须契约负责人评审后再立任务书**。
 
-### G13 上下文窗口可见性
+### G13 上下文窗口可见性 —— **已完成（PR #138，2026-10-29 合入，超额交付计量+自动压缩），移入 §1.1**
+
+> 原 §6 草案正文保留如下作历史记录。
 **缺口**：每轮回放"近期历史"的截断策略用户不可见，长会话静默失忆（`contextTurns` grep 零命中）。
 **实现草案**：Host 在回合结果事件中携带 `contextTurns`（本轮实际携带条数/截断数），消息 meta 展示"本轮携带历史 N 条"；超出时的提示条。小活，可与 G12 同期或独立做。
 
@@ -202,7 +217,8 @@ Ctrl+K 浮层经 `search.global` 检索 Host 全库：250ms 防抖 + latest-ref�
 5. ~~SPRINTS §7 审计表刷新~~ **随本刷新更新**（语言、备份、更新、设置持久化、附件、搜索、硬件加速行改为已完成并登记去向 GAP_AUDIT）；
 6. ~~快赢安家~~ **SPRINTS §9.1 表已注记四项全部完成及载体**（随本刷新）；
 7. ~~本文件入库~~ **随 docs/gap-audit-refresh 分支提交**；
-8. ~~CONTRACTS.md 文档滞后~~ **已收口（2026-10-29 契约补记）**：`chat.send` / `chat.history` / `chat.cancel` / `chat.status` / `chat.attach` 五行已补入 §3 方法表，内容以 `packages/contracts` 冻结 schema 为准（此前 `chat.status` 全文零提及）；skills、primitive 与附件分块细节仍指向既有 D17/D26 节与 §4 事件段，两处漂移风险就此消除。
+8. ~~CONTRACTS.md 文档滞后~~ **已收口（2026-10-29 契约补记）**：`chat.send` / `chat.history` / `chat.cancel` / `chat.status` / `chat.attach` 五行已补入 §3 方法表，内容以 `packages/contracts` 冻结 schema 为准（此前 `chat.status` 全文零提及）；skills、primitive 与附件分块细节仍指向既有 D17/D26 节与 §4 事件段，两处漂移风险就此消除；
+9. **无报告合入与 P2 未处理（2026-10-29 四次刷新新增）**：#150（stream-pacer）/ #151（语音接线）未按 §9「每编号 + 报告」入库报告文件（PR 正文模板齐全，是否补报告由归属人定）；#138 合并时未处理 PREMERGE-REVIEW §2.1 的 P2——压缩回合与用户发送真并发 vs 任务书/报告「忙锁排队」断言的分歧已随合并进入 develop，处理方式（改锁或改文档）待归属人。
 
 ## 8. 建议排期（依赖驱动的批次，可多晚并行）
 
@@ -210,7 +226,7 @@ Ctrl+K 浮层经 `search.global` 检索 Host 全库：250ms 防抖 + latest-ref�
 | --- | --- | --- |
 | ~~第一批~~ | G10'（#126）、G9'（#129）、G3（#125）、G11'（#127）、D20'（#134/#135） | 10-28/29 已全部交付，见 §1.1 |
 | 第二批 | G1'（等拍板 #1 记录 ui.* 清单） | P0 仅剩 G1' 与 G4 |
-| 第三批 | D21'（真实键鼠，真机）；D27'（语音 UI 联调） | 需真机/联调环境 |
+| 第三批 | D21'（真实键鼠，真机）；语音实机联调（录音/朗读真机验收，#151 已接线） | 需真机环境 |
 | 第四批 | G4 全链验收（需临时 Key 与费用授权）+ D13/D23 收官 | 各项主体合入后执行 |
 | 另行立项 | G12、G13（拍板后）；D19 视觉理解（等模型） | — |
 
