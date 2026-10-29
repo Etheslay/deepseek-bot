@@ -244,6 +244,28 @@ describe("chat runtime", () => {
     expect(history.messages[1]?.text).toBe("fake final response");
   });
 
+  it("humanizes credential failures instead of leaking raw system errors", async () => {
+    const { host, botId } = await hostWithBot("ok", async () => {
+      throw new Error(
+        "ENOENT: no such file or directory, open 'D:\\data\\credentials\\00000000-0000-4000-8000-000000000001.blob'",
+      );
+    });
+    let failure: { code: string; message: string } | undefined;
+    try {
+      await host.handleMethod("chat.send", { botId, text: "你好" });
+    } catch (error) {
+      failure = error as { code: string; message: string };
+    }
+    expect(failure).toBeDefined();
+    expect(failure?.code).toBe("INVALID_INPUT");
+    // One calm sentence with the fix — and none of the raw noise.
+    expect(failure?.message).toContain("API Key");
+    expect(failure?.message).toContain("设置");
+    expect(failure?.message).not.toContain("ENOENT");
+    expect(failure?.message).not.toContain("credentials");
+    expect(failure?.message).not.toContain("\\");
+  });
+
   it("replays history as context because each turn opens a fresh session", async () => {
     const { host, botId } = await hostWithBot();
     const first = (await host.handleMethod("chat.send", { botId, text: "one" })) as {

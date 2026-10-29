@@ -4075,16 +4075,19 @@ function BotsPlaceholder({
             )}
             {stream.failure && (
               <div className="chat-failure" role="alert">
-                <span className="failure-code">{stream.failure.code}</span>
-                {failureMessage(stream.failure.code)}
-                {stream.failure.message ? (
-                  <span className="failure-detail">{stream.failure.message}</span>
-                ) : null}
-                {stream.failure.retryable && (
-                  <button type="button" className="pill-btn" onClick={retryStream}>
-                    {t("shell.retry")}
-                  </button>
-                )}
+                <div className="failure-head">
+                  <span className="failure-chip">{stream.failure.code}</span>
+                  {stream.failure.retryable && (
+                    <button type="button" className="pill-btn" onClick={retryStream}>
+                      {t("shell.retry")}
+                    </button>
+                  )}
+                </div>
+                {/* The Host authors the human sentence (humanized errors); the
+                    catalogue line only backs codes that carry no message. */}
+                <div className="failure-text">
+                  {stream.failure.message ? stream.failure.message : failureMessage(stream.failure.code)}
+                </div>
               </div>
             )}
           </>

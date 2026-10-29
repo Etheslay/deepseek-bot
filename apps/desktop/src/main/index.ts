@@ -250,31 +250,50 @@ function registerShellIpc(win: BrowserWindow): void {
       checkUpdates: () => checkUpdates(),
       downloadAndInstallUpdate: () => downloadAndInstallUpdate(),
       setLanguage: (preference) => setMainLanguagePreference(preference),
-      hostCall: (method, payload) => {
+      hostCall: async (method, payload) => {
+        // Humanized errors (streaming-reply era UX): the channel never throws —
+        // it resolves an envelope so the renderer gets the Host's own message
+        // and stable code without Electron's "Error invoking remote method"
+        // wrapping, which used to bury the useful sentence under noise.
         if (!isAllowedHostMethod(method)) {
-          return Promise.reject(new Error(`unknown host method`));
+          return {
+            ok: false as const,
+            error: { code: "INVALID_INPUT", message: "unknown host method", retryable: false },
+          };
         }
         if (hostClient === null) {
-          return Promise.reject(new Error("host process is not running"));
+          return {
+            ok: false as const,
+            error: {
+              code: "RUNTIME_UNAVAILABLE",
+              message: "host process is not running",
+              retryable: false,
+            },
+          };
         }
-        if (method === "data.restore") {
-          // The restore handler replaces the database on disk; the running
-          // Host is dead afterwards (handlers.ts). Replace the child before
-          // the renderer sees the result, so follow-up calls hit the fresh
-          // process instead of failing with "host process has exited".
-          return hostClient
-            .call(method, payload)
-            .then(async () => {
-              await restartHost();
-              return { restored: true, hostRestarted: true } satisfies RestoreOutcome;
-            })
-            .catch((error: unknown) => {
-              // A refused restore leaves the current Host intact; surface the
-              // stable error (active runs, checksum mismatch, …) untouched.
-              return Promise.reject(error);
-            });
+        try {
+          if (method === "data.restore") {
+            // The restore handler replaces the database on disk; the running
+            // Host is dead afterwards (handlers.ts). Replace the child before
+            // the renderer sees the result, so follow-up calls hit the fresh
+            // process instead of failing with "host process has exited".
+            await hostClient.call(method, payload);
+            await restartHost();
+            return { ok: true as const, result: { restored: true, hostRestarted: true } satisfies RestoreOutcome };
+          }
+          return { ok: true as const, result: await hostClient.call(method, payload) };
+        } catch (error) {
+          const hostError = error as { code?: unknown; message?: unknown; retryable?: unknown };
+          return {
+            ok: false as const,
+            error: {
+              code: typeof hostError.code === "string" ? hostError.code : "RUNTIME_UNAVAILABLE",
+              message:
+                hostError instanceof Error ? hostError.message : String(hostError ?? "host call failed"),
+              retryable: hostError.retryable === true,
+            },
+          };
         }
-        return hostClient.call(method, payload);
       },
       listBackups: () => listBackups(resolveDataRoot()),
       hardwareAcceleration: (enabled: unknown) => {
