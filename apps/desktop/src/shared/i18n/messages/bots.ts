@@ -26,6 +26,7 @@ export const botsMessages = {
   "bots.toneGentle": { zh: "温柔", en: "Gentle" },
   "bots.toneHotBlooded": { zh: "热血", en: "Hot-blooded" },
   "bots.toneHumorous": { zh: "幽默", en: "Humorous" },
+  "bots.toneNormal": { zh: "正常", en: "Normal" },
   "bots.toneSelection": { zh: "语气选择（可多选）", en: "Tone (multi-select)" },
   "bots.toneSerious": { zh: "严肃", en: "Serious" },
   "bots.toneSharpTongued": { zh: "毒舌", en: "Sharp-tongued" },
