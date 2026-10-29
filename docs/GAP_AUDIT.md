@@ -8,7 +8,8 @@
 | 刷新勘误（同日第二提交，基线 `968aa0b` = PR #123） | ① **G2 已由 PR #123 交付**（`feature/g2-bridge-staging-e8f4`，启动即 staging 桥包），移入 §1.1——本刷新首提交仍标开放，特此更正；② **G10 降级为部分完成**：Host 侧 `search.global` 已合入（#117），但渲染层 Ctrl+K 浮层仍只过滤渲染层本地索引（`global-search.tsx` 经 `filterSearch`，全渲染层 grep `search.global` 零调用），余项立为 **G10'**；③ D27 追加：whisper 配置已持久化进 settings KV（PR #118/#123） |
 | 第三次刷新 | 2026-10-29，基线 `origin/develop` = `3e21112`（PR #136/#137）；对照第二次刷新基线 `968aa0b`（PR #123）之后合入的 #124–#137，关闭 **G3、G9'、G10'、G11'、D20'**，并把 D21' 收窄为真实键鼠复核；已完成项逐个经 `git grep` 与交付报告核实 |
 | 第四次刷新 | 2026-10-29，基线 `origin/develop` = `db64e01`（PR #150/#151）；对照三次刷新后合入的 #138/#143–#151，关闭 **G13（#138 超额交付：计量+自动压缩）、D27'（#151 语音桌面接线）**；#150 为无编号 UX 切片；#138 的审查 P2 未处理即合入，转入治理债 §7.9；已完成项经代码与 PR 正文核实 |
-| 已完成并归档 | 第一次刷新已归档 G5/G9（大部）；本次归档 **G6、G7、G8、G10、G14、G11（能力强制部分）、D19（除视觉理解）、D21（真机复核除外）、D22、D27（后端）**、拍板 #2；第三次刷新归档 **G3、G9'、G10'、G11'、D20'**，第四次刷新归档 **G13、D27'**，见 §1.1 |
+| 第五次刷新 | 2026-10-29，基线 `origin/develop` = `d1cb448`（PR #152–#154）；#152/#153 合入清零在途分支；CONTRACTS 标题对齐 0.11（随本刷新修正）；d14 审查 §2.2 P3 未处理随合并入库转 §7.9；已合入项经代码核实 |
+| 已完成并归档 | 第一次刷新已归档 G5/G9（大部）；本次归档 **G6、G7、G8、G10、G14、G11（能力强制部分）、D19（除视觉理解）、D21（真机复核除外）、D22、D27（后端）**、拍板 #2；第三次刷新归档 **G3、G9'、G10'、G11'、D20'**，第四次刷新归档 **G13、D27'**，见 §1.1；#152/#153 为既有任务收尾，记 §1.1 附行 |
 | 红线 | 遵守 AGENTS.md 与 SPRINTS 三铁律；契约变更小型独立 PR 先行；未运行检查不得声称通过；不伪造自审；消费红线（零订阅、数据本地）见 SPRINTS §9；**付费真实 Key 验收（G4）在负责人明确授权前不执行** |
 | 状态 | 待两位负责人评审、认领与拍板 |
 
@@ -64,6 +65,14 @@ develop 一天合入 12 个 PR，原审计多项缺口就此关闭：#73 深度�
 | #150 `feature/streaming-reply`（`6659d29`） | stream-pacer：长回复按行/句自适应回放节奏（纯呈现层，契约零改动），修 finish 即 resolve 与取消不释放定时器 | —（无 D 编号 UX 切片；PR 正文即交付描述，无入库报告 → §7.9） |
 | #151 `feature/voice-ui-wiring`（`db64e01`） | D27' 语音桌面接线：麦克风录音→WAV→`voice.transcribe`（只填输入框不自动发送，20s 自动停）、逐条回复朗读按钮（`voice.speak`）、按 `voice.status` 门控禁用 | **D27' ✅**（「按住说话/自动断句」交互未做；真机未验证） |
 
+### 10-29 五次刷新总览（db64e01 → d1cb448，PR #152–#154）
+
+| PR | 内容 | 关闭的审计项 |
+| --- | --- | --- |
+| #152 `feature/d17-skill-host-store`（`cf22763`） | D17' 技能库进 Host：`skillLibrary.get/save`（协议 0.11）+ settings KV `skills.library.v1` 整库校验 + 一次性迁移（composer 数组形态绝不迁移）+ 降级读 localStorage | —（D17 收尾切片） |
+| #153 `feature/d14-mermaid`（`6299994`） | D14 mermaid 补齐：strict + DOMPurify svg + shadow DOM、动态 import chunk、失败回退保原文 | —（D14 收尾切片；审查 §2.2 P3 未处理随合并入库 → §7.9） |
+| #154 本文件四次刷新 | 审计与台账收敛 | — |
+
 双语系统核实（第一次刷新记录，仍有效）：
 
 ## 1. 缺口地图（总览）
@@ -109,6 +118,8 @@ develop 一天合入 12 个 PR，原审计多项缺口就此关闭：#73 深度�
 | ~~G13~~ | 上下文用量可视 + 80% 自动压缩（超额） | PR #138；`chat.contextUsage` + 迁移 `0023-chat-summaries` + `compressTurn`（空工具面、无审批、用量照记）+ 渲染层 context-ring；历史行不删；**审查 §2.1 P2（并发断言）未处理随合并入库**；真实模型摘要质量与真机未验证（[报告](reports/CONTEXT_METER-report.md)） |
 | ~~D27'~~ | 语音桌面接线 | PR #151；`features/voice/`（wav 编码/clip-recorder/voice-ui 门控）+ App.tsx 麦克风（转写只填输入框不自动发送、20s 停）与逐条朗读按钮；「按住说话/自动断句」未做（现为点击录音 20 秒上限）；真机未验证 |
 | — | stream-pacer 流式回放节奏（无编号 UX 切片） | PR #150；`features/chat/stream-pacer.ts` 纯呈现层（按行/句自适应、≤7s），修 finish 即 resolve 与取消定时器泄漏；无入库报告 |
+| — | D17' 技能库进 Host（协议 0.11） | PR #152；`skillLibrary.get/save` + settings KV `skills.library.v1` 整库校验 + 一次性迁移（composer 数组形态绝不迁移）+ 降级读 localStorage；审查 §2.3 备忘未处理（不阻塞）；真机未验证（[报告](reports/D17-skill-host-store-report.md)） |
+| — | D14 补遗：本地 mermaid 渲染 | PR #153；strict + DOMPurify svg + shadow DOM、动态 import chunk、失败回退保原文；**审查 §2.2 P3 未处理随合并入库**；真机截图未做（[报告](reports/D14-mermaid-report.md)） |
 
 ---
 
@@ -212,13 +223,13 @@ Ctrl+K 浮层经 `search.global` 检索 Host 全库：250ms 防抖 + latest-ref�
 
 1. **拍板 #1**（Renderer→Host 方案）：D 步与 B 步的聊天/历史部分已事实上线（运行监控真实化、`chat.history` 接线、存储会话列表），但 **G1' 剩余的 ui.* 界面态持久化仍需拍板 #1 对 ui.* 清单的正式记录**（记录到 RENDERER_HOST_MAPPING §4）后开工；
 2. ~~拍板 #2~~ **已定案并合入 develop（PR #99，2026-10-27）**：develop 头像线为基准，`feature/mono-shape` 作废；
-3. **自审签署**：B 线四项（D14/D24/D25/D26）、D17、D18/D19 报告的自审栏仍空；10-28/29 合入的 G3、G9'、G10'、G11'、D20'（两份）、D21-windows-acceptance、BOT_INTEROP、PRIMITIVE_MODE 各报告自审栏同样留空，PR #136/#137 任务书 §6 亦未填（不追认，由负责人本人针对最新提交 SHA 签署）；
+3. **自审签署**：B 线四项（D14/D24/D25/D26）、D17、D18/D19 报告的自审栏仍空；10-28/29 合入的 G3、G9'、G10'、G11'、D20'（两份）、D21-windows-acceptance、BOT_INTEROP、PRIMITIVE_MODE 各报告自审栏同样留空，PR #136/#137 任务书 §6 亦未填，#152/#153 两份报告自审栏同样留空（不追认，由负责人本人针对最新提交 SHA 签署）；
 4. **手测截图**：`docs/reports/assets/` 现有 chat-diag/d02/d05/d07/d09/d16/d19-mcp/d21/d22/d24-data/d28/d30/settings-nav/sidebar-footer/ui-settings/usage-charts/usage-stats，**d14/d17/d25/d26 仍缺**（d21 两张为合成文本证据图）；
 5. ~~SPRINTS §7 审计表刷新~~ **随本刷新更新**（语言、备份、更新、设置持久化、附件、搜索、硬件加速行改为已完成并登记去向 GAP_AUDIT）；
 6. ~~快赢安家~~ **SPRINTS §9.1 表已注记四项全部完成及载体**（随本刷新）；
 7. ~~本文件入库~~ **随 docs/gap-audit-refresh 分支提交**；
 8. ~~CONTRACTS.md 文档滞后~~ **已收口（2026-10-29 契约补记）**：`chat.send` / `chat.history` / `chat.cancel` / `chat.status` / `chat.attach` 五行已补入 §3 方法表，内容以 `packages/contracts` 冻结 schema 为准（此前 `chat.status` 全文零提及）；skills、primitive 与附件分块细节仍指向既有 D17/D26 节与 §4 事件段，两处漂移风险就此消除；
-9. **无报告合入与 P2 未处理（2026-10-29 四次刷新新增）**：#150（stream-pacer）/ #151（语音接线）未按 §9「每编号 + 报告」入库报告文件（PR 正文模板齐全，是否补报告由归属人定）；#138 合并时未处理 PREMERGE-REVIEW §2.1 的 P2——压缩回合与用户发送真并发 vs 任务书/报告「忙锁排队」断言的分歧已随合并进入 develop，处理方式（改锁或改文档）待归属人。
+9. **无报告合入与 P2 未处理（2026-10-29 四次刷新新增）**：#150（stream-pacer）/ #151（语音接线）未按 §9「每编号 + 报告」入库报告文件（PR 正文模板齐全，是否补报告由归属人定）；#138 合并时未处理 PREMERGE-REVIEW §2.1 的 P2——压缩回合与用户发送真并发 vs 任务书/报告「忙锁排队」断言的分歧已随合并进入 develop，处理方式（改锁或改文档）待归属人；d14 §2.2 P3（主题切换后新图仍用旧主题）同样未处理随 #153 入库（`setMermaidTheme` 仍不重新 initialize）。
 
 ## 8. 建议排期（依赖驱动的批次，可多晚并行）
 
