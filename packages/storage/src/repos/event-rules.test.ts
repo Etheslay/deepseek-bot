@@ -5,13 +5,16 @@ import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import {
   appendEventRuleRecord,
+  claimEventRuleKey,
   createBot,
   decideEventRuleReview,
   enqueueEventRuleReview,
+  EVENT_RULE_KEY_WINDOW_MS,
   findEventRuleReview,
   listEventRuleStates,
   listEventRules,
   listPendingEventRuleReviews,
+  pruneEventRuleKeys,
   saveEventRule,
   saveWorkflow,
   setEventRuleEnabled,
@@ -258,6 +261,73 @@ describe("event rules", () => {
     expect(listEventRuleStates(db, { botId, limit: 1 })).toEqual([
       expect.objectContaining({ state: "review" }),
     ]);
+    db.close();
+  });
+});
+
+describe("event rule key claims (B5 automation dedupe)", () => {
+  it("claims once, blocks inside the window, and re-arms after it", () => {
+    const clock = makeTestClock();
+    const { db, botId, workflowId } = setup(clock);
+    const rule = saveEventRule(db, {
+      botId,
+      name: "窗口内只执行一次",
+      workflowId,
+      eventType: "run.failed",
+    });
+    const eventId = randomUUID();
+    expect(claimEventRuleKey(db, { ruleId: rule.id, eventId })).toBe(true);
+    expect(claimEventRuleKey(db, { ruleId: rule.id, eventId })).toBe(false);
+    clock.advanceMs(EVENT_RULE_KEY_WINDOW_MS - 1);
+    expect(claimEventRuleKey(db, { ruleId: rule.id, eventId })).toBe(false);
+    clock.advanceMs(1);
+    // The window has passed: the claim refreshes and executes again. The
+    // primary record remains the permanent backstop above this layer.
+    expect(claimEventRuleKey(db, { ruleId: rule.id, eventId })).toBe(true);
+    db.close();
+  });
+
+  it("scopes claims per rule, so two rules claim the same event independently", () => {
+    const clock = makeTestClock();
+    const { db, botId, workflowId } = setup(clock);
+    const first = saveEventRule(db, { botId, name: "甲", workflowId, eventType: "run.failed" });
+    const second = saveEventRule(db, { botId, name: "乙", workflowId, eventType: "run.failed" });
+    const eventId = randomUUID();
+    expect(claimEventRuleKey(db, { ruleId: first.id, eventId })).toBe(true);
+    expect(claimEventRuleKey(db, { ruleId: second.id, eventId })).toBe(true);
+    expect(claimEventRuleKey(db, { ruleId: first.id, eventId })).toBe(false);
+    expect(claimEventRuleKey(db, { ruleId: second.id, eventId })).toBe(false);
+    db.close();
+  });
+
+  it("deleting the rule cascades to its claims", () => {
+    const clock = makeTestClock();
+    const { db, botId, workflowId } = setup(clock);
+    const rule = saveEventRule(db, { botId, name: "会删的", workflowId, eventType: "run.failed" });
+    const eventId = randomUUID();
+    expect(claimEventRuleKey(db, { ruleId: rule.id, eventId })).toBe(true);
+    db.raw.prepare("DELETE FROM event_rules WHERE id = ?;").run(rule.id);
+    const remaining = db.raw
+      .prepare("SELECT COUNT(*) AS n FROM event_rule_keys WHERE rule_id = ?;")
+      .get(rule.id) as { n: number };
+    expect(remaining.n).toBe(0);
+    db.close();
+  });
+
+  it("prunes only claims older than the window", () => {
+    const clock = makeTestClock();
+    const { db, botId, workflowId } = setup(clock);
+    const rule = saveEventRule(db, { botId, name: "清理", workflowId, eventType: "run.failed" });
+    const stale = randomUUID();
+    const fresh = randomUUID();
+    expect(claimEventRuleKey(db, { ruleId: rule.id, eventId: stale })).toBe(true);
+    clock.advanceMs(EVENT_RULE_KEY_WINDOW_MS + 1);
+    expect(claimEventRuleKey(db, { ruleId: rule.id, eventId: fresh })).toBe(true);
+    expect(pruneEventRuleKeys(db)).toBe(1);
+    // The stale claim is gone (re-claimable), the fresh one still blocks.
+    expect(claimEventRuleKey(db, { ruleId: rule.id, eventId: stale })).toBe(true);
+    expect(claimEventRuleKey(db, { ruleId: rule.id, eventId: fresh })).toBe(false);
+    expect(pruneEventRuleKeys(db)).toBe(0);
     db.close();
   });
 });

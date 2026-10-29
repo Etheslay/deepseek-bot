@@ -12,6 +12,13 @@
  * does not enter the queue. Enabling, disabling, or switching review on
  * appends one state row when that flag changes. A repeat call that leaves
  * the flag as it is does not append another row.
+ *
+ * B5 automation dedupe: the evaluator also claims a pre-execution key per
+ * (rule, event) in `event_rule_keys`. The claim is the processed-key ledger —
+ * a sighting whose key is still live inside `EVENT_RULE_KEY_WINDOW_MS` is a
+ * windowed duplicate even when the primary record has not landed yet. Claims
+ * older than the window are pruned; the cursor normally makes those events
+ * unreachable anyway.
  */
 import { randomUUID } from "node:crypto";
 import type { OpenedDatabase } from "../database.js";
@@ -450,6 +457,58 @@ export function listEventRuleRecords(
     )
     .all(...params) as unknown as RecordSqlRow[];
   return rows.map(mapRecord);
+}
+
+/** How long one (rule, event) claim keeps blocking a re-execution (B5). */
+export const EVENT_RULE_KEY_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Transactional pre-execution claim for one (rule, event) pair. Returns true
+ * when this call owns the claim and the caller may execute; false when a
+ * live claim inside the window already covers the pair — the caller records
+ * a duplicate and drops the sighting. A claim older than the window is
+ * refreshed and executes again: the window bounds how far back a replay or
+ * cursor rewind is protected, and the primary record remains the permanent
+ * backstop.
+ */
+export function claimEventRuleKey(
+  db: OpenedDatabase,
+  input: { ruleId: string; eventId: string },
+): boolean {
+  return runInTransaction(db.raw, () => {
+    const now = db.now();
+    const row = db.raw
+      .prepare("SELECT claimed_at FROM event_rule_keys WHERE rule_id = ? AND event_id = ?;")
+      .get(input.ruleId, input.eventId) as { claimed_at: string } | undefined;
+    const at = isoNow(db.now);
+    if (row === undefined) {
+      db.raw
+        .prepare("INSERT INTO event_rule_keys (rule_id, event_id, claimed_at) VALUES (?, ?, ?);")
+        .run(input.ruleId, input.eventId, at);
+      return true;
+    }
+    const age = now.getTime() - new Date(row.claimed_at).getTime();
+    if (Number.isFinite(age) && age < EVENT_RULE_KEY_WINDOW_MS) {
+      return false;
+    }
+    db.raw
+      .prepare("UPDATE event_rule_keys SET claimed_at = ? WHERE rule_id = ? AND event_id = ?;")
+      .run(at, input.ruleId, input.eventId);
+    return true;
+  });
+}
+
+/**
+ * Remove claims older than the window. The evaluator calls this once per
+ * pass so the ledger stays bounded; deleting a rule cascades to its claims.
+ * Returns the removed row count.
+ */
+export function pruneEventRuleKeys(db: OpenedDatabase): number {
+  const cutoff = new Date(db.now().getTime() - EVENT_RULE_KEY_WINDOW_MS).toISOString();
+  const result = db.raw
+    .prepare("DELETE FROM event_rule_keys WHERE claimed_at < ?;")
+    .run(cutoff);
+  return Number(result.changes);
 }
 
 export function getEventRuleReview(db: OpenedDatabase, id: string): EventRuleReview | undefined {
