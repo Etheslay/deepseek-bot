@@ -9172,8 +9172,7 @@ button.automation-notice-jump .automation-notice-main {
   font-size: 0.9rem;
 }
 
-.approval-note,
-.approval-decided {
+.approval-note {
   color: var(--muted);
   font-size: 0.85rem;
 }

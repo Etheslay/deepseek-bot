@@ -249,8 +249,9 @@ describe("chat permission cards", () => {
       });
     });
     await vi.waitFor(() => {
+      // 图三：the card disappears; only the centred status line remains.
       expect(container.textContent).toContain("已始终允许 小助手");
-      expect(container.textContent).toContain("✓ 已始终允许");
+      expect(container.querySelectorAll(".approval-card")).toHaveLength(0);
     });
     expect(labels(container)).toEqual([]);
   });
@@ -277,7 +278,7 @@ describe("chat permission cards", () => {
           scope: "once",
         },
       });
-      expect(container.textContent).toContain("✗ 已拒绝");
+      expect(container.textContent).toContain("已拒绝 小助手");
     });
   });
 });

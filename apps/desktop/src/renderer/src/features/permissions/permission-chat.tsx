@@ -4,13 +4,13 @@
  * note, the exact parameter preview and three actions 从不 / 始终允许 /
  * 允许一次. Per-action capabilities (exec.shell, screen.capture, …) only
  * ever offer 从不 / 允许一次: the contract forbids lasting grants for
- * them. After a decision the card stays in the flow in a resolved state
- * (✓/✗ line instead of buttons) under a centred status line; the session
- * scope remains a contract value (approvalDecision) but is no longer a
- * card button. Proactive grants, policy edits and revocation live in
+ * them. Once decided, the card disappears and only a centred status line
+ * remains ({bot} 本次可以… / 已始终允许… / 已拒绝…); the session scope
+ * remains a contract value (approvalDecision) but is no longer a card
+ * button. Proactive grants, policy edits and revocation live in
  * Settings → Permissions.
  */
-import { Fragment, useCallback, useEffect, useRef, useState, type JSX } from "react";
+import { useCallback, useEffect, useRef, useState, type JSX } from "react";
 import {
   PERMISSION_METHODS,
   requiresPerActionApproval,
@@ -70,16 +70,6 @@ function capabilityLine(capabilities: readonly CapabilityId[]): string {
   return capabilities.map(capabilityLabel).join(t("d22.listSeparator"));
 }
 
-function decidedLine(choice: CardChoice): string {
-  const keys: Record<CardChoice, MessageKey> = {
-    once: "permissions.decidedOnce",
-    session: "permissions.decidedOnce",
-    permanent: "permissions.decidedPermanent",
-    deny: "permissions.decidedDenied",
-  };
-  return t(keys[choice]);
-}
-
 export function PermissionChatCards(props: {
   botId: string;
   /** Grok-style card copy names the bot (图二/图三). */
@@ -103,13 +93,11 @@ type ResolvedCard = { approval: AppApproval; choice: CardChoice };
 function ApprovalCard(props: {
   approval: AppApproval;
   botName: string;
-  /** null = pending (buttons); otherwise the card shows the settled state. */
-  decided: CardChoice | null;
   busy?: boolean;
   onDecide?: (approval: AppApproval, choice: CardChoice) => void;
   onDismiss?: (approvalId: string) => void;
 }): JSX.Element {
-  const { approval, botName, decided, busy, onDecide, onDismiss } = props;
+  const { approval, botName, busy, onDecide, onDismiss } = props;
   const capabilities = capabilityLine(approval.capabilities);
   const preview =
     approval.tool === "mcp_call"
@@ -142,15 +130,11 @@ function ApprovalCard(props: {
         {t("permissions.allowTitle", [botName, capabilities])}
       </p>
       <p className="approval-bot">{botName}</p>
-      {decided === null ? (
-        <p className="approval-note">{t("permissions.scopeNote", [botName])}</p>
-      ) : (
-        <p className="approval-decided">{decidedLine(decided)}</p>
-      )}
+      <p className="approval-note">{t("permissions.scopeNote", [botName])}</p>
       <pre className="permission-params" aria-label={t("permissions.pendingParamsAria")}>
         {JSON.stringify(preview, null, 2)}
       </pre>
-      {decided === null && onDecide !== undefined && (
+      {onDecide !== undefined && (
         <div className="approval-actions" role="group" aria-label={t("permissions.approvalFor", [approval.tool])}>
           <button
             type="button"
@@ -285,29 +269,25 @@ function BotPermissionChatCards(props: {
           key={approval.id}
           approval={approval}
           botName={botName}
-          decided={null}
           busy={busyId === approval.id}
           onDecide={choose}
           onDismiss={dismiss}
         />
       ))}
       {resolved.map(({ approval, choice }) => (
-        <Fragment key={approval.id}>
-          <p className="sys-line">
-            {choice === "deny"
-              ? t("permissions.grantedDeniedLine", [botName, capabilityLine(approval.capabilities)])
-              : choice === "permanent"
-                ? t("permissions.grantedPermanentLine", [
-                    botName,
-                    capabilityLine(approval.capabilities),
-                  ])
-                : t("permissions.grantedOnceLine", [
-                    botName,
-                    capabilityLine(approval.capabilities),
-                  ])}
-          </p>
-          <ApprovalCard approval={approval} botName={botName} decided={choice} />
-        </Fragment>
+        <p key={approval.id} className="sys-line">
+          {choice === "deny"
+            ? t("permissions.grantedDeniedLine", [botName, capabilityLine(approval.capabilities)])
+            : choice === "permanent"
+              ? t("permissions.grantedPermanentLine", [
+                  botName,
+                  capabilityLine(approval.capabilities),
+                ])
+              : t("permissions.grantedOnceLine", [
+                  botName,
+                  capabilityLine(approval.capabilities),
+                ])}
+        </p>
       ))}
       {notice !== null ? <p className="sys-line">{t(notice.key, notice.params ?? [])}</p> : null}
     </div>
