@@ -25,6 +25,11 @@ import {
 } from "../../shared/system-integration.js";
 import type { NotificationOutcome } from "../notifications.js";
 import {
+  assertValidVoicePickKind,
+  type VoicePickKind,
+  type VoicePickResult,
+} from "../../shared/voice-pick.js";
+import {
   assertAuthorizedSender,
   type SenderGuard,
 } from "./guards.js";
@@ -43,6 +48,11 @@ export type IpcHandlers = {
   saveKey: (key: unknown) => Promise<{ configured: boolean }>;
   /** Open the knowledge file dialog. The caller cannot pass a path. */
   importKnowledge: () => Promise<import("../../shared/knowledge-import.js").KnowledgeImportResult>;
+  /**
+   * Open a local whisper file dialog (binary or model). The only argument is
+   * the kind; the picked path comes back as the result, never in.
+   */
+  voicePickFile: (kind: VoicePickKind) => Promise<VoicePickResult>;
   /** D24: check GitHub Releases for a newer version. */
   checkUpdates: () => Promise<UpdateStatus>;
   /** D24: download the update and restart into the installer. */
@@ -145,6 +155,15 @@ export function registerIpcHandlers(
   ipcMain.handle(
     IPC_CHANNELS.KNOWLEDGE_IMPORT,
     wrap(IPC_CHANNELS.KNOWLEDGE_IMPORT, () => handlers.importKnowledge()),
+  );
+  ipcMain.handle(
+    IPC_CHANNELS.VOICE_PICK_FILE,
+    (event: IpcMainInvokeEvent, kind: unknown) => {
+      assertAllowedChannel(IPC_CHANNELS.VOICE_PICK_FILE);
+      assertAuthorizedSender(event, isAuthorized);
+      assertValidVoicePickKind(kind);
+      return handlers.voicePickFile(kind);
+    },
   );
   ipcMain.handle(
     IPC_CHANNELS.UPDATES_CHECK,

@@ -26,6 +26,7 @@ import {
 } from "./chrome-bookmarks.js";
 import { DATA_ROOT_DIR_NAME, HOST_EVENT_MISSED, SYSTEM_EVENT_WINDOW_FOCUS } from "../shared/ipc-channels.js";
 import { pickKnowledgeFile } from "./knowledge-import.js";
+import { pickVoiceFile } from "./voice-pick.js";
 import { listBackups, type RestoreOutcome } from "./backups.js";
 import {
   applyHardwareAccelerationPreference,
@@ -247,6 +248,7 @@ function registerShellIpc(win: BrowserWindow): void {
       }),
       saveKey: (key) => saveApiKey(key),
       importKnowledge: () => pickKnowledgeFile(win),
+      voicePickFile: (kind) => pickVoiceFile(win, kind),
       checkUpdates: () => checkUpdates(),
       downloadAndInstallUpdate: () => downloadAndInstallUpdate(),
       setLanguage: (preference) => setMainLanguagePreference(preference),

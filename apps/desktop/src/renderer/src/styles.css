@@ -8276,6 +8276,18 @@ select:focus-visible {
   flex: 0 0 auto;
 }
 
+/* Voice settings rows: local whisper paths are long, so the input flexes like
+   the connector fields instead of the fixed 180px key width. */
+.voice-fields .key-input {
+  width: auto;
+  flex: 1 1 10rem;
+  min-width: 0;
+}
+
+.voice-fields .pill-btn {
+  flex: 0 0 auto;
+}
+
 .automation-form {
   display: grid;
   grid-template-columns: minmax(7rem, 1fr) minmax(9rem, 1.5fr) minmax(7rem, 1fr) auto;

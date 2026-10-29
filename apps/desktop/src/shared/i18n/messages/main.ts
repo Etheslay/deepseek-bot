@@ -8,4 +8,9 @@ export const mainMessages = {
   "main.keyFormatInvalid": { zh: "API Key 格式不正确", en: "The API key format is invalid" },
   "main.keyMustBeString": { zh: "API Key 必须是字符串", en: "The API key must be a string" },
   "main.textFilesFilter": { zh: "文本", en: "Text files" },
+  "main.pickWhisperBin": { zh: "选择 whisper.cpp 程序", en: "Choose the whisper.cpp binary" },
+  "main.pickWhisperModel": { zh: "选择 whisper.cpp 模型", en: "Choose the whisper.cpp model" },
+  "main.executablesFilter": { zh: "可执行文件", en: "Executables" },
+  "main.modelFilesFilter": { zh: "模型文件", en: "Model files" },
+  "main.allFilesFilter": { zh: "所有文件", en: "All files" },
 } satisfies Record<string, Message>;
