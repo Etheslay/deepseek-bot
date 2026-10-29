@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ChatHistoryRow } from "../../src/renderer/src/services/desktop-service.js";
+import { canAnswerChoice } from "../../src/renderer/src/features/questions/choice-answer.js";
 import {
   CHAT_THREAD_HISTORY_LIMIT,
   historyMessageId,
@@ -74,8 +75,14 @@ describe("historyThreadMessages", () => {
       BOT,
     );
     expect(messages.map((message) => message.text)).toEqual(["later", "earlier"]);
-    expect(messages[0]).toMatchObject({ from: "bot", speakerKey: BOT, origin: "history" });
-    expect(messages[1]).toMatchObject({ from: "user", origin: "history" });
+    expect(messages[0]).toMatchObject({
+      from: "bot",
+      speakerKey: BOT,
+      origin: "history",
+      history: true,
+    });
+    expect(messages[1]).toMatchObject({ from: "user", origin: "history", history: true });
+    expect(messages[0]?.choices).toBeUndefined();
     expect(messages[1]?.speakerKey).toBeUndefined();
     expect(messages[0]?.time).toBe(Date.parse("2026-10-28T00:00:02.000Z"));
   });
@@ -111,10 +118,72 @@ describe("historyThreadMessages", () => {
             status: "done",
           },
         }),
+        row({
+          id: "cdcdcdcd-cdcd-4cdc-8cdc-cdcdcdcdcdcd",
+          role: "assistant",
+          text: "automation notice",
+          at: "2026-10-28T00:00:04.000Z",
+          meta: {
+            kind: "automation",
+            ruleId: "edededed-eded-4ede-8ede-edededededed",
+            outcome: "started",
+            runId: null,
+          },
+        }),
       ],
       BOT,
     );
     expect(messages.map((message) => message.text)).toEqual(["hello"]);
+    expect(messages[0]?.history).toBe(true);
+  });
+
+  it("restores an answered choice card and keeps it locked", () => {
+    const messages = historyThreadMessages(
+      [
+        row({
+          id: "12121212-1212-4121-8121-121212121212",
+          role: "assistant",
+          text: "【向用户提问】Which first?\nA. Alpha\nB. Beta",
+          at: "2026-10-28T00:00:01.000Z",
+          meta: {
+            kind: "choice",
+            question: "Which first?",
+            options: [
+              { id: "A", label: "Alpha" },
+              { id: "B", label: "Beta" },
+            ],
+            other: true,
+            answered: "Alpha",
+          },
+        }),
+        row({
+          id: "34343434-3434-4343-8343-343434343434",
+          role: "user",
+          text: "Alpha",
+          at: "2026-10-28T00:00:02.000Z",
+        }),
+      ],
+      BOT,
+    );
+    expect(messages).toHaveLength(2);
+    expect(messages[0]).toMatchObject({
+      from: "bot",
+      history: true,
+      speakerKey: BOT,
+      choices: {
+        question: "Which first?",
+        other: true,
+        answered: "Alpha",
+        options: [
+          { id: "A", label: "Alpha" },
+          { id: "B", label: "Beta" },
+        ],
+      },
+    });
+    expect(canAnswerChoice(messages[0]!)).toBe(false);
+    expect(messages[1]).toMatchObject({ from: "user", history: true });
+    expect(messages[1]?.choices).toBeUndefined();
+    expect(canAnswerChoice(messages[1]!)).toBe(false);
   });
 
   it("uses stable negative ids that do not collide", () => {
@@ -182,10 +251,7 @@ describe("mergeOpenedThread", () => {
   });
 
   it("keeps the seed and a send that landed while an empty read was in flight", () => {
-    const local = [
-      ...seed,
-      turn({ from: "user", text: "hi", time: OPENED_AT, origin: "live" }),
-    ];
+    const local = [...seed, turn({ from: "user", text: "hi", time: OPENED_AT, origin: "live" })];
     expect(mergeOpenedThread([], local, seed)).toEqual(local);
   });
 
@@ -226,7 +292,13 @@ describe("mergeOpenedThread", () => {
 
   it("keeps a repeated line once the previous copy is outside the same-turn window", () => {
     const history = [
-      turn({ from: "user", text: "ok", time: OPENED_AT - SAME_TURN_WINDOW_MS - 1, origin: "history", id: -1 }),
+      turn({
+        from: "user",
+        text: "ok",
+        time: OPENED_AT - SAME_TURN_WINDOW_MS - 1,
+        origin: "history",
+        id: -1,
+      }),
     ];
     const live = turn({ from: "user", text: "ok", time: OPENED_AT, origin: "live", id: 9 });
     expect(mergeOpenedThread(history, [live], seed).map((message) => message.id)).toEqual([-1, 9]);
@@ -251,28 +323,18 @@ describe("isSameStoredTurn", () => {
   });
 
   it("matches the stored copy of the reply just appended", () => {
-    expect(
-      isSameStoredTurn(stored, { from: "bot", text: "hello" }, OPENED_AT + 40),
-    ).toBe(true);
+    expect(isSameStoredTurn(stored, { from: "bot", text: "hello" }, OPENED_AT + 40)).toBe(true);
   });
 
   it("does not swallow a later reply that happens to repeat the text", () => {
     expect(
-      isSameStoredTurn(
-        stored,
-        { from: "bot", text: "hello" },
-        OPENED_AT + SAME_TURN_WINDOW_MS + 1,
-      ),
+      isSameStoredTurn(stored, { from: "bot", text: "hello" }, OPENED_AT + SAME_TURN_WINDOW_MS + 1),
     ).toBe(false);
   });
 
   it("ignores live bubbles", () => {
     expect(
-      isSameStoredTurn(
-        { ...stored, origin: "live" },
-        { from: "bot", text: "hello" },
-        OPENED_AT,
-      ),
+      isSameStoredTurn({ ...stored, origin: "live" }, { from: "bot", text: "hello" }, OPENED_AT),
     ).toBe(false);
   });
 });

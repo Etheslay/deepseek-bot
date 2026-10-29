@@ -7,8 +7,10 @@
  * stored rows once. Later sends stay in the in-memory list and are appended;
  * this module does not reload them.
  *
- * Rows with meta are dispatch markers and task notices. The task feed already
- * renders those, so they stay out of the message thread.
+ * Dispatch, task-notice, and automation rows belong to the task feed and the
+ * notice bar, so they stay out of the message thread. An answered choice
+ * card (`meta.kind === "choice"`) is the question row itself: it comes back
+ * as a collapsed card and is marked `history: true` with every other replay.
  */
 import type { ChatHistoryRow } from "../../services/desktop-service.js";
 
@@ -32,11 +34,34 @@ export type ThreadTurn = {
   origin?: ThreadOrigin;
 };
 
+export type RestoredChoice = {
+  question: string;
+  options: { id: string; label: string }[];
+  other?: boolean;
+  answered: string;
+};
+
 export type HistoryThreadMessage = ThreadTurn & {
   id: number;
   origin: "history";
+  /** Replay of a stored row. Live composer turns never set this. */
+  history: true;
   speakerKey?: number;
+  choices?: RestoredChoice;
 };
+
+function restoredChoice(row: ChatHistoryRow): RestoredChoice | undefined {
+  const meta = row.meta;
+  if (meta?.kind !== "choice" || meta.answered.length === 0) {
+    return undefined;
+  }
+  return {
+    question: meta.question,
+    options: meta.options.map((option) => ({ id: option.id, label: option.label })),
+    ...(meta.other === true ? { other: true } : {}),
+    answered: meta.answered,
+  };
+}
 
 /** Negative id so stored rows never collide with Date.now() sends or bot keys. */
 export function historyMessageId(rowId: string, used: Set<number>): number {
@@ -60,9 +85,10 @@ export function historyThreadMessages(
   const used = new Set<number>();
   const messages: HistoryThreadMessage[] = [];
   for (const row of rows) {
-    if (row.meta !== undefined) {
+    if (row.meta !== undefined && row.meta.kind !== "choice") {
       continue;
     }
+    const choices = restoredChoice(row);
     const parsed = Date.parse(row.at);
     const message: HistoryThreadMessage = {
       id: historyMessageId(row.id, used),
@@ -70,6 +96,8 @@ export function historyThreadMessages(
       text: row.text,
       time: Number.isNaN(parsed) ? 0 : parsed,
       origin: "history",
+      history: true,
+      ...(choices !== undefined ? { choices } : {}),
     };
     if (row.role === "assistant") {
       message.speakerKey = botKey;
@@ -126,9 +154,7 @@ export function mergeOpenedThread<T extends ThreadTurn>(
     if (origin === "seed" || origin === "history") {
       continue;
     }
-    const match = history.findIndex(
-      (row, index) => !consumed.has(index) && sameTurn(row, message),
-    );
+    const match = history.findIndex((row, index) => !consumed.has(index) && sameTurn(row, message));
     if (match >= 0) {
       consumed.add(match);
       continue;

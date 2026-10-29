@@ -3419,6 +3419,13 @@ select option {
   user-select: none;
 }
 
+/* G1': a replayed row is a record, so its time separator stays quieter than a new turn. */
+.chat-time.replay {
+  margin-top: 6px;
+  opacity: 0.55;
+  font-size: 0.72rem;
+}
+
 /* Delete Bot confirmation. */
 .delete-modal {
   width: 420px;

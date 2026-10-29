@@ -18,7 +18,7 @@ export interface ChatMessageRow {
   readonly sessionId: string;
   readonly role: ChatRole;
   readonly text: string;
-  /** v0.5 dispatch marker / task notice; undefined for plain messages. */
+  /** Dispatch, task notice, automation, or an answered choice card. */
   readonly meta?: ChatMessageMeta;
   readonly createdAt: string;
 }

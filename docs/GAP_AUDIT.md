@@ -81,7 +81,7 @@ develop 一天合入 12 个 PR，原审计多项缺口就此关闭：#73 深度�
 
 | 编号 | 缺口 | 优先级 | 建议负责线 | 依赖 |
 | --- | --- | --- | --- | --- |
-| G1' | 界面状态持久化与回放补全（G1 剩余） | P0 | B（UI）+ A（ui.* 服务） | 拍板 #1（ui.* 清单） |
+| G1' | 界面状态持久化与回放补全（G1 剩余：ui.*） | P0 | B（UI）+ A（ui.* 服务） | 拍板 #1（ui.* 清单）；已答卡回放与 `history: true` 见 §2 |
 | G4 | 付费真实 Key 全链验收 | P0 | A+B | 负责人提供临时 Key 并授权费用 |
 | D21' | 真实 Windows 键鼠输入复核（真实窗口截图/OCR 已有真机证据：[D21-windows-acceptance 报告](reports/D21-windows-acceptance-report.md) §4，PR #93） | P2 | A | 真机 |
 | G12 | 多会话管理（会话列表已上，多会话未立） | P3 | A+B | 拍板（新契约面） |
@@ -129,24 +129,26 @@ develop 一天合入 12 个 PR，原审计多项缺口就此关闭：#73 深度�
 
 **已完成部分（不再重复立项）**：`chat.history` 契约（D30）+ 渲染层接线（PR #97/#103）——重启后每 bot 消息历史与流式最终态可见，会话列表/打开读同一份存储行（`stored-session.ts`）。
 
-**剩余缺口（证据，2026-10-28 对 `81a0924` 核实）**：
-- 契约面无任何 `ui.*` 方法（`packages/contracts/src/methods.ts`、`packages/host/src` grep 零命中）：侧栏 bot/分组排列、选中态、界面偏好仍重启即失（SPRINTS §7"全局"行）；
-- 卡片已答态不随历史恢复：`ChatHistoryRow`（`desktop-service.ts:53`）无 choices meta，D30 报告与 TASK_CHOICE_CARD Q2 明确把"回放恢复已答态"列为同批处理项，至今未做；
-- 历史回放消息无"历史"标记（`history: true` grep 零命中），弱化渲染缺失。
+**剩余缺口（ui.*，仍等拍板 #1）**：
+- 契约面无任何 `ui.*` 方法（`packages/contracts/src/methods.ts`、`packages/host/src` grep 零命中）：侧栏 bot/分组排列、选中态、界面偏好仍重启即失（SPRINTS §7"全局"行）。本片不新增 `ui.state.get/set`。
+
+**已补、不依赖拍板 #1**：
+- 已答选项卡：`question.answer` 在助手消息写入 `meta.kind = "choice"`（问题、展示选项、`answered`）。`historyThreadMessages` 恢复 `choices.answered`；卡片折叠，`canAnswerChoice` 对 `history: true` 或已有 `answered` 返回 false，不能再次作答。存量无该 meta 的提问行仍是纯文本。
+- 从 `chat.history` 装入的消息带 `history: true`（并保留 `origin: "history"`）。回放行的时间分隔使用更弱的样式，与本会话新消息区分。
 
 **需求**（沿第一次刷新 G1 的需求，范围收窄到剩余三项）：
 - 侧栏 bot/分组排列、选中态、界面偏好重启后恢复；快照不含任何密钥/敏感数据；
-- 已答选项卡从 `chat_messages` meta 恢复 `choices.answered`，且不可再次作答；
-- 历史回放消息明确区分"历史回放"与"新消息"（弱化时间分隔、禁止再次触发已答卡）。
+- ~~已答选项卡从 `chat_messages` meta 恢复 `choices.answered`，且不可再次作答~~；
+- ~~历史回放消息明确区分"历史回放"与"新消息"（弱化时间分隔、禁止再次触发已答卡）~~（`history: true`）。
 
-**实现方式**（按 [RENDERER_HOST_MAPPING.md](RENDERER_HOST_MAPPING.md) §3 的 B 步，不动冻结契约）：
-1. Host 新增 `ui.state.get/set` 受信方法（按 key 存 JSON 快照，白名单校验：超 key/超大 payload 拒绝），渲染层状态变更防抖写入——**此项依赖拍板 #1 对 ui.* 清单的正式记录**；
-2. 卡片消息从 `chat_messages` 的 meta 恢复 `choices.answered`（D30 已把提问以助手消息落库，恢复所需数据在库）；
-3. 历史回放消息以 `history: true` 标记渲染。
+**实现方式**（按 [RENDERER_HOST_MAPPING.md](RENDERER_HOST_MAPPING.md) §3 的 B 步；ui.* 不进冻结契约）：
+1. Host 新增 `ui.state.get/set` 受信方法（按 key 存 JSON 快照，白名单校验：超 key/超大 payload 拒绝），渲染层状态变更防抖写入——**此项依赖拍板 #1 对 ui.* 清单的正式记录，本片未做**；
+2. ~~卡片消息从 `chat_messages` 的 meta 恢复 `choices.answered`~~（`ChatMessageMeta` 增加可选 `kind: "choice"`，不升 `protocolVersion`）；
+3. ~~历史回放消息以 `history: true` 标记渲染~~。
 
 **验收**：
-- [ ] 发送 10 条消息重启应用，历史与流式最终态完整恢复（现有行为，回归确认）；
-- [ ] 已答选项卡重启后仍为已答态且不可再次作答；
+- [ ] 发送 10 条消息重启应用，历史与流式最终态完整恢复（现有行为，回归确认；本片未做 Electron 重启）；
+- [ ] 已答选项卡重启后仍为已答态且不可再次作答（单测覆盖 meta 落库与回放拒答；未做真机重启）；
 - [ ] `ui.*` 方法白名单校验通过，快照不含 Key；
 - [ ] 拍板 #1 正式记录到 RENDERER_HOST_MAPPING §4（采纳 B 及 ui.* 清单）。
 
@@ -236,7 +238,7 @@ Ctrl+K 浮层经 `search.global` 检索 Host 全库：250ms 防抖 + latest-ref�
 | 批次 | 内容 | 说明 |
 | --- | --- | --- |
 | ~~第一批~~ | G10'（#126）、G9'（#129）、G3（#125）、G11'（#127）、D20'（#134/#135） | 10-28/29 已全部交付，见 §1.1 |
-| 第二批 | G1'（等拍板 #1 记录 ui.* 清单） | P0 仅剩 G1' 与 G4 |
+| 第二批 | G1' 的 ui.*（等拍板 #1 记录 ui.* 清单） | 已答卡回放与 `history: true` 不在此等待；P0 其余为 G4 |
 | 第三批 | D21'（真实键鼠，真机）；语音实机联调（录音/朗读真机验收，#151 已接线） | 需真机环境 |
 | 第四批 | G4 全链验收（需临时 Key 与费用授权）+ D13/D23 收官 | 各项主体合入后执行 |
 | 另行立项 | G12、G13（拍板后）；D19 视觉理解（等模型） | — |

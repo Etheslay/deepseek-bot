@@ -475,11 +475,17 @@ export const TaskSchema = z.object({
 
 export type Task = z.infer<typeof TaskSchema>;
 
+/** Option ids the Host shows on an ask_user card. D's label is host-forced. */
+const CHOICE_OPTION_IDS = ["A", "B", "C", "D"] as const;
+
 /**
  * Additive marker on a persisted chat message row (v0.5). `dispatch` marks
  * the user-side message a coordinator's dispatch injected into the executor
  * session; `task_notice` is the delivery receipt the Host writes into the
  * coordinator session when a dispatched task leaves the running state.
+ * `choice` (G1' replay, no protocol bump) is the answered ask_user card:
+ * the question row already stored for the model, plus the answer so a
+ * reload can render the card collapsed and refuse another answer.
  */
 export const ChatMessageMetaSchema = z.discriminatedUnion("kind", [
   z
@@ -504,6 +510,27 @@ export const ChatMessageMetaSchema = z.discriminatedUnion("kind", [
       outcome: z.enum(["started", "skipped", "review", "enabled", "disabled", "deleted"]),
       runId: UuidSchema.nullable(),
       reason: z.string().max(200).optional(),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("choice"),
+      question: z.string().min(1).max(2_000),
+      options: z
+        .array(
+          z
+            .object({
+              id: z.enum(CHOICE_OPTION_IDS),
+              label: z.string().min(1).max(1_000),
+            })
+            .strict(),
+        )
+        .min(2)
+        .max(4),
+      /** True when the card accepted a free-text answer besides the options. */
+      other: z.boolean().optional(),
+      /** The answer text persisted with the card. Restored cards are always answered. */
+      answered: z.string().min(1).max(4_000),
     })
     .strict(),
 ]);
