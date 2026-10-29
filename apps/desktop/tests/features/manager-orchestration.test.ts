@@ -1,7 +1,8 @@
 /**
- * v0.5 manager orchestration UI tests (T5): the coordinator role switch in
- * the bot editor, the dispatched-task monitor tab (filter/cancel/chain hop)
- * and the chat-side dispatch/notice feed.
+ * v0.5 manager orchestration UI tests (T5): the dispatched-task monitor tab
+ * (filter/cancel/chain hop) and the chat-side dispatch/notice feed. The bot
+ * editor role switch was removed by interop (TASK_BOT_INTEROP.md) — any bot
+ * dispatches now, so there is no role switch left to test.
  */
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -9,13 +10,12 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { TaskSchema, type Bot, type Task } from "@deepseek-bot/contracts";
 import { ServiceProvider } from "../../src/renderer/src/services/service-context.jsx";
-import { BotForm } from "../../src/renderer/src/features/bots/bot-form.js";
 import { TaskList } from "../../src/renderer/src/features/run-monitor/tasks/task-list.js";
 import { TaskFeedCards } from "../../src/renderer/src/features/chat/task-feed.js";
 import { createFixtureTaskService } from "../../src/renderer/src/features/run-monitor/tasks/task-service.js";
 import { capabilityLabel } from "../../src/renderer/src/features/permissions/capability-labels.js";
 import { setLanguagePreference } from "../../src/renderer/src/i18n.js";
-import type { BotDraft, ChatHistoryRow } from "../../src/renderer/src/services/desktop-service.js";
+import type { ChatHistoryRow } from "../../src/renderer/src/services/desktop-service.js";
 
 const roots: Root[] = [];
 beforeEach(() => {
@@ -73,50 +73,6 @@ const bots = [
   { id: WRITER, name: "writer" },
   { id: CODER, name: "coder" },
 ] as Bot[];
-
-describe("bot editor role switch (FR-1)", () => {
-  it("submits the coordinator role and toggles back to standard", async () => {
-    const submitted: BotDraft[] = [];
-    const container = await render(
-      createElement(BotForm, {
-        submitLabel: "保存",
-        onSubmit: async (draft) => {
-          submitted.push(draft);
-          return { ok: true };
-        },
-        onCancel: () => undefined,
-        initial: {
-          name: "manager",
-          instructions: "负责派活",
-          modelProfileId: "44444444-4444-4444-8444-444444444444",
-          workspaceId: "55555555-5555-4555-8555-555555555555",
-          toolPolicyId: "66666666-6666-4666-8666-666666666666",
-          role: "standard",
-        },
-      }),
-    );
-    const chips = [...container.querySelectorAll<HTMLButtonElement>(".role-chip")];
-    expect(chips.map((chip) => chip.textContent)).toEqual(["标准", "协调者（可派发任务）"]);
-    await act(async () => {
-      chips[1]!.click();
-    });
-    await act(async () => {
-      [...container.querySelectorAll("button")]
-        .find((button) => button.textContent === "保存")!
-        .click();
-    });
-    expect(submitted[0]?.role).toBe("coordinator");
-    await act(async () => {
-      chips[0]!.click();
-    });
-    await act(async () => {
-      [...container.querySelectorAll("button")]
-        .find((button) => button.textContent === "保存")!
-        .click();
-    });
-    expect(submitted[1]?.role).toBe("standard");
-  });
-});
 
 describe("dispatch capability label (FR-5/E6)", () => {
   it("names app.dispatch_task in the human permission surfaces", () => {

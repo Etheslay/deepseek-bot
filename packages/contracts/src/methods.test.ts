@@ -27,10 +27,9 @@ describe("method whitelist", () => {
   it("defines a contract for every whitelisted method and nothing else", () => {
     const contractMethods = Object.keys(METHOD_CONTRACTS).sort();
     expect(contractMethods).toEqual([...METHODS].sort());
-    // develop (with voice, search.global and usage.summary) is 117; the
-    // voice-config slice adds voice.config.get/set and D17' adds
-    // skillLibrary.get/save.
-    expect(METHODS).toHaveLength(121);
+    // develop (with voice, search.global, usage.summary and chat.contextUsage)
+    // is 120; D17' adds skillLibrary.get/save.
+    expect(METHODS).toHaveLength(122);
   });
 
   it("covers every method group from CONTRACTS §3", () => {

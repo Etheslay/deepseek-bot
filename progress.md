@@ -1,5 +1,69 @@
 # 工作记录
 
+## 2026-10-29：BOT_WORKSPACE.md 陈旧口径修正（纯文档）
+
+- 该文档为 D05 交付文档但被 D26/D28 持续追加，新旧口径混杂。修正四处：①引言加时点注（夹具驱动为 D05 时口径，现聊天/历史走 host-service，夹具仅存离线演示模式）；②服务清单对齐现状（6 文件，host-service 为真实通道、新增 stored-session）；③测试用例计数改指向 TESTING.md（原文 22+5+7 例早已过期）；④「契约边界速查」表标记为 D05 历史口径不再维护，列出已推翻其「不能声称」列的交付（D30/#97/#103、D24/#78/#119、v0.2 分组），当前能力以 GAP_AUDIT 与 SPRINTS §4 为准。
+- 证据均对 develop `25723cb` 实测（services 目录文件清单、GAP_AUDIT §1.1）；纯文档；`git diff --check` 与链接检查通过。
+
+## 2026-10-29：THIRD_PARTY_NOTICES 直接依赖许可审计（纯文档）
+
+- 从本地 node_modules 实读 34 个工作区直接依赖的 license 字段：第三方全部为 MIT/BSD/Apache/MPL 宽松许可（无 GPL/AGPL），写入 THIRD_PARTY_NOTICES 新增「运行时直接依赖许可索引」节（版本为当日锁文件实测，锁文件仍为权威）。
+- 登记两条：d14 在途分支的 mermaid@12.2.0（MIT）合入时应补表；9 个内部包无 license 字段（根 private:true，未发布可接受，公开分发需负责人决定补法，不代改 package.json）。
+- 纯文档；`git diff --check` 通过。
+
+## 2026-10-29：CONTRACTS.md 标题版本号对齐（纯文档）
+
+- 标题行仍写「接口与数据契约 v0.9」，而代码真值 `CONTRACT_VERSION = "0.10"`（PR #119 升版时漏改标题，正文 §0 已写 0.10）；标题对齐为 v0.10。全 docs 扫描无其他「当前版本」类漂移。
+
+## 2026-10-29：全仓文档完整性体检（纯文档）
+
+- 范围：docs/** 与根目录六个 md，共 109 个文件、345 条本地链接、代码围栏配对、乱码嫌疑、行尾空白五项检查。
+- 结果：仅 D22-report.md 三条断链（相对路径少一级 `../`，指向 DEVELOPMENT_PLAN/GIT_WORKFLOW），已修复；其余全绿（围栏配对 0 异常、乱码 0、行尾空白 0）。体检脚本一次性使用后删除，不入库。
+- 此项为原规范化阶段一致性验证的扩展复查，覆盖近期大量文档改动后的漂移面。
+
+## 2026-10-29：在途台账五更（纯文档）
+
+- PR #144 合入后：develop = `53c5093`；Destinyian 已为 context-meter 开 PR #138（零冲突），但合并前审查的两条发现（cm P2、d14 P3）需其先处理；台账改记录 PR 号与审查指向，弃逐次变动的「落后 N」精确计数（改提示口径，用 rev-list 随时可见）。
+- 纯 Markdown；`git diff --check` 与本地链接检查通过。
+
+## 2026-10-29：三条在途切片合并前独立审查（授权执行）
+
+- 负责人授权对 context-meter / d14-mermaid / d17-skill-host-store 做只读审查：各建 `.worktrees/review-*` 只读 worktree（d14 按其锁文件在线拉 mermaid，其余离线装），读任务书/报告/关键 diff，独立复跑受影响包测试与全仓 lint/typecheck，结束后清理 worktree；三条分支 tip 未动。
+- 结论：三片实现与任务书一致，断言全绿（cm：storage 224/contracts 149/host 含既有抖动隔离复绿/desktop 587；d14：desktop 595/contracts 149；d17：contracts 149/host 含既有抖动隔离复绿/desktop 575；typecheck/lint 均 0）。间歇性「全过但退出 -1」为本机已知 teardown 抖动家族，复跑退出 0。
+- 发现：① cm P2——`compressTurn` 不取每 bot 忙锁，压缩与用户发送真并发，任务书/报告「新 sends 排队（RATE_LIMITED）」断言失实（改锁或改文档，归属人定）；② d14 P3——`initialize` 仅首次执行，主题切换后新图仍用旧主题，与任务书验收「渲染时刻主题决定配色」不符（补 initialize 或改文档）；③ d17 P3 备忘——App.tsx 两处直调 preload 绕过服务层（功能等价）。详见 [PREMERGE-REVIEW-2026-10-29](docs/reports/PREMERGE-REVIEW-2026-10-29.md)。
+- 报告随分支 `feature/premerge-review-973a`（自 develop `5740049`）入库；推送与 PR 由负责人确认。
+
+## 2026-10-29：在途台账四更（纯文档，最小刷新）
+
+- PR #142 合入后：develop = `5740049`；三条在途分支 tip 未动，落后计数刷新（context-meter 2/8、d14-mermaid 2/8、d17-skill-host-store 3/27）；冲突面复算：前两条零冲突，d17-store 仍 1 文件（CONTRACTS.md）。已合入行补 #141/#142。
+- 纯 Markdown；`git diff --check` 与本地链接检查通过。
+
+## 2026-10-29：DEVELOPMENT_PLAN §6 叙事一致性修正（纯文档）
+
+- 三处被后续交付推翻的陈述修正：G3（原生聊天 D08 审批，PR #125）不再是“后续范围”；知识导入上限 16 KiB 已被 D18 收尾（PR #63，256 KiB 知识文档 + knowledge_search + 保留策略）取代；“工作流模板仍未做”改为 G11'（PR #127）已交付本地模板库。
+- 段末加权威指针：其后交付以 SPRINTS §4 与 GAP_AUDIT 为准，本节不再逐段展开。
+- 纯 Markdown；`git diff --check` 与本地链接检查通过；未运行测试（无代码路径变更）。
+
+## 2026-10-29：在途台账三更（纯文档）
+
+- PR #140 合入后 fetch：develop 快进至 `fb69d7e`；远程在途分支变动：`feature/context-meter` 被归属人变基（新头 `7caf386`，试算零冲突）、新增 `feature/d14-mermaid`（D14 mermaid 补齐，含 pnpm-lock 依赖引入，试算零冲突）、`feature/d17-skill-host-store` 未变基已落后 23 提交（冲突 1 文件）。均登记进 SPRINTS §10，不触碰。
+- 纯 Markdown；未运行 pnpm 测试；执行 `git diff --check` 与本地链接检查。
+
+## 2026-10-29：CONTRACTS.md 契约补记 + 在途台账二更（纯文档）
+
+- PR #139 合入后 fetch：develop 快进至 `faecb98`；发现两条新远程在途分支 `feature/context-meter`、`feature/d17-skill-host-store`（均为 Destinyian 的完整切片，含任务书与报告；冲突试算分别 3 文件 / 1 文件）——只登记进 SPRINTS §10，不触碰。
+- 治理债 §7.8 收口：CONTRACTS.md §3 方法表补 `chat.send` / `chat.history` / `chat.cancel` / `chat.status` / `chat.attach` 五行，字段与边界逐一对照 `packages/contracts/src/methods.ts` 冻结 schema（此前 chat.status 全文零提及）；GAP_AUDIT §7.8 标记已收口。
+- 纯 Markdown；未运行 pnpm 测试（无代码路径变更）；执行 `git diff --check` 与本地链接检查，结果见 PR 验证证据表。
+
+## 2026-10-29：GAP_AUDIT 三次刷新与在途台账清点（纯文档）
+
+- 开工时本地 develop 落后 1 提交，fetch 后快进至 `3e21112`（PR #136 互通派发、#137 原始人模式已合入，远程 feature 分支已删）；工作区干净，本轮未改任何代码、未装依赖、未发起 API 请求。
+- 逐项核实 #124–#137 交付：G3（#125）、G9'（#129）、G10'（#126）、G11'（#127）、D20'（#134/#135）关闭；证据为各交付报告加 `git grep`（`packages/host/src/chat-gate.ts` 在库、`host-service.ts:341` 直调 `search.global`、`ui.state` 全仓零命中等）。G1'（等拍板 #1）、G4（无 Key 授权）保持开放；D21' 依 D21-windows-acceptance 报告（PR #93 真机证据）收窄为真实键鼠复核。
+- 更新 `docs/GAP_AUDIT.md`（三次刷新总览、缺口地图、§2/§4/§5/§7/§8）与 `docs/SPRINTS.md`（§4 补 7 行执行记录、§7 搜索圆钮行改已完成、§10 台账重写为 2026-10-29 清点）；`progress.md`/`task_plan.md` 同步。
+- 如实登记：各新交付报告自审栏留空（含 #136/#137 任务书 §6），合并不等于自审已签署；AI 不代签。
+- 验证：纯 Markdown 改动，未运行 pnpm 测试（无代码路径变更）；执行 `git diff --check` 与两份文档的本地链接存在性检查，结果见 PR 验证证据表。
+- 分支 `feature/docs-audit-refresh-8029`（自 develop `3e21112`）；推送与 PR 由负责人确认。
+
 ## 2026-10-26：D15 `web_search` 提交推送授权
 
 - 用户明确授权提交并推送本片，提供PR title和comment，不代填本人自审或合并。

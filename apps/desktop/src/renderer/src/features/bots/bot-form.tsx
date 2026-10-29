@@ -151,13 +151,9 @@ export function BotForm(
     setFieldErrors((prev) => ({ ...prev, [field]: undefined }));
   };
 
-  // FR-1: the coordinator role is a human-only switch. It renders as a chip
-  // pair like the tone picker; the model-facing batch path never carries it.
-  const role: "standard" | "coordinator" =
-    draft.role === "coordinator" ? "coordinator" : "standard";
-  const setRole = (next: "standard" | "coordinator"): void => {
-    setDraft((prev) => ({ ...prev, role: next }));
-  };
+  // Interop (TASK_BOT_INTEROP.md): the coordinator role picker is gone — any
+  // bot may dispatch now, so the role confers nothing. An existing role label
+  // rides along in `draft`/`initial` untouched and is never edited here.
 
 
   const toggleTone = (id: string): void => {
@@ -249,28 +245,6 @@ export function BotForm(
       {fieldErrors.instructions && <em className="field-error">{fieldErrors.instructions}</em>}
       <span className="form-hint">{t("bots.instructionsHint")}</span>
 
-      <span className="tone-label">{t("bots.roleLabel")}</span>
-      <div className="role-picker" role="group" aria-label={t("bots.roleGroupAria")}>
-        <button
-          type="button"
-          className={"role-chip" + (role === "standard" ? " selected" : "")}
-          aria-pressed={role === "standard"}
-          onClick={() => setRole("standard")}
-        >
-          {t("bots.roleStandard")}
-        </button>
-        <button
-          type="button"
-          className={"role-chip coordinator" + (role === "coordinator" ? " selected" : "")}
-          aria-pressed={role === "coordinator"}
-          onClick={() => setRole("coordinator")}
-        >
-          {t("bots.roleCoordinator")}
-        </button>
-      </div>
-      <span className="form-hint">
-        {t("bots.roleHint")}
-      </span>
       <span className="tone-label">{t("bots.personality")}</span>
       <div className="tone-picker" role="group" aria-label={t("bots.toneSelection")}>
         {(props.minimal

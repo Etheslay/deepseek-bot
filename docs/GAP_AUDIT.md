@@ -6,7 +6,8 @@
 | 首次盘点 | 2026-10-26，逐份核对 DEVELOPMENT_PLAN §6、SPRINTS §4–§9、全部任务报告的"未验证/已知边界"与代码实况 |
 | 第二次刷新 | 2026-10-28，基线 `origin/develop` = `81a0924`（PR #121）；对照第一次刷新基线 `b22ca88`（PR #89）之间合入的 #90–#121，未完成项逐个经 `git grep` 对 develop 重新核实后保留任务书原文并更新证据 |
 | 刷新勘误（同日第二提交，基线 `968aa0b` = PR #123） | ① **G2 已由 PR #123 交付**（`feature/g2-bridge-staging-e8f4`，启动即 staging 桥包），移入 §1.1——本刷新首提交仍标开放，特此更正；② **G10 降级为部分完成**：Host 侧 `search.global` 已合入（#117），但渲染层 Ctrl+K 浮层仍只过滤渲染层本地索引（`global-search.tsx` 经 `filterSearch`，全渲染层 grep `search.global` 零调用），余项立为 **G10'**；③ D27 追加：whisper 配置已持久化进 settings KV（PR #118/#123） |
-| 已完成并归档 | 第一次刷新已归档 G5/G9（大部）；本次归档 **G6、G7、G8、G10、G14、G11（能力强制部分）、D19（除视觉理解）、D21（真机复核除外）、D22、D27（后端）**、拍板 #2，见 §1.1 |
+| 第三次刷新 | 2026-10-29，基线 `origin/develop` = `3e21112`（PR #136/#137）；对照第二次刷新基线 `968aa0b`（PR #123）之后合入的 #124–#137，关闭 **G3、G9'、G10'、G11'、D20'**，并把 D21' 收窄为真实键鼠复核；已完成项逐个经 `git grep` 与交付报告核实 |
+| 已完成并归档 | 第一次刷新已归档 G5/G9（大部）；本次归档 **G6、G7、G8、G10、G14、G11（能力强制部分）、D19（除视觉理解）、D21（真机复核除外）、D22、D27（后端）**、拍板 #2；第三次刷新归档 **G3、G9'、G10'、G11'、D20'**，见 §1.1 |
 | 红线 | 遵守 AGENTS.md 与 SPRINTS 三铁律；契约变更小型独立 PR 先行；未运行检查不得声称通过；不伪造自审；消费红线（零订阅、数据本地）见 SPRINTS §9；**付费真实 Key 验收（G4）在负责人明确授权前不执行** |
 | 状态 | 待两位负责人评审、认领与拍板 |
 
@@ -36,6 +37,21 @@ develop 一天合入 12 个 PR，原审计多项缺口就此关闭：#73 深度�
 | #118 / #123 `feature/voice-config-kv-c4d2`、`feature/g2-bridge-staging-e8f4` | whisper 本地配置持久化进 settings KV；**G2 审批桥启动 staging**（`createHost` 即调 `prepareAppToolProfile`，失败降级 stderr 记录） | **G2 ✅**、D27 配置持久化 ✅ |
 | #121 `fix/quota-exhausted-message` | 余额耗尽按 `BUDGET_EXCEEDED` 报告，不再伪装"模型不可用" | G4 验收的错误路径改善 |
 
+### 10-29 三次刷新总览（968aa0b → 3e21112，PR #124–#137）
+
+| PR | 内容 | 关闭的审计项 |
+| --- | --- | --- |
+| #122 `docs/gap-audit-refresh` | 本文件第二次刷新随该 PR 入库 | — |
+| #124 | 与 G2 并行重复实现，已关闭作废 | — |
+| #125 `feature/g3-chat-native-approvals-9d4b`（`473ec67`） | 聊天回合内原生工具审批后端：`ChatNativeGate` 把桥转来的 file/shell/mcp/network 动作词映射到 D16 检查点，ask 落既有 AppApproval 卡（10 分钟 TTL、一次决定），渲染复用现链路 | **G3 ✅**（真实回合端到端归 G4/真机） |
+| #126 `feature/d25-host-search`（`dbfeda0`） | Ctrl+K 浮层经 `search.global` 查 Host 全库（250ms 防抖、过期响应丢弃、四类命中导航、不可达降级本地） | **G10' ✅** |
+| #127 `feature/g11-workflow-template-library`（`92303eb`） | 本地工作流模板库：冻结 `WorkflowDraftSchema` 归一化入架、入架剥离走私的策略字段，落库仍走 `workflow.save` 服务端校验 | **G11' ✅** |
+| #129 `feature/g9-update-channel-docs`（`2eddb1e`） | DESKTOP_SHELL.md「应用内更新（D24）」节 + RELEASE.md §4.1「发布即触发更新」检查单，并修正已失实描述 | **G9' ✅** |
+| #134 / #135 `feature/d20-automation-notices-3c7a`、`feature/d20-chat-notice`（`b1dae08`/`687ac1e`） | 规则启停/错过/待评审以 meta 行写入所属 bot 聊天（后端）+ 聊天内自动化通知条（折叠摘要、错过明细、去设置处理，静默降级） | **D20' ✅** |
+| #128 / #130 / #131 / #133 | 设置导航扁平化；`ask_user` 限真实分叉回合且每回合 ≤3 次；用量图表可读性；侧栏底部固定修复 | — |
+| #136 `feature/bot-interop`（`3e21112`） | 任意 bot 平权派发（去角色/同组门槛、跨组链放行）+ `idempotencyKey` 幂等重放；`Bot.role` 退役为遗留标签 | —（任务书 [TASK_BOT_INTEROP](TASK_BOT_INTEROP.md)） |
+| #137 `feature/primitive-mode`（`fde0953`） | 作曲器「原始人」开关（`chat.send` 可选 `primitive`，最短提示组装，落库不变）+ 深度思考入口移至输入框旁 | —（任务书 [TASK_PRIMITIVE_MODE](TASK_PRIMITIVE_MODE.md)） |
+
 双语系统核实（第一次刷新记录，仍有效）：语言切换在 设置 → 通用 → 外观 → 语言，持久化于 `deepseek-bot.settings.v2`，Host 文案随 `settings.update { patch: { "ui.locale" } }` 同步（`feature/host-dispatch-bilingual` 线，CONTRACTS.md settings.update 行已补记）。
 
 ## 1. 缺口地图（总览）
@@ -45,13 +61,8 @@ develop 一天合入 12 个 PR，原审计多项缺口就此关闭：#73 深度�
 | 编号 | 缺口 | 优先级 | 建议负责线 | 依赖 |
 | --- | --- | --- | --- | --- |
 | G1' | 界面状态持久化与回放补全（G1 剩余） | P0 | B（UI）+ A（ui.* 服务） | 拍板 #1（ui.* 清单） |
-| G10' | D25 后半：渲染层 Ctrl+K 浮层接 Host `search.global` | P1 | B | 无（Host 侧已合入） |
-| G3 | 原生聊天回合内 D08 工具审批 | P0 | A+B | 无（G2 已由 #123 合入） |
 | G4 | 付费真实 Key 全链验收 | P0 | A+B | 负责人提供临时 Key 并授权费用 |
-| G9' | D24 文档欠账（DESKTOP_SHELL/RELEASE 更新通道说明） | P2 | B | 无 |
-| G11' | D17 收尾剩余（工作流模板 Host 注入） | P2 | A | 无 |
-| D20' | 聊天内自动化状态通知条 + 错过触发可见 | P2 | A+B | 无 |
-| D21' | 真实 Windows 键鼠与真实窗口截图/OCR 复核 | P2 | A | 真机 |
+| D21' | 真实 Windows 键鼠输入复核（真实窗口截图/OCR 已有真机证据：[D21-windows-acceptance 报告](reports/D21-windows-acceptance-report.md) §4，PR #93） | P2 | A | 真机 |
 | D27' | 语音桌面 UI（按住说话/自动断句/播放接线） | P2 | B | 无 |
 | G12 | 多会话管理（会话列表已上，多会话未立） | P3 | A+B | 拍板（新契约面） |
 | G13 | 上下文窗口可见性 | P3 | A+B | 无（建议与 G12 同拍板） |
@@ -80,6 +91,11 @@ develop 一天合入 12 个 PR，原审计多项缺口就此关闭：#73 深度�
 | — | D27 语音后端（whisper.cpp 转写 + SAPI 播报） | PR #113；桌面 UI 余项记 D27' |
 | — | 每 bot 存储会话列表（G1 历史回放部分） | PR #97/#103；`host-service.ts:208–218` 已接 `chat.history`，`stored-session.ts` 单会话视图 |
 | — | 拍板 #2（mono-shape 作废） | PR #99 合入 develop |
+| ~~G3~~ | 聊天回合内原生 D08 审批（后端片） | PR #125；`packages/host/src/chat-gate.ts` `ChatNativeGate`（D08 句柄→D16 能力映射，ask 落 AppApproval 卡 10 分钟 TTL），渲染复用 `permission.approval.*` 卡面；真实回合端到端归 G4/真机 |
+| ~~G9'~~ | D24 应用内更新通道文档 | PR #129；`docs/DESKTOP_SHELL.md`「应用内更新（D24）」节 + `docs/RELEASE.md` §4.1 检查单，断言与代码对照见 [G9' 报告](reports/G9-update-channel-docs-report.md) §2 |
+| ~~G10'~~ | Ctrl+K 浮层接 Host 检索 | PR #126；`host-service.ts` 直调 `search.global`（limit 20）、`global-search.tsx` 250ms 防抖 + 过期丢弃 + 四类导航 + 失败降级本地（[报告](reports/D25-host-search-renderer-report.md)） |
+| ~~G11'~~ | D17 工作流模板库 | PR #127；`features/workflow-editor/template/workflow-templates.ts` 冻结 schema 剥离走私策略字段 + Host 端不落库用例（[报告](reports/G11-workflow-template-library-report.md)） |
+| ~~D20'~~ | 聊天内自动化状态通知条 | PR #134/#135；meta 行（kind automation）+ `features/automation/chat-automation-notice.tsx`（错过明细/启停/待评审，20 秒轮询、静默降级，契约零改动）（[报告](reports/D20-chat-notice-report.md)） |
 
 ---
 
@@ -114,32 +130,13 @@ develop 一天合入 12 个 PR，原审计多项缺口就此关闭：#73 深度�
 
 `createHost` 启动即调 `prepareAppToolProfile` 把桥包幂等拷入钉扎 profile（失败不阻断启动、stderr 记录）。首次刷新建议的 `installBridgeIntoProfile`（pnpm file:）路径未采用，与最终实现一致；验收第一条（真实钉扎 Harness 不再打印 `entry did not activate`）仍待真实启动核对。
 
-### G10' D25 后半：渲染层浮层接 Host 检索
+### G10' D25 后半：渲染层浮层接 Host 检索 —— **已完成（PR #126，2026-10-28 合入），移入 §1.1**
 
-**现状（证据，2026-10-28 对 `968aa0b` 核实）**：Host 侧 `search.global`（一体检索 bot/工作流/消息/产物，字面子串，消息只回有界摘要）已随 PR #117 合入并有契约与 Host 单测；但渲染层 Ctrl+K 浮层（`features/search/global-search.tsx`）仍只对**渲染层内存索引**（`buildSearchIndex`：当前已加载 bot、当前会话消息、三个快捷动作）做 `filterSearch` 本地过滤——**全渲染层 grep `search.global` 零调用**。跨 bot 历史与产物在浮层里搜不到，D25"Host 检索 + 浮层合并"只兑现了后端一半。
+Ctrl+K 浮层经 `search.global` 检索 Host 全库：250ms 防抖 + latest-ref、过期响应丢弃、bot/message/workflow/artifact 四类命中同列表键盘导航、Host 不可达时降级本地并如实提示。真机 Electron 手测与真实数据下的检索质量仍未验证（[报告](reports/D25-host-search-renderer-report.md) §3）。
 
-**需求**：搜索请求走 Host（`search.global`），结果回到现有搜索界面；不得只在渲染层过滤本地列表。浮层合并本地快捷项与 Host 命中（按 kind 分派导航：bot → 选中该 bot；message → 打开该 bot 会话线程；workflow → 打开工作流编辑器；artifact → 打开该 bot 产物视图/会话），Host 不可达时如实降级（仅本地结果 + 提示条），不假成功。
+### G3 原生聊天回合内的 D08 工具审批 —— **已完成（PR #125，2026-10-28 合入），移入 §1.1**
 
-**实现方式**（任务书与实现方案随 `feature/d25-host-search` 分支提交，见 `docs/TASK_D25_HOST_SEARCH.md`）：服务层新增 `globalSearch(query)`（host-service 直调 `search.global` 并按契约解析，fixture 返回空）；浮层输入防抖查询、过期响应丢弃、加载/失败态如实呈现；结果分节渲染，键盘导航跨节连续。
-
-**验收**：
-- [ ] 输入关键词后浮层出现 Host 命中（含未在当前会话加载的跨 bot 消息），与本地结果同列表可键盘选择；
-- [ ] 命中导航正确落地（bot/message/workflow/artifact 四类）；
-- [ ] Host 不可达时显示本地结果 + 失败提示，不假成功；过期响应不覆盖新结果；
-- [ ] 不新增契约方法（`search.global` 已冻结），无授权边界变化（检索本身不授权，命中打开走既有逐 bot 方法）。
-
-### G3 原生聊天回合内的 D08 工具审批
-
-**现状（证据）**：DEVELOPMENT_PLAN §8 进度注记原话"其他工具的原生聊天 D08 审批仍为后续范围"（对 `81a0924` 仍准确）。聊天回合内 Harness 调 fs/exec 等原生工具时的审批请求目前无处落地；`ApprovalCard` 现仅在运行监控（工作流）中使用。
-
-**需求**：聊天回合内触发受 D08 管控的动作（fs.read/fs.write/exec.shell/screen.capture）时，聊天流内出现与工作流一致的审批卡（精确参数、允许/拒绝、超时语义）；"从不允许"在网关/D08 层拒绝而非仅 UI 隐藏。
-
-**实现方式**：依赖 G2 的桥通道——Harness 侧审批请求经 bridge 事件到 Host → 复用 D16 审批卡组件在聊天流渲染 → 决定经受信方法回传 Harness 继续/中止；与 D16 grant 检查点协同（策略 ask 才弹卡，deny 直接拒，allow 放行）；审批等待沿用 10 分钟 TTL 与取消语义；审计照记。
-
-**验收**：
-- [ ] 聊天中让 bot 写一个文件：卡片弹出、展示精确路径、拒绝后无副作用；
-- [ ] 策略 deny 的能力直接失败且解释可读；allow 不弹卡；
-- [ ] 超时/取消后 Harness 回合按既有语义终止。
+`ChatNativeGate` 把桥转来的原生工具审批路由到 D16 检查点（fs/exec 能力 + 聊天网络缝 + mcp.call），ask 落既有 AppApproval 卡面（10 分钟 TTL、一次决定）；桌面渲染复用现链路。**真实 Harness 回合内的端到端（弹卡、拒绝无副作用、超时/取消终止回合）仍未验证**，归 G4 授权后或真机复核执行。
 
 ### G4 付费真实 Key 全链验收
 
@@ -163,15 +160,13 @@ develop 一天合入 12 个 PR，原审计多项缺口就此关闭：#73 深度�
 
 ## 4. P2：计划内切片收尾
 
-### G9' D24 文档欠账
-**现状**：备份/恢复/保险库/应用内更新/用量统计/硬件加速主体已交付（PR #78、#119、`b57d46b`）；`docs/DESKTOP_SHELL.md` 与 `docs/RELEASE.md` 仍无应用内更新通道说明（2026-10-28 grep electron-updater 在两文件零命中）。
-**实现**：把"启动静默检查 → 左下角徽标 → 下载重启安装；无 Release 时软着陆"的既有行为（`apps/desktop/src/main/updates.ts`）写入两文档；RELEASE.md 补发布即触发更新的检查单。
-**验收**：文档更新随 PR；描述与代码行为一致（`autoDownload = false`、`autoInstallOnAppQuit = true`）。
+### G9' D24 文档欠账 —— **已完成（PR #129，2026-10-28 合入），移入 §1.1**
 
-### G11' D17 收尾剩余（工作流模板注入）
-**现状**：D17 的技能注入与能力强制已由 PR #115 交付（技能随 `chat.send` 注入、声明能力成为该轮允许集、未声明工具授权检查前拒绝）；D17-skill-injection 报告原话"工作流模板仍未做"。
-**实现**：模板保存的工作流经 `workflow.save` 落库（校验照走）；模板内引用的工具策略在注入时强制重绑该 bot 的 toolPolicyId（不信任模板内嵌权限）；导入导出维持契约校验。
-**验收**：从模板创建工作流后，节点工具策略以宿主 bot 现行策略为准（篡改模板策略无效的用例）。
+`docs/DESKTOP_SHELL.md` 新增「应用内更新（D24）」一节并修正已失实描述（更新通道已接入、设置六分区可用）；`docs/RELEASE.md` §4.1 新增「发布即触发更新的检查单」。文档断言与代码行为逐条对照见 [G9' 报告](reports/G9-update-channel-docs-report.md) §2。
+
+### G11' D17 收尾剩余（工作流模板注入）—— **已完成（PR #127，2026-10-28 合入），移入 §1.1**
+
+渲染层本地模板库（冻结 `WorkflowDraftSchema` 归一化入架、剥离走私的策略字段）+「走私字段不落库」的渲染/Host 双层用例；应用模板仍经 `workflow.save` 服务端校验落库，模板内嵌权限不可信。Electron 真机手测与截图未做（[报告](reports/G11-workflow-template-library-report.md) §3）。
 
 ---
 
@@ -180,8 +175,8 @@ develop 一天合入 12 个 PR，原审计多项缺口就此关闭：#73 深度�
 以下在 [DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md) §6 已有验收定义，仅列 2026-10-28 对 `81a0924` 的现状：
 
 - **D19 剩余**：视觉理解（DeepSeek 视觉模型可用后接入；凭据引用解析、本地 SD 生图、MCP HTTP/stdio 均已交付，见 D19 各报告与 PR #65/#107）；
-- **D20 剩余**：聊天内自动化启停状态通知条、错过触发可见（触发器、规则、评审队列、规则状态历史、重复防护、桌面评审页已交付：PR #66/#84/#85/#87 + D20 各报告；"同一事件不第二次启动"由本地自动启动切片完成）；
-- **D21 剩余**：真实 Windows 键鼠与真实窗口截图/OCR 复核（D21-device-input 报告自记"没有在这台 Linux 环境上执行真实 Windows 键鼠或复核真实窗口截图/OCR"；输入闸门与本地记录已交付：PR #88/#89/#104）；
+- **D20**：计划内切片全部交付——聊天内状态通知条与错过可见已由 PR #134/#135 补齐（触发器、规则、评审队列、规则状态历史、重复防护、桌面评审页此前已交付：PR #66/#84/#85/#87 + D20 各报告；"同一事件不第二次启动"由本地自动启动切片完成）；
+- **D21 剩余**：真实键鼠输入复核（真实窗口截图/OCR 已有真机证据：[D21-windows-acceptance 报告](reports/D21-windows-acceptance-report.md) §4，PR #93；D21-device-input 报告自记"没有在这台 Linux 环境上执行真实 Windows 键鼠或复核真实窗口截图/OCR"；输入闸门与本地记录已交付：PR #88/#89/#104；键鼠真机复核与真实设备动作验收合并排期）；
 - **D22**：全部完成（双语/托盘/通知/Chrome 导入 PR #75；硬件加速 `b57d46b`）；
 - **D27 剩余**：桌面语音 UI——按住说话、自动断句、播放接线（后端 `voice.status/transcribe/speak` 已合入 PR #113，CONTRACTS.md v0.9 段注明"语音录制与播放接线归桌面后续联调"；渲染层 grep whisper/按住 零命中）；
 - **D13 性能预算实测**（PRD §6：未测量不得宣称达标）、**D23 平台收官**：按 DEVELOPMENT_PLAN §9 顺延至阶段二收官，与发布验收合并执行。
@@ -202,20 +197,20 @@ develop 一天合入 12 个 PR，原审计多项缺口就此关闭：#73 深度�
 
 1. **拍板 #1**（Renderer→Host 方案）：D 步与 B 步的聊天/历史部分已事实上线（运行监控真实化、`chat.history` 接线、存储会话列表），但 **G1' 剩余的 ui.* 界面态持久化仍需拍板 #1 对 ui.* 清单的正式记录**（记录到 RENDERER_HOST_MAPPING §4）后开工；
 2. ~~拍板 #2~~ **已定案并合入 develop（PR #99，2026-10-27）**：develop 头像线为基准，`feature/mono-shape` 作废；
-3. **自审签署**：B 线四项（D14/D24/D25/D26）、D17、D18/D19 报告的自审栏仍空（不追认，由负责人本人签署）；
-4. **手测截图**：`docs/reports/assets/` 现有 chat-diag/d02/d05/d07/d09/d16/d19-mcp/d21/d22/d24-data/d28/d30/ui-settings/usage-stats，**d14/d17/d25/d26 仍缺**；
+3. **自审签署**：B 线四项（D14/D24/D25/D26）、D17、D18/D19 报告的自审栏仍空；10-28/29 合入的 G3、G9'、G10'、G11'、D20'（两份）、D21-windows-acceptance、BOT_INTEROP、PRIMITIVE_MODE 各报告自审栏同样留空，PR #136/#137 任务书 §6 亦未填（不追认，由负责人本人针对最新提交 SHA 签署）；
+4. **手测截图**：`docs/reports/assets/` 现有 chat-diag/d02/d05/d07/d09/d16/d19-mcp/d21/d22/d24-data/d28/d30/settings-nav/sidebar-footer/ui-settings/usage-charts/usage-stats，**d14/d17/d25/d26 仍缺**（d21 两张为合成文本证据图）；
 5. ~~SPRINTS §7 审计表刷新~~ **随本刷新更新**（语言、备份、更新、设置持久化、附件、搜索、硬件加速行改为已完成并登记去向 GAP_AUDIT）；
 6. ~~快赢安家~~ **SPRINTS §9.1 表已注记四项全部完成及载体**（随本刷新）；
 7. ~~本文件入库~~ **随 docs/gap-audit-refresh 分支提交**；
-8. **CONTRACTS.md 文档滞后（2026-10-28 新增）**：`chat.history`/`chat.cancel`（D30）、`search.*`（#117）、`chat.send` 技能注入字段（#115）等已在 `packages/contracts` 冻结并合入，但 CONTRACTS.md 正文未逐项收录（仅 v0.9/v0.10 段提及 voice/usage）。建议随下一次契约 PR 补正文或在该文件头部明确"以 packages/contracts 为准"的指引，避免两处漂移。
+8. ~~CONTRACTS.md 文档滞后~~ **已收口（2026-10-29 契约补记）**：`chat.send` / `chat.history` / `chat.cancel` / `chat.status` / `chat.attach` 五行已补入 §3 方法表，内容以 `packages/contracts` 冻结 schema 为准（此前 `chat.status` 全文零提及）；skills、primitive 与附件分块细节仍指向既有 D17/D26 节与 §4 事件段，两处漂移风险就此消除。
 
 ## 8. 建议排期（依赖驱动的批次，可多晚并行）
 
 | 批次 | 内容 | 说明 |
 | --- | --- | --- |
-| 第一批 | G10'（渲染层浮层接 Host 检索，任务书已立）；G9'（纯文档） | G10' 无契约变更立即开工 |
-| 第二批 | G1'（拍板 #1 记录后）；G3（G2 已合入）；G11'；D20' | G11'/D20' 无契约变更可先行 |
-| 第三批 | D21'（真机）；D27'（语音 UI 联调） | 需真机/联调环境 |
+| ~~第一批~~ | G10'（#126）、G9'（#129）、G3（#125）、G11'（#127）、D20'（#134/#135） | 10-28/29 已全部交付，见 §1.1 |
+| 第二批 | G1'（等拍板 #1 记录 ui.* 清单） | P0 仅剩 G1' 与 G4 |
+| 第三批 | D21'（真实键鼠，真机）；D27'（语音 UI 联调） | 需真机/联调环境 |
 | 第四批 | G4 全链验收（需临时 Key 与费用授权）+ D13/D23 收官 | 各项主体合入后执行 |
 | 另行立项 | G12、G13（拍板后）；D19 视觉理解（等模型） | — |
 

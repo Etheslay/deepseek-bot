@@ -11,7 +11,7 @@ import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { afterAll, describe, expect, it, vi } from "vitest";
 import type { AppApproval, Task } from "@deepseek-bot/contracts";
-import { createBot, insertTask, listChatMessages, listTasks, listWorkflows } from "@deepseek-bot/storage";
+import { createBot, getBot, insertTask, listChatMessages, listTasks, listWorkflows } from "@deepseek-bot/storage";
 import { createHost, type DeepSeekBotHost } from "./host.js";
 
 const fakeHarness = fileURLToPath(
@@ -143,29 +143,27 @@ async function waitForTask(
   return task!;
 }
 
-describe("U1 gateway role rules (FR-8/FR-9)", () => {
-  it("rejects standard bots, cross-group targets, self targets and untrusted callers", async () => {
+describe("U1 interop identity rules (TASK_BOT_INTEROP.md)", () => {
+  it("allows standard bots and cross-group targets; still rejects self and untrusted callers", async () => {
     const fx = await hostWithGroup();
     await allowPolicy(fx.host, "app.dispatch_task");
 
-    // A standard bot never passes the coordinator check — even with a
-    // trusted bot binding (the gateway explains, not the UI hides).
-    await expect(
-      fx.host.agentTools.call(
-        { id: `chat:${fx.workerA}`, botId: fx.workerA, sessionId: `chat:${fx.workerA}` },
-        "dispatch_task",
-        { toBotId: fx.workerB, task: "帮我干活" },
-      ),
-    ).rejects.toMatchObject({ code: "UNAUTHORIZED_PATH" });
+    // A standard bot dispatches without any coordinator role — interop makes
+    // every bot equal (the gateway explains; the UI never hides this).
+    const fromWorker = (await fx.host.agentTools.call(
+      { id: `chat:${fx.workerA}`, botId: fx.workerA, sessionId: `chat:${fx.workerA}` },
+      "dispatch_task",
+      { toBotId: fx.workerB, task: "worker 直接派活" },
+    )) as Task;
+    expect(fromWorker.status).toBe("queued");
 
-    // Cross-group targets are refused even for the coordinator.
-    await expect(
-      fx.host.agentTools.call(
-        { id: `chat:${fx.coordinator}`, botId: fx.coordinator, sessionId: `chat:${fx.coordinator}` },
-        "dispatch_task",
-        { toBotId: fx.outsider, task: "跨组试试" },
-      ),
-    ).rejects.toMatchObject({ code: "UNAUTHORIZED_PATH" });
+    // Cross-group targets are allowed: the coordinator names the outsider.
+    const crossGroup = (await fx.host.agentTools.call(
+      { id: `chat:${fx.coordinator}`, botId: fx.coordinator, sessionId: `chat:${fx.coordinator}` },
+      "dispatch_task",
+      { toBotId: fx.outsider, task: "跨组协作" },
+    )) as Task;
+    expect(crossGroup.toBotId).toBe(fx.outsider);
 
     // Self-dispatch is refused at the tool layer.
     await expect(
@@ -184,14 +182,99 @@ describe("U1 gateway role rules (FR-8/FR-9)", () => {
       }),
     ).rejects.toMatchObject({ code: "UNAUTHORIZED_PATH" });
 
-    // And the authoritative method surface enforces the same triple.
+    // The authoritative method surface enforces the same identity rules.
+    const viaMethod = (await fx.host.handleMethod("task.dispatch", {
+      fromBotId: fx.workerA,
+      toBotId: fx.outsider,
+      task: "standard 跨组派发",
+    })) as Task;
+    expect(viaMethod.toBotId).toBe(fx.outsider);
+  });
+
+  it("still refuses archived senders and archived targets", async () => {
+    const fx = await hostWithGroup();
+    await allowPolicy(fx.host, "app.dispatch_task");
+    const bot = getBot(fx.host.db, fx.workerB)!;
+    await fx.host.handleMethod("bot.archive", {
+      id: bot.id,
+      expectedRevision: bot.revision,
+    });
     await expect(
-      fx.host.handleMethod("task.dispatch", {
-        fromBotId: fx.workerA,
-        toBotId: fx.workerB,
-        task: "standard 伪装协调者",
-      }),
+      fx.host.agentTools.call(
+        { id: `chat:${fx.coordinator}`, botId: fx.coordinator, sessionId: `chat:${fx.coordinator}` },
+        "dispatch_task",
+        { toBotId: fx.workerB, task: "发给已归档" },
+      ),
+    ).rejects.toMatchObject({ code: "INVALID_INPUT" });
+    // The archived bot itself cannot dispatch either.
+    await expect(
+      fx.host.agentTools.call(
+        { id: `chat:${fx.workerB}`, botId: fx.workerB, sessionId: `chat:${fx.workerB}` },
+        "dispatch_task",
+        { toBotId: fx.workerA, task: "已归档者派发" },
+      ),
     ).rejects.toMatchObject({ code: "UNAUTHORIZED_PATH" });
+  });
+});
+
+describe("dispatch idempotency (TASK_BOT_INTEROP.md)", () => {
+  it("replays the first task for the same idempotencyKey instead of queueing twice", async () => {
+    const fx = await hostWithGroup();
+    await allowPolicy(fx.host, "app.dispatch_task");
+    const key = randomUUID();
+
+    const first = (await fx.host.handleMethod("task.dispatch", {
+      fromBotId: fx.coordinator,
+      toBotId: fx.workerA,
+      task: "只做一次",
+      idempotencyKey: key,
+    })) as Task;
+    await waitForTask(fx.host, first.id, "done");
+
+    // A retry with the same key — even with a different instruction text —
+    // replays the first task (first write wins).
+    const retry = (await fx.host.handleMethod("task.dispatch", {
+      fromBotId: fx.coordinator,
+      toBotId: fx.workerA,
+      task: "重试同一条",
+      idempotencyKey: key,
+    })) as Task;
+    expect(retry.id).toBe(first.id);
+
+    // Another sender using the same key is NOT deduped against someone
+    // else's task; a fresh key creates a fresh task.
+    const otherSender = (await fx.host.handleMethod("task.dispatch", {
+      fromBotId: fx.workerA,
+      toBotId: fx.workerB,
+      task: "worker 的任务",
+      idempotencyKey: key,
+    })) as Task;
+    expect(otherSender.id).not.toBe(first.id);
+
+    // Exactly one dispatch marker and one task row for the deduped sender.
+    const history = listChatMessages(fx.host.db, fx.workerA, 20);
+    const markers = history.filter((row) => row.meta?.kind === "dispatch");
+    expect(markers).toHaveLength(1);
+    expect(markers[0]!.text.includes("只做一次")).toBe(true);
+    const all = listTasks(fx.host.db, { limit: 100 });
+    expect(all.filter((row) => row.fromBotId === fx.coordinator)).toHaveLength(1);
+  });
+
+  it("keeps plain behavior when no idempotencyKey is sent", async () => {
+    const fx = await hostWithGroup();
+    await allowPolicy(fx.host, "app.dispatch_task");
+    const first = (await fx.host.handleMethod("task.dispatch", {
+      fromBotId: fx.coordinator,
+      toBotId: fx.workerA,
+      task: "第一次",
+    })) as Task;
+    const second = (await fx.host.handleMethod("task.dispatch", {
+      fromBotId: fx.coordinator,
+      toBotId: fx.workerA,
+      task: "第一次",
+    })) as Task;
+    expect(second.id).not.toBe(first.id);
+    await waitForTask(fx.host, second.id, "done");
   });
 });
 
@@ -406,8 +489,17 @@ describe("U7 dual-identity audit (FR-5)", () => {
 });
 
 describe("T7 relay chains (U8–U11)", () => {
-  it("U8: rejects duplicate, cross-group and over-limit chains with readable errors", async () => {
+  it("U8: rejects duplicate-botId and over-limit chains; cross-group chains pass", async () => {
     const fx = await hostWithGroup();
+    // A cross-group hop is allowed (interop): coordinator → workerA → outsider.
+    const crossChain = (await fx.host.handleMethod("task.dispatch", {
+      fromBotId: fx.coordinator,
+      toBotId: fx.workerA,
+      task: "跨组接力",
+      chain: [{ botId: fx.outsider, instruction: "越组一步" }],
+    })) as Task;
+    expect(crossChain.chainTotal).toBe(2);
+    await waitForTask(fx.host, crossChain.id, "done");
     await expect(
       fx.host.handleMethod("task.dispatch", {
         fromBotId: fx.coordinator,
@@ -419,14 +511,6 @@ describe("T7 relay chains (U8–U11)", () => {
         ],
       }),
     ).rejects.toMatchObject({ code: "INVALID_INPUT" });
-    await expect(
-      fx.host.handleMethod("task.dispatch", {
-        fromBotId: fx.coordinator,
-        toBotId: fx.workerA,
-        task: "跨组跳",
-        chain: [{ botId: fx.outsider, instruction: "越权一步" }],
-      }),
-    ).rejects.toMatchObject({ code: "UNAUTHORIZED_PATH" });
     await expect(
       fx.host.handleMethod("task.dispatch", {
         fromBotId: fx.coordinator,

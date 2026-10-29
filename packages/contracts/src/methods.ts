@@ -144,6 +144,7 @@ export const METHODS = [
   "chat.history",
   "chat.cancel",
   "chat.status",
+  "chat.contextUsage",
   "task.dispatch",
   "task.list",
   "task.cancel",
@@ -599,12 +600,19 @@ export const METHOD_CONTRACTS = {
    * instructions into the prompt and, when any capability id is present, the
    * tool gateway allows only tools those ids cover. Omitted or empty means
    * no skill constraint. This does not grant capabilities.
+   *
+   * `primitive` (原始人模式) marks a one-step terse turn: the Host composes a
+   * minimal prompt — no persona instructions and no history replay, only the
+   * attached skill block, a terse directive and this message. Storage and
+   * history replay are unchanged; the flag affects prompt assembly only.
+   * Optional and additive: omitted means the existing behavior.
    */
   "chat.send": {
     request: z.object({
       botId: UuidSchema,
       text: z.string().min(1).max(4000),
       skills: z.array(ChatSkillInjectionSchema).max(MAX_CHAT_SKILLS).optional(),
+      primitive: z.boolean().optional(),
     }),
     response: z.object({
       sessionId: z.string().min(1).max(128),
@@ -689,20 +697,46 @@ export const METHOD_CONTRACTS = {
     }),
   },
   /**
-   * v0.5 manager orchestration (TASK_MANAGER_ORCHESTRATION.md §3.3).
-   * task.dispatch is gateway-internal: only the model tool `dispatch_task`
-   * reaches it, and the Host re-checks the coordinator rules (role, same
-   * group, not self) before enqueueing — the gateway layer check explains
-   * the rejection to the model, this one is authoritative. task.list is the
-   * human + read-only-tool query surface; task.cancel is human-only (queued
-   * tasks cancel directly, running tasks ride the chat cancel path; queued
-   * hops of the same relay chain are cascaded, T7 R-13.5).
+   * Context meter (TASK_CONTEXT_METER.md): read-only usage gauge for the
+   * bot's single chat session. `percent` compares the context the NEXT turn
+   * would assemble against the host's context window: the last completed
+   * turn's real input tokens when available (estimated=false), otherwise a
+   * chars/4 estimate (estimated=true); after a background compression the
+   * estimate reflects the summarized prompt. `compressedAt` is when the
+   * active session summary was written; `compressing` reports a compression
+   * turn in flight. Read-only display data — it never gates a send.
+   */
+  "chat.contextUsage": {
+    request: z.object({ botId: UuidSchema }),
+    response: z.object({
+      percent: z.int().min(0).max(100),
+      usedTokens: z.int().min(0),
+      windowTokens: z.int().min(1),
+      estimated: z.boolean(),
+      compressedAt: IsoDateTimeUtcSchema.nullable(),
+      compressing: z.boolean(),
+    }),
+  },
+  /**
+   * v0.5 manager orchestration (TASK_MANAGER_ORCHESTRATION.md §3.3), relaxed
+   * to interop (TASK_BOT_INTEROP.md): task.dispatch is gateway-internal — only
+   * the model tool `dispatch_task` reaches it, and the Host re-checks the
+   * sender rules (trusted live bot, not self) before enqueueing; any bot may
+   * dispatch, cross-group included. The gateway layer check explains the
+   * rejection to the model, this one is authoritative. task.list is the human
+   * + read-only-tool query surface; task.cancel is human-only (queued tasks
+   * cancel directly, running tasks ride the chat cancel path; queued hops of
+   * the same relay chain are cascaded, T7 R-13.5).
    *
    * T7 relay chain: `chain` pre-declares the downstream hops. The chain is
-   * validated as a simple path (no repeated botId, no self-reference) of
-   * same-group live bots; total hops including this dispatch are capped at
-   * TASK_CHAIN_MAX. One approval on this call covers the whole chain
+   * validated as a simple path (no repeated botId, no self-reference) of live
+   * bots — cross-group allowed; total hops including this dispatch are capped
+   * at TASK_CHAIN_MAX. One approval on this call covers the whole chain
    * (R-13.1), and every hop is revalidated before execution (R-13.6).
+   *
+   * Idempotency: a repeated submission with the same `idempotencyKey` replays
+   * the first task this sender created under that key (first write wins) —
+   * no duplicate rows, queueing or dispatch markers.
    */
   "task.dispatch": {
     request: z
@@ -720,10 +754,11 @@ export const METHOD_CONTRACTS = {
           )
           .max(TASK_CHAIN_MAX - 1)
           .optional(),
+        idempotencyKey: UuidSchema.optional(),
       })
       .strict()
       .refine((request) => request.fromBotId !== request.toBotId, {
-        message: "a coordinator cannot dispatch a task to itself",
+        message: "a bot cannot dispatch a task to itself",
       })
       .refine(
         (request) => {

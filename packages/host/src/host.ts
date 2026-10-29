@@ -125,6 +125,7 @@ import {
 } from "./voice.js";
 import { TaskDispatcher } from "./task-dispatcher.js";
 import { ChatNativeGate } from "./chat-gate.js";
+import { writeAutomationNotice } from "./automation-notices.js";
 import { evaluateTriggerRules } from "./triggers.js";
 import { invokeConnector } from "./connectors.js";
 import { McpService } from "./mcp.js";
@@ -191,6 +192,12 @@ export interface HostOptions {
     readonly runTranscribe?: VoiceTranscribeRunner;
     readonly runSpeak?: VoiceSpeakRunner;
   };
+  /**
+   * Context meter (TASK_CONTEXT_METER.md): the model context window the
+   * usage percentage divides by. One host-wide default (65,536); per-model
+   * windows are a documented follow-up.
+   */
+  readonly contextWindowTokens?: number;
 }
 
 export interface DeepSeekBotHost {
@@ -574,7 +581,22 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
       // after a successful pass, so nothing is skipped.
     }
     try {
-      evaluateEventRules(db, engine);
+      evaluateEventRules(db, engine, {
+        onRuleOutcome: (notice) => {
+          writeAutomationNotice(
+            db,
+            {
+              ruleId: notice.ruleId,
+              botId: notice.botId,
+              ruleName: notice.ruleName,
+              outcome: notice.outcome,
+              runId: notice.runId,
+              reason: notice.reason,
+            },
+            uiLocale.current,
+          );
+        },
+      });
     } catch {
       // A failed rule keeps its cursor and is retried on the next tick.
     }
@@ -637,6 +659,8 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
     tasks,
     locale: uiLocale,
     attachmentUploads: attachmentStore,
+    contextWindowTokens: options.contextWindowTokens ?? 65_536,
+    compressingChats: new Set<string>(),
     get agentTools(): ToolGateway {
       if (agentToolsHolder.current === undefined) {
         throw new Error("agent tools gateway is not ready yet");

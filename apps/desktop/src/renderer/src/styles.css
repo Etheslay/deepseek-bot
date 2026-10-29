@@ -1411,6 +1411,25 @@ body {
   color: var(--muted);
   display: grid;
   place-items: center;
+  /* D27 desktop slice: the mic is a real button now (was a placeholder span). */
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.composer-mic:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.composer-mic.recording {
+  background: #e5484d;
+  color: #fff;
+}
+
+.composer-mic.recording:hover {
+  background: #f0575c;
 }
 
 .composer-mic svg {
@@ -7465,39 +7484,87 @@ select:focus-visible {
 }
 
 
-/* ---------- G5 深度思考开关（会话头部） ---------- */
-.deep-thinking-toggle {
+/* ---------- 原始人模式 + 深度思考：composer 双开关 ---------- */
+.composer-modes {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
+  flex: none;
+}
+
+.composer-mode {
   font: inherit;
-  font-size: 0.85rem;
+  font-size: 0.72rem;
   color: var(--muted);
   background: transparent;
   border: 1px solid var(--border);
   border-radius: 999px;
-  padding: 0.32rem 0.8rem;
+  padding: 0.18rem 0.55rem;
   cursor: pointer;
-  -webkit-app-region: no-drag;
+  white-space: nowrap;
 }
 
-.deep-thinking-toggle svg {
-  width: 15px;
-  height: 15px;
-}
-
-.deep-thinking-toggle:hover {
+.composer-mode:hover {
   color: var(--text);
   background: var(--item-hover);
 }
 
-.deep-thinking-toggle.active {
+.composer-mode.active {
   color: var(--text);
   background: var(--item-active);
   border-color: var(--accent, #3b82f6);
 }
 
-.deep-thinking-toggle:focus-visible {
+.composer-mode:focus-visible {
+  outline: 2px solid #8ab4ff;
+  outline-offset: 2px;
+}
+
+/* ---------- 上下文圆圈（TASK_CONTEXT_METER.md） ----------
+   用量展示专用：不承载任何开关，悬停读百分比。 */
+.context-ring {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  flex: none;
+  cursor: default;
+}
+
+.context-ring svg {
+  width: 20px;
+  height: 20px;
+}
+
+.context-ring-track {
+  fill: none;
+  stroke: var(--border);
+  stroke-width: 2.4;
+}
+
+.context-ring-fill {
+  fill: none;
+  stroke: var(--accent, #3b82f6);
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  transition: stroke-dasharray 240ms ease;
+}
+
+.context-ring.warn .context-ring-fill {
+  stroke: var(--runs, #ec4899);
+}
+
+.context-ring-value {
+  position: absolute;
+  font-size: 0.42rem;
+  font-weight: 700;
+  color: var(--muted);
+  pointer-events: none;
+}
+
+.context-ring:focus-visible {
   outline: 2px solid #8ab4ff;
   outline-offset: 2px;
 }
@@ -8877,4 +8944,140 @@ select:focus-visible {
 .usage-dot-output,
 .usage-point.usage-line-output {
   color: var(--usage-c2);
+}
+
+   Sidebar: only the bot list scrolls
+   The account row sat after the list in the same flex column, so
+   enough bots stretched the column and pushed it out of the
+   viewport. The list is now its own scroll container; the identity
+   block above and the account row below are pinned, and the
+   scrollbar sits in a few pixels of padding so it never overlaps a
+   row or the selected tab's rounded edge.
+   ============================================================ */
+
+.sidebar {
+  min-height: 0;
+}
+
+.sidebar-scroll {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  padding-right: 3px;
+  margin-right: -3px;
+}
+
+.sidebar-foot {
+  flex: 0 0 auto;
+  margin-top: 0;
+}
+
+/* the update badge belongs with the pinned footer, not the scrolling list */
+.sidebar > .update-badge {
+  flex: 0 0 auto;
+}
+
+/* ------------------------------------------------------------
+   Chat automation status notice (D20'). Visual language follows the
+   chat's muted inline rows (.deliver-notice / .sys-line): centered
+   small text, panel-tinted strip, no bubble, never a chat message.
+   ------------------------------------------------------------ */
+
+.automation-notice {
+  margin: 0 16px 8px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel);
+  overflow: hidden;
+}
+
+.automation-notice-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 12px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+  text-align: left;
+  cursor: pointer;
+}
+
+.automation-notice-toggle:hover {
+  background: var(--item-hover);
+}
+
+.automation-notice-title {
+  color: var(--text);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.automation-notice-summary {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  min-width: 0;
+}
+
+.automation-notice-caret {
+  flex: none;
+  font-size: 10px;
+}
+
+.automation-notice-body {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--border);
+}
+
+.automation-notice-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 5px 12px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.automation-notice-row + .automation-notice-row {
+  border-top: 1px solid var(--border);
+}
+
+.automation-notice-main {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.automation-notice-meta {
+  flex: none;
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+button.automation-notice-jump {
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+button.automation-notice-jump:hover {
+  background: var(--item-hover);
+}
+
+button.automation-notice-jump .automation-notice-main {
+  color: var(--text);
 }

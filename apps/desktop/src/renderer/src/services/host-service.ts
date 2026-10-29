@@ -15,6 +15,7 @@ import {
   type Task,
 } from "@deepseek-bot/contracts";
 import { bytesToBase64 } from "../features/chat/attachments.js";
+import { planPacing } from "../features/chat/stream-pacer.js";
 import {
   ServiceError,
   type AttachmentUploadResult,
@@ -219,6 +220,10 @@ export function createHostService(bridge: HostBridge): DesktopService {
         };
       },
       history: async (botId, limit = 100) => readHistory(botId, limit),
+      contextUsage: async (botId) =>
+        METHOD_CONTRACTS["chat.contextUsage"].response.parse(
+          await bridge.host.call("chat.contextUsage", { botId }),
+        ),
       importAttachment: async (botId, file) => {
         if (file.bytes.byteLength === 0) {
           throw new ServiceError("INVALID_INPUT", t("shell.attachmentEmpty", [file.name]));
@@ -255,20 +260,46 @@ export function createHostService(bridge: HostBridge): DesktopService {
       },
       stream: (botId, text, handlers, options) => {
         let cancelled = false;
+        /** Pending inter-chunk timer and the resolver it belongs to (see cancel). */
+        let pacingTimer: ReturnType<typeof setTimeout> | null = null;
+        let stopPacing: (() => void) | null = null;
         const sessionId = `chat:${botId}`;
         const skills = options?.skills;
+        const primitive = options?.primitive === true;
+        const payload: Record<string, unknown> = { botId, text };
+        if (skills !== undefined && skills.length > 0) {
+          payload.skills = skills;
+        }
+        if (primitive) {
+          payload.primitive = true;
+        }
         const done = bridge.host
-          .call(
-            "chat.send",
-            skills !== undefined && skills.length > 0 ? { botId, text, skills } : { botId, text },
-          )
-          .then((response) => {
+          .call("chat.send", payload)
+          .then(async (response) => {
             const reply = (response as { text: string }).text;
-            if (!cancelled) {
-              const chunks = reply.match(/[\s\S]{1,32}/g) ?? [reply];
-              for (const chunk of chunks) {
-                handlers.onDelta(chunk);
+            if (cancelled) {
+              return { cancelled: true, failure: null } satisfies StreamResult;
+            }
+            // The Host answers with the whole reply, so the bubble is a replay:
+            // slice it per line (long) or per sentence (short) and advance at an
+            // interval derived from the length. See features/chat/stream-pacer.ts.
+            const plan = planPacing(reply);
+            for (let index = 0; index < plan.chunks.length; index += 1) {
+              if (cancelled) {
+                return { cancelled: true, failure: null } satisfies StreamResult;
               }
+              handlers.onDelta(plan.chunks[index] ?? "");
+              if (index === plan.chunks.length - 1) {
+                break;
+              }
+              await new Promise<void>((resolve) => {
+                stopPacing = resolve;
+                pacingTimer = setTimeout(() => {
+                  pacingTimer = null;
+                  stopPacing = null;
+                  resolve();
+                }, plan.intervalMs);
+              });
             }
             return { cancelled, failure: null } satisfies StreamResult;
           })
@@ -283,6 +314,14 @@ export function createHostService(bridge: HostBridge): DesktopService {
         return {
           cancel: () => {
             cancelled = true;
+            // Release a replay that is waiting between two chunks, otherwise the
+            // finish promise would never settle and the bubble would stay busy.
+            if (pacingTimer !== null) {
+              clearTimeout(pacingTimer);
+              pacingTimer = null;
+            }
+            stopPacing?.();
+            stopPacing = null;
             void bridge.host.call("chat.cancel", { sessionId }).catch(() => undefined);
           },
           finish: () => done,

@@ -42,6 +42,24 @@ export interface EventRuleEvaluation {
   readonly pending: number;
 }
 
+/** One per-bot outcome worth surfacing in the owner bot's chat (D20'). */
+export interface EventRuleNotice {
+  readonly ruleId: string;
+  readonly botId: string;
+  readonly ruleName: string;
+  readonly outcome: "started" | "skipped" | "review";
+  readonly runId: string | null;
+  readonly reason: string | undefined;
+}
+
+export interface EventRuleEvaluationHooks {
+  /**
+   * Called once per started/skipped/reviewed local event. A throwing or
+   * missing hook never affects the evaluation itself.
+   */
+  onRuleOutcome?(notice: EventRuleNotice): void;
+}
+
 interface EventRow {
   rowid: number;
   event_id: string;
@@ -113,9 +131,32 @@ function truncate(reason: string): string {
  * One pass over every rule, including disabled ones. Disabled matches are
  * skips. The cursor advances only after that rule's rows are handled.
  */
+function emitNotice(
+  hooks: EventRuleEvaluationHooks | undefined,
+  rule: EventRule,
+  outcome: EventRuleNotice["outcome"],
+  runId: string | null,
+  reason: string | undefined,
+): void {
+  if (hooks?.onRuleOutcome === undefined) return;
+  try {
+    hooks.onRuleOutcome({
+      ruleId: rule.id,
+      botId: rule.botId,
+      ruleName: rule.name,
+      outcome,
+      runId,
+      reason,
+    });
+  } catch {
+    // A notice sink must never break the evaluation.
+  }
+}
+
 export function evaluateEventRules(
   db: OpenedDatabase,
   engine: WorkflowEngine,
+  hooks?: EventRuleEvaluationHooks,
 ): EventRuleEvaluation {
   let scanned = 0;
   let started = 0;
@@ -168,6 +209,7 @@ export function evaluateEventRules(
           runId: null,
           reason: "rule disabled",
         });
+        emitNotice(hooks, rule, "skipped", null, "rule disabled");
         skipped += 1;
         continue;
       }
@@ -179,11 +221,13 @@ export function evaluateEventRules(
           runId: null,
           reason: "source run was started by an event rule",
         });
+        emitNotice(hooks, rule, "skipped", null, "source run was started by an event rule");
         skipped += 1;
         continue;
       }
       if (rule.review) {
         enqueueEventRuleReview(db, { ruleId: rule.id, eventId: event.event_id });
+        emitNotice(hooks, rule, "review", null, undefined);
         pending += 1;
         continue;
       }
@@ -211,6 +255,7 @@ export function evaluateEventRules(
           runId: run.id,
           reason: "matching local event",
         });
+        emitNotice(hooks, rule, "started", run.id, "matching local event");
         started += 1;
       } catch (error) {
         const existingId = findRunIdByIdempotency(db, idempotencyKey);
@@ -222,17 +267,20 @@ export function evaluateEventRules(
             runId: existingId,
             reason: "matching local event",
           });
+          emitNotice(hooks, rule, "started", existingId, "matching local event");
           started += 1;
           continue;
         }
         const message = error instanceof Error ? error.message : String(error);
+        const failureReason = truncate(`event rule trigger failed: ${message}`);
         appendEventRuleRecord(db, {
           ruleId: rule.id,
           eventId: event.event_id,
           outcome: "skipped",
           runId: null,
-          reason: truncate(`event rule trigger failed: ${message}`),
+          reason: failureReason,
         });
+        emitNotice(hooks, rule, "skipped", null, failureReason);
         skipped += 1;
       }
     }

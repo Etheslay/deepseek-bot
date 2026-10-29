@@ -34,6 +34,7 @@ export * from "./repos/artifact-versions.js";
 export * from "./repos/settings.js";
 export * from "./repos/permissions.js";
 export * from "./repos/chat.js";
+export * from "./repos/chat-summaries.js";
 export * from "./repos/memories.js";
 export * from "./repos/knowledge.js";
 export * from "./repos/retention.js";

@@ -797,6 +797,39 @@ CREATE INDEX usage_events_time ON usage_events(occurred_at);
 CREATE INDEX usage_events_bot_time ON usage_events(bot_id, occurred_at);
 `,
   },
+  {
+    // Interop dispatch idempotency (TASK_BOT_INTEROP.md): a caller may key a
+    // dispatch so a retried submission replays the first task instead of
+    // queueing the same instruction twice. Scoped per sender, nullable for
+    // every unkeyed dispatch (plain task rows leave it NULL).
+    id: 22,
+    name: "0022-task-idempotency",
+    sql: /* sql */ `
+ALTER TABLE tasks ADD COLUMN idempotency_key TEXT;
+CREATE UNIQUE INDEX tasks_from_idem
+  ON tasks(from_bot_id, idempotency_key)
+  WHERE idempotency_key IS NOT NULL;
+`,
+  },
+  {
+    // Context meter (TASK_CONTEXT_METER.md): one compressed-history summary
+    // per bot session. `covers_message_id` is the watermark — the last
+    // chat_messages row folded into `summary`; later rows still replay
+    // verbatim. Rows in chat_messages are never deleted, so deleting the
+    // summary row restores the full replay.
+    id: 23,
+    name: "0023-chat-summaries",
+    sql: /* sql */ `
+CREATE TABLE chat_summaries (
+  bot_id TEXT NOT NULL REFERENCES bots(id),
+  session_id TEXT NOT NULL,
+  summary TEXT NOT NULL,
+  covers_message_id TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (bot_id, session_id)
+);
+`,
+  },
 
 ];
 

@@ -99,8 +99,16 @@
 | D27 本地语音后端 | **已交付（PR #113）**：`voice.status` / `voice.transcribe` / `voice.speak`（协议 0.9），whisper.cpp 本地转写 + Windows SAPI 播报，剪辑不落盘不外发；麦克风采集/断句/播放接线与真实模型分发归后续 | `feature/voice-local-backend-8c21` → PR #113 `6ecd1b3` | [D27-voice-backend-report](reports/D27-voice-backend-report.md) |
 | D27 语音配置持久化 | **已交付（PR #118）**：`voice.config.get` / `voice.config.set` 受信方法，whisper 路径写入 settings KV 即时生效、重启恢复（环境变量只是启动种子）；桌面设置页可据此接线 | `feature/voice-config-kv-c4d2` → PR #118 `94bc05d` | [D27-voice-config-report](reports/D27-voice-config-report.md) |
 | G2 审批桥激活 | **已交付（PR #123）**：Host 启动时把 harness-bridge 幂等装入钉扎 sdk profile，工作流与聊天全部启动路径可解析插件行，消除 `entry did not activate`；真实 Harness 告警消失归真机复核 | `feature/g2-bridge-staging-e8f4` → PR #123 `968aa0b` | [G2-bridge-activation-report](reports/G2-bridge-activation-report.md) |
-| G3 原生聊天 D08 审批（后端） | 后端切片已实现待合并：ChatNativeGate 把桥转来的原生工具审批路由到 D16 检查点（fs/exec 能力 + 聊天网络缝 + mcp.call），ask 落既有 AppApproval 卡面（10 分钟 TTL、一次决定）；桌面渲染复用现链路，真实 Harness 端到端归 G4/真机 | `feature/g3-chat-native-approvals-9d4b` | [G3-chat-native-approvals-report](reports/G3-chat-native-approvals-report.md) |
-| D25 host 检索 | 后端切片已实现待合并：`search.global` 受信方法（跨 bot 消息/产物/工作流/bot 名，字面子串、有界摘要）；渲染层接线归桌面后续 | `feature/d25-host-search-5f3a` | [D25-host-search-report](reports/D25-host-search-report.md) |
+| G9' 应用内更新通道文档 | **已交付（PR #129）**：DESKTOP_SHELL「应用内更新（D24）」节 + RELEASE §4.1 发布即触发更新检查单，修正失实描述 | `feature/g9-update-channel-docs` → PR #129 `2eddb1e` | [G9-update-channel-docs-report](reports/G9-update-channel-docs-report.md) |
+| G11' 工作流模板库 | **已交付（PR #127）**：本地模板库（冻结 schema 归一化、剥离走私策略字段）+ 落库仍走 `workflow.save` 校验 | `feature/g11-workflow-template-library` → PR #127 `92303eb` | [G11-workflow-template-library-report](reports/G11-workflow-template-library-report.md) |
+| D25 后半（浮层接 Host 检索） | **已交付（PR #126）**：Ctrl+K 经 `search.global` 查 Host 全库，四类命中导航、过期丢弃、失败降级本地 | `feature/d25-host-search` → PR #126 `dbfeda0` | [D25-host-search-renderer-report](reports/D25-host-search-renderer-report.md) |
+| D20' 聊天自动化通知条（渲染） | **已交付（PR #135）**：折叠摘要 + 错过明细 + 启停 + 待评审「去设置处理」，20 秒轮询、静默降级，契约零改动 | `feature/d20-chat-notice` → PR #135 `687ac1e` | [D20-chat-notice-report](reports/D20-chat-notice-report.md) |
+| `ask_user` 防滥用闸 | **已交付（PR #130）**：仅真实分叉回合可 ask_user，每回合 ≤3 次 | `feature/ask-user-card-gating` → PR #130 `e768e2a` | [TASK_CHOICE_CARD](TASK_CHOICE_CARD.md) 注记 |
+| 互通：任意 bot 平权派发 + 幂等 | **已交付（PR #136）**：去角色/同组门槛、跨组链放行、`idempotencyKey` 幂等重放、`Bot.role` 退役为遗留标签 | `feature/bot-interop` → PR #136 `3e21112` | [BOT_INTEROP-report](reports/BOT_INTEROP-report.md) |
+| 原始人模式 + 作曲器深度思考入口 | **已交付（PR #137）**：`chat.send` 可选 `primitive` 最短提示组装（落库不变）；深度思考入口移至输入框旁 | `feature/primitive-mode` → PR #137 `fde0953` | [PRIMITIVE_MODE-report](reports/PRIMITIVE_MODE-report.md) |
+| G3 原生聊天 D08 审批（后端） | **已交付（PR #125）**：ChatNativeGate 把桥转来的原生工具审批路由到 D16 检查点（fs/exec 能力 + 聊天网络缝 + mcp.call），ask 落既有 AppApproval 卡面（10 分钟 TTL、一次决定）；桌面渲染复用现链路，真实 Harness 端到端归 G4/真机 | `feature/g3-chat-native-approvals-9d4b` → PR #125 `473ec67` | [G3-chat-native-approvals-report](reports/G3-chat-native-approvals-report.md) |
+| D20' 自动化状态聊天通知（后端） | **已交付（PR #134）**：本地事件规则的 started/skipped/review 与启停状态变化以 meta 行（kind automation）写入所属 bot 聊天，文案双语定稿 | `feature/d20-automation-notices-3c7a` → PR #134 `b1dae08` | [D20-automation-notices-report](reports/D20-automation-notices-report.md) |
+| D25 host 检索（后端） | **已交付（PR #117）**：`search.global` 受信方法（跨 bot 消息/产物/工作流/bot 名，字面子串、有界摘要）；渲染层接线见下一行 | `feature/d25-host-search-5f3a` → PR #117 `f819dfd` | [D25-host-search-report](reports/D25-host-search-report.md) |
 | D18 记忆写入 / 检索 / 删除 | 已交付 | `feature/memory-knowledge` → PR #57 `7de305b` | [D18-memory-report](reports/D18-memory-report.md) |
 | D18 知识导入（.txt/.md，16 KiB 上限） | 已交付 | `feature/knowledge-import` → PR #59 `9805b6a` | [D18-knowledge-import-report](reports/D18-knowledge-import-report.md) |
 | D18 独立知识表 + 本地向量检索 + 保留策略 | 已交付 | `feature/knowledge-base` → PR #63 `ae0c6be` | [D18-knowledge-search-report](reports/D18-knowledge-search-report.md) |
@@ -187,7 +195,7 @@
 | 聊天 | 回复仍是"（占位回复）"夹具数据；横幅标注"静态占位" | **已实现**：chat.send/history/cancel 真实链路（D30 + PR #97/#103），夹具仅存于离线演示模式 | ~~Renderer↔Host 映射~~ 聊天部分已落地；剩余界面态见 **GAP_AUDIT G1'** |
 | 聊天 | ＋ 菜单"添加附件" | **已实现**（D26）：`attachment.begin/append/commit` 上传进工作区 + 模型工具 `read_workspace_file`（PR #106/#111） | ~~D26~~ 已完成，见 [GAP_AUDIT](GAP_AUDIT.md) §1.1 G8 |
 | 聊天 | 麦克风按钮 | 占位仍在渲染层；后端已备（`voice.status/transcribe/speak`，whisper.cpp+SAPI 全本地，PR #113） | **D27'** 语音桌面 UI，见 [GAP_AUDIT](GAP_AUDIT.md) §5 |
-| 顶栏 | 搜索圆钮 | **部分实现**：Ctrl+K 浮层已有但只过滤渲染层本地索引；Host `search.global` 已合入（PR #117）而浮层尚未调用（渲染层 grep 零命中） | **D25 后半（G10'）**，见 [GAP_AUDIT](GAP_AUDIT.md) §2 |
+| 顶栏 | 搜索圆钮 | **已实现**：Ctrl+K 浮层经 `search.global` 检索 Host 全库（bot/工作流/跨 bot 消息/产物，四类命中导航，不可达降级本地；PR #117 + #126） | ~~D25 后半~~ 已完成，见 [D25-host-search-renderer-report](reports/D25-host-search-renderer-report.md) |
 | 顶栏 | 最近会话 / 产物 popover | 会话部分已读真实数据（PR #103 stored-session）；产物 popover 本次刷新未逐项复核 | 同 [GAP_AUDIT](GAP_AUDIT.md) G1'/G10 |
 | 设置 | 分类"电脑 / 保险库 / 用量与账单 / 更新" | **已实现**（D24）：备份/恢复/保险库（PR #78）、用量统计（PR #119）、应用内更新（`main/updates.ts`） | ~~D24~~ 已完成 |
 | 设置 | 强调色 / 语言 / 硬件加速 / 通知 | **已实现**：强调色+持久化（D24）、语言/通知/托盘/Chrome 导入（D22，PR #75）、硬件加速（`b57d46b`） | ~~D24~~/~~D22~~ 已完成 |
@@ -238,40 +246,23 @@
 
 自有云服务、云存储、账户体系、计费系统、订阅制依赖、遥测上报、远程中继、模型托管。发现任何"必须付 Token 以外的钱才能用"的能力，一律不立项或必须先给出零成本本地等价路径。
 
-## 10. 在途分支台账（2026-10-27 清点）
+## 10. 在途分支台账（2026-10-29 清点）
 
-清点基线：`origin/develop` = `3afea90`（PR #66 合入后）。冲突结论来自 `git merge-tree --write-tree origin/develop <分支>` 的**试算**，不代表已解决；每次合并后本节需更新。
+清点基线：`origin/develop` = `53c5093`（PR #144 独立审查报告合入后）。10-27 清点中列出的全部分支（reasoner-toggle、settings-vault、choice-card-answer、system-integration、manager-orchestration、mono-shape 及各切片）已全部合入或按 §8 拍板作废删除；`backup/pre-ui-merge` 等本地备份分支已不存在。冲突结论来自 `git merge-tree --write-tree origin/develop <分支>` 的**试算**，不代表已解决；「落后 N」随 develop 演进持续增长，仅作变基紧迫度参考，不逐次更新。
 
-各任务使用独立工作区（`git worktree list`）：`deepseek-bot-d22` → D22 系统集成、`deepseek-bot-d24` → 备份保险库、`deepseek-bot-d28` → 画布共编（**已合入，工作区待清理**）、`deepseek-bot-g5` → 深度思考开关、`deepseek-bot-manager-orchestration` → v0.5 编排；另有 `deepseek-bot-avatar-ball`、`deepseek-bot-reaction-pill` 两个 10-25 的**死工作区**（分支早已合入，可直接 `git worktree remove`）。
+- **远程在途分支（均归属 Destinyian，AI 只登记不触碰）**：
+  - `feature/context-meter`——上下文用量圆环 + 历史 80% 自动折叠（任务书 `TASK_CONTEXT_METER.md` 与报告随分支提交）；归属人已开 **PR #138**（对 develop 试算零冲突）；**合并前需处理[合并前审查](reports/PREMERGE-REVIEW-2026-10-29.md) §2.1 的 P2**（compressTurn 并发语义断言失实——改锁或改文档由归属人定）；
+  - `feature/d14-mermaid`（新增）——补齐 D14 砦除的聊天内 mermaid 流程图渲染（任务书 `TASK_D14_MERMAID.md` 与 D14-mermaid 报告随分支提交，SPRINTS §4 D14 行同步改写随分支）；试算零冲突；**引入 mermaid 依赖（pnpm-lock +837 行）**，属依赖面变更；**合并前需处理审查报告 §2.2 的 P3**（主题切换后新图仍用旧主题）；
+  - `feature/d17-skill-host-store`——技能库迁 Host 存储（`skillLibrary.get/save`，协议 v0.11；任务书 `TASK_D17_SKILL_HOST_STORE.md` 与报告随分支提交）；未变基，落后幅度最大，试算冲突 1 文件：`docs/CONTRACTS.md`（含 #140 补记的 chat.* 方法行区域），建议先变基再开 PR；审查 §2.3 备忘不阻塞；
+  - 处置：由归属人本人自审（针对最新提交 SHA）后开 PR；
+- **已合入**：#144（独立审查报告）、#143（台账四更）、#142（开发计划注记修正）、#141（台账三更）、#140（chat.* 契约补记）、#139（文档刷新），均 2026-10-29；此前 #136（互通派发）与 #137（原始人模式）于 10-28 合入，远程 feature 分支随合并删除；
+- **本地**：33 个分支中未合入 develop 的只有 `archive/stage-plan-proposal` 与 `archive/stage-plan-push2`（2026-10-23 误署名事件的提案存档，按当时记录待负责人讨论——不合并、不推送、不删除）；
+- **工作区**（`git worktree list`）5 个活动项，其分支均已合入：`~/.codex/worktrees/d21-windows-acceptance`（`feature/screen-windows-acceptance`，PR #93）、`~/.codex/worktrees/resolve-pr65-connectors`（`feature/local-exec`）、`deepseek-bot-wt-connectors`（`feature/connector-registry`）、`deepseek-bot-wt-knowledge`（`feature/knowledge-import`）、`deepseek-bot-wt-memory`（`feature/memory-knowledge`，PR #57）——均属可清理死工作区，但可能含未跟踪本机数据，删除前需负责人逐个确认，本台账只登记不动手；
+- **主工作区残件**：根目录 `.tmp-d16-*` 日志与临时 electron 目录（`.gitignore` 覆盖、不入库）为 D16 会话遗留，可删；
+- **欠账复核**（对照 10-27 清点）：`docs/GAP_AUDIT.md`、`docs/TASK_MANAGER_ORCHESTRATION.md` 已入库（PR #122 起）；根目录 0 字节 `$null` 文件已不存在；手测截图 d14/d17/d25/d26 仍缺；各报告自审签署欠账清单见 [GAP_AUDIT](GAP_AUDIT.md) §7.3；
+- **未完成的计划项**：**D21 真实键鼠复核**（截图/OCR 真机证据已由 PR #93 报告覆盖）、**D23 平台验收**（依赖 D13 与 D14–D22 全部完成，未开始）；下一批候选见 [GAP_AUDIT](GAP_AUDIT.md) §8。
 
-| 分支 | 归属 | 未合入提交 | 推送状态 | 与 develop 试算 | 处置 |
-| --- | --- | --- | --- | --- | --- |
-| `feature/reasoner-toggle` | §9.1 快赢「深度思考开关」 | 1（6 文件） | 已推送 | **零冲突** | 可直接开 PR，最小最先 |
-| `feature/settings-vault` | D24 备份保险库 + 真实设置分区 | 3（23 文件） | 已推送 | **零冲突** | 可开 PR；合入后 D24 由"切片交付"升级为更接近完成 |
-| `feature/choice-card-answer` | 选项卡片回传 + 记忆弹窗移出聊天流 + 主窗口显示修复；**正在合入技能选择器菜单** | 5（17 文件）+ 合并中 | **仅本地**（跟踪 origin/develop） | 主工作区当前处于**未完成的合并**：`App.tsx`、`styles.css` 为 UU，`skill-store.ts` 与其测试已暂存 | 先完成或 `git merge --abort`，再推送开 PR |
-| `backup/pre-ui-merge` | 与上一行**完全相同的 5 个提交** | 5 | 仅本地 | — | 纯备份；`feature/choice-card-answer` 合入后删除 |
-| `feature/gaze-avatar`（本地多出的 1 个提交 `e7b83f3`） | 技能选择器菜单与版本化提示词复用（D17 后续，**与分支名无关**） | 1（4 文件） | 远端同名分支已合入并删除 | 与 `feature/choice-card-answer` 相撞（`styles.css`） | 正被合进 `feature/choice-card-answer`（见上一行）；若放弃该合并，则摘出另开 `feature/skills-composer-menu` |
-| `feature/system-integration` | **D22 系统集成与双语**（zh/en 词典、每 bot 托盘、系统通知、Chrome 导入） | 9（104 文件） | **从未推送** | 冲突 7 文件：`main/index.ts`、`App.tsx`、`avatar-picker.tsx`、`permission-chat.tsx`、`permissions-panel.tsx`、`fixture-service.ts`、`styles.css` | 最高优先：**先推送留痕**（当前只存在于这台机器，磁盘一坏就没了），再 sync develop 解冲突、开 PR |
-| `feature/manager-orchestration` | v0.5 协调者编排（契约 + agent-tools + storage + host + desktop + 文档） | 6（63 文件） | 已推送 | 冲突 7 文件，含 `docs/CONTRACTS.md`、`contracts/methods.test.ts`、`host.ts`、`storage/database.ts` | 契约面变更：按 DEVELOPMENT_PLAN §1 先出契约小 PR 与 ADR 对齐 v0.5 范围，再解冲突；排在上述之后 |
-| `feature/mono-shape` | 头像支线遗留 | 远端 1 / 本地 2 | 本地 `cf661c0` 未推送 | 冲突 4 文件（头像组件） | 仍等 §8 待拍板 #2；决定后要么推送并解冲突重开 PR，要么丢弃 |
-
-建议合入顺序（每条都要按规范填自审结论再合，不代签）：
-
-1. `feature/reasoner-toggle` —— 最小、零冲突；
-2. `feature/settings-vault` —— 零冲突，补 D24 欠账；
-3. `feature/choice-card-answer` —— 零冲突，含记忆弹窗移出；合入后删 `backup/pre-ui-merge`；
-4. `feature/skills-composer-menu`（从 gaze 分支摘出）—— 解 `styles.css` 冲突；
-5. `feature/system-integration` —— **先推送**，再解 7 文件冲突，这是 D22 主体；
-6. `feature/manager-orchestration` —— 先定 v0.5 契约范围与 ADR；
-7. `feature/mono-shape` —— 等 §8 待拍板 #2。
-
-另记的欠账：
-
-- 未入库文档：`docs/GAP_AUDIT.md`、`docs/TASK_MANAGER_ORCHESTRATION.md` 目前只是主工作区的未跟踪文件，需随相应分支入库；
-- 工作区垃圾：主工作区根目录有一个 0 字节的 `$null` 文件（10-26 17:35 由误用的重定向产生），可直接删除；
-- 死工作区：`deepseek-bot-avatar-ball`、`deepseek-bot-reaction-pill`、已合入的 `deepseek-bot-d28` 三个工作区可清理（先确认其中没有未跟踪的截图或日志）；
-- 手测截图：D14 / D17 / D24 / D25 / D26 的 `reports/assets/…` 仍缺；
-- 未完成的计划项：**D21 本地执行守护**（Etheslay：桌面设置页已合入；设备动作批准闸门已合入 develop（PR #88）。`feature/device-action-record-07ab` 在一次精确审批后写入本地记录。`feature/d21-device-input` 在另一次精确审批后执行一次有界键鼠输入；这台 Linux 环境没有执行真实 Windows 键鼠，也没有复核真实窗口截图/OCR）、**D23 平台验收**（你，依赖 D13 与 D14–D22 全部完成，未开始）。
+下次合并后本节照例更新。
 
 
 

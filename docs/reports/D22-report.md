@@ -134,7 +134,7 @@
 - [ ] 遗留问题（§6 第 1–6 项处置、`imports/chrome/` 是否纳入备份清单）：＿＿＿＿
 - [ ] 结论：＿＿＿＿
 
-> 按 [开发计划 §4](DEVELOPMENT_PLAN.md) 与 [Git 工作流 §4](GIT_WORKFLOW.md)：本分支未自行合入 `develop`，自审结论由负责人签署后再以 merge commit 合并。
+> 按 [开发计划 §4](../DEVELOPMENT_PLAN.md) 与 [Git 工作流 §4](../GIT_WORKFLOW.md)：本分支未自行合入 `develop`，自审结论由负责人签署后再以 merge commit 合并。
 
 ## 9. 提交范围与 PR
 
@@ -150,4 +150,4 @@
 
 与 develop 的冲突处理：`App.tsx` 取 develop 侧（#52 把聊天内联授权卡移进审批网关路径）；`permission-chat.tsx` 保留 #52 的按 bot 生命周期守卫、`botId` 过滤与新增的「待执行参数」块，并重新套用 D22 文案层（能力表改由 `capability-labels.ts` 提供、选项与提示存 message key、新增 2 条 key）；`docs/SPRINTS.md` 保留 develop 的 D17 行并追加 D22 行。合并后 `pnpm test` / `pnpm run lint` / `pnpm --dir apps/desktop run typecheck` 与未翻译扫描全部通过，§5 证据在合并后的构建上重新采集。
 
-分支已推送 `origin/feature/system-integration`。本机无 `gh` CLI，PR 需由负责人在浏览器创建：<https://github.com/Etheslay/deepseek-bot/pull/new/feature/system-integration>（base = `develop`）。按 [Git 工作流 §4](GIT_WORKFLOW.md)（必需批准数 0、负责人自审后自行合并），填写 §8 后以 merge commit 合入；本次未执行任何合并动作。
+分支已推送 `origin/feature/system-integration`。本机无 `gh` CLI，PR 需由负责人在浏览器创建：<https://github.com/Etheslay/deepseek-bot/pull/new/feature/system-integration>（base = `develop`）。按 [Git 工作流 §4](../GIT_WORKFLOW.md)（必需批准数 0、负责人自审后自行合并），填写 §8 后以 merge commit 合入；本次未执行任何合并动作。

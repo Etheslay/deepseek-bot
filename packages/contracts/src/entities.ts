@@ -164,6 +164,11 @@ export function assignBatchAvatars(input: {
  * path is the human bot editor (`bot.create`/`bot.update`); no model tool
  * ever accepts a role field, and the Host enforces at most one coordinator
  * per group before persisting.
+ *
+ * Since interop (TASK_BOT_INTEROP.md) the role no longer gates anything: any
+ * bot may dispatch, cross-group included, so the field survives only as a
+ * legacy label kept readable for stored data. The human write path and the
+ * uniqueness validation stay for compatibility; they confer no privilege.
  */
 export const BOT_ROLES = ["standard", "coordinator"] as const;
 export type BotRole = (typeof BOT_ROLES)[number];
@@ -490,6 +495,15 @@ export const ChatMessageMetaSchema = z.discriminatedUnion("kind", [
       taskId: UuidSchema,
       status: z.enum(TASK_STATUSES),
       resultSummary: z.string().max(2_000).optional(),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("automation"),
+      ruleId: UuidSchema,
+      outcome: z.enum(["started", "skipped", "review", "enabled", "disabled", "deleted"]),
+      runId: UuidSchema.nullable(),
+      reason: z.string().max(200).optional(),
     })
     .strict(),
 ]);

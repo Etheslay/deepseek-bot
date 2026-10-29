@@ -107,6 +107,9 @@ import {
   listPermissionAudit,
   countTasks,
   listTaskEvents,
+  getChatSummary,
+  getLatestUsageForBot,
+  upsertChatSummary,
 } from "@deepseek-bot/storage";
 import type { AgentPermissionService } from "./agent-permissions.js";
 import type { McpService } from "./mcp.js";
@@ -127,7 +130,9 @@ import {
   newBackupId,
   type UiLocale,
 } from "./host.js";
+import { writeAutomationNotice } from "./automation-notices.js";
 import { chatSessionIdFor, type ChatManager } from "./chat.js";
+import { estimateTokens } from "./usage-capture.js";
 import type { AttachmentIngress } from "./workspace-attachments.js";
 import { KNOWN_CAPABILITIES, policyKey, readPolicy, type PolicyLevel } from "./permissions.js";
 import { buildUsageSummary } from "./usage-summary.js";
@@ -146,6 +151,161 @@ export interface ChatSearchRecord {
   readonly results: Array<{ title: string; url: string; snippet: string }>;
   readonly warnings: string[];
   readonly at: string;
+}
+
+// --- Context meter (TASK_CONTEXT_METER.md) ---------------------------------
+
+/** Shape of the chat.contextUsage response (contract mirror for tests). */
+export type ContextUsageResult = {
+  percent: number;
+  usedTokens: number;
+  windowTokens: number;
+  estimated: boolean;
+  compressedAt: string | null;
+  compressing: boolean;
+};
+
+const COMPRESSION_THRESHOLD_PERCENT = 80;
+/** Headroom over the folded estimate so the next turn still fits. */
+const CONTEXT_METER_HEADROOM_TOKENS = 2_048;
+/** Per-row and total caps for the text handed to the summarization turn. */
+const COMPRESS_ROW_CHARS = 800;
+const COMPRESS_TOTAL_CHARS = 24_000;
+
+/**
+ * The meter's numerator. With an active session summary it is a chars/4
+ * estimate of what the next prompt would fold (persona + digest + kept rows
+ * + headroom), because the summary already replaced those rows in the
+ * replay; without one it is the last completed turn's real input tokens.
+ */
+function contextMeterState(
+  db: OpenedDatabase,
+  botId: string,
+  windowTokens: number,
+): { percent: number; usedTokens: number; estimated: boolean } {
+  const sessionId = chatSessionIdFor(botId);
+  const summary = getChatSummary(db, botId, sessionId);
+  if (summary !== undefined) {
+    const rows = rowsAfterWatermark(db, botId, summary.coversMessageId);
+    const bot = getBot(db, botId);
+    const folded =
+      (bot?.instructions ?? "") + summary.summary + rows.map((row) => row.text).join("\n");
+    const usedTokens = estimateTokens(folded) + CONTEXT_METER_HEADROOM_TOKENS;
+    return {
+      percent: Math.min(100, Math.round((usedTokens / windowTokens) * 100)),
+      usedTokens,
+      estimated: true,
+    };
+  }
+  const latest = getLatestUsageForBot(db, botId);
+  if (latest === undefined) {
+    return { percent: 0, usedTokens: 0, estimated: true };
+  }
+  return {
+    percent: Math.min(100, Math.round((latest.inputTokens / windowTokens) * 100)),
+    usedTokens: latest.inputTokens,
+    estimated: latest.source === "estimated",
+  };
+}
+
+function rowsAfterWatermark(
+  db: OpenedDatabase,
+  botId: string,
+  coversMessageId: string,
+): Array<{ id: string; role: "user" | "assistant"; text: string }> {
+  const rows = listChatMessages(db, botId, 20);
+  const watermark = rows.findIndex((row) => row.id === coversMessageId);
+  const kept = watermark < 0 ? rows : rows.slice(watermark + 1);
+  return kept.map((row) => ({ id: row.id, role: row.role, text: row.text }));
+}
+
+function buildCompressionPrompt(
+  locale: UiLocale,
+  toCompress: Array<{ role: "user" | "assistant"; text: string }>,
+  previousSummary: string | undefined,
+): string {
+  const lines: string[] = [];
+  for (const row of toCompress) {
+    const text = row.text.length > COMPRESS_ROW_CHARS ? `${row.text.slice(0, COMPRESS_ROW_CHARS)}…` : row.text;
+    lines.push(`${row.role === "user" ? "用户" : "助手"}：${text}`);
+  }
+  let body = lines.join("\n");
+  if (body.length > COMPRESS_TOTAL_CHARS) {
+    body = `…${body.slice(body.length - COMPRESS_TOTAL_CHARS)}`;
+  }
+  if (locale === "en") {
+    return [
+      "【Context compression】Summarize the conversation below into terse notes. Keep tasks, conclusions, decisions and open questions; drop greetings, filler and repetition. Reply with the notes only.",
+      ...(previousSummary !== undefined
+        ? [`【Previous notes】\n${previousSummary}`, "【Merge the previous notes with the new conversation below into one updated note block】"]
+        : []),
+      `【Conversation to compress】\n${body}`,
+    ].join("\n\n");
+  }
+  return [
+    "【上下文压缩】把下面的对话压缩成要点笔记：保留任务、结论、已做的决定和未决事项；去掉寒暄、重复与铺垫。只输出笔记本身。",
+    ...(previousSummary !== undefined
+      ? [`【先前摘要】\n${previousSummary}`, "【把先前摘要与下面的新对话合并成一份更新后的笔记】"]
+      : []),
+    `【待压缩对话】\n${body}`,
+  ].join("\n\n");
+}
+
+/**
+ * Background compression after a chat turn: fires only at or above the
+ * threshold, folds everything except the newest turn into the session
+ * summary, and never touches `chat_messages` (deleting the summary restores
+ * the full replay). Failures degrade silently to the status-quo replay.
+ */
+async function maybeCompressChat(context: HostContext, botId: string): Promise<void> {
+  const { db, chat, compressingChats, contextWindowTokens, locale } = context;
+  if (compressingChats.has(botId)) {
+    return;
+  }
+  const meter = contextMeterState(db, botId, contextWindowTokens);
+  if (meter.percent < COMPRESSION_THRESHOLD_PERCENT) {
+    return;
+  }
+  const sessionId = chatSessionIdFor(botId);
+  const summary = getChatSummary(db, botId, sessionId);
+  const rows = listChatMessages(db, botId, 10_000);
+  let lastAssistant = -1;
+  for (let index = rows.length - 1; index >= 0; index -= 1) {
+    if (rows[index]!.role === "assistant") {
+      lastAssistant = index;
+      break;
+    }
+  }
+  // The newest turn (user + assistant) stays out of the digest.
+  const keepFrom = lastAssistant < 1 ? -1 : lastAssistant - 1;
+  const toCompress = keepFrom <= 0 ? [] : rows.slice(0, keepFrom);
+  if (toCompress.length === 0) {
+    return;
+  }
+  const watermark = toCompress[toCompress.length - 1]!.id;
+  if (summary !== undefined && summary.coversMessageId === watermark) {
+    return;
+  }
+  compressingChats.add(botId);
+  try {
+    const prompt = buildCompressionPrompt(
+      locale.current,
+      toCompress.map((row) => ({ role: row.role, text: row.text })),
+      summary?.summary,
+    );
+    const digest = await chat.compressTurn(getBot(db, botId)!, prompt);
+    upsertChatSummary(db, {
+      botId,
+      sessionId,
+      summary: digest.trim().slice(0, 8_000),
+      coversMessageId: watermark,
+    });
+  } catch {
+    // Degrade: no summary, status-quo replay; the next threshold crossing
+    // retries.
+  } finally {
+    compressingChats.delete(botId);
+  }
 }
 
 export interface HostContext {
@@ -191,6 +351,10 @@ export interface HostContext {
    * handoff framing and the ask_user fallback label come out in this language.
    */
   readonly locale: { current: UiLocale };
+  /** Context meter (TASK_CONTEXT_METER.md): the host's context window size. */
+  readonly contextWindowTokens: number;
+  /** Bot ids with a background compression turn currently in flight. */
+  readonly compressingChats: Set<string>;
 }
 
 /** The Host never renders or persists the model's own label for the fallback option. */
@@ -811,7 +975,18 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
         throw invalid("archived bots cannot chat");
       }
       const sessionId = chatSessionIdFor(bot.id);
-      const history = listChatMessages(db, bot.id, 20).map((row) => ({
+      // 原始人模式 composes a one-step prompt: rows are still persisted (and
+      // still replay for later normal turns), so the replay read is skipped.
+      const primitive = payload.primitive === true;
+      const summaryRow = primitive ? undefined : getChatSummary(db, bot.id, sessionId);
+      const allRows = primitive ? [] : listChatMessages(db, bot.id, 20);
+      // Context meter: with an active summary only the post-watermark rows
+      // replay verbatim; everything earlier rides in the digest block.
+      const replayRows =
+        summaryRow === undefined
+          ? allRows
+          : allRows.slice(allRows.findIndex((row) => row.id === summaryRow.coversMessageId) + 1);
+      const history = replayRows.map((row) => ({
         role: row.role,
         text: row.text,
       }));
@@ -821,13 +996,19 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
         role: "user",
         text: payload.text,
       });
-      const outcome = await chat.send(bot, payload.text, history, payload.skills ?? []);
+      const outcome = await chat.send(bot, payload.text, history, payload.skills ?? [], {
+        primitive,
+        ...(summaryRow !== undefined ? { summary: summaryRow.summary } : {}),
+      });
       const assistant = appendChatMessage(db, {
         botId: bot.id,
         sessionId,
         role: "assistant",
         text: outcome.finalResponse,
       });
+      // Context meter: fold older history in the background at ≥80% — the
+      // reply has already been returned above; failures degrade silently.
+      void maybeCompressChat(context, bot.id).catch(() => undefined);
       return {
         sessionId: outcome.sessionId,
         messageId: assistant.id,
@@ -877,6 +1058,17 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
     // events only (see ChatManager.status).
     "chat.status": (payload) => chat.status(payload.botId),
 
+    "chat.contextUsage": (payload) => {
+      const meter = contextMeterState(db, payload.botId, context.contextWindowTokens);
+      const summary = getChatSummary(db, payload.botId, chatSessionIdFor(payload.botId));
+      return {
+        ...meter,
+        windowTokens: context.contextWindowTokens,
+        compressedAt: summary?.createdAt ?? null,
+        compressing: context.compressingChats.has(payload.botId),
+      };
+    },
+
     /**
      * v0.5 manager orchestration. task.dispatch is the gateway-internal
      * surface for the dispatch_task tool: the dispatcher re-checks the
@@ -891,6 +1083,9 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
         task: payload.task,
         ...(payload.context !== undefined ? { context: payload.context } : {}),
         ...(payload.chain !== undefined ? { chain: payload.chain } : {}),
+        ...(payload.idempotencyKey !== undefined
+          ? { idempotencyKey: payload.idempotencyKey }
+          : {}),
       }),
 
     "task.list": (payload) => ({
@@ -1148,19 +1343,51 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
       );
     },
 
-    "eventRule.enable": (payload) => ({
-      ...toEventRuleResponse(
-        setEventRuleEnabled(db, { id: payload.id, botId: payload.botId, enabled: true }),
-      ),
-      enabled: true as const,
-    }),
+    "eventRule.enable": (payload) => {
+      const prior = getEventRule(db, payload.id);
+      const updated = setEventRuleEnabled(db, { id: payload.id, botId: payload.botId, enabled: true });
+      if (prior !== undefined && prior.botId === payload.botId && !prior.enabled) {
+        writeAutomationNotice(
+          db,
+          {
+            ruleId: updated.id,
+            botId: updated.botId,
+            ruleName: updated.name,
+            outcome: "enabled",
+            runId: null,
+            reason: undefined,
+          },
+          context.locale.current,
+        );
+      }
+      return {
+        ...toEventRuleResponse(updated),
+        enabled: true as const,
+      };
+    },
 
-    "eventRule.disable": (payload) => ({
-      ...toEventRuleResponse(
-        setEventRuleEnabled(db, { id: payload.id, botId: payload.botId, enabled: false }),
-      ),
-      enabled: false as const,
-    }),
+    "eventRule.disable": (payload) => {
+      const prior = getEventRule(db, payload.id);
+      const updated = setEventRuleEnabled(db, { id: payload.id, botId: payload.botId, enabled: false });
+      if (prior !== undefined && prior.botId === payload.botId && prior.enabled) {
+        writeAutomationNotice(
+          db,
+          {
+            ruleId: updated.id,
+            botId: updated.botId,
+            ruleName: updated.name,
+            outcome: "disabled",
+            runId: null,
+            reason: undefined,
+          },
+          context.locale.current,
+        );
+      }
+      return {
+        ...toEventRuleResponse(updated),
+        enabled: false as const,
+      };
+    },
 
     "eventRule.record.list": (payload) => {
       requireLiveBot(db, payload.botId);
@@ -1188,10 +1415,28 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
       };
     },
 
-    "eventRule.review": (payload) => ({
-      ...toEventRuleResponse(setEventRuleReview(db, { id: payload.id, botId: payload.botId })),
-      review: true as const,
-    }),
+    "eventRule.review": (payload) => {
+      const prior = getEventRule(db, payload.id);
+      const updated = setEventRuleReview(db, { id: payload.id, botId: payload.botId });
+      if (prior !== undefined && prior.botId === payload.botId && !prior.review) {
+        writeAutomationNotice(
+          db,
+          {
+            ruleId: updated.id,
+            botId: updated.botId,
+            ruleName: updated.name,
+            outcome: "review",
+            runId: null,
+            reason: undefined,
+          },
+          context.locale.current,
+        );
+      }
+      return {
+        ...toEventRuleResponse(updated),
+        review: true as const,
+      };
+    },
 
     "eventRule.review.list": (payload) => {
       requireLiveBot(db, payload.botId);

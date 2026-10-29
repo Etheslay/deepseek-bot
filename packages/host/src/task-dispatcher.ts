@@ -1,19 +1,20 @@
 /**
  * TaskDispatcher (v0.5 manager orchestration, TASK_MANAGER_ORCHESTRATION.md
- * §3.3; relay chains per §7/T7). Sits next to the ChatManager: a coordinator
- * dispatch becomes a durable task row, the executor's session receives the
- * marked user-side message, and the Host runs ONE real chat turn for the
- * executor through the D30 path. Every terminal transition emits a
- * `task.status` event and writes a delivery notice into the root
- * coordinator's session (FR-7).
+ * §3.3; relay chains per §7/T7), relaxed to interop (TASK_BOT_INTEROP.md).
+ * Sits next to the ChatManager: a dispatch becomes a durable task row, the
+ * executor's session receives the marked user-side message, and the Host
+ * runs ONE real chat turn for the executor through the D30 path. Every
+ * terminal transition emits a `task.status` event and writes a delivery
+ * notice into the root sender's session (FR-7).
  *
- * Invariants (FR-8/FR-9, §3.4): the coordinator only ever "sends one
- * instruction" — it does not own the executor, whose own tool calls keep
- * their own policy/grant/approval path and audit identity. Dispatch rules
- * (coordinator role, same group, not self) are checked at the gateway tool
- * AND re-checked here authoritatively. Relay chains are pre-declared simple
- * paths; hops carry no autonomous dispatch right — the dispatcher, not the
- * bot, moves the chain.
+ * Invariants (§3.4, unchanged): the sender only ever "sends one instruction"
+ * — it does not own the executor, whose own tool calls keep their own
+ * policy/grant/approval path and audit identity. Dispatch identity rules
+ * (trusted live bot, not self) are checked at the gateway tool AND
+ * re-checked here authoritatively; interop removed the coordinator-role and
+ * same-group gates, so any bot may dispatch, cross-group included. Relay
+ * chains are pre-declared simple paths; hops carry no autonomous dispatch
+ * right — the dispatcher, not the bot, moves the chain.
  */
 import { createHash, randomUUID } from "node:crypto";
 import {
@@ -32,6 +33,7 @@ import {
   getBot,
   getPermissionApproval,
   getTask,
+  getTaskByIdempotencyKey,
   insertTask,
   listChatMessages,
   listPermissionGrants,
@@ -58,6 +60,8 @@ export interface DispatchInput {
   readonly task: string;
   readonly context?: string;
   readonly chain?: ReadonlyArray<{ botId: string; instruction: string }>;
+  /** Idempotency key (interop): a retry with the same key replays the task. */
+  readonly idempotencyKey?: string;
   readonly authorization?: TaskAuthorizationRef;
 }
 
@@ -259,26 +263,27 @@ export class TaskDispatcher {
    * its turn starts.
    */
   async dispatch(input: DispatchInput): Promise<Task> {
-    const me = this.requireCoordinator(input.fromBotId);
+    // Idempotency (interop): a retried submission with the same key replays
+    // the first task this sender created — no new rows, no queueing, no
+    // second dispatch marker.
+    if (input.idempotencyKey !== undefined) {
+      const existing = getTaskByIdempotencyKey(this.db, input.fromBotId, input.idempotencyKey);
+      if (existing !== undefined) {
+        this.auditDispatch(existing, "ok", "idempotent replay: this idempotencyKey already created the task");
+        return existing;
+      }
+    }
+    const me = this.requireLiveSender(input.fromBotId);
     const target = this.requireLiveBot(input.toBotId);
     if (input.toBotId === me.id) {
-      throw invalid("a coordinator cannot dispatch a task to itself");
+      throw invalid("a bot cannot dispatch a task to itself");
     }
-    // Ungrouped bots share the implicit "未分组" group: null === null passes,
-    // a grouped/ungrouped mix or a real group mismatch stays rejected. This
-    // mirrors the gateway-layer guard in agent-tools/task-tools.ts.
-    if (target.groupId !== me.groupId) {
-      throw unauthorized("task dispatch targets must stay inside the coordinator's group");
-    }
+    // Interop: cross-group dispatch is allowed. Only identity, a simple
+    // chain path, the chain cap and the per-bot queue cap remain.
     for (const hop of input.chain ?? []) {
-      const hopBot = this.requireLiveBot(hop.botId);
+      this.requireLiveBot(hop.botId);
       if (hop.botId === me.id || hop.botId === input.toBotId) {
         throw invalid("relay chain botIds must form a simple path (no repeats)", {
-          botId: hop.botId,
-        });
-      }
-      if (hopBot.groupId !== me.groupId) {
-        throw unauthorized("relay chain hops must stay inside the coordinator's group", {
           botId: hop.botId,
         });
       }
@@ -308,6 +313,9 @@ export class TaskDispatcher {
       rootTaskId: rootId,
       chainIndex: 0,
       chainTotal,
+      ...(input.idempotencyKey !== undefined
+        ? { idempotencyKey: input.idempotencyKey }
+        : {}),
       ...(input.authorization !== undefined
         ? {
             authorization: {
@@ -579,14 +587,14 @@ export class TaskDispatcher {
     parts.push(s.taskMarker(task.instruction));
     return parts.join("\n\n");
   }
-  private requireCoordinator(botId: string) {
+  private requireLiveSender(botId: string) {
     const bot = getBot(this.db, botId);
     if (bot === undefined || bot.archivedAt !== null) {
       throw unauthorized("dispatch sender bot does not exist or is archived", { botId });
     }
-    if (bot.role !== "coordinator") {
-      throw unauthorized("only coordinator bots may dispatch tasks", { botId });
-    }
+    // Interop: no role gate — any live bot may dispatch. The human approval
+    // on app.dispatch_task stays the gate; the executor's own policy governs
+    // its turn.
     return bot;
   }
 

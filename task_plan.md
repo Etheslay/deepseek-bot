@@ -1,5 +1,24 @@
 # 项目规范化工作计划
 
+## 2026-10-29：在途切片合并前独立审查（授权执行）
+
+- 范围：只读审查三条 Destinyian 在途切片（context-meter / d14-mermaid / d17-skill-host-store），产出 [PREMERGE-REVIEW-2026-10-29](docs/reports/PREMERGE-REVIEW-2026-10-29.md)；不代替自审、不改分支、不代开 PR。
+- 2 条需归属人处理的发现（cm 并发断言 P2、d14 主题偏差 P3）+ 1 条 d17 备忘。
+
+## 2026-10-29：DEVELOPMENT_PLAN §6 叙事一致性修正（纯文档）
+
+- 范围：仅文档。修正三处已被后续交付推翻的陈述（G3 / D18 收尾 / G11'），段末加权威指针（SPRINTS §4 + GAP_AUDIT）。
+
+## 2026-10-29：契约补记与台账二更（纯文档）
+
+- 范围：仅文档；无应用源码、无依赖、无 API 请求。
+- 内容：CONTRACTS.md §3 方法表补 `chat.*` 五行（治理债 §7.8 收口）；SPRINTS §10 登记 PR #139 合入与两条新在途分支（context-meter、d17-skill-host-store，均归属 Destinyian，只登记不触碰）。
+
+## 2026-10-29：文档刷新（GAP_AUDIT 三次刷新 + SPRINTS 台账清点）
+
+- 范围：仅文档；无应用源码、无依赖安装、无 API 请求。分支 `feature/docs-audit-refresh-8029`，基线 origin/develop `3e21112`。
+- 内容：登记 #125–#137 关闭的审计项（G3/G9'/G10'/G11'/D20'），收窄 D21'，重写 SPRINTS §10 台账（当前无在途任务分支）；G1'/G4 保持开放，自审签署欠账如实扩大登记、不代签。
+
 ## 2026-10-26：D16 权限与授权后端
 
 - 分支：feature/permissions-grants，基线 origin/develop b693c5b（含 D15 搜索与 Destinyian 最新合并）。
