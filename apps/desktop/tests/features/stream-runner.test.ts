@@ -186,3 +186,45 @@ describe("runChatStream (U5: one shared starter for composer, retry and cards)",
     expect(committedInsideUpdater, "onAssistant ran during a state updater").toBe(false);
   });
 });
+it("a stale cancelled turn must not mark a newer turn's pending state", async () => {
+  // Same bot, newer turn: the handle map entry no longer points at this
+  // stream, so its late cancellation belongs to nobody's UI.
+  const { stream } = fakeStream({ cancelled: true, failure: null });
+  const store = installUpdater();
+  const onAssistant = vi.fn();
+  const onSettled = vi.fn();
+  const handle = runChatStream({
+    stream,
+    botId: "bot-1",
+    text: "你好",
+    forKey: 1,
+    update: store.update,
+    onAssistant,
+    isCurrent: () => false,
+    onSettled,
+  });
+  await handle.finish();
+  expect(store.state()).toBeNull();
+  expect(onAssistant).not.toHaveBeenCalled();
+  expect(onSettled).toHaveBeenCalledWith({ cancelled: true, failure: null });
+});
+
+it("a stale failure must not mark a newer turn's pending state", async () => {
+  const { stream } = fakeStream({
+    cancelled: false,
+    failure: { code: "AUTH_FAILED", message: "bad key", retryable: false },
+  });
+  const store = installUpdater();
+  const onAssistant = vi.fn();
+  const handle = runChatStream({
+    stream,
+    botId: "bot-1",
+    text: "你好",
+    forKey: 1,
+    update: store.update,
+    onAssistant,
+    isCurrent: () => false,
+  });
+  await handle.finish();
+  expect(store.state()).toBeNull();
+});

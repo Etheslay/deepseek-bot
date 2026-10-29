@@ -366,6 +366,29 @@ export function App(): JSX.Element {
 
   const [selectedBot, setSelectedBot] = useState<number | null>(null);
   /**
+   * 跨 bot 并行思考（每 bot 一条流）：live stream 状态按 bot 键控存放在 App，
+   * 切换/重挂载聊天面板不再丢掉进行中的思考与流式文本。handles 同样按 bot
+   * 键控，取消按钮只取消当前 bot 的回合。
+   */
+  const [streams, setStreams] = useState<Record<number, StreamStateForBot>>({});
+  const streamHandles = useRef<Map<number, StreamHandle>>(new Map());
+  const updateStreamState = (
+    key: number,
+    update: (prev: StreamStateForBot | null) => StreamStateForBot | null,
+  ): void => {
+    setStreams((prev) => {
+      const current = prev[key] ?? null;
+      const next = update(current === null ? null : { ...current, forKey: key });
+      if (next === null) {
+        if (prev[key] === undefined) return prev;
+        const rest = { ...prev };
+        delete rest[key];
+        return rest;
+      }
+      return { ...prev, [key]: next };
+    });
+  };
+  /**
    * The bot the sidebar header speaks for: whichever conversation is active,
    * falling back to the first bot before one is picked. The header used to be a
    * fixed "DeepSeek Bot" plate, which meant it contradicted the list under it as
@@ -2023,6 +2046,9 @@ const logout = (): void => {
               bots={bots}
               groups={groups}
               selectedBot={selectedBot}
+              stream={streams[selectedBot] ?? null}
+              streamHandles={streamHandles.current}
+              onStreamUpdate={(update) => updateStreamState(selectedBot, update)}
               msgs={chats[selectedBot] ?? []}
               pairTranscripts={pairTranscripts}
               quoteDraft={quoteDraft}
@@ -3320,6 +3346,9 @@ function BotsPlaceholder({
   bots,
   groups,
   selectedBot,
+  stream,
+  streamHandles,
+  onStreamUpdate,
   msgs,
   pairTranscripts,
   quoteDraft,
@@ -3348,6 +3377,13 @@ function BotsPlaceholder({
   bots: UiBot[];
   groups: Group[];
   selectedBot: number;
+  /** 跨 bot 并行思考：本 bot 的 live stream 状态存放在 App（切换不丢）。 */
+  stream: StreamStateForBot | null;
+  /** 本 bot 的 Host 回合句柄；与 stream 一样跨面板重挂载存活。 */
+  streamHandles: Map<number, StreamHandle>;
+  onStreamUpdate: (
+    update: (prev: StreamStateForBot | null) => StreamStateForBot | null,
+  ) => void;
   msgs: Msg[];
   pairTranscripts: Record<
     string,
@@ -3392,7 +3428,6 @@ function BotsPlaceholder({
   const [draft, setDraft] = useState("");
   const [plusOpen, setPlusOpen] = useState(false);
   const [detailOther, setDetailOther] = useState<number | null>(null);
-  const [stream, setStream] = useState<StreamStateForBot | null>(null);
   const [failedText, setFailedText] = useState("");
   const [answeredQuestions, setAnsweredQuestions] = useState<AnsweredQuestionMap>({});
   const [clarify, setClarify] = useState<ClarifyTarget | null>(null);
@@ -3414,7 +3449,6 @@ function BotsPlaceholder({
   /** G6: a pending 编辑重发 labels the next sent user bubble. */
   const [pendingMeta, setPendingMeta] = useState<Msg["meta"] | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const streamRef = useRef<StreamHandle | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const me = bots.find((b) => b.key === selectedBot);
@@ -3661,11 +3695,10 @@ function BotsPlaceholder({
       );
       return;
     }
-    if (streamRef.current) {
-      streamRef.current.cancel();
-    }
+    // 同一 bot 的新回合取代自己的旧回合；其他 bot 的流互不影响（跨 bot 并行思考）。
+    streamHandles.get(me.key)?.cancel();
     const forKey = me.key;
-    setStream({ ...emptyStream(), forKey });
+    onStreamUpdate(() => ({ ...emptyStream(), forKey }));
     onBotStatus(me.bot.id, "running");
     const started = runChatStream({
       stream: service.chat.stream,
@@ -3674,13 +3707,14 @@ function BotsPlaceholder({
       skills: injected.skills,
       primitive: primitiveMode,
       forKey,
-      update: setStream,
+      update: (update) => onStreamUpdate(update),
       onAssistant,
-      /* Only this handle may commit its answer. Once a newer turn (or another
-         bot's chat) owns streamRef, this one is stale — and that has to be
+      /* Only this handle may commit its answer. Once a newer turn of the same
+         bot owns the handle map entry, this one is stale — and that has to be
          asked here rather than inferred inside the state updater, which React
-         runs during render. */
-      isCurrent: () => streamRef.current === started,
+         runs during render. The map lives in App, so it survives pane
+         remounts (switching chats never drops a running turn). */
+      isCurrent: () => streamHandles.get(forKey) === started,
       onSettled: (result) => {
         const settled = result.cancelled || result.failure !== null;
         onBotStatus(me.bot.id, "idle");
@@ -3690,7 +3724,7 @@ function BotsPlaceholder({
         refreshContextUsage();
       },
     });
-    streamRef.current = started;
+    streamHandles.set(forKey, started);
   };
 
   /**
@@ -4095,7 +4129,7 @@ function BotsPlaceholder({
                           type="button"
                           className="stream-cancel"
                           title={t("shell.cancel")}
-                          onClick={() => streamRef.current?.cancel()}
+                          onClick={() => streamHandles.get(me.key)?.cancel()}
                         >
                           {t("shell.cancel")}
                         </button>
@@ -4109,7 +4143,7 @@ function BotsPlaceholder({
                       type="button"
                       className="stream-cancel"
                       title={t("shell.cancel")}
-                      onClick={() => streamRef.current?.cancel()}
+                      onClick={() => streamHandles.get(me.key)?.cancel()}
                     >
                       {t("shell.cancel")}
                     </button>
