@@ -6,8 +6,9 @@
  * invalid — no partial imports. Merging is name-based and never overwrites:
  * entries whose name already exists locally are skipped and counted.
  *
- * Pure functions over `Storage` + strings: file picking and downloading stay in
- * the UI layer so this module stays unit-testable.
+ * Pure merging over the in-memory library + strings; bot templates keep their
+ * localStorage store. File picking and downloading stay in the UI layer so
+ * this module stays unit-testable.
  */
 import {
   LIBRARY_EXPORT_FORMAT,
@@ -21,7 +22,7 @@ import {
   listTemplates,
   saveTemplate,
 } from "../templates/bot-templates.js";
-import { loadSkills, saveSkill, type SkillLibrary } from "./skills.js";
+import { saveSkill, type SkillLibrary } from "./skills.js";
 import { t } from "../../i18n.js";
 
 export type ImportSummary = {
@@ -35,12 +36,16 @@ export type ImportResult =
   | { ok: true; summary: ImportSummary; library: SkillLibrary }
   | { ok: false; reason: string };
 
-/** Build the unified export file text (2-space indent, contract-valid). */
+/**
+ * Build the unified export file text (2-space indent, contract-valid). Skills
+ * come from the in-memory library (the durable copy is Host-side); bot
+ * templates remain a localStorage store and read through `storage`.
+ */
 export function exportLibrary(
+  library: SkillLibrary,
   storage: Storage,
   now: Date = new Date(),
 ): string {
-  const library = loadSkills(storage);
   const templates = listTemplates(storage);
   const file: LibraryExportFile = {
     format: LIBRARY_EXPORT_FORMAT,
@@ -82,11 +87,13 @@ export function exportLibrary(
 
 /**
  * Validate and merge an export file. Same-name entries are skipped (skills by
- * skill name, templates by bot name); nothing existing is overwritten.
+ * skill name, templates by bot name); nothing existing is overwritten. Skills
+ * merge into the passed library (the caller persists the result through
+ * `skillLibrary.save`); bot templates still write to localStorage.
  */
 export function importLibrary(
-  storage: Storage,
   library: SkillLibrary,
+  storage: Storage,
   text: string,
 ): ImportResult {
   let parsed: unknown;
@@ -116,7 +123,7 @@ export function importLibrary(
       summary.skippedSkills += 1;
       continue;
     }
-    const saved = saveSkill(storage, current, {
+    const saved = saveSkill(current, {
       name,
       instructions: skill.instructions,
       ...(skill.description === undefined

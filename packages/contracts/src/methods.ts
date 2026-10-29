@@ -56,6 +56,7 @@ import { SCREEN_METHODS } from "./screen.js";
 import { DEVICE_METHODS } from "./device.js";
 import { VOICE_METHODS } from "./voice.js";
 import { USAGE_METHODS } from "./usage.js";
+import { SKILL_LIBRARY_METHODS } from "./skills.js";
 
 export const MAX_MESSAGE_BYTES = 1_048_576;
 
@@ -208,6 +209,8 @@ export const METHODS = [
   "schedule.disable",
   "settings.testConnection",
   "settings.update",
+  "skillLibrary.get",
+  "skillLibrary.save",
   "data.backup",
   "data.restore",
   "data.describe",
@@ -1612,6 +1615,7 @@ export const METHOD_CONTRACTS = {
   ...DEVICE_METHODS,
   ...VOICE_METHODS,
   ...USAGE_METHODS,
+  ...SKILL_LIBRARY_METHODS,
 } as const satisfies Record<
   Method,
   { request: z.ZodType; response: z.ZodType }

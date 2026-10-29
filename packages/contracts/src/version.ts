@@ -33,9 +33,13 @@
 // v0.10 adds token usage accounting (usage.summary). Additive only: the method
 // is new, existing methods keep their semantics, and workflow documents are
 // unchanged, so 0.1–0.9 senders stay accepted.
-export const CONTRACT_VERSION = "0.10" as const;
+// v0.11 adds skillLibrary.get/save — the D17 skill library moves from renderer
+// localStorage to Host storage. Additive only: injection still rides
+// chat.send.skills (0.8+), existing methods keep their semantics, and 0.1–0.10
+// senders stay accepted.
+export const CONTRACT_VERSION = "0.11" as const;
 export const PROTOCOL_VERSION = CONTRACT_VERSION;
-/** Workflow documents did not change in v0.3–v0.10; keep the document version. */
+/** Workflow documents did not change in v0.3–v0.11; keep the document version. */
 export const WORKFLOW_SCHEMA_VERSION = "0.1" as const;
 
 export const SUPPORTED_PROTOCOL_VERSIONS: readonly string[] = [
@@ -48,6 +52,7 @@ export const SUPPORTED_PROTOCOL_VERSIONS: readonly string[] = [
   "0.7",
   "0.8",
   "0.9",
+  "0.10",
   PROTOCOL_VERSION,
 ];
 

@@ -16,6 +16,8 @@ v0.10 新增 `usage.summary`：把每个聊天回合的 token 用量聚合成「
 
 上下文圆圈（TASK_CONTEXT_METER.md）在当前协议上新增受信只读方法 `chat.contextUsage`（不另升 `protocolVersion`）：返回该 bot 单会话的上下文用量 `{percent, usedTokens, windowTokens, estimated, compressedAt, compressing}`——分子优先取最近完成回合的真实 input tokens（无上报则 chars/4 估算并标 `estimated`），分母为 Host 配置的上下文窗口（默认 65,536）。Host 在用量 ≥80% 时自动后台压缩更早历史为一段摘要（新表 `chat_summaries`，迁移 0023：摘要 + 水位 `covers_message_id`），此后提示组装 = persona + 技能 + `【更早对话摘要】` + 水位后的行 + 当前消息；`chat_messages` 行不删除，删除摘要行即恢复全量回放。只读展示数据，不作为发送门槛。
 
+v0.11 新增 `skillLibrary.get` / `skillLibrary.save`（D17' 收尾）：D17 技能库（技能定义 + bot 绑定）从渲染层 localStorage 迁到 Host 持久化，存于 settings KV 行 `skills.library.v1`，整库读写、请求侧整体校验（≤30 技能、指令入库上限 20 000 字、绑定 ≤50 bot 且 id 唯一）。注入零改动：`chat.send.skills`（0.8+）仍是唯一注入路径，声明能力仍是本轮网关允许集，网关在授权前拒绝名单外工具，无能力技能只注入说明；库存字符串能力 id（旧导出可载入），强制发生在发送组装时。当前 `protocolVersion` 为 0.11，继续接受 0.1–0.10 发送方；工作流 `schemaVersion` 仍为 0.1。
+
 ## 1. 通用规则
 
 - ID 使用不可预测的 UUID；时间用 UTC ISO 8601，展示/调度另外保存 IANA 时区。

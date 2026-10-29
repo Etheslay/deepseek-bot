@@ -5,9 +5,9 @@ import {
 } from "../../src/renderer/src/features/skills/library-io.js";
 import {
   emptyLibrary,
-  loadSkills,
   saveSkill,
   setBotSkills,
+  type SkillLibrary,
 } from "../../src/renderer/src/features/skills/skills.js";
 import { listTemplates, saveTemplate } from "../../src/renderer/src/features/templates/bot-templates.js";
 
@@ -25,15 +25,18 @@ function makeStorage(): Storage {
   } as Storage;
 }
 
-function seed(storage: Storage): void {
-  const created = saveSkill(storage, emptyLibrary(), {
+function seedSkillLibrary(): SkillLibrary {
+  const created = saveSkill(emptyLibrary(), {
     name: "周报助手",
     description: "整理周报",
     instructions: "输出三段式周报。",
     capabilities: ["read"],
   });
   if (!created.ok) throw new Error("seed skill failed");
-  setBotSkills(storage, created.library, "bot-1", [created.skill.id]);
+  return setBotSkills(created.library, "bot-1", [created.skill.id]);
+}
+
+function seedTemplates(storage: Storage): void {
   const saved = saveTemplate(storage, {
     name: "设计模板",
     bot: {
@@ -47,16 +50,20 @@ function seed(storage: Storage): void {
 
 describe("library import/export", () => {
   it("round-trips skills and templates through one file", () => {
-    const source = makeStorage();
-    seed(source);
-    const text = exportLibrary(source, new Date("2026-10-25T21:00:00.000Z"));
+    const sourceTemplates = makeStorage();
+    seedTemplates(sourceTemplates);
+    const text = exportLibrary(
+      seedSkillLibrary(),
+      sourceTemplates,
+      new Date("2026-10-25T21:00:00.000Z"),
+    );
     const parsed = JSON.parse(text) as Record<string, unknown>;
     expect(parsed.format).toBe("deepseek-bot-library");
     expect(parsed.formatVersion).toBe(1);
     expect(parsed.exportedAt).toBe("2026-10-25T21:00:00.000Z");
 
-    const target = makeStorage();
-    const result = importLibrary(target, emptyLibrary(), text);
+    const targetTemplates = makeStorage();
+    const result = importLibrary(emptyLibrary(), targetTemplates, text);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.summary).toEqual({
@@ -65,22 +72,22 @@ describe("library import/export", () => {
       addedTemplates: 1,
       skippedTemplates: 0,
     });
-    const reloaded = loadSkills(target);
-    expect(reloaded.skills).toHaveLength(1);
-    expect(reloaded.skills[0]?.name).toBe("周报助手");
-    expect(reloaded.skills[0]?.capabilities).toEqual(["read"]);
-    expect(listTemplates(target)).toHaveLength(1);
+    expect(result.library.skills).toHaveLength(1);
+    expect(result.library.skills[0]?.name).toBe("周报助手");
+    expect(result.library.skills[0]?.capabilities).toEqual(["read"]);
+    expect(listTemplates(targetTemplates)).toHaveLength(1);
     // Bindings are local state and are not part of the file.
-    expect(reloaded.bindings).toEqual({});
+    expect(result.library.bindings).toEqual({});
   });
 
   it("skips entries whose name already exists locally", () => {
-    const source = makeStorage();
-    seed(source);
-    const text = exportLibrary(source);
-    const target = makeStorage();
-    seed(target);
-    const result = importLibrary(target, loadSkills(target), text);
+    const sourceTemplates = makeStorage();
+    seedTemplates(sourceTemplates);
+    const text = exportLibrary(seedSkillLibrary(), sourceTemplates);
+    const targetTemplates = makeStorage();
+    seedTemplates(targetTemplates);
+    const local = seedSkillLibrary();
+    const result = importLibrary(local, targetTemplates, text);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.summary).toEqual({
@@ -89,11 +96,11 @@ describe("library import/export", () => {
       addedTemplates: 0,
       skippedTemplates: 1,
     });
-    expect(loadSkills(target).skills).toHaveLength(1);
+    expect(result.library.skills).toHaveLength(1);
   });
 
   it("rejects malformed JSON as a whole", () => {
-    const result = importLibrary(makeStorage(), emptyLibrary(), "{oops");
+    const result = importLibrary(emptyLibrary(), makeStorage(), "{oops");
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.reason).toContain("JSON");
@@ -107,7 +114,7 @@ describe("library import/export", () => {
       skills: [],
       templates: [],
     });
-    const result = importLibrary(makeStorage(), emptyLibrary(), text);
+    const result = importLibrary(emptyLibrary(), makeStorage(), text);
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.reason).toContain("校验失败");
@@ -121,11 +128,11 @@ describe("library import/export", () => {
       skills: [],
       templates: [],
     });
-    expect(importLibrary(makeStorage(), emptyLibrary(), text).ok).toBe(false);
+    expect(importLibrary(emptyLibrary(), makeStorage(), text).ok).toBe(false);
   });
 
-  it("does not import anything when the file fails validation", () => {
-    const target = makeStorage();
+  it("returns the untouched library when the file fails validation", () => {
+    const local = seedSkillLibrary();
     const text = JSON.stringify({
       format: "deepseek-bot-library",
       formatVersion: 1,
@@ -133,7 +140,10 @@ describe("library import/export", () => {
       skills: [],
       templates: [],
     });
-    expect(importLibrary(target, emptyLibrary(), text).ok).toBe(false);
-    expect(loadSkills(target).skills).toEqual([]);
+    const result = importLibrary(local, makeStorage(), text);
+    expect(result.ok).toBe(false);
+    // A rejected file must not produce a next library at all, so `local`
+    // stays the only library state the caller holds.
+    expect(local.skills).toHaveLength(1);
   });
 });

@@ -1,7 +1,9 @@
 /**
  * Skills panel (D17): list, create, edit, delete, and import/export of the
  * skill library. Mounted in the settings dialog; the parent owns the library
- * state so the bot form's picker stays in sync.
+ * state (durable in the Host since D17') so the bot form's picker stays in
+ * sync. The `storage` prop is only for the bot-template half of the shared
+ * import/export file.
  */
 import { useRef, useState, type JSX } from "react";
 import {
@@ -59,7 +61,7 @@ export function SkillsPanel(props: {
 
   const commit = (): void => {
     if (!editor) return;
-    const result = saveSkill(props.storage, props.library, {
+    const result = saveSkill(props.library, {
       ...(editor.id ? { id: editor.id } : {}),
       name: editor.name,
       description: editor.description,
@@ -90,12 +92,12 @@ export function SkillsPanel(props: {
   };
 
   const remove = (skill: SkillDefinition): void => {
-    props.onChange(deleteSkill(props.storage, props.library, skill.id));
+    props.onChange(deleteSkill(props.library, skill.id));
     toast(t("skills.skillDeleted", [skill.name]));
   };
 
   const download = (): void => {
-    const text = exportLibrary(props.storage);
+    const text = exportLibrary(props.library, props.storage);
     const blob = new Blob([text], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
@@ -110,8 +112,8 @@ export function SkillsPanel(props: {
     const reader = new FileReader();
     reader.onload = () => {
       const result = importLibrary(
-        props.storage,
         props.library,
+        props.storage,
         String(reader.result ?? ""),
       );
       if (!result.ok) {

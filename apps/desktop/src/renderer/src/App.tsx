@@ -138,9 +138,12 @@ import {
 import { BotSkillsPicker } from "./features/skills/bot-skills-picker.js";
 import { SkillsPanel } from "./features/skills/skills-panel.js";
 import {
+  emptyLibrary,
+  localLibraryCandidate,
   loadSkills,
   setBotSkills,
   skillsForInjection,
+  toRendererLibrary,
   type SkillLibrary,
 } from "./features/skills/skills.js";
 
@@ -489,9 +492,71 @@ export function App(): JSX.Element {
   const [botTemplates, setBotTemplates] = useState<BotTemplate[]>(() =>
     listTemplates(window.localStorage),
   );
-  const [skillLibrary, setSkillLibrary] = useState<SkillLibrary>(() =>
-    loadSkills(window.localStorage),
-  );
+  const [skillLibrary, setSkillLibrary] = useState<SkillLibrary>(emptyLibrary);
+  /** D17': any local edit wins over the in-flight boot load. */
+  const skillLibraryTouchedRef = useRef(false);
+
+  // D17': boot the skill library from the Host. When the Host has none, the
+  // legacy localStorage copy migrates once; the composer prompt-template
+  // store (an array under the same legacy key) is never migrated. A Host
+  // without the methods (or a broken bridge) degrades to the legacy read.
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      try {
+        const response = await window.deepseekBot.host.call("skillLibrary.get", {});
+        if (!alive || skillLibraryTouchedRef.current) return;
+        const hostLibrary = METHOD_CONTRACTS["skillLibrary.get"].response.parse(
+          response,
+        ).library;
+        if (hostLibrary.skills.length > 0) {
+          setSkillLibrary(toRendererLibrary(hostLibrary));
+          return;
+        }
+        const candidate = localLibraryCandidate(
+          window.localStorage.getItem("deepseek-bot.skills.v1"),
+        );
+        if (candidate === null) {
+          setSkillLibrary(toRendererLibrary(hostLibrary));
+          return;
+        }
+        const saved = await window.deepseekBot.host.call("skillLibrary.save", {
+          library: candidate,
+        });
+        if (!alive || skillLibraryTouchedRef.current) return;
+        skillLibraryTouchedRef.current = true;
+        setSkillLibrary(
+          toRendererLibrary(METHOD_CONTRACTS["skillLibrary.save"].response.parse(saved).library),
+        );
+      } catch {
+        if (alive && !skillLibraryTouchedRef.current) {
+          setSkillLibrary(loadSkills(window.localStorage));
+          setToast(t("skills.hostDegraded"));
+        }
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  /**
+   * D17': optimistic local update + whole-library Host save. A failed save
+   * keeps the in-session library and says so — the same semantics the old
+   * localStorage quota-loss path had.
+   */
+  const updateLibrary = useCallback((next: SkillLibrary) => {
+    skillLibraryTouchedRef.current = true;
+    setSkillLibrary(next);
+    void window.deepseekBot.host
+      .call("skillLibrary.save", { library: next })
+      .then((response) => {
+        METHOD_CONTRACTS["skillLibrary.save"].response.parse(response);
+      })
+      .catch(() => {
+        setToast(t("skills.hostSaveFailed"));
+      });
+  }, []);
 
   const saveBotTemplate = (target: UiBot): void => {
     const result = saveTemplate(window.localStorage, {
@@ -2388,13 +2453,8 @@ const logout = (): void => {
                       skills={skillLibrary.skills}
                       selected={skillLibrary.bindings[editingBot.bot.id] ?? []}
                       onChange={(ids) =>
-                        setSkillLibrary(
-                          setBotSkills(
-                            window.localStorage,
-                            skillLibrary,
-                            editingBot.bot.id,
-                            ids,
-                          ),
+                        updateLibrary(
+                          setBotSkills(skillLibrary, editingBot.bot.id, ids),
                         )
                       }
                     />
@@ -2590,7 +2650,7 @@ const logout = (): void => {
                   <SkillsPanel
                     storage={window.localStorage}
                     library={skillLibrary}
-                    onChange={setSkillLibrary}
+                    onChange={updateLibrary}
                     onToast={setToast}
                   />
                 </div>
