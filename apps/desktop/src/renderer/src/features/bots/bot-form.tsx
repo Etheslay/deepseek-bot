@@ -107,11 +107,9 @@ export function BotForm(
     onCancel: () => void;
     /** Rendered above the name field (avatar preview). */
     previewSlot?: ReactNode;
-    /** Rendered between name and role (avatar picker slot). */
+    /** Rendered after the name field (avatar picker slot). */
     avatarSlot?: ReactNode;
-    /** Rendered after role (group select row). */
-    groupSlot?: ReactNode;
-    /** Rendered after the group row (skill bindings, D17). */
+    /** Rendered after the avatar (skill bindings, D17). */
     skillsSlot?: ReactNode;
     /** Create mode: keep the dialog focused on name + avatar. */
     minimal?: boolean;
@@ -153,7 +151,8 @@ export function BotForm(
 
   // Interop (TASK_BOT_INTEROP.md): the coordinator role picker is gone — any
   // bot may dispatch now, so the role confers nothing. An existing role label
-  // rides along in `draft`/`initial` untouched and is never edited here.
+  // rides along in `draft`/`initial` untouched and is never edited here. The
+  // group row left with it (众生平等): new bots are ungrouped.
 
 
   const toggleTone = (id: string): void => {
@@ -281,8 +280,6 @@ export function BotForm(
           />
         </div>
       )}
-
-      {props.groupSlot}
 
       {props.skillsSlot}
 

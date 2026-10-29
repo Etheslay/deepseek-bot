@@ -334,7 +334,6 @@ export function App(): JSX.Element {
     shape: "blob",
     color: "#3b93f0",
   }));
-  const [modalGroup, setModalGroup] = useState<number>(UNGROUPED);
   const [tplSeed, setTplSeed] = useState("new");
   /** Name suggested for the next bot, computed when the create dialog opens. */
   const [createName, setCreateName] = useState("");
@@ -962,9 +961,6 @@ export function App(): JSX.Element {
     setShape(0);
     setColor(2);
     setAvatar({ kind: "grok", shape: "blob", color: "#3b93f0" });
-    setModalGroup(
-      groups.find((g) => g.key === UNGROUPED)?.key ?? groups[0]?.key ?? UNGROUPED,
-    );
     setEditingBot(null);
     setModalOpen(true);
   };
@@ -972,10 +968,6 @@ export function App(): JSX.Element {
   const openEditBotModal = (bot: UiBot) => {
     setEditingBot(bot);
     setAvatar(bot.avatar);
-    // The edit dialog carries the same group row as create, pre-set to the
-    // bot's current bucket, so moving a bot between groups is one visit here
-    // instead of a sidebar drag.
-    setModalGroup(bot.group);
     setModalOpen(true);
   };
 
@@ -985,7 +977,6 @@ export function App(): JSX.Element {
     if (editingBot) {
       const result = await updateBotEntity(editingBot.bot.id, draft);
       if (result.ok) {
-        setUi(editingBot.key, { group: modalGroup });
         setModalOpen(false);
         setToast(t("shell.saved"));
       }
@@ -993,7 +984,8 @@ export function App(): JSX.Element {
     }
     const result = await createBotEntity(draft);
     if (result.ok && result.key !== undefined) {
-      setUi(result.key, { avatar, shape, color, group: modalGroup });
+      // 众生平等：弹窗不再选分组，新建 bot 一律进未分组（侧栏拖拽仍可整理）。
+      setUi(result.key, { avatar, shape, color, group: UNGROUPED });
       setModalOpen(false);
       setToast(t("shell.created"));
     }
@@ -2440,18 +2432,6 @@ const logout = (): void => {
                   </div>
                 }
                 avatarSlot={<AvatarPicker value={avatar} onChange={setAvatar} theme={theme} />}
-                groupSlot={
-                  <div className="group-pick compact">
-                    <span>{t("shell.group")}</span>
-                    <CustomSelect
-                      value={modalGroup}
-                      options={groups.map((g) => ({ value: g.key, label: groupLabel(g) }))}
-                      onChange={(v) => setModalGroup(Number(v))}
-                      ariaLabel={t("shell.group")}
-                      disabled={groups.length === 0}
-                    />
-                  </div>
-                }
                 skillsSlot={
                   editingBot ? (
                     <BotSkillsPicker
