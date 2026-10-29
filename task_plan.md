@@ -1,5 +1,10 @@
 # 项目规范化工作计划
 
+## 2026-10-29：契约补记与台账二更（纯文档）
+
+- 范围：仅文档；无应用源码、无依赖、无 API 请求。
+- 内容：CONTRACTS.md §3 方法表补 `chat.*` 五行（治理债 §7.8 收口）；SPRINTS §10 登记 PR #139 合入与两条新在途分支（context-meter、d17-skill-host-store，均归属 Destinyian，只登记不触碰）。
+
 ## 2026-10-29：文档刷新（GAP_AUDIT 三次刷新 + SPRINTS 台账清点）
 
 - 范围：仅文档；无应用源码、无依赖安装、无 API 请求。分支 `feature/docs-audit-refresh-8029`，基线 origin/develop `3e21112`。

@@ -202,7 +202,7 @@ Ctrl+K 浮层经 `search.global` 检索 Host 全库：250ms 防抖 + latest-ref�
 5. ~~SPRINTS §7 审计表刷新~~ **随本刷新更新**（语言、备份、更新、设置持久化、附件、搜索、硬件加速行改为已完成并登记去向 GAP_AUDIT）；
 6. ~~快赢安家~~ **SPRINTS §9.1 表已注记四项全部完成及载体**（随本刷新）；
 7. ~~本文件入库~~ **随 docs/gap-audit-refresh 分支提交**；
-8. **CONTRACTS.md 文档滞后（2026-10-28 新增；10-29 复核收窄）**：`search.*`（方法表行）、`chat.send` 技能注入（D17 节）、`primitive`（协议开头）、`idempotencyKey`（task 行）已随 #126/#136/#137 收录正文；`chat.history`/`chat.cancel`（D30）仍无独立方法行（grep 正文仅 1 处顺带提及）。建议随下一次契约 PR 补正文或在该文件头部明确"以 packages/contracts 为准"的指引，避免两处漂移。
+8. ~~CONTRACTS.md 文档滞后~~ **已收口（2026-10-29 契约补记）**：`chat.send` / `chat.history` / `chat.cancel` / `chat.status` / `chat.attach` 五行已补入 §3 方法表，内容以 `packages/contracts` 冻结 schema 为准（此前 `chat.status` 全文零提及）；skills、primitive 与附件分块细节仍指向既有 D17/D26 节与 §4 事件段，两处漂移风险就此消除。
 
 ## 8. 建议排期（依赖驱动的批次，可多晚并行）
 

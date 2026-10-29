@@ -248,16 +248,20 @@
 
 ## 10. 在途分支台账（2026-10-29 清点）
 
-清点基线：`origin/develop` = `3e21112`（PR #136/#137 合入后）。10-27 清点中列出的全部分支（reasoner-toggle、settings-vault、choice-card-answer、system-integration、manager-orchestration、mono-shape 及各切片）已全部合入或按 §8 拍板作废删除；`backup/pre-ui-merge` 等本地备份分支已不存在。冲突试算仅对在途分支有意义，当前无在途分支，故本节不列试算。
+清点基线：`origin/develop` = `faecb98`（PR #139 文档刷新合入后）。10-27 清点中列出的全部分支（reasoner-toggle、settings-vault、choice-card-answer、system-integration、manager-orchestration、mono-shape 及各切片）已全部合入或按 §8 拍板作废删除；`backup/pre-ui-merge` 等本地备份分支已不存在。冲突结论来自 `git merge-tree --write-tree origin/develop <分支>` 的**试算**，不代表已解决。
 
-- **远程**：仅 `origin/main` 与 `origin/develop`；#136（互通派发）与 #137（原始人模式）已于 10-28 合入，远程 feature 分支随合并删除；
+- **远程在途分支（新增，均归属 Destinyian，AI 只登记不触碰）**：
+  - `feature/context-meter`——上下文用量圆环 + 历史 80% 自动折叠（任务书 `TASK_CONTEXT_METER.md` 与报告随分支提交）；领先 develop 2 提交、落后 5；试算冲突 3 文件：`apps/desktop/src/shared/i18n/messages/shell.ts`、`packages/contracts/src/methods.ts`、`packages/storage/src/database.ts`，需先同步 develop 解冲突；
+  - `feature/d17-skill-host-store`——技能库迁 Host 存储（`skillLibrary.get/save`，协议 v0.11；任务书 `TASK_D17_SKILL_HOST_STORE.md` 与报告随分支提交）；领先 3 提交；试算冲突 1 文件：`docs/CONTRACTS.md`；
+  - 处置：由归属人本人自审（针对最新提交 SHA）后开 PR；两条分支均涉及契约文档面，建议按「先到先合、后者重放」顺序处理；
+- **已合入**：#139（本仓库文档刷新，2026-10-29）；此前 #136（互通派发）与 #137（原始人模式）于 10-28 合入，远程 feature 分支随合并删除；
 - **本地**：33 个分支中未合入 develop 的只有 `archive/stage-plan-proposal` 与 `archive/stage-plan-push2`（2026-10-23 误署名事件的提案存档，按当时记录待负责人讨论——不合并、不推送、不删除）；
 - **工作区**（`git worktree list`）5 个活动项，其分支均已合入：`~/.codex/worktrees/d21-windows-acceptance`（`feature/screen-windows-acceptance`，PR #93）、`~/.codex/worktrees/resolve-pr65-connectors`（`feature/local-exec`）、`deepseek-bot-wt-connectors`（`feature/connector-registry`）、`deepseek-bot-wt-knowledge`（`feature/knowledge-import`）、`deepseek-bot-wt-memory`（`feature/memory-knowledge`，PR #57）——均属可清理死工作区，但可能含未跟踪本机数据，删除前需负责人逐个确认，本台账只登记不动手；
 - **主工作区残件**：根目录 `.tmp-d16-*` 日志与临时 electron 目录（`.gitignore` 覆盖、不入库）为 D16 会话遗留，可删；
 - **欠账复核**（对照 10-27 清点）：`docs/GAP_AUDIT.md`、`docs/TASK_MANAGER_ORCHESTRATION.md` 已入库（PR #122 起）；根目录 0 字节 `$null` 文件已不存在；手测截图 d14/d17/d25/d26 仍缺；各报告自审签署欠账清单见 [GAP_AUDIT](GAP_AUDIT.md) §7.3；
 - **未完成的计划项**：**D21 真实键鼠复核**（截图/OCR 真机证据已由 PR #93 报告覆盖）、**D23 平台验收**（依赖 D13 与 D14–D22 全部完成，未开始）；下一批候选见 [GAP_AUDIT](GAP_AUDIT.md) §8。
 
-当前无在途任务分支；下次合并后本节照例更新。
+下次合并后本节照例更新。
 
 
 
