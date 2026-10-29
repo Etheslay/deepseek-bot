@@ -9081,3 +9081,36 @@ button.automation-notice-jump:hover {
 button.automation-notice-jump .automation-notice-main {
   color: var(--text);
 }
+
+/* ------------------------------------------------------------
+   Local mermaid flowcharts (D14 follow-up). The diagram mounts in a
+   shadow root, so only the host box is themed here; the SVG keeps its
+   own mermaid theme colors.
+   ------------------------------------------------------------ */
+
+.mermaid-block {
+  display: block;
+  margin: 6px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bubble);
+  overflow-x: auto;
+}
+
+.mermaid-block svg {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 0 auto;
+}
+
+.md-code-mermaid-failed {
+  border-color: var(--border);
+}
+
+.md-code-mermaid-error {
+  padding: 4px 12px;
+  color: var(--muted);
+  font-size: 12px;
+}

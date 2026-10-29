@@ -87,7 +87,7 @@
 | D16 `ask_user` 聊天回传 | 已交付 | `feature/ask-user-chat` → PR #54 `134306a` | [D16-ask-user-chat-report](reports/D16-ask-user-chat-report.md) |
 | D16 `web_search` 聊天接线 | 已交付 | `feature/web-search-chat` → PR #56 `b57c29e` | [D16-web-search-chat-report](reports/D16-web-search-chat-report.md) |
 | D30 聊天运行时 | 已交付 | `feature/chat-runtime` → PR #44 `19057e6` | [D30-report](reports/D30-report.md) |
-| D14 渲染片 + 交互片 | 已交付（mermaid 砍除，验收部分达成） | `feature/chat-experience` → `feature/settings-updates` → `0f20970` | [D14-report](reports/D14-report.md) |
+| D14 渲染片 + 交互片 | 已交付（mermaid 由 `feature/d14-mermaid` 本地补齐，验收达成，见 [D14-mermaid 报告](reports/D14-mermaid-report.md)） | `feature/chat-experience` → `feature/settings-updates` → `0f20970` | [D14-report](reports/D14-report.md) |
 | 头像打磨（Grok Ball 视线与节奏） | 已交付 | `feature/gaze-avatar` → PR #61 `cc4a379`、#62 `5533ea6` | [B-AVATAR-02-report](reports/B-AVATAR-02-report.md) |
 | D25 全局搜索 | 已交付（host 检索按计划后接） | 同上 → `0f20970` | [D25-report](reports/D25-report.md) |
 | D26 聊天附件 | **切片交付（渲染层）；D26 收尾（附件理解闭环）另见 [D26 附件读取报告](reports/D26-attachment-read-report.md)**：附件分片上传进 bot 工作区 `attachments/`、模型工具 `read_workspace_file`（fs.read 授权）按需读取、阈值注入（≤16 KiB 文本内联，超限走工具）、图片/二进制卡片说明 | 同上 → `0f20970`；收尾在 `feature/attachment-read-closure` | [D26-report](reports/D26-report.md)、[D26-attachment-read-report](reports/D26-attachment-read-report.md) |
