@@ -1,5 +1,12 @@
 # 工作记录
 
+## 2026-10-29：三条在途切片合并前独立审查（授权执行）
+
+- 负责人授权对 context-meter / d14-mermaid / d17-skill-host-store 做只读审查：各建 `.worktrees/review-*` 只读 worktree（d14 按其锁文件在线拉 mermaid，其余离线装），读任务书/报告/关键 diff，独立复跑受影响包测试与全仓 lint/typecheck，结束后清理 worktree；三条分支 tip 未动。
+- 结论：三片实现与任务书一致，断言全绿（cm：storage 224/contracts 149/host 含既有抖动隔离复绿/desktop 587；d14：desktop 595/contracts 149；d17：contracts 149/host 含既有抖动隔离复绿/desktop 575；typecheck/lint 均 0）。间歇性「全过但退出 -1」为本机已知 teardown 抖动家族，复跑退出 0。
+- 发现：① cm P2——`compressTurn` 不取每 bot 忙锁，压缩与用户发送真并发，任务书/报告「新 sends 排队（RATE_LIMITED）」断言失实（改锁或改文档，归属人定）；② d14 P3——`initialize` 仅首次执行，主题切换后新图仍用旧主题，与任务书验收「渲染时刻主题决定配色」不符（补 initialize 或改文档）；③ d17 P3 备忘——App.tsx 两处直调 preload 绕过服务层（功能等价）。详见 [PREMERGE-REVIEW-2026-10-29](docs/reports/PREMERGE-REVIEW-2026-10-29.md)。
+- 报告随分支 `feature/premerge-review-973a`（自 develop `5740049`）入库；推送与 PR 由负责人确认。
+
 ## 2026-10-29：DEVELOPMENT_PLAN §6 叙事一致性修正（纯文档）
 
 - 三处被后续交付推翻的陈述修正：G3（原生聊天 D08 审批，PR #125）不再是“后续范围”；知识导入上限 16 KiB 已被 D18 收尾（PR #63，256 KiB 知识文档 + knowledge_search + 保留策略）取代；“工作流模板仍未做”改为 G11'（PR #127）已交付本地模板库。
