@@ -20,6 +20,7 @@ export const skillsMessages = {
   "skills.importDone": { zh: "导入完成：技能 +{0}（跳过 {1}），模板 +{2}（跳过 {3}）", en: "Import complete: skills +{0} ({1} skipped), templates +{2} ({3} skipped)" },
   "skills.importFailed": { zh: "导入失败：{0}", en: "Import failed: {0}" },
   "skills.injectionRejected": { zh: "技能「{0}」无法注入本轮", en: "Skill “{0}” could not be injected into this turn" },
+  "skills.migrateFailed": { zh: "技能库迁移失败，旧数据已保留，可在设置里重新导入导出文件", en: "Skill library migration failed; your old data is kept — re-import it from a file in settings" },
   "skills.instructionsPlaceholder": { zh: "技能指令：发送时由 Host 注入本轮，不写进聊天气泡", en: "Skill instructions: the Host injects these into the turn. They are not stored in the chat bubble" },
   "skills.invalidJson": { zh: "文件不是合法 JSON", en: "The file is not valid JSON" },
   "skills.libraryExported": { zh: "已导出技能与模板", en: "Skills and templates exported" },

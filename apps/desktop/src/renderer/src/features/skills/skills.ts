@@ -66,6 +66,8 @@ export type SaveSkillResult =
   | { ok: false; reason: "duplicate" | "limit" | "missing" | "invalid" };
 
 const STORAGE_KEY = "deepseek-bot.skills.v1";
+/** The same key, exposed for the one-time Host migration (library-migration). */
+export const LEGACY_SKILLS_STORAGE_KEY = STORAGE_KEY;
 export const MAX_SKILLS = 30;
 export const MAX_SKILL_CONTEXT_CHARS = 4000;
 

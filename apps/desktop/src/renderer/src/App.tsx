@@ -145,13 +145,13 @@ import { BotSkillsPicker } from "./features/skills/bot-skills-picker.js";
 import { SkillsPanel } from "./features/skills/skills-panel.js";
 import {
   emptyLibrary,
-  localLibraryCandidate,
   loadSkills,
   setBotSkills,
   skillsForInjection,
   toRendererLibrary,
   type SkillLibrary,
 } from "./features/skills/skills.js";
+import { migrateLegacyLibrary } from "./features/skills/library-migration.js";
 
 
 type Group = { key: number; name: string };
@@ -512,9 +512,10 @@ export function App(): JSX.Element {
   const skillLibraryTouchedRef = useRef(false);
 
   // D17': boot the skill library from the Host. When the Host has none, the
-  // legacy localStorage copy migrates once; the composer prompt-template
-  // store (an array under the same legacy key) is never migrated. A Host
-  // without the methods (or a broken bridge) degrades to the legacy read.
+  // legacy localStorage copy migrates once behind an idempotent marker; the
+  // composer prompt-template store (an array under the same legacy key) is
+  // never migrated. A Host without the methods (or a broken bridge) degrades
+  // to the legacy read; a failed import keeps the legacy payload and says so.
   useEffect(() => {
     let alive = true;
     void (async () => {
@@ -524,25 +525,21 @@ export function App(): JSX.Element {
         const hostLibrary = METHOD_CONTRACTS["skillLibrary.get"].response.parse(
           response,
         ).library;
-        if (hostLibrary.skills.length > 0) {
-          setSkillLibrary(toRendererLibrary(hostLibrary));
-          return;
-        }
-        const candidate = localLibraryCandidate(
-          window.localStorage.getItem("deepseek-bot.skills.v1"),
-        );
-        if (candidate === null) {
-          setSkillLibrary(toRendererLibrary(hostLibrary));
-          return;
-        }
-        const saved = await window.deepseekBot.host.call("skillLibrary.save", {
-          library: candidate,
+        const migration = await migrateLegacyLibrary({
+          storage: window.localStorage,
+          hostLibrary,
+          saveLibrary: (library) =>
+            window.deepseekBot.host.call("skillLibrary.save", { library }),
         });
         if (!alive || skillLibraryTouchedRef.current) return;
-        skillLibraryTouchedRef.current = true;
-        setSkillLibrary(
-          toRendererLibrary(METHOD_CONTRACTS["skillLibrary.save"].response.parse(saved).library),
-        );
+        if (migration.outcome === "failed") {
+          // The legacy payload stays in localStorage (retry next boot, or
+          // re-import the export file from settings).
+          setSkillLibrary(loadSkills(window.localStorage));
+          setToast(t("skills.migrateFailed"));
+          return;
+        }
+        setSkillLibrary(toRendererLibrary(migration.library));
       } catch {
         if (alive && !skillLibraryTouchedRef.current) {
           setSkillLibrary(loadSkills(window.localStorage));
