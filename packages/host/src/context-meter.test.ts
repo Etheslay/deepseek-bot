@@ -119,6 +119,8 @@ describe("context meter (TASK_CONTEXT_METER.md)", () => {
     const { host, botId } = await meterHost();
 
     let compressed = false;
+    let sawPreFoldRows = false;
+    let rowsBeforeFold = 0;
     for (let turn = 1; turn <= 10; turn += 1) {
       await host.handleMethod("chat.send", {
         botId,
@@ -126,10 +128,16 @@ describe("context meter (TASK_CONTEXT_METER.md)", () => {
       });
       const usage = await usageOf(host, botId);
       if (usage.compressedAt !== null) {
-        // The background fold already finished between the reply and this read.
+        // The background fold already finished between the reply and this read:
+        // no pre-fold count exists for this race, so the equality check below
+        // does not apply (the floor assertion still holds).
         compressed = true;
         break;
       }
+      // The fold for this trigger has not completed yet, so this snapshot is
+      // a genuine pre-fold row count.
+      rowsBeforeFold = listChatMessages(host.db, botId, 100).length;
+      sawPreFoldRows = true;
       if (usage.percent >= 80) {
         // The fold runs in the background right after this turn.
         await vi.waitFor(
@@ -154,9 +162,16 @@ describe("context meter (TASK_CONTEXT_METER.md)", () => {
     expect(after.percent).toBeLessThan(80);
     expect(after.compressedAt).not.toBeNull();
 
-    // Storage keeps every row — the fold never deletes history.
+    // Storage keeps every row — the fold never deletes history. The weighted
+    // CJK token estimate makes compression fire earlier than the old
+    // chars/4 rule, so how many turns (and rows) accumulate before the fold
+    // is no longer a fixed value; this assertion therefore pins the
+    // semantics only: the row count survives the fold unchanged.
     const rows = listChatMessages(host.db, botId, 100);
-    expect(rows.length).toBeGreaterThanOrEqual(8);
+    expect(rows.length).toBeGreaterThanOrEqual(2); // at least one Q&A turn
+    if (sawPreFoldRows) {
+      expect(rows.length).toBe(rowsBeforeFold); // the fold deletes nothing
+    }
   });
 
   it("folds the digest into the next prompt and replays only post-watermark rows", async () => {
