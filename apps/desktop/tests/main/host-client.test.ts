@@ -84,9 +84,11 @@ describe("spawnHostProcess", () => {
     const notices = vi.fn();
     const unsubscribe = client.onChatStream(notices);
     await vi.waitFor(() => expect(notices).toHaveBeenCalled(), { timeout: 5_000 });
+    // The fake pushes a malformed notice (non-UUID botId) ahead of the valid
+    // one; the schema-validated consumer skips it and forwards only this.
     expect(notices.mock.calls[0]?.[0]).toEqual({
-      botId: "bot-1",
-      sessionId: "chat:bot-1:s1",
+      botId: "11111111-1111-4111-8111-111111111111",
+      sessionId: "chat:11111111-1111-4111-8111-111111111111",
       text: "live segment",
     });
     unsubscribe();

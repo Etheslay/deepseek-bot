@@ -15,9 +15,11 @@ import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { createInterface } from "node:readline";
 import {
+  ChatStreamNoticeSchema,
   METHODS,
   RequestEnvelopeSchema,
   isWithinMessageSizeLimit,
+  type ChatStreamNotice,
   type Method,
 } from "@deepseek-bot/contracts";
 
@@ -46,14 +48,10 @@ export interface ScheduleMissedNotice {
 /**
  * B6: one live assistant segment of a running chat turn, pushed by the Host
  * over the `chat.stream` notification (the wire twin of schedule.missed).
- * The pinned harness settles a whole assistant message per model attempt, so
- * a segment is a full message text, not a token delta.
+ * The shape (`ChatStreamNotice`) comes from the contracts package and the
+ * consumer validates it with `ChatStreamNoticeSchema` — malformed pushes are
+ * ignored, exactly like the previous hand-rolled field checks.
  */
-export interface ChatStreamNotice {
-  readonly botId: string;
-  readonly sessionId: string;
-  readonly text: string;
-}
 
 /** Error surfaced to the renderer for a failed host call (CONTRACTS §6 shape). */
 export class HostCallError extends Error {
@@ -202,18 +200,11 @@ export function spawnHostProcess(options: HostProcessClientOptions): HostProcess
       return;
     }
     if (method === "chat.stream") {
-      const params = (record.params ?? {}) as Partial<ChatStreamNotice>;
-      if (
-        typeof params.botId === "string" &&
-        typeof params.sessionId === "string" &&
-        typeof params.text === "string"
-      ) {
-        const notice: ChatStreamNotice = {
-          botId: params.botId,
-          sessionId: params.sessionId,
-          text: params.text,
-        };
-        for (const listener of chatStreamListeners) listener(notice);
+      // Malformed pushes are ignored — the same behavior the hand-rolled
+      // field checks had, now validated by the pinned contracts schema.
+      const parsed = ChatStreamNoticeSchema.safeParse(record.params ?? {});
+      if (parsed.success) {
+        for (const listener of chatStreamListeners) listener(parsed.data);
       }
       return;
     }

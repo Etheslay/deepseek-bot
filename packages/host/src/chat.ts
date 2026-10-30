@@ -22,6 +22,9 @@ import type {
   CapabilityId,
   ChatSkillInjection,
 } from "@deepseek-bot/contracts";
+// B6: the notice shape is pinned by the contracts package (events.ts) — one
+// source of truth for the host emitter and the desktop consumer.
+import { type ChatStreamNotice } from "@deepseek-bot/contracts";
 import {
   EngineError,
   type NodePermissionHandle,
@@ -71,13 +74,11 @@ export interface TurnProgress {
  * The pinned harness settles a whole assistant message per model attempt
  * (there are no token-level deltas on the wire), so a tool-using turn
  * streams its narration segment by segment; the turn's authoritative reply
- * stays the last one (`chat.send` response).
+ * stays the last one (`chat.send` response). The shape is pinned by the
+ * contracts package (`ChatStreamNoticeSchema`, events.ts) — one source of
+ * truth for the host emitter and the desktop consumer.
  */
-export interface ChatStreamNotice {
-  readonly botId: string;
-  readonly sessionId: string;
-  readonly text: string;
-}
+export type { ChatStreamNotice };
 
 interface ChatSession {
   lastSessionId: string;

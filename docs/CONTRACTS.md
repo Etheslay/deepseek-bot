@@ -148,6 +148,11 @@ v0.5 任务事件（T7）：`task.status`。派发任务不进 runs 事件日志
 
 `assistant.delta` 为瞬态流，带 streamId 与 chunkIndex，不占持久 sequence，不承诺逐片段重放；重连用已提交会话快照补齐。`run.completed` 必须在持久事务成功后发送。
 
+服务端→桌面 stdio 通知（非方法调用；不占持久 sequence，不重放；旧客户端忽略未知通知方法）：
+
+- `schedule.missed`（FR-08）：params 为 `{notices: [{scheduleId, workflowId, occurrenceUtc, reason}]}`；形状声明在 `@deepseek-bot/runtime`（`ScheduleMissNotice`）。
+- `chat.stream`（B6 增量流）：params 为 `{botId, sessionId, text}`——运行中回合的实时助手分段；钉扎 Harness 按整条消息结算，分段是完整消息文本而非 token 增量，回合的权威回复仍是 `chat.send` 响应。schema 钉在 `packages/contracts`（`ChatStreamNoticeSchema`，botId 为 UUID、text 非空），随 v0.12 入库、不升 protocolVersion；桌面消费端经该 schema 校验，畸形通知整条忽略。
+
 ## 5. 状态和失败语义
 
 Run：`queued → running ↔ waiting_approval → succeeded / failed / cancelled`；进程退出或崩溃使未终结运行进入 `interrupted`。取消中的运行使用 `cancelling`，待子任务停止后才进入 `cancelled`。终态不可直接回到 running；恢复以新 Run 关联 `resumedFromRunId`。
