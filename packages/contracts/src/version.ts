@@ -45,7 +45,11 @@
 // schema-pinned in the contracts package (ChatStreamNoticeSchema): a
 // server→client notification only, additive, so older clients that ignore
 // unknown notifications are unaffected and no protocol bump is needed.
-export const CONTRACT_VERSION = "0.12" as const;
+// v0.13 adds the renderer interface-state methods (ui.state.get/set, G1'):
+// one settings-KV snapshot of sidebar order + selection, validated by the
+// fixed UiStateSchema. Additive only: two new trusted methods, no entity
+// changes, and 0.1–0.12 senders stay accepted.
+export const CONTRACT_VERSION = "0.13" as const;
 export const PROTOCOL_VERSION = CONTRACT_VERSION;
 /** Workflow documents did not change in v0.3–v0.11; keep the document version. */
 export const WORKFLOW_SCHEMA_VERSION = "0.1" as const;
@@ -62,6 +66,7 @@ export const SUPPORTED_PROTOCOL_VERSIONS: readonly string[] = [
   "0.9",
   "0.10",
   "0.11",
+  "0.12",
   PROTOCOL_VERSION,
 ];
 

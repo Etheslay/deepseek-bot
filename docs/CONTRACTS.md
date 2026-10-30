@@ -1,4 +1,4 @@
-# 接口与数据契约 v0.12
+# 接口与数据契约 v0.13
 
 本文件定义本项目前后端契约，不是 DeepSeek Harness 官方 API。状态：v0.1 已冻结（2026-10-23，D00 验收记录见 D00 Issue）；v0.2 为 D15 写层扩展；v0.3（2026-10-26，D16 后端）新增人类权限控制方法；v0.4（2026-10-26，D28 共编侧车）新增 `artifacts.*` 方法组；v0.5（2026-10-26，manager-orchestration，TASK_MANAGER_ORCHESTRATION.md）新增 bot 协调者角色、`task.*` 方法组、`task.status` 任务事件与能力 `app.dispatch_task`，`protocolVersion` 升至 0.5，继续接受 0.1–0.4 发送方。工作流文档 `schemaVersion` 保持 0.1（存量数据可读）。后续变更按 §7 提升版本并由变更负责人自审同步使用方。可执行实现位于 `packages/contracts/`：schema、§7 夹具与双方共用契约测试见 [packages/contracts/README.md](../packages/contracts/README.md)。所有字段均需后端校验，TypeScript 类型不能替代运行时校验。
 
@@ -19,6 +19,8 @@ v0.10 新增 `usage.summary`：把每个聊天回合的 token 用量聚合成「
 v0.11 新增 `skillLibrary.get` / `skillLibrary.save`（D17' 收尾）：D17 技能库（技能定义 + bot 绑定）从渲染层 localStorage 迁到 Host 持久化，存于 settings KV 行 `skills.library.v1`，整库读写、请求侧整体校验（≤30 技能、指令入库上限 20 000 字、绑定 ≤50 bot 且 id 唯一）。注入零改动：`chat.send.skills`（0.8+）仍是唯一注入路径，声明能力仍是本轮网关允许集，网关在授权前拒绝名单外工具，无能力技能只注入说明；库存字符串能力 id（旧导出可载入），强制发生在发送组装时。当前 `protocolVersion` 为 0.11，继续接受 0.1–0.10 发送方；工作流 `schemaVersion` 仍为 0.1。
 
 v0.12 新增工作流读面 `workflow.get` / `run.snapshot` / `approval.list`：桌面编辑器要按 id 打开完整工作流文档（`workflow.list` 只回摘要、`workflow.export` 还要先知道 revision），运行监控要一帧拿到 `{run, nodeRuns, approvals, artifacts}` 而不是分别调用夹具列表，审批收件箱要跨运行筛选 `{runId?, status?, limit?}`（`permission.approval.list` 属能力授权域，schema 不同）。三个方法都只是既有存储/引擎读的薄封装，不改实体、不改变既有方法语义，当前 `protocolVersion` 为 0.12，继续接受 0.1–0.11 发送方；工作流 `schemaVersion` 仍为 0.1。本片只补契约与 Host 实现，**不代表桌面已经切到真实 Host**：`DesktopService.workflows/runs` 仍由夹具提供，接线与端到端验收另片完成。
+
+v0.13 新增界面态方法 `ui.state.get` / `ui.state.set`（G1' 收口）：桌面侧栏快照（bot/分组顺序 + 选中态）存于 settings KV 行 `ui.state.v1`，整快照读写、请求侧用固定的 `UiStateSchema` 整体校验（仅稳定实体 UUID：`botOrder`/`groupOrder` 去重 ≤1000、`selectedBotId`/`selectedGroupId` 可空），缺失或损坏行降级为空态、不失败。**不存任意 UI 载荷，不可能落 Key**。只覆盖稳定实体；桌面分组目前是会话内数字 key，`groupOrder`/`selectedGroupId` 在分组实体化前由渲染层写空值。两方法只是 settings KV 的薄封装，不改实体、不改变既有方法语义，当前 `protocolVersion` 为 0.13，继续接受 0.1–0.12 发送方；工作流 `schemaVersion` 仍为 0.1。
 
 ## 1. 通用规则
 
@@ -84,6 +86,7 @@ MCP 实际调用使用独立能力 `mcp.call`，默认 `ask`，禁止全局 `all
 | approval.decide | 允许/拒绝指定动作 | 校验摘要、权限、有效期与 pending 状态；重复决定不得重复执行 |
 | schedule.save / enable / disable | 本地调度 | 唯一 scheduleId + occurrenceUtc 防重复 |
 | settings.testConnection / update | 接入与设置 | Key 写入与测试位于后端；前端只得到是否已配置。`update` 的 patch 支持 `ui.locale`（`"zh" \| "en"`）：桌面把解析后的界面语言推给 Host（启动与切换时各一次），Host 存入 settings KV 并即时生效——任务派发通知、交接框架（`【上游交接 · …】`）、画布冲突与凭据错误、ask_user 兜底选项等 Host 侧文案随该语言输出；缺省与非法值回落 zh。语言切换只影响之后新写入的行，历史回放保持原样 |
+| ui.state.get / set | v0.13 界面态快照（受信桌面） | `get` 无参 → `{state}`（`UiStateSchema`：botOrder/groupOrder 去重 UUID 列表 ≤1000、selectedBotId/selectedGroupId 可空）；`set` 请求 `{state}` 整体校验后整快照落 settings KV 行 `ui.state.v1` 并回显，末写胜出。缺失/损坏行降级空态。只存稳定实体 ID，不存任意载荷、不存密钥；分组实体化前 group 字段写空值 |
 | data.backup / restore / describe | 数据管理 | restore 必须停止所有运行、校验备份、备份旧数据 |
 | permission.policy.list / set | v0.3 人类读取/修改全局能力策略 | start_run 仅 ask；shell/screen 不能 allow；deny 覆盖全部授权 |
 | permission.grant.list / revoke | v0.3 人类查询/撤销授权 | botId 可筛选；默认仅有效记录，最多 100；撤销已存在授权幂等 |

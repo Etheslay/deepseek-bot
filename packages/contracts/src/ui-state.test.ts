@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { UiStateSchema } from "./index.js";
+import { METHOD_CONTRACTS, UiStateSchema } from "./index.js";
 
 const botId = "11111111-1111-4111-8111-111111111111";
 const groupId = "77777777-7777-4777-8777-777777777777";
@@ -19,5 +19,22 @@ describe("UI state snapshot contract", () => {
   });
   it("rejects lists that exceed their bound", () => {
     expect(UiStateSchema.safeParse({ ...state, botOrder: Array.from({ length: 1001 }, (_, i) => `11111111-1111-4111-8111-${i.toString(16).padStart(12, "0")}`) }).success).toBe(false);
+  });
+});
+
+describe("ui.state methods", () => {
+  it("round-trips a snapshot through get/set contracts", () => {
+    const get = METHOD_CONTRACTS["ui.state.get"]!;
+    const set = METHOD_CONTRACTS["ui.state.set"]!;
+    expect(get.request.safeParse({}).success).toBe(true);
+    expect(get.response.safeParse({ state }).success).toBe(true);
+    expect(set.request.safeParse({ state }).success).toBe(true);
+    expect(set.response.safeParse({ state }).success).toBe(true);
+  });
+  it("rejects extra fields and non-snapshot payloads", () => {
+    const set = METHOD_CONTRACTS["ui.state.set"]!;
+    expect(set.request.safeParse({ state, extra: 1 }).success).toBe(false);
+    expect(set.request.safeParse({ state: { ...state, apiKey: "secret" } }).success).toBe(false);
+    expect(set.request.safeParse({}).success).toBe(false);
   });
 });
