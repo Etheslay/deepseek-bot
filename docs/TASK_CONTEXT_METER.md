@@ -87,7 +87,7 @@ CREATE TABLE chat_summaries (
 ## 5. 风险与回退
 
 - 摘要质量依赖模型：压缩后若丢关键细节，用户可删 `chat_summaries` 行恢复全量回放（未提供 UI，报告注明手工 SQL 路径）；
-- 后台压缩回合与用户下一条消息并发：ChatManager 每 bot 忙锁下，压缩回合占用期间新 sends 会排队（RATE_LIMITED 语义既有）——压缩回合应尽量短（提示已限字数）；把并发窗口如实告知；
+- 压缩回合与用户下一条消息**真并发**（2026-10-29 修订，[PREMERGE-REVIEW](reports/PREMERGE-REVIEW-2026-10-29.md) §2.1 P2）：`compressTurn` 不读不设 ChatManager 每 bot 忙锁（busy 仅约束 send），压缩重入由 `compressingChats` 防护——两个并行 Harness 会话共用同一 bot profile。摘要 upsert 覆盖式、水位取压缩前快照、新行总在水位于之后，数据完整性不受影响；实际风险是并发回合的 provider 限流与 `usage_events` 用量行交错，`chat.contextUsage` 在两者间取最近一行（口径抖动）。压缩提示仍限字数（行 800/总 24k）以缩短窗口；
 - 回退：`git revert -m 1 <merge-sha>`；迁移 0023 只加新表，回退需连数据库备份（`DATA_VERSION_UNSUPPORTED` 既有口径）。
 
 ## 6. 负责人自审记录（待负责人填写，AI 不代签）

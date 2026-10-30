@@ -36,7 +36,7 @@
 ## 4. 风险与回退
 
 - 摘要质量依赖模型；丢失关键细节时删除 `chat_summaries` 对应行即恢复全量回放（无 UI，手工 SQL 路径，报告如实注明）。
-- 后台压缩回合与用户下一条消息并发：ChatManager 每 bot 忙锁下，压缩占用期间新 sends 排队（既有 RATE_LIMITED 语义）；压缩提示已限字数（行 800/总 24k）以缩短窗口。
+- 压缩回合与用户下一条消息**真并发**（2026-10-29 修订，[PREMERGE-REVIEW](PREMERGE-REVIEW-2026-10-29.md) §2.1 P2）：原表述「忙锁下压缩占用期间新 sends 排队」与实现不符——`compressTurn` 不读不设每 bot 忙锁（busy 仅约束 send），压缩重入仅由 `compressingChats` 防护，两回合是并行 Harness 会话（同一 bot profile）。功能正确性不受影响（摘要 upsert 覆盖式、水位取压缩前快照、新行总在水位于之后）；实际风险是 provider 限流、`usage_events` 行交错与 `chat.contextUsage` 最近行口径抖动；压缩提示已限字数（行 800/总 24k）以缩短窗口。
 - 压缩回合的用量照记 `usage_events`（真实成本）：账单页会出现一条不对应可见消息的行，属已知表现。
 - 迁移编号说明：初版曾取 0022，与后合入的互通片（PR #136，`0022-task-idempotency`）冲突；变基后本片重编号为 **0023**，与 develop 现状连续。
 - 回退：`git revert -m 1 <merge-sha>`；迁移 0023 只加新表，回退需连数据库备份（`DATA_VERSION_UNSUPPORTED` 既有口径）。
