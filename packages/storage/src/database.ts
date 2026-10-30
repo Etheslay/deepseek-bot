@@ -848,6 +848,35 @@ CREATE TABLE event_rule_keys (
 CREATE INDEX event_rule_keys_claimed ON event_rule_keys(claimed_at);
 `,
   },
+  {
+    // B4' attachment body extraction: one cached parse per committed binary
+    // attachment. The Host fills this row after `attachment.commit` lands the
+    // file in the workspace (PDF text layer via unpdf, docx body via fflate)
+    // and the chat.send assembly reads it back — `status='parse_failed'`
+    // records WHY a body is unavailable (no text layer, corrupt archive…)
+    // instead of failing silently. `source_checksum` keys the cache to the
+    // exact committed bytes; text is bounded at 256 KiB per row.
+    id: 25,
+    name: "0025-attachment-parses",
+    sql: /* sql */ `
+CREATE TABLE attachment_parses (
+  bot_id TEXT NOT NULL REFERENCES bots(id),
+  path TEXT NOT NULL,
+  media_type TEXT NOT NULL,
+  source_checksum TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('ok', 'parse_failed')),
+  text TEXT NOT NULL DEFAULT '',
+  truncated INTEGER NOT NULL DEFAULT 0,
+  original_chars INTEGER NOT NULL DEFAULT 0,
+  pages INTEGER,
+  paragraphs INTEGER,
+  error_reason TEXT,
+  parsed_at TEXT NOT NULL,
+  PRIMARY KEY (bot_id, path)
+);
+CREATE INDEX attachment_parses_bot ON attachment_parses(bot_id, parsed_at);
+`,
+  },
 
 ];
 

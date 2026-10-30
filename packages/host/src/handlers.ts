@@ -137,6 +137,11 @@ import {
 } from "./host.js";
 import { writeAutomationNotice } from "./automation-notices.js";
 import { chatSessionIdFor, type ChatManager } from "./chat.js";
+import {
+  collectAttachmentParsePaths,
+  composeAttachmentParseBlocks,
+  parseAndStoreAttachment,
+} from "./attachment-parse.js";
 import { estimateTokens } from "./usage-capture.js";
 import type { AttachmentIngress } from "./workspace-attachments.js";
 import { KNOWN_CAPABILITIES, policyKey, readPolicy, type PolicyLevel } from "./permissions.js";
@@ -1041,13 +1046,30 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
         role: row.role,
         text: row.text,
       }));
+      // B4' 附件正文: paths the renderer already named in the prompt
+      // (`attachments/…`, deterministic block format) get their extracted
+      // bodies appended as text attachment blocks — ≤16 KiB inline with a
+      // truncation marker, or 「无法提取正文：<原因>」 from the parse cache.
+      // The injected text is what the model receives AND what the stored row
+      // keeps, matching the D26 pointer composition. No protocol change.
+      // Path collection stays SYNCHRONOUS: the handler must reach the
+      // ChatManager session registration without yielding, or a racing
+      // chat.cancel finds no session and aborts nothing. Awaiting happens
+      // only when a PDF/docx path is actually present (cache hits are fast).
+      const documentPaths = collectAttachmentParsePaths(payload.text);
+      const documentBlocks =
+        documentPaths.length > 0
+          ? await composeAttachmentParseBlocks(db, bot.id, documentPaths)
+          : "";
+      const turnText =
+        documentBlocks.length > 0 ? `${payload.text}\n\n${documentBlocks}` : payload.text;
       appendChatMessage(db, {
         botId: bot.id,
         sessionId,
         role: "user",
-        text: payload.text,
+        text: turnText,
       });
-      const outcome = await chat.send(bot, payload.text, history, payload.skills ?? [], {
+      const outcome = await chat.send(bot, turnText, history, payload.skills ?? [], {
         primitive,
         ...(summaryRow !== undefined ? { summary: summaryRow.summary } : {}),
       });
@@ -1254,7 +1276,17 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
       return { received };
     },
 
-    "attachment.commit": (payload) => context.attachmentUploads.commit(payload.uploadId),
+    "attachment.commit": (payload) => {
+      const result = context.attachmentUploads.commit(payload.uploadId);
+      // B4': warm the body parse cache in the background — never blocks or
+      // fails the upload (parseAndStoreAttachment records parse_failed rows
+      // instead of throwing), and chat.send falls back to inline parsing if
+      // this has not landed before the first send.
+      void parseAndStoreAttachment(db, result.botId, result.path, result.checksum).catch(
+        () => undefined,
+      );
+      return result;
+    },
 
     "memory.list": (payload) => {
       const bot = requireLiveBot(db, payload.botId);
