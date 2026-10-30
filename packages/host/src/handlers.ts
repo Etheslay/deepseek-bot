@@ -33,6 +33,7 @@ import {
   type WorkflowEngine,
 } from "@deepseek-bot/runtime";
 import { readSkillLibrary, writeSkillLibrary } from "./skill-library.js";
+import { readUiState, writeUiState } from "./ui-state.js";
 import {
   archiveBot,
   archiveBotUnchecked,
@@ -1808,6 +1809,15 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
       // contract (limits, bindings, instruction bounds); store and echo it.
       writeSkillLibrary(db, payload.library);
       return { library: payload.library };
+    },
+
+    "ui.state.get": () => ({ state: readUiState(db) }),
+
+    "ui.state.set": (payload) => {
+      // The dispatcher already validated the snapshot against the fixed
+      // UiStateSchema (stable IDs only); store and echo it.
+      writeUiState(db, payload.state);
+      return { state: payload.state };
     },
 
     "data.backup": () => {

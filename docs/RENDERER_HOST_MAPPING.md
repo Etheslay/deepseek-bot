@@ -47,15 +47,20 @@ Host 内实现 `ui.*` 命名空间的会话服务（读写 Harness 会话日志 
 
 **分两步：先 D 后 B。** 第一步（D）renderer 为主、立即可做，让运行监控/审批/调度全部真起来；第二步（B）在同一版本内落地聊天会话服务，不动冻结契约。A 的长期契约化收益待 B 稳定后按 §7 正常升级（v0.2）。C 不单独推荐（B 已覆盖其通道需求，流式可在 B 之上增量）。
 
-## 4. 决策所需
+## 4. 拍板 #1 记录（2026-10-30 更新）
 
 两负责人对以下三项达成一致并记录在本文档：① 采纳方案（A/B/C/D 或分步组合）；② D 方案下聊天示例数据的界面标注与发布说明口径；③ B 方案下 ui.* 命名空间的方法清单与非承诺声明。选择后：D 的 renderer 切片由 Destinyian 开独立分支执行；B 的 host 片由 Etheslay 执行。
 
-## 5. 界面状态契约候选（待负责人确认）
+**当前记录**（如实，非双方会签）：
 
-本分支提出 `UiStateSchema`：`botOrder` 与 `groupOrder` 为去重的持久 UUID 列表，各最多 1000 项；`selectedBotId` 与 `selectedGroupId` 为 UUID 或 null。对象严格校验，不接受额外字段或任意文本。本片只定义类型与验证，不开放 Host 方法，不改变 IPC 协议版本。
+- **D 步**：聊天/历史事实接线已先行落地（运行监控真实化、`chat.history` 接线、存储会话列表——PR #97/#103；工作流读面 #176/#177）；界面标注口径仍待 Destinyian。
+- **B 步 ui.***：**Etheslay 于 2026-10-31 指示按 G1' 既定草案推进**（GAP_AUDIT §2 G1' 的实现方式），采纳方案 B 的 ui.* 清单为：`ui.state.get` / `ui.state.set`（v0.13）+ 固定 `UiStateSchema` 快照（botOrder/groupOrder/selectedBotId/selectedGroupId，仅稳定实体 UUID，不收任意载荷）。Destinyian 对本清单的会签**待补**；分组实体（现会话内数字 key）映射另行核实，`groupOrder`/`selectedGroupId` 在实体化前由渲染层写空值。
 
-现有桌面分组使用会话内数字 key，不能作为持久 UUID 使用；接线前须先核实真实分组实体、创建/移动行为与标识映射，明确空分组和不存在的实体的恢复策略。列表、选择态与字段边界为候选设计，需由负责人协调确认；本文不代表双方已确认，也不代表界面或存储已完成。
+## 5. 界面状态契约（候选已采纳，方法面见 v0.13）
+
+`UiStateSchema`（#175 契约候选，本片随 v0.13 采纳）：`botOrder` 与 `groupOrder` 为去重的持久 UUID 列表，各最多 1000 项；`selectedBotId` 与 `selectedGroupId` 为 UUID 或 null。对象严格校验，不接受额外字段或任意文本。Host 方法面为 `ui.state.get` / `ui.state.set`（settings KV 行 `ui.state.v1`，缺失/损坏行降级空态，见 [CONTRACTS](CONTRACTS.md) §3 与 `packages/host/src/ui-state.ts`）。
+
+现有桌面分组使用会话内数字 key，不能作为持久 UUID 使用；`groupOrder`/`selectedGroupId` 的启用以分组实体化（核实真实分组实体、创建/移动行为与标识映射）为前提，渲染层在实体化前写空值。快照不含任何密钥/敏感数据（schema 只收 UUID）。
 
 ## 6. 工作流读面与桌面接线（v0.12，2026-10-30）
 

@@ -272,13 +272,13 @@ PR #159 以用户临时 Key（仅进程环境变量注入、用后即弃、不�
 - 由桌面线负责接线、平台线核对 Host 所需接口和兼容性。通过事件重放能否完整恢复节点、审批与产物需另行验证；如现有契约不足，先提交独立契约变更，不以演示数据代替真实数据。
 - 目标验收：桌面创建并保存工作流，重启后读取，真实 Host 启动三机器人流程，显示节点与审批，验证拒绝、取消、重启恢复和历史；报告记录代码 SHA、环境、实际结果与未验证项。
 - 第六次刷新记载的两个“未推送分支”已分别由 PR #165、#167 合入；#165 只修正文档对并发的描述，没有消除并发风险。
-- 增量流式（#172）新增服务端推送通知 `chat.stream`（`packages/host/src/stdio.ts` 的 `notifyChatStream`，桌面 `apps/desktop/src/main/host-client.ts:204` 消费，等同 `schedule.missed` 的通知位）。`packages/contracts` 没有该通知的 schema，CONTRACTS.md 也没有条目——消费方已接、旧客户端会忽略，但契约文档与代码存在漂移，建议随主路径接线补一行契约文档。
+- 增量流式（#172）新增服务端推送通知 `chat.stream`（`packages/host/src/stdio.ts` 的 `notifyChatStream`，桌面 `apps/desktop/src/main/host-client.ts:204` 消费，等同 `schedule.missed` 的通知位）。~~`packages/contracts` 没有该通知的 schema，CONTRACTS.md 也没有条目~~ **已由 PR #179 收口（2026-10-30）**：`ChatStreamNoticeSchema` 钉进 contracts、host/桌面单一类型源、CONTRACTS.md §4 补两通知通道（[报告](reports/B6-chat-stream-contract-report.md)）。
 
 **2026-10-30 接线结果（更新，基线 `ad617a0`）**：
 
 - 契约与 Host：PR #176 补齐 `workflow.get`、`run.snapshot`、`approval.list`（协议 v0.12），handlers 是既有存储读的薄封装；CONTRACTS §3 与 RENDERER_HOST_MAPPING §6 已同步。`workflow.get` 同时补上 `workflow.list` 只有摘要、`export` 又要 revision 的空档。
 - 桌面：PR #177 用 `createHostWorkflowService`/`createHostRunService` 覆盖 `workflows`/`runs`，`createFixtureService()` 退为离线开发底座；编辑器导入只做预览校验（`workflow.validate`）不落库；运行监控按 `RunServiceApi.playback` 显隐夹具回放控件；审批卡在 Host 不透出 `resolvedAt` 时按 status 推导已决定文案。
-- **仍存差异（未消项）**：`approval.requestedAt` 由 `expiresAt - APPROVAL_DEFAULT_TTL_MS` 近似；`invalidReason="generation"` 只有夹具路径；`pullTransient` 真实路径恒空；`advanceScenario` 真实路径明确拒绝；`chat.stream` 仍未进契约文档；桌面端不调用宿主 `workflow.import`（该处理器会直接落库，与编辑器「确认后才载入画布」语义冲突）。
+- **仍存差异（未消项）**：`approval.requestedAt` 由 `expiresAt - APPROVAL_DEFAULT_TTL_MS` 近似；`invalidReason="generation"` 只有夹具路径；`pullTransient` 真实路径恒空；`advanceScenario` 真实路径明确拒绝；~~`chat.stream` 仍未进契约文档~~（已由 #179 收口，见上）；桌面端不调用宿主 `workflow.import`（该处理器会直接落库，与编辑器「确认后才载入画布」语义冲突）。
 - **未完成那一步**：桌面 UI 端到端人工验收（保存→重启读回→三机器人运行→审批/拒绝/取消/重启恢复/历史）尚未执行，步骤与证据表见 [WORKFLOW-MAIN-PATH-ACCEPTANCE-checklist](reports/WORKFLOW-MAIN-PATH-ACCEPTANCE-checklist.md)。现有证据只到 Host 层主路径测试（`packages/host/src/host.test.ts` 的 `runs a workflow end to end through the method surface`）与桌面服务层单测（`apps/desktop/tests/services/host-service.test.ts` 的 12 例 host-backed 用例）。
 - 结论：§7.10 的「桌面夹具」缺口可关闭，「验收」仍开放；D23 前必须补人工验收记录。
 
