@@ -9,5 +9,6 @@ export {
   TurnUsageAccumulator,
   estimateTokens,
   extractUsageFromEvent,
+  tokenWeight,
   type TurnUsage,
 } from "@deepseek-bot/harness-adapter";
