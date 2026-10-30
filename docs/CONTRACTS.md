@@ -1,4 +1,4 @@
-# 接口与数据契约 v0.11
+# 接口与数据契约 v0.12
 
 本文件定义本项目前后端契约，不是 DeepSeek Harness 官方 API。状态：v0.1 已冻结（2026-10-23，D00 验收记录见 D00 Issue）；v0.2 为 D15 写层扩展；v0.3（2026-10-26，D16 后端）新增人类权限控制方法；v0.4（2026-10-26，D28 共编侧车）新增 `artifacts.*` 方法组；v0.5（2026-10-26，manager-orchestration，TASK_MANAGER_ORCHESTRATION.md）新增 bot 协调者角色、`task.*` 方法组、`task.status` 任务事件与能力 `app.dispatch_task`，`protocolVersion` 升至 0.5，继续接受 0.1–0.4 发送方。工作流文档 `schemaVersion` 保持 0.1（存量数据可读）。后续变更按 §7 提升版本并由变更负责人自审同步使用方。可执行实现位于 `packages/contracts/`：schema、§7 夹具与双方共用契约测试见 [packages/contracts/README.md](../packages/contracts/README.md)。所有字段均需后端校验，TypeScript 类型不能替代运行时校验。
 
@@ -17,6 +17,8 @@ v0.10 新增 `usage.summary`：把每个聊天回合的 token 用量聚合成「
 上下文圆圈（TASK_CONTEXT_METER.md）在当前协议上新增受信只读方法 `chat.contextUsage`（不另升 `protocolVersion`）：返回该 bot 单会话的上下文用量 `{percent, usedTokens, windowTokens, estimated, compressedAt, compressing}`——分子优先取最近完成回合的真实 input tokens（无上报则 chars/4 估算并标 `estimated`），分母为 Host 配置的上下文窗口（默认 65,536）。Host 在用量 ≥80% 时自动后台压缩更早历史为一段摘要（新表 `chat_summaries`，迁移 0023：摘要 + 水位 `covers_message_id`），此后提示组装 = persona + 技能 + `【更早对话摘要】` + 水位后的行 + 当前消息；`chat_messages` 行不删除，删除摘要行即恢复全量回放。只读展示数据，不作为发送门槛。
 
 v0.11 新增 `skillLibrary.get` / `skillLibrary.save`（D17' 收尾）：D17 技能库（技能定义 + bot 绑定）从渲染层 localStorage 迁到 Host 持久化，存于 settings KV 行 `skills.library.v1`，整库读写、请求侧整体校验（≤30 技能、指令入库上限 20 000 字、绑定 ≤50 bot 且 id 唯一）。注入零改动：`chat.send.skills`（0.8+）仍是唯一注入路径，声明能力仍是本轮网关允许集，网关在授权前拒绝名单外工具，无能力技能只注入说明；库存字符串能力 id（旧导出可载入），强制发生在发送组装时。当前 `protocolVersion` 为 0.11，继续接受 0.1–0.10 发送方；工作流 `schemaVersion` 仍为 0.1。
+
+v0.12 新增工作流读面 `workflow.get` / `run.snapshot` / `approval.list`：桌面编辑器要按 id 打开完整工作流文档（`workflow.list` 只回摘要、`workflow.export` 还要先知道 revision），运行监控要一帧拿到 `{run, nodeRuns, approvals, artifacts}` 而不是分别调用夹具列表，审批收件箱要跨运行筛选 `{runId?, status?, limit?}`（`permission.approval.list` 属能力授权域，schema 不同）。三个方法都只是既有存储/引擎读的薄封装，不改实体、不改变既有方法语义，当前 `protocolVersion` 为 0.12，继续接受 0.1–0.11 发送方；工作流 `schemaVersion` 仍为 0.1。本片只补契约与 Host 实现，**不代表桌面已经切到真实 Host**：`DesktopService.workflows/runs` 仍由夹具提供，接线与端到端验收另片完成。
 
 ## 1. 通用规则
 
@@ -72,10 +74,13 @@ MCP 实际调用使用独立能力 `mcp.call`，默认 `ask`，禁止全局 `all
 | creation.revoke | v0.2 整批撤销 | 归档该批全部 bot（无 revision 守卫，撤销必须生效），批次自建的组一并归档；重复撤销返回 INVALID_INPUT |
 | group.create / list | v0.2 分组管理 | list 仅返回未归档组 |
 | workflow.list | v0.3 工作流摘要（选择器用） | 只回 id/name/revision，不回节点图；全库摘要远低于 1 MiB 消息上限 |
+| workflow.get | v0.12 编辑器按 id 打开工作流 | 请求 `{id: UUID}`（严格字段），响应完整 `Workflow`（节点/边/设置与当前 revision）。`workflow.list` 只回摘要、`workflow.export` 要求先给 expectedRevision，都不能替代；不存在的 id 返回 INVALID_INPUT |
 | workflow.validate / save / export / import | 编辑与模板交换 | validate 返回可定位节点/字段的错误；import 先校验 schemaVersion |
 | run.start / get / list / cancel | 运行控制 | start 以 idempotencyKey 去重；cancel 重复调用返回已有终态 |
+| run.snapshot | v0.12 运行监控一帧 | 请求 `{runId: UUID}`，响应 `{run, nodeRuns[], approvals[], artifacts[]}`，均按该 run 过滤；不存在的 run 返回 INVALID_INPUT。四者在同一帧读出，避免多次调用之间状态漂移 |
 | run.retryNode | 显式重试失败/中断节点 | 新 attempt；校验下游状态与副作用；不静默恢复旧审批 |
 | events.subscribe | 按 runId + afterSequence 订阅 | 持久事件可重放；无法补齐时返回 snapshotRequired |
+| approval.list | v0.12 跨运行审批收件箱 | 请求 `{runId?: UUID, status?: pending\|approved\|denied\|expired\|consumed, limit?: 1–100（缺省 50）}` → `{approvals: Approval[]}`；按创建时间正序并截断到 limit。与 `permission.approval.list`（能力授权域）不同，本方法只针对 run 动作审批 |
 | approval.decide | 允许/拒绝指定动作 | 校验摘要、权限、有效期与 pending 状态；重复决定不得重复执行 |
 | schedule.save / enable / disable | 本地调度 | 唯一 scheduleId + occurrenceUtc 防重复 |
 | settings.testConnection / update | 接入与设置 | Key 写入与测试位于后端；前端只得到是否已配置。`update` 的 patch 支持 `ui.locale`（`"zh" \| "en"`）：桌面把解析后的界面语言推给 Host（启动与切换时各一次），Host 存入 settings KV 并即时生效——任务派发通知、交接框架（`【上游交接 · …】`）、画布冲突与凭据错误、ask_user 兜底选项等 Host 侧文案随该语言输出；缺省与非法值回落 zh。语言切换只影响之后新写入的行，历史回放保持原样 |
