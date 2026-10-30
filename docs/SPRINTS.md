@@ -100,7 +100,7 @@
 | D27 语音配置持久化 | **已交付（PR #118）**：`voice.config.get` / `voice.config.set` 受信方法，whisper 路径写入 settings KV 即时生效、重启恢复（环境变量只是启动种子）；桌面设置页可据此接线 | `feature/voice-config-kv-c4d2` → PR #118 `94bc05d` | [D27-voice-config-report](reports/D27-voice-config-report.md) |
 | G2 审批桥激活 | **已交付（PR #123）**：Host 启动时把 harness-bridge 幂等装入钉扎 sdk profile，工作流与聊天全部启动路径可解析插件行，消除 `entry did not activate`；真实 Harness 告警消失归真机复核 | `feature/g2-bridge-staging-e8f4` → PR #123 `968aa0b` | [G2-bridge-activation-report](reports/G2-bridge-activation-report.md) |
 | G9' 应用内更新通道文档 | **已交付（PR #129）**：DESKTOP_SHELL「应用内更新（D24）」节 + RELEASE §4.1 发布即触发更新检查单，修正失实描述 | `feature/g9-update-channel-docs` → PR #129 `2eddb1e` | [G9-update-channel-docs-report](reports/G9-update-channel-docs-report.md) |
-| G11' 工作流模板库 | **已交付（PR #127）**：本地模板库（冻结 schema 归一化、剥离走私策略字段）+ 落库仍走 `workflow.save` 校验 | `feature/g11-workflow-template-library` → PR #127 `92303eb` | [G11-workflow-template-library-report](reports/G11-workflow-template-library-report.md) |
+| G11' 工作流模板库 | **已交付（PR #127）**：本地模板库（冻结 schema 归一化、剥离走私策略字段）；桌面编辑器保存仍为内存夹具，Host 落库接线待完成 | `feature/g11-workflow-template-library` → PR #127 `92303eb` | [G11-workflow-template-library-report](reports/G11-workflow-template-library-report.md) |
 | D25 后半（浮层接 Host 检索） | **已交付（PR #126）**：Ctrl+K 经 `search.global` 查 Host 全库，四类命中导航、过期丢弃、失败降级本地 | `feature/d25-host-search` → PR #126 `dbfeda0` | [D25-host-search-renderer-report](reports/D25-host-search-renderer-report.md) |
 | D20' 聊天自动化通知条（渲染） | **已交付（PR #135）**：折叠摘要 + 错过明细 + 启停 + 待评审「去设置处理」，20 秒轮询、静默降级，契约零改动 | `feature/d20-chat-notice` → PR #135 `687ac1e` | [D20-chat-notice-report](reports/D20-chat-notice-report.md) |
 | `ask_user` 防滥用闸 | **已交付（PR #130）**：仅真实分叉回合可 ask_user，每回合 ≤3 次 | `feature/ask-user-card-gating` → PR #130 `e768e2a` | [TASK_CHOICE_CARD](TASK_CHOICE_CARD.md) 注记 |
@@ -135,8 +135,18 @@
 | D21 真机指针/按键记录 | **已合入 develop（PR #160）**：文档切片——真机指针移动与允许列表内按键各一次（无点击），`win32-input.ps1` 生产路径、精确仅本次审批、发送前重读前台焦点，请求到返回 ~0.6 s；延迟、焦点边界与未按的键如实入档，自审栏留空 | `feature/d21-pointer-key-fc7a` | [D21-pointer-key-report](reports/D21-pointer-key-report.md) |
 | D22 系统集成与双语 | **已合入 develop（PR #75 `9db1ae9`）**：全量中英双语（20 域 853 条 key + AST 扫描防回归守卫；计数为本次同步在合流后的树上实测）、单托盘随活跃 bot + 逐 bot 图标菜单、系统通知与设置（总开关 / 仅非前台 / 按 bot 静音 / 测试通知）、Chrome **书签**只读导入（预览→导入→导出→删除）。托盘渲染与点击、Windows 通知弹出、真实 Chrome 配置、打包版 AppUserModelId 属实机未验证项；负责人自审记录仍待本人填写 | `feature/system-integration` → PR #75 | [D22-report](reports/D22-report.md) |
 | D23 平台验收 | 未开始（依赖 D13、D14–D22 全部完成） | — | — |
-| 审查发现 d14 P3 修复 | **已交付（本地未推送，待负责人审后推送）**：`mermaid.initialize` 改为按 `initializedTheme` 比对在渲染取模块时重跑——主题切换后新图用新主题，切回曾用主题命中该主题缓存不触碰全局配置；desktop 74 文件 655 例全过，lint/typecheck 通过——PREMERGE-REVIEW §2.2 P3 | `feature/d14-mermaid-theme-reinit` @ `9058196`（基线 `9d3ac5b`） | [D14-mermaid-theme-report](reports/D14-mermaid-theme-report.md) |
-| 审查发现 cm P2 处置 | **已交付（本地未推送，待负责人审后推送）**：选文档化处置——任务书 §5 与报告 §4 改为如实记录「压缩回合与用户发送真并发（busy 仅约束 send，重入由 `compressingChats` 防护）」及 provider 限流/用量行交错/`chat.contextUsage` 最近行抖动风险；不改锁：后台维护回合不应把 RATE_LIMITED 递给用户——PREMERGE-REVIEW §2.1 P2 | `feature/context-meter-concurrency-docs` @ `d9b89cd`（基线 `9d3ac5b`） | [CONTEXT_METER-report §4](reports/CONTEXT_METER-report.md) |
+| 审查发现 d14 P3 修复 | **已合入（PR #167）**：`mermaid.initialize` 改为按 `initializedTheme` 比对在渲染取模块时重跑——主题切换后新图用新主题，切回曾用主题命中该主题缓存不触碰全局配置；desktop 测试、lint/typecheck 在分支期通过——PREMERGE-REVIEW §2.2 P3 | `feature/d14-mermaid-theme-reinit` → PR #167 `417df1c`（基线 `9d3ac5b`） | [D14-mermaid-theme-report](reports/D14-mermaid-theme-report.md) |
+| 审查发现 cm P2 处置 | **已合入（PR #165）**：选文档化处置——任务书 §5 与报告 §4 改为如实记录「压缩回合与用户发送真并发（busy 仅约束 send，重入由 `compressingChats` 防护）」及 provider 限流/用量行交错/`chat.contextUsage` 最近行抖动风险；不改锁：后台维护回合不应把 RATE_LIMITED 递给用户——PREMERGE-REVIEW §2.1 P2 | `feature/context-meter-concurrency-docs` → PR #165 `a6a11e9`（基线 `9d3ac5b`） | [CONTEXT_METER-report §4](reports/CONTEXT_METER-report.md) |
+| onboarding 卡片（name-derived） | **已合入（PR #161）**：首启引导改为按 bot 名派生的卡片，退役自由文本种子卡；`features/bots/onboarding.ts` + 选项回传联动 + i18n + 单测 | `feature/onboarding-cards` → PR #161 `fea4077` | [ONBOARDING-CARDS-report](reports/ONBOARDING-CARDS-report.md) |
+| 聊天失败人类化卡片 | **已合入（PR #162）**：Host 信封错误 + 渲染层失败卡与文案（不泄露内部细节），失败态与取消/重试一致 | `feature/humanized-errors` → PR #162 `08f2e00` | [HUMANIZED-ERRORS-report](reports/HUMANIZED-ERRORS-report.md) |
+| 发布代码签名决策 | **已合入（PR #163）**：新增 [CODE_SIGNING](CODE_SIGNING.md) 并同步 RELEASE 的签名与验证要求；**仅文档，签名证书与 `signtool verify` 未执行** | `feature/release-code-signing` → PR #163 `e5d4d17` | —（文档切片） |
+| GAP_AUDIT 六次刷新 | **已合入（PR #164）**：缺口地图、SPRINTS 账目与 progress 刷新（基线 `9d3ac5b`） | `feature/gap-audit-refresh6` → PR #164 `5751a16` | —（审计文档） |
+| mermaid 主题重绘 | **已合入（PR #166）**：节点/连线配色随聊天主题联动，测试更新 | `feature/a3-mermaid-theme-redraw` → PR #166 `6d9f547` | —（PR 正文） |
+| 图片附件可见性提示 | **已合入（PR #168）**：图片附件「模型看不到」的显式提示（文案 + 样式） | `feature/a4-image-visibility-hint` → PR #168 `de8f227` | —（PR 正文） |
+| 技能库迁移幂等 | **已合入（PR #169）**：一次性迁移加幂等标记（`features/skills/library-migration.ts`），失败可重试且不重复迁移 | `feature/a2-skill-library-migration` → PR #169 `c3685dd` | —（PR 正文） |
+| 语音设置面板 | **已合入（PR #170）**：whisper 路径经主进程对话框选择（`main/voice-pick.ts`）、麦克风即时解锁、i18n 与测试（18 文件） | `feature/a1-voice-settings` → PR #170 `cfea9a2` | —（PR 正文） |
+| 自动化触发窗口去重 | **已合入（PR #171）**：迁移 `0024-event-rule-keys`，执行前 `claimEventRuleKey` 认领，窗口内重复触发记「duplicate trigger within window」，窗口过期回到永久去重 | `feature/b5-automation-dedupe` → PR #171 `a6db352` | —（PR 正文） |
+| 增量流式（live segments） | **已合入（PR #172）**：Host 把每个 settled 助手分段经 `chat.stream` 通知推给桌面，渲染层 `stream-runner` 增量渲染（19 文件）；**该通知未入契约文档，记 [GAP_AUDIT §7.10](GAP_AUDIT.md)** | `feature/b6-incremental-streaming` → PR #172 `5248ab6` | —（PR 正文） |
 
 补记说明：B 线四项与 D17 模板库切片在合入时**未写交付报告、PR 自审记录未填**（两份 PR 清单各仅勾选 2/5）；相应报告于 2026-10-25 事后补记，**不追认事前完成自审**，自审结论仍留空待负责人签署。B 线四项挤在一条串行分支经单个 PR 合入，偏离"一任务一分支"，lockfile 与 CI 配置改动亦未拆独立小 PR；D17 技能库部分已改从最新 develop 单独切分支。后续任务（含 D24、D26 的剩余部分）同样单独切分支，不再堆叠。各任务的手测截图（`reports/assets/d14|d17|d24|d25|d26/`）仍缺，列为待补。
 
@@ -217,7 +227,7 @@
 
 | # | 事项 | 需要 | 状态 |
 | --- | --- | --- | --- |
-| 1 | Renderer↔Host 真实数据接线方案（A/B/C/D 或组合） | 两负责人按 [映射提案](RENDERER_HOST_MAPPING.md) §3 达成一致 | 待拍板——D 步与聊天/历史 B 步已事实上线（PR #97/#103）；剩余 **ui.\*** 清单只阻塞 G1' 的界面态持久化（已答卡回放与 `history: true` 不依赖该清单，见 [GAP_AUDIT](GAP_AUDIT.md) §2） |
+| 1 | Renderer↔Host 真实数据接线方案（A/B/C/D 或组合） | 两负责人按 [映射提案](RENDERER_HOST_MAPPING.md) §3 达成一致 | 待拍板——聊天/历史部分已上线（PR #97/#103）；工作流编辑和运行监控的 D 步仍为夹具，见 [GAP_AUDIT](GAP_AUDIT.md) §7.10；剩余 **ui.\*** 清单只阻塞 G1' 的界面态持久化（已答卡回放与 `history: true` 不依赖该清单，见 [GAP_AUDIT](GAP_AUDIT.md) §2） |
 | 2 | mono-shape 头像线与 develop 头像线（PR #18/#19）的分叉合并策略 | Destinyian 定基准 | **已定案（2026-10-27）：develop 头像线为基准，`feature/mono-shape` 作废并删除。** 该分支相对 develop 只有一个提交 `e74e570`（fix(desktop): let the mono avatar use any rounded shape），它改的 `MinimalAvatar` / `shapeIndex` / `{kind:"minimal"}` 已随 B-AVATAR-02 的头像重做全部移除（现网 0 命中），合并只会复活死类型。其意图（mono 换形状）至今仍未实现，但更前置的是：契约 `AvatarSchema` 只有 `shape` + `color`、没有 `kind`，mono 属渲染层 UI-only 值，**无法持久化**，重启后头像按 bot id 派生。若将来要黑白头像可留存，需要的是契约加字段（另立小 PR），不是给 mono 加形状 |
 
 ## 9. 对标缺口盘点（Grok Bot · GitHub 分发 · 本地优先）
@@ -255,7 +265,7 @@
 
 自有云服务、云存储、账户体系、计费系统、订阅制依赖、遥测上报、远程中继、模型托管。发现任何"必须付 Token 以外的钱才能用"的能力，一律不立项或必须先给出零成本本地等价路径。
 
-## 10. 在途分支台账（2026-10-29 清点）
+## 10. 在途分支台账（最近清点 2026-10-30）
 
 清点基线：`origin/develop` = `d1cb448`（PR #152–#154 合入后）。**远程在途分支清零**——#152（D17' 技能库进 Host）、#153（D14 mermaid 补齐）已合入（远程分支随合并删除）。冲突结论来自 `git merge-tree --write-tree origin/develop <分支>` 的**试算**，不代表已解决；「落后 N」随 develop 演进持续增长，仅作变基紧迫度参考，不逐次更新。
 
@@ -279,6 +289,22 @@
 
 - **审查发现项收尾状态（更新）**：d14 §2.2 P3 已修复、#138 §2.1 P2 已文档化处置（见上两分支）；d17 §2.3 备忘未处理（不阻塞，归属人可选把 App.tsx 两处直调收敛到服务层）；#150/#151 报告是否补录待归属人定；
 - **另见**：[GAP_AUDIT](GAP_AUDIT.md) 第六次刷新——G4 付费链验收已入档（#159，残留如实列出）。
+
+**10-30 七次刷新清点（develop = `5248ab6`，PR #161–#172 合入后）**：
+
+- **远程在途分支仍为零**；#161–#172 均已合入（远程分支随合并删除）；第六次刷新登记的 `feature/d14-mermaid-theme-reinit` 与 `feature/context-meter-concurrency-docs` 已分别由 PR #167、#165 合入。
+- **本地在途（2026-10-30 开工，均未推送）**：
+
+  | 分支 | 内容 | 工作区 |
+  | --- | --- | --- |
+  | `feature/workflow-contract-audit` | 本次审计刷新：GAP_AUDIT §7.10 + 第七次刷新 + SPRINTS §4/§10 账目 | `~/.codex/worktrees/workflow-contract-audit` |
+  | `feature/workflow-usage-accounting` | 工作流模型回合 token 写入 `usage_events`（`model=null`/`source=estimated`） | `~/.codex/worktrees/workflow-usage` |
+  | `feature/ui-state-contract` | `ui.*` 界面态契约候选（schema + 测试 + 映射 §5；不含 Host 方法） | `~/.codex/worktrees/ui-state-persistence` |
+
+- **审查发现项**：d14 P3、cm P2 已合入（#167/#165）；d17 §2.3 备忘仍未处理（不阻塞）。
+- **新欠账**：#161–#172 中 8 项无入库报告（GAP_AUDIT §7.9 第 10 条）；`chat.stream` 通知未入契约文档（GAP_AUDIT §7.10）。
+- **未完成的计划项**：工作流主路径接线（GAP_AUDIT §7.10）、G1' 的 ui.*、D13/D23 与 v0.1.0 发布验收。
+- **另见**：[GAP_AUDIT](GAP_AUDIT.md) 第七次刷新。
 
 下次合并后本节照例更新。
 
