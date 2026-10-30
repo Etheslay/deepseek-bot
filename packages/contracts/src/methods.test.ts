@@ -28,8 +28,9 @@ describe("method whitelist", () => {
     const contractMethods = Object.keys(METHOD_CONTRACTS).sort();
     expect(contractMethods).toEqual([...METHODS].sort());
     // develop (with voice, search.global, usage.summary and chat.contextUsage)
-    // is 120; D17' adds skillLibrary.get/save.
-    expect(METHODS).toHaveLength(122);
+    // is 120; D17' adds skillLibrary.get/save; v0.12 adds the workflow read
+    // surface (workflow.get, run.snapshot, approval.list).
+    expect(METHODS).toHaveLength(125);
   });
 
   it("covers every method group from CONTRACTS §3", () => {

@@ -48,8 +48,11 @@ import {
   getRun,
   getWorkflow,
   listBots,
+  listApprovals,
+  listArtifacts,
   listEvents,
   listGroups,
+  listNodeRuns,
   listRuns,
   listSchedules,
   listWorkflows,
@@ -792,6 +795,14 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
       })),
     }),
 
+    "workflow.get": (payload) => {
+      const workflow = getWorkflow(db, payload.id);
+      if (workflow === undefined) {
+        throw invalid("workflow not found", { workflowId: payload.id });
+      }
+      return workflow;
+    },
+
     "workflow.validate": (payload) => {
       const issues = validateWorkflowDraft(payload.workflow);
       return { valid: issues.length === 0, errors: issues };
@@ -875,6 +886,22 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
       return { runs, nextCursor: null };
     },
 
+    // v0.12 read surface: one consistent frame for the run monitor. The
+    // engine owns node runs and approvals, so the renderer must not join
+    // fixtures to render a run.
+    "run.snapshot": (payload) => {
+      const run = getRun(db, payload.runId);
+      if (run === undefined) {
+        throw invalid("run not found", { runId: payload.runId });
+      }
+      return {
+        run,
+        nodeRuns: listNodeRuns(db, payload.runId),
+        approvals: listApprovals(db, { runId: payload.runId }),
+        artifacts: listArtifacts(db, { runId: payload.runId }),
+      };
+    },
+
     "run.cancel": async (payload) => engine.cancelRun(payload.runId),
 
     "run.resume": (payload) => {
@@ -921,6 +948,13 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
         snapshotRequired: false,
       };
     },
+
+    "approval.list": (payload) => ({
+      approvals: listApprovals(db, {
+        ...(payload.runId !== undefined ? { runId: payload.runId } : {}),
+        ...(payload.status !== undefined ? { status: payload.status } : {}),
+      }).slice(0, payload.limit),
+    }),
 
     "approval.decide": (payload) => {
       engine.decideApproval(payload.approvalId, payload.decision, payload.expectedActionDigest);
