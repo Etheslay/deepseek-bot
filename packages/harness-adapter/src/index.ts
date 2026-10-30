@@ -7,6 +7,7 @@ export {
   HarnessAttempt,
   type HarnessAttemptOptions,
   type HarnessInitializeParams,
+  type PromptContentBlock,
   type SessionEventEnvelope,
   type TurnOutcome,
   type TurnEndKind,

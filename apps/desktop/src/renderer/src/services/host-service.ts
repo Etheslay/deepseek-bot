@@ -107,11 +107,20 @@ export function createHostService(bridge: HostBridge): DesktopService {
       ((await bridge.host.call("ui.state.set", { state })) as { state: UiState }).state,
   };
 
+  // B3'' (v0.14): the vision capability flag for the composer UI.
+  const vision = {
+    status: async (botId: string) =>
+      METHOD_CONTRACTS["vision.status"].response.parse(
+        await bridge.host.call("vision.status", { botId }),
+      ),
+  };
+
   return {
     ...base,
     workflows,
     runs,
     uiState,
+    vision,
     bots: {
       list: listBots,
       create: async (draft: BotDraft): Promise<Bot> =>
@@ -293,9 +302,13 @@ export function createHostService(bridge: HostBridge): DesktopService {
         const sessionId = `chat:${botId}`;
         const skills = options?.skills;
         const primitive = options?.primitive === true;
+        const images = options?.images;
         const payload: Record<string, unknown> = { botId, text };
         if (skills !== undefined && skills.length > 0) {
           payload.skills = skills;
+        }
+        if (images !== undefined && images.length > 0) {
+          payload.images = images;
         }
         if (primitive) {
           payload.primitive = true;

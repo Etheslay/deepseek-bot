@@ -803,6 +803,14 @@ export function createFixtureService(): DesktopService {
       },
     },
 
+    // B3'' fixture: no pinned-catalog knowledge in the preview, so the UI
+    // stays neutral (visionKnown=false) and image cards keep the fallback
+    // note — an honest "unknown", not a fabricated "supported".
+    vision: {
+      status: () =>
+        Promise.resolve({ model: "fixture-model", visionAvailable: false, visionKnown: false }),
+    },
+
     // The fixture chat is renderer-local only, so there is no Host corpus to
     // query; the overlay degrades to its local index without a failure notice.
     search: {

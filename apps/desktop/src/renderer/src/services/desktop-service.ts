@@ -127,6 +127,16 @@ export type StreamOptions = {
    * rows and history replay are unchanged. The fixture ignores the flag.
    */
   primitive?: boolean;
+  /**
+   * B3'' 视觉输入: raster attachments riding this turn as real image content
+   * blocks (canonical base64, admitted MIME types). Omitted means no image
+   * blocks — the pre-vision wire shape; images stay saved to the workspace
+   * regardless, so read_workspace_file keeps working.
+   */
+  images?: readonly {
+    data: string;
+    mimeType: "image/png" | "image/jpeg" | "image/webp" | "image/gif";
+  }[];
 };
 
 export type StreamHandle = {
@@ -298,6 +308,15 @@ export interface DesktopService {
     get(): Promise<UiState>;
     /** Replace the whole snapshot atomically; the caller debounces writes. */
     save(state: UiState): Promise<UiState>;
+  };
+
+  /**
+   * B3'' 视觉能力标志: whether the bot's configured model is known to accept
+   * image input. visionKnown=false (model id outside the pinned catalog)
+   * means the UI stays neutral; the send-time harness gating is the truth.
+   */
+  vision: {
+    status(botId: string): Promise<{ model: string; visionAvailable: boolean; visionKnown: boolean }>;
   };
 
   /**

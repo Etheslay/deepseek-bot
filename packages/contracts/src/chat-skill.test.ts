@@ -7,8 +7,32 @@ describe("chat.send skill injection", () => {
   const request = METHOD_CONTRACTS["chat.send"].request;
 
   it("stays on the current protocol and still accepts a turn without skills", () => {
-    expect(PROTOCOL_VERSION).toBe("0.13");
+    // v0.14 (B3'') added the optional chat.send.images array and the
+    // vision.status flag — a plain turn still parses exactly as before.
+    expect(PROTOCOL_VERSION).toBe("0.14");
     expect(request.safeParse({ botId, text: "你好" }).success).toBe(true);
+  });
+
+  it("accepts admitted raster attachments and rejects others (B3'' 视觉输入)", () => {
+    expect(
+      request.safeParse({
+        botId,
+        text: "看这张图",
+        images: [{ data: "aGk=", mimeType: "image/png" }],
+      }).success,
+    ).toBe(true);
+    expect(
+      request.safeParse({
+        botId,
+        text: "看这张图",
+        images: [{ data: "aGk=", mimeType: "image/heic" }],
+      }).success,
+    ).toBe(false);
+    const tooMany = Array.from({ length: 5 }, () => ({
+      data: "aGk=",
+      mimeType: "image/png" as const,
+    }));
+    expect(request.safeParse({ botId, text: "看", images: tooMany }).success).toBe(false);
   });
 
   it("accepts capability ids and rejects an unknown declaration", () => {

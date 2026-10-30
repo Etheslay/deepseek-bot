@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -7,6 +7,10 @@ import { NodeExecutionError } from "@deepseek-bot/runtime";
 import { HarnessAttempt } from "./harness-attempt.js";
 
 const fakeHarness = fileURLToPath(new URL("./testing/fake-harness.mjs", import.meta.url));
+
+// 1×1 red PNG, base64 — the smallest valid raster.
+const pngBase64 =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
 
 const roots: string[] = [];
 afterAll(() => {
@@ -82,6 +86,29 @@ describe("HarnessAttempt", () => {
     expect(live).toContain("tool/call");
     expect(live).toContain("tool/result");
     expect(live.indexOf("tool/call")).toBeLessThan(live.indexOf("tool/result"));
+    await attempt.shutdown();
+  });
+
+  it("sends vision turns as text plus admitted image blocks (B3'')", async () => {
+    const root = makeRoot();
+    const records = join(root, "records");
+    const options = attemptOptions("ok", root);
+    options.env.FAKE_RECORD_DIR = records;
+    const attempt = new HarnessAttempt(options);
+    await attempt.start({ cwd: root, provider: "deepseek-official", model: "deepseek-chat" });
+    await attempt.runTurn("session-1", [
+      { type: "text", text: "这张图片里是什么颜色？" },
+      { type: "image", data: pngBase64, mimeType: "image/png" },
+    ]);
+    const lines = readFileSync(join(records, "fake-harness.jsonl"), "utf8")
+      .split("\n")
+      .filter((line) => line.trim().length > 0)
+      .map((line) => JSON.parse(line) as { method: string; params: Record<string, unknown> });
+    const prompt = lines.find((entry) => entry.method === "session/prompt");
+    expect(prompt?.params.contentBlocks).toEqual([
+      { type: "text", text: "这张图片里是什么颜色？" },
+      { type: "image", data: pngBase64, mimeType: "image/png" },
+    ]);
     await attempt.shutdown();
   });
 

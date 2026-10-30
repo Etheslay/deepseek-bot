@@ -151,6 +151,7 @@ export const METHODS = [
   "chat.cancel",
   "chat.status",
   "chat.contextUsage",
+  "vision.status",
   "task.dispatch",
   "task.list",
   "task.cancel",
@@ -660,6 +661,27 @@ export const METHOD_CONTRACTS = {
     request: z.object({
       botId: UuidSchema,
       text: z.string().min(1).max(4000),
+      /**
+       * B3'' 视觉输入 (TASK_B3P_VISION_INPUT.md): raster attachments riding
+       * THIS turn as real image content blocks — canonical base64 + admitted
+       * MIME types, ≤4 per turn, each ≤4 MB of base64 (≈3 MB raster, under
+       * the provider's 2 MiB inline budget after renderer compression).
+       * Optional with a safe default: omitted means no image blocks — the
+       * exact pre-vision wire shape. The harness gates per model and
+       * projects deterministic text for text-only routes; images must also
+       * stay saved to the workspace so read_workspace_file keeps working.
+       */
+      images: z
+        .array(
+          z
+            .object({
+              data: z.string().min(4).max(4_000_000),
+              mimeType: z.enum(["image/png", "image/jpeg", "image/webp", "image/gif"]),
+            })
+            .strict(),
+        )
+        .max(4)
+        .optional(),
       skills: z.array(ChatSkillInjectionSchema).max(MAX_CHAT_SKILLS).optional(),
       primitive: z.boolean().optional(),
     }),
@@ -668,6 +690,23 @@ export const METHOD_CONTRACTS = {
       messageId: UuidSchema,
       text: z.string(),
       at: IsoDateTimeUtcSchema,
+    }),
+  },
+  /**
+   * B3'' 视觉能力标志 (TASK_B3P_VISION_INPUT.md), following the voice.status
+   * capability-availability pattern. Trusted desktop, read-only: whether the
+   * bot's configured model is known to accept image input. `visionKnown` is
+   * false for model ids outside the pinned upstream catalog (deployments may
+   * replace it) — the UI stays neutral then, and the harness's per-model
+   * gating at send time remains the authority: a text-only route receives
+   * the deterministic text projection, never silently dropped pixels.
+   */
+  "vision.status": {
+    request: z.object({ botId: UuidSchema }),
+    response: z.object({
+      model: z.string().min(1).max(128),
+      visionAvailable: z.boolean(),
+      visionKnown: z.boolean(),
     }),
   },
   /**
