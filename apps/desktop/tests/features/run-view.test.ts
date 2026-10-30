@@ -10,6 +10,7 @@ import {
 import successRunFixture from "@deepseek-bot/contracts/fixtures/success-run.json";
 import {
   approvalDecidable,
+  approvalDecisionFromStatus,
   buildRunView,
   canCancelRun,
   retryableNodeRuns,
@@ -212,5 +213,14 @@ describe("run view folding", () => {
     expect(NODE_RUN_TRANSITIONS.skipped).toEqual([]);
     expect(canTransitionRun("waiting_approval", "failed")).toBe(true);
     expect(canTransitionRun("failed", "running")).toBe(false);
+  });
+
+  it("derives the settled approval decision from the status alone", () => {
+    // Host-backed runs expose only the status, not a resolved record.
+    expect(approvalDecisionFromStatus("approved")).toBe("approved");
+    expect(approvalDecisionFromStatus("consumed")).toBe("approved");
+    expect(approvalDecisionFromStatus("denied")).toBe("denied");
+    expect(approvalDecisionFromStatus("expired")).toBe("expired");
+    expect(approvalDecisionFromStatus("pending")).toBeUndefined();
   });
 });

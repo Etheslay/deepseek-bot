@@ -5,9 +5,10 @@
  * snapshot baseline (`run.get` + service views) plus `events.subscribe`
  * (runId + afterSequence) for the detail; dedupe/gap/snapshotRequired
  * handling lives in events/event-stream.ts, statuses fold through
- * events/run-view.ts against the contracts state machines. All run state is
- * fixture playback (夹具回放) — no real engine, backend approvals,
- * persistence or scheduling.
+ * events/run-view.ts against the contracts state machines. Run state comes
+ * from the Host (`run.*`, `events.subscribe`, `approval.*`) through the host
+ * service; the fixture implementation remains for offline UI development and
+ * is the only mode that renders the fixture-replay controls.
  */
 import { useCallback, useEffect, useState, type JSX } from "react";
 import type { AssistantDelta, Run, Task } from "@deepseek-bot/contracts";
@@ -36,6 +37,8 @@ const TASK_REFRESH_MS = 4_000;
 export function RunMonitor(props: { onClose: () => void }): JSX.Element {
   const desktop = useService();
   const runs = desktop.runs;
+  /** Fixture playback is a fixture-only affordance; host runs hide its controls. */
+  const fixturePlayback = runs.playback === "fixture";
   const bots = useBots(0);
 
   const [runList, setRunList] = useState<Run[]>([]);
@@ -276,7 +279,9 @@ export function RunMonitor(props: { onClose: () => void }): JSX.Element {
     <div className="rm-shell">
       <header className="rm-top">
         <span className="rm-title">{t("shell.runMonitorApprovals")}</span>
-        <span className="rm-badge">{t("runs.fixtureReplayBadge")}</span>
+        {fixturePlayback && (
+          <span className="rm-badge">{t("runs.fixtureReplayBadge")}</span>
+        )}
         <button
           type="button"
           className="ghost-btn rm-close-btn"
@@ -394,6 +399,7 @@ export function RunMonitor(props: { onClose: () => void }): JSX.Element {
                   onAdvance={onAdvance}
                   onReconnect={onReconnect}
                   onRebuild={onRebuild}
+                  fixturePlayback={fixturePlayback}
                 />
               ) : (
                 <RunHistory

@@ -57,16 +57,20 @@ Host 内实现 `ui.*` 命名空间的会话服务（读写 Harness 会话日志 
 
 现有桌面分组使用会话内数字 key，不能作为持久 UUID 使用；接线前须先核实真实分组实体、创建/移动行为与标识映射，明确空分组和不存在的实体的恢复策略。列表、选择态与字段边界为候选设计，需由负责人协调确认；本文不代表双方已确认，也不代表界面或存储已完成。
 
-## 6. 工作流读面已补齐（v0.12，2026-10-30）
+## 6. 工作流读面与桌面接线（v0.12，2026-10-30）
 
-契约 v0.12 增加 `workflow.get`、`run.snapshot`、`approval.list`（见 [CONTRACTS](CONTRACTS.md) §3），Host 处理器已实现并有测试。§1 所说「`workflows.*` / `runs.*` 与契约面基本对应，可先行切换」现在只差桌面接线：
+契约 v0.12 增加 `workflow.get`、`run.snapshot`、`approval.list`（见 [CONTRACTS](CONTRACTS.md) §3），Host 处理器已实现并有测试（PR #176）。桌面接线随后落在 `feature/workflow-host-wiring`：
+
+- `host-service.ts` 已用 `createHostWorkflowService` / `createHostRunService` 覆盖 `workflows`/`runs`，不再落到夹具；夹具实现保留用于离线 UI 开发。
+- 编辑器导入按"预览校验、确认才载入、模板不落库"的契约实现：调用 `workflow.validate`，**不调用会落库的 `workflow.import`**。
+- 运行监控用 `runs.playback` 区分来源：仅 fixture 模式显示「夹具回放」徽章与推进/模拟重连控制；host 模式隐藏，`advanceScenario` 直接拒绝。
 
 | 桌面 `DesktopService` 面 | 真实方法 | 备注 |
 | --- | --- | --- |
-| 打开/编辑工作流 | `workflow.get` + `workflow.save`（expectedRevision） | 「复制」由 get+save 组合，节点 id 重映射在渲染层完成；`workflow.import` 不回保存后的文档，导入后须重新 `workflow.list` 找 id |
+| 打开/编辑工作流 | `workflow.get` + `workflow.save`（expectedRevision） | 「复制」由 get+save 组合，节点 id 重映射在渲染层完成 |
 | 工作流选择器 | `workflow.list` | 仅 id/name/revision 摘要 |
 | 运行列表/详情 | `run.list` / `run.snapshot` | 快照一帧含 `nodeRuns`/`approvals`/`artifacts` |
-| 审批收件箱 | `approval.list` + `approval.decide` | 夹具的 `invalidReason` 是 UI 级结论（过期、旧代次），真实路径需渲染层按 `expiresAt`/`status` 自行计算 |
+| 审批收件箱 | `approval.list` + `approval.decide` | `requestedAt = expiresAt − APPROVAL_DEFAULT_TTL_MS` 推导；`invalidReason` 只能判过期（契约不透出 generation/resolvedAt） |
 | 事件推送 | `events.subscribe` | 本 build 恒 `snapshotRequired: false`；运行监控轮询即可 |
 
-本片只补契约与 Host：`apps/desktop/src/renderer/src/services/host-service.ts` 仍在 `createFixtureService()` 上展开，`workflows`/`runs` 未覆盖——桌面接线与端到端验收另片执行（桌面片 Destinyian 负责，Host 支持 Etheslay 负责）。
+剩余差异（未改契约，记为后续缺口）：`Approval` 不暴露代次与解决时间；`run.list` 只有单页；host 模式无瞬态增量。端到端 UI 验收（真实三机器人运行、重启恢复、历史）仍未执行，见 [WORKFLOW-HOST-WIRING 报告](reports/WORKFLOW-HOST-WIRING-report.md)。

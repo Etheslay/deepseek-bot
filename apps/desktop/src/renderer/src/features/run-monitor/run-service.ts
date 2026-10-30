@@ -59,6 +59,12 @@ export type SubscribeResult = {
 };
 
 export interface RunServiceApi {
+  /**
+   * Which backend feeds this service: "fixture" is scripted playback, "host"
+   * is the real engine over the contract bridge. The monitor only renders the
+   * fixture-only controls when this is "fixture".
+   */
+  readonly playback: "fixture" | "host";
   /** run.list: newest first, optional status filter, single fixture page. */
   list(query?: RunListQuery): Promise<{ runs: Run[]; nextCursor: string | null }>;
   /** run.get. */
@@ -926,6 +932,8 @@ export function createFixtureRunService(): RunServiceApi {
   };
 
   const service: RunServiceApi = {
+    playback: "fixture",
+
     async list(query = {}) {
       const limit = query.limit ?? 50;
       const all = [...scenarios.values()]
