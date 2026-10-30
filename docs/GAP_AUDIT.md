@@ -11,6 +11,7 @@
 | 第五次刷新 | 2026-10-29，基线 `origin/develop` = `d1cb448`（PR #152–#154）；#152/#153 合入清零在途分支；CONTRACTS 标题对齐 0.11（随本刷新修正）；d14 审查 §2.2 P3 未处理随合并入库转 §7.9；已合入项经代码核实 |
 | 第六次刷新 | 2026-10-29，基线 `origin/develop` = `9d3ac5b`（PR #156–#160）；关闭 **G4 主体（#159 付费链路验收入档，残留见 §2）**、**D21' 真机指针/按键记录（#160，文档）**；G1' 回放弱化（#156/#158）与 D27 按住说话（#157）随合并入档；§7.9 的 cm P2（改文档）与 d14 P3（改代码）以两个**未推送本地分支**处置；已合入项经报告与代码核实；后续状态以 §7.10 勘误为准 |
 | 第七次刷新 | 2026-10-30，基线 `origin/develop` = `5248ab6`（PR #161–#172）；对照六次刷新基线 `9d3ac5b` 之后合入的 #161–#172，**无新增缺口关闭**（均为 UX/流式/文档/加固切片）；新增 **§7.10 工作流主路径接线核对**，并据此勘误 G14 与 G11' 的完成口径；§7.9 中两处「未推送分支」更新为已由 #165/#167 合入；发现 #172 新增的 `chat.stream` 服务端推送未进契约文档（记 §7.10）；同步刷新 SPRINTS §4、§10 账目 |
+| 接线后勘误（2026-10-30，本 PR） | 基线 `origin/develop` = `ad617a0`（PR #173–#177）：#173 入库第七次刷新；#174 工作流回合 token 入 `usage_events`；#175 `ui.*` 界面态契约候选；#176 工作流读面（协议 v0.12：`workflow.get`/`run.snapshot`/`approval.list`）；#177 桌面 `workflows`/`runs` 切真实 Host。据此更新 §7.10 状态、§8 第五批进度与 SPRINTS 账目；**桌面 UI 端到端人工验收仍未执行**，§7.10 结论保持「接线完成、验收未完成」 |
 | 已完成并归档 | 第一次刷新已归档 G5/G9（大部）；本次归档 **G6、G7、G8、G10、G11（能力强制部分）、D19（除视觉理解）、D21（真机复核除外）、D22、D27（后端）**、拍板 #2；第三次刷新归档 **G3、G9'、G10'、G11'、D20'**，第四次刷新归档 **G13、D27'**，第六次刷新归档 **G4（主体入档）**，见 §1.1；#152/#153 为既有任务收尾，记 §1.1 附行；**第七次刷新无新增归档** |
 | 红线 | 遵守 AGENTS.md 与 SPRINTS 三铁律；契约变更小型独立 PR 先行；未运行检查不得声称通过；不伪造自审；消费红线（零订阅、数据本地）见 SPRINTS §9；**付费调用已执行一次（G4，#159）；再次付费调用仍需负责人逐次授权** |
 | 状态 | 待两位负责人评审、认领与拍板 |
@@ -56,8 +57,6 @@ develop 一天合入 12 个 PR，原审计多项缺口就此关闭：#73 深度�
 | #136 `feature/bot-interop`（`3e21112`） | 任意 bot 平权派发（去角色/同组门槛、跨组链放行）+ `idempotencyKey` 幂等重放；`Bot.role` 退役为遗留标签 | —（任务书 [TASK_BOT_INTEROP](TASK_BOT_INTEROP.md)） |
 | #137 `feature/primitive-mode`（`fde0953`） | 作曲器「原始人」开关（`chat.send` 可选 `primitive`，最短提示组装，落库不变）+ 深度思考入口移至输入框旁 | —（任务书 [TASK_PRIMITIVE_MODE](TASK_PRIMITIVE_MODE.md)） |
 
-双语系统核实（第一次刷新记录，仍有效）：语言切换在 设置 → 通用 → 外观 → 语言，持久化于 `deepseek-bot.settings.v2`，Host 文案随 `settings.update { patch: { "ui.locale" } }` 同步（`feature/host-dispatch-bilingual` 线，CONTRACTS.md settings.update 行已补记）。
-
 ### 10-29 四次刷新总览（968aa0b → db64e01，PR #138/#143–#151）
 
 | PR | 内容 | 关闭的审计项 |
@@ -100,6 +99,16 @@ develop 一天合入 12 个 PR，原审计多项缺口就此关闭：#73 深度�
 | #170 `feature/a1-voice-settings`（`cfea9a2`） | 语音设置面板：whisper 路径经主进程对话框选取（`voice-pick.ts`）、麦克风即时解锁、i18n 与测试 | —（D27 桌面配置） |
 | #171 `feature/b5-automation-dedupe`（`a6db352`） | 自动化窗口式执行前去重：迁移 `0024-event-rule-keys` + `claimEventRuleKey`/`pruneEventRuleKeys`，窗口内重复触发记「duplicate trigger within window」 | —（D20 加固） |
 | #172 `feature/b6-incremental-streaming`（`5248ab6`） | 增量流式：Host 把每个 settled 助手分段经 `chat.stream` 通知推给桌面（stdio/主进程/预加载），渲染层 `stream-runner` 增量渲染；19 文件 | —（D14/D30 体验；`packages/contracts` 未改，但新增的服务端推送未入契约文档 → §7.10） |
+
+### 10-30 接线勘误总览（5248ab6 → ad617a0，PR #173–#177）
+
+| PR | 内容 | 关闭 / 更新的审计项 |
+| --- | --- | --- |
+| #173 `feature/workflow-contract-audit`（`0999eac`） | 本文件第七次刷新 + §7.10 工作流主路径接线核对 + SPRINTS 账目 + progress.md | §7.10 立项；G14/G11' 完成口径勘误 |
+| #174 `feature/workflow-usage-accounting`（`20d919a`） | 工作流节点回合 token 写入 `usage_events`（`model=null`/`source=estimated`）；用量解析迁入 `@deepseek-bot/harness-adapter`，执行器结果加可选 `NodeTurnUsage` | §2 G4 残留之一「工作流模型回合 token 不入 `usage_events`」 ✅ |
+| #175 `feature/ui-state-contract`（`6254d04`） | `packages/contracts/src/ui-state.ts`：`UiStateSchema`（strict；bot/分组顺序与选中态；≤1000 唯一 UUID） | G1' 的 `ui.*` **契约候选**入库；Host 方法与渲染接线仍未做（§2） |
+| #176 `feature/workflow-read-surface`（`776b873`） | 协议 v0.12：`workflow.get`、`run.snapshot`、`approval.list` + Host 处理器与契约测试 + CONTRACTS/RENDERER_HOST_MAPPING 同步 | §7.10 的「契约缺项」 ✅ |
+| #177 `feature/workflow-host-wiring`（`ad617a0`） | 桌面 `createHostService` 以 host 版 `workflows`/`runs` 覆盖夹具；导入惰性；`playback` 标记；审批 status 回退文案 | §7.10 的「桌面夹具」 ✅；**桌面 UI 端到端人工验收仍欠** |
 
 双语系统核实（第一次刷新记录，仍有效）：语言切换在 设置 → 通用 → 外观 → 语言，持久化于 `deepseek-bot.settings.v2`，Host 文案随 `settings.update { patch: { "ui.locale" } }` 同步（`feature/host-dispatch-bilingual` 线，CONTRACTS.md settings.update 行已补记）。
 
@@ -158,7 +167,7 @@ develop 一天合入 12 个 PR，原审计多项缺口就此关闭：#73 深度�
 **已完成部分（不再重复立项）**：`chat.history` 契约（D30）+ 渲染层接线（PR #97/#103）——重启后每 bot 消息历史与流式最终态可见，会话列表/打开读同一份存储行（`stored-session.ts`）。
 
 **剩余缺口（ui.*，仍等拍板 #1）**：
-- 契约面无任何 `ui.*` 方法（`packages/contracts/src/methods.ts`、`packages/host/src` grep 零命中）：侧栏 bot/分组排列、选中态、界面偏好仍重启即失（SPRINTS §7"全局"行）。本片不新增 `ui.state.get/set`。
+- 契约面无任何 `ui.*` 方法（`packages/contracts/src/methods.ts`、`packages/host/src` grep 零命中）：侧栏 bot/分组排列、选中态、界面偏好仍重启即失（SPRINTS §7"全局"行）。本片不新增 `ui.state.get/set`。（2026-10-30：`UiStateSchema` 契约候选已由 #175 入库，仅类型与校验；Host 方法、渲染接线与拍板 #1 记录仍缺。）
 
 **已补、不依赖拍板 #1**：
 - 已答选项卡：`question.answer` 在助手消息写入 `meta.kind = "choice"`（问题、展示选项、`answered`）。`historyThreadMessages` 恢复 `choices.answered`；卡片折叠，`canAnswerChoice` 对 `history: true` 或已有 `answered` 返回 false，不能再次作答。存量无该 meta 的提问行仍是纯文本。
@@ -265,6 +274,14 @@ PR #159 以用户临时 Key（仅进程环境变量注入、用后即弃、不�
 - 第六次刷新记载的两个“未推送分支”已分别由 PR #165、#167 合入；#165 只修正文档对并发的描述，没有消除并发风险。
 - 增量流式（#172）新增服务端推送通知 `chat.stream`（`packages/host/src/stdio.ts` 的 `notifyChatStream`，桌面 `apps/desktop/src/main/host-client.ts:204` 消费，等同 `schedule.missed` 的通知位）。`packages/contracts` 没有该通知的 schema，CONTRACTS.md 也没有条目——消费方已接、旧客户端会忽略，但契约文档与代码存在漂移，建议随主路径接线补一行契约文档。
 
+**2026-10-30 接线结果（更新，基线 `ad617a0`）**：
+
+- 契约与 Host：PR #176 补齐 `workflow.get`、`run.snapshot`、`approval.list`（协议 v0.12），handlers 是既有存储读的薄封装；CONTRACTS §3 与 RENDERER_HOST_MAPPING §6 已同步。`workflow.get` 同时补上 `workflow.list` 只有摘要、`export` 又要 revision 的空档。
+- 桌面：PR #177 用 `createHostWorkflowService`/`createHostRunService` 覆盖 `workflows`/`runs`，`createFixtureService()` 退为离线开发底座；编辑器导入只做预览校验（`workflow.validate`）不落库；运行监控按 `RunServiceApi.playback` 显隐夹具回放控件；审批卡在 Host 不透出 `resolvedAt` 时按 status 推导已决定文案。
+- **仍存差异（未消项）**：`approval.requestedAt` 由 `expiresAt - APPROVAL_DEFAULT_TTL_MS` 近似；`invalidReason="generation"` 只有夹具路径；`pullTransient` 真实路径恒空；`advanceScenario` 真实路径明确拒绝；`chat.stream` 仍未进契约文档；桌面端不调用宿主 `workflow.import`（该处理器会直接落库，与编辑器「确认后才载入画布」语义冲突）。
+- **未完成那一步**：桌面 UI 端到端人工验收（保存→重启读回→三机器人运行→审批/拒绝/取消/重启恢复/历史）尚未执行，步骤与证据表见 [WORKFLOW-MAIN-PATH-ACCEPTANCE-checklist](reports/WORKFLOW-MAIN-PATH-ACCEPTANCE-checklist.md)。现有证据只到 Host 层主路径测试（`packages/host/src/host.test.ts` 的 `runs a workflow end to end through the method surface`）与桌面服务层单测（`apps/desktop/tests/services/host-service.test.ts` 的 12 例 host-backed 用例）。
+- 结论：§7.10 的「桌面夹具」缺口可关闭，「验收」仍开放；D23 前必须补人工验收记录。
+
 ## 8. 建议排期（依赖驱动的批次，可多晚并行）
 
 | 批次 | 内容 | 说明 |
@@ -273,7 +290,7 @@ PR #159 以用户临时 Key（仅进程环境变量注入、用后即弃、不�
 | 第二批 | G1' 的 ui.*（等拍板 #1 记录 ui.* 清单） | **仍开放**：G1' 其余两项（已答卡回放、`history: true`、回放弱化）已由 #97/#103/#156/#158 交付 |
 | ~~第三批~~ | ~~D21'（真实键鼠，真机）~~；语音实机联调（录音/朗读真机验收，#151/#157 已接线） | D21' 真机指针/按键已记录（#160；点击与编辑器内按键仍开放）；语音实机仍欠 |
 | ~~第四批~~ | ~~G4 全链验收~~（#159 已入档）+ D13/D23 收官 | 剩 **D13 性能预算实测 + D23 平台验收**（收官，与发布验收合并执行） |
-| 第五批（收口，2026-10-30 排定） | ①工作流主路径接线（见 §7.10：契约差异→Host 核对→桌面替换夹具→验收报告）→ ②G1' 的 ui.* → ③D13/D23 与 v0.1.0 发布验收 | 主路径是 D07/D09 的集成验收与 D23 前置；释放前 P0/P1 必须清零 |
+| 第五批（收口，2026-10-30 排定） | ①工作流主路径接线：契约 + Host（#176）与桌面替换夹具（#177）**已合入**，剩桌面端到端人工验收报告 → ②G1' 的 ui.*（契约候选 #175 已入库，待拍板 #1 后做 Host 方法与渲染接线）→ ③D13/D23 与 v0.1.0 发布验收 | 主路径是 D07/D09 的集成验收与 D23 前置；释放前 P0/P1 必须清零 |
 | 另行立项 | G12（拍板后）；D19 视觉理解（等模型） | G13 已完成（#138） |
 
 并行保障：G2→G3 为 Host/桥一线；G9'/G1'/D20'/D27' 主要在渲染层与文档，文件面与 Host 线基本不交叉；跨线任务按 SPRINTS 铁律拆分文件边界。
