@@ -47,6 +47,8 @@ export function RunDetail(props: {
   onAdvance: () => Promise<void>;
   onReconnect: () => Promise<void>;
   onRebuild: () => void;
+  /** Fixture playback controls only apply when runs come from the fixture. */
+  fixturePlayback: boolean;
 }): JSX.Element {
   const {
     view,
@@ -58,6 +60,7 @@ export function RunDetail(props: {
     onAdvance,
     onReconnect,
     onRebuild,
+    fixturePlayback,
   } = props;
 
   const cancellable = canCancelRun(view);
@@ -211,20 +214,22 @@ export function RunDetail(props: {
         )}
       </section>
 
-      <section className="rm-section rm-controls" aria-label={t("runs.fixtureControls")}>
-        <h4>{t("runs.fixtureReplay")}</h4>
-        <div className="rm-controls-row">
-          <button type="button" className="pill-btn" onClick={() => void onAdvance()}>
-            {t("runs.advanceStep")}
-          </button>
-          <button type="button" className="pill-btn" onClick={() => void onReconnect()}>
-            {t("runs.simulateReconnect")}
-          </button>
-        </div>
-        <p className="rm-sub">
-          {t("runs.fixtureSourceNote")}
-        </p>
-      </section>
+      {fixturePlayback && (
+        <section className="rm-section rm-controls" aria-label={t("runs.fixtureControls")}>
+          <h4>{t("runs.fixtureReplay")}</h4>
+          <div className="rm-controls-row">
+            <button type="button" className="pill-btn" onClick={() => void onAdvance()}>
+              {t("runs.advanceStep")}
+            </button>
+            <button type="button" className="pill-btn" onClick={() => void onReconnect()}>
+              {t("runs.simulateReconnect")}
+            </button>
+          </div>
+          <p className="rm-sub">
+            {t("runs.fixtureSourceNote")}
+          </p>
+        </section>
+      )}
     </div>
   );
 }

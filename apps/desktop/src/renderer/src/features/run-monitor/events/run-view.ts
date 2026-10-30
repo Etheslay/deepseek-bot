@@ -13,6 +13,7 @@
  */
 import type {
   Approval,
+  ApprovalStatus,
   Artifact,
   EventEnvelope,
   NodeRun,
@@ -485,6 +486,27 @@ export function approvalDecisionLabel(decision: string): string {
       return t("runs.expired");
     default:
       return decision;
+  }
+}
+
+/**
+ * Terminal approval status → decision label. The real Host only exposes the
+ * status, not a resolved record, so the UI derives the same "已决定" copy from
+ * the status instead of pretending a resolution timestamp exists.
+ */
+export function approvalDecisionFromStatus(
+  status: ApprovalStatus,
+): "approved" | "denied" | "expired" | undefined {
+  switch (status) {
+    case "approved":
+    case "consumed":
+      return "approved";
+    case "denied":
+      return "denied";
+    case "expired":
+      return "expired";
+    default:
+      return undefined;
   }
 }
 

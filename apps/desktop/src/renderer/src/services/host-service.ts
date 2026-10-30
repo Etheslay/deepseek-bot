@@ -4,8 +4,8 @@
  * The renderer is a sandboxed browser context: it can only reach the Host
  * through the preload bridge (`window.deepseekBot.host.call`), which forwards
  * one allowlisted contract method at a time. This implementation replaces the
- * fixture for settings and bots; chat/workflow/run views stay on the fixture
- * until their contract methods exist (see docs/AGENT_PLATFORM.md).
+ * fixture for settings, bots, workflow editing and the run monitor; the fixture
+ * service remains the seed for surfaces without a contract method yet.
  */
 import {
   MAX_ATTACHMENT_CHUNK_BYTES,
@@ -27,6 +27,9 @@ import {
 } from "./desktop-service.js";
 import { validateArtifactVersion, validateBotArtifact } from "./contract-validation.js";
 import { createFixtureService } from "./fixture-service.js";
+import { createHostRunService } from "./host-run-service.js";
+import { createHostWorkflowService } from "./host-workflow-service.js";
+import type { HostCall } from "./host-call.js";
 import {
   messagesForStoredSession,
   STORED_SESSION_HISTORY_LIMIT,
@@ -71,7 +74,7 @@ export function createHostService(bridge: HostBridge): DesktopService {
    * ServiceError the UI already understands. REVISION_CONFLICT keeps its
    * meaning: the file changed underneath an open editor.
    */
-  const artifactCall = async (method: string, payload: unknown): Promise<unknown> => {
+  const hostCall: HostCall = async (method, payload) => {
     try {
       return await bridge.host.call(method, payload);
     } catch (error) {
@@ -91,8 +94,14 @@ export function createHostService(bridge: HostBridge): DesktopService {
     return response.messages;
   };
 
+  // v0.12 read surface: editing and monitoring run against the real Host.
+  const workflows = createHostWorkflowService(hostCall);
+  const runs = createHostRunService(hostCall);
+
   return {
     ...base,
+    workflows,
+    runs,
     bots: {
       list: listBots,
       create: async (draft: BotDraft): Promise<Bot> =>
@@ -122,7 +131,7 @@ export function createHostService(bridge: HostBridge): DesktopService {
     },
     artifacts: {
       list: async (botId) => {
-        const response = (await artifactCall("artifacts.list", { botId })) as {
+        const response = (await hostCall("artifacts.list", { botId })) as {
           artifacts: unknown[];
         };
         return response.artifacts.map((artifact) => {
@@ -134,11 +143,11 @@ export function createHostService(bridge: HostBridge): DesktopService {
         });
       },
       read: async (botId, relativePath) =>
-        (await artifactCall("artifacts.read", { botId, path: relativePath })) as Awaited<
+        (await hostCall("artifacts.read", { botId, path: relativePath })) as Awaited<
           ReturnType<DesktopService["artifacts"]["read"]>
         >,
       save: async (botId, relativePath, content, expectedChecksum) => {
-        const response = (await artifactCall("artifacts.save", {
+        const response = (await hostCall("artifacts.save", {
           botId,
           path: relativePath,
           content,
@@ -152,7 +161,7 @@ export function createHostService(bridge: HostBridge): DesktopService {
         return { artifact: artifact.value, version: version.value };
       },
       versions: async (botId, relativePath) => {
-        const response = (await artifactCall("artifacts.versions", {
+        const response = (await hostCall("artifacts.versions", {
           botId,
           path: relativePath,
         })) as { versions: unknown[] };
@@ -165,13 +174,13 @@ export function createHostService(bridge: HostBridge): DesktopService {
         });
       },
       versionContent: async (botId, relativePath, versionId) =>
-        (await artifactCall("artifacts.versionContent", {
+        (await hostCall("artifacts.versionContent", {
           botId,
           path: relativePath,
           versionId,
         })) as Awaited<ReturnType<DesktopService["artifacts"]["versionContent"]>>,
       revert: async (botId, relativePath, versionId) => {
-        const response = (await artifactCall("artifacts.revert", {
+        const response = (await hostCall("artifacts.revert", {
           botId,
           path: relativePath,
           versionId,
@@ -192,7 +201,7 @@ export function createHostService(bridge: HostBridge): DesktopService {
         const sha256 = [...new Uint8Array(digest)]
           .map((byte) => byte.toString(16).padStart(2, "0"))
           .join("");
-        const begun = (await artifactCall("attachment.begin", {
+        const begun = (await hostCall("attachment.begin", {
           botId,
           name,
           size: bytes.byteLength,
@@ -200,12 +209,12 @@ export function createHostService(bridge: HostBridge): DesktopService {
         })) as { uploadId: string };
         for (let offset = 0; offset < bytes.byteLength; offset += MAX_ATTACHMENT_CHUNK_BYTES) {
           const chunk = bytes.subarray(offset, Math.min(offset + MAX_ATTACHMENT_CHUNK_BYTES, bytes.byteLength));
-          await artifactCall("attachment.append", {
+          await hostCall("attachment.append", {
             uploadId: begun.uploadId,
             chunkBase64: bytesToBase64(chunk),
           });
         }
-        return (await artifactCall("attachment.commit", {
+        return (await hostCall("attachment.commit", {
           uploadId: begun.uploadId,
         })) as AttachmentUploadResult;
       },
@@ -449,7 +458,7 @@ export function createHostService(bridge: HostBridge): DesktopService {
         >;
       },
       createBackup: async () => {
-        const response = (await artifactCall("data.backup", {})) as {
+        const response = (await hostCall("data.backup", {})) as {
           backupId: string;
           createdAt: string;
           sizeBytes: number;
@@ -457,14 +466,14 @@ export function createHostService(bridge: HostBridge): DesktopService {
         return response;
       },
       restore: async (backupId) => {
-        const response = (await artifactCall("data.restore", { backupId })) as {
+        const response = (await hostCall("data.restore", { backupId })) as {
           restored: true;
           hostRestarted?: boolean;
         };
         return { restored: true, hostRestarted: response.hostRestarted === true };
       },
       describe: async () => {
-        const response = (await artifactCall("data.describe", {})) as {
+        const response = (await hostCall("data.describe", {})) as {
           schemaVersion: string;
           counts: Record<string, number>;
         };

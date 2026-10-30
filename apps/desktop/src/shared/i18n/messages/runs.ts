@@ -47,6 +47,7 @@ export const runsMessages = {
   "runs.expired": { zh: "已过期", en: "Expired" },
   "runs.expiresAtWithDefaultTtl": { zh: "{0}（默认 {1}）", en: "{0} (default {1})" },
   "runs.fixtureControls": { zh: "夹具回放控制", en: "Fixture replay controls" },
+  "runs.fixtureOnlyControl": { zh: "「推进场景」只属于夹具回放；真实 Host 运行不接受该操作。", en: "\"Advance scenario\" is fixture playback only; real Host runs reject it." },
   "runs.fixtureReplay": { zh: "夹具回放（非真实引擎）", en: "Fixture replay (not the real engine)" },
   "runs.fixtureReplayBadge": { zh: "夹具回放 · FR-06/07", en: "Fixture replay · FR-06/07" },
   "runs.fixtureReplayFailed": { zh: "夹具回放失败", en: "Fixture replay failed" },

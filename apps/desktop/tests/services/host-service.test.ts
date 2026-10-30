@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import type { Bot, ChatSkillInjection } from "@deepseek-bot/contracts";
+import type {
+  Approval,
+  Bot,
+  ChatSkillInjection,
+  Run,
+  Workflow,
+  WorkflowDraft,
+} from "@deepseek-bot/contracts";
+import successRunFixture from "@deepseek-bot/contracts/fixtures/success-run.json";
 import { createHostService } from "../../src/renderer/src/services/host-service.js";
 
 const bot = {
@@ -491,3 +499,241 @@ describe("host-backed vault (D24 leftover)", () => {
   });
 });
 
+const workflow = {
+  id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  revision: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+  name: "sample-review-flow",
+  schemaVersion: "0.1",
+  nodes: [
+    {
+      id: "n1",
+      type: "bot",
+      botId: bot.id,
+      instructionTemplate: "summarize the draft",
+      inputBindings: [],
+      retryPolicy: { maxRetries: 0 },
+    },
+  ],
+  edges: [],
+  limits: { maxConcurrentNodes: 2 },
+} satisfies Workflow;
+
+const draft: WorkflowDraft = {
+  name: workflow.name,
+  schemaVersion: workflow.schemaVersion,
+  nodes: workflow.nodes.map((node) => ({ ...node })),
+  edges: [],
+  limits: { ...workflow.limits },
+};
+
+const run = successRunFixture.interactions[0]!.expectedResponse as unknown as Run;
+
+const nodeRun = {
+  id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+  runId: run.id,
+  nodeId: "n1",
+  attempt: 1,
+  status: "pending",
+  inputRefs: [],
+  outputRefs: [],
+  sessionId: null,
+};
+
+const approval = {
+  id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+  runId: run.id,
+  nodeRunId: nodeRun.id,
+  actionDigest: "a".repeat(64),
+  resource: "workspace:read",
+  expiresAt: new Date(Date.now() + 600_000).toISOString(),
+  status: "pending",
+} satisfies Approval;
+
+describe("host-backed workflow service", () => {
+  it("lists and gets workflows through the contract methods", async () => {
+    const { bridge, calls } = makeBridge({
+      "workflow.list": () => ({
+        workflows: [{ id: workflow.id, revision: workflow.revision, name: workflow.name }],
+      }),
+      "workflow.get": () => workflow,
+    });
+    const service = createHostService(bridge);
+    await expect(service.workflows.list()).resolves.toEqual([
+      { id: workflow.id, revision: workflow.revision, name: workflow.name },
+    ]);
+    await expect(service.workflows.get(workflow.id)).resolves.toEqual(workflow);
+    expect(calls.map((call) => call.method)).toEqual(["workflow.list", "workflow.get"]);
+    expect(calls[1]!.payload).toEqual({ id: workflow.id });
+  });
+
+  it("saves a draft with the expected revision only when one is given", async () => {
+    const { bridge, calls } = makeBridge({ "workflow.save": () => workflow });
+    const service = createHostService(bridge);
+    await service.workflows.save(draft);
+    await service.workflows.save(draft, workflow.revision);
+    expect(calls[0]!.payload).toEqual({ workflow: draft });
+    expect(calls[1]!.payload).toEqual({
+      workflow: draft,
+      expectedRevision: workflow.revision,
+    });
+  });
+
+  it("copies by remapping node ids and saving a new document", async () => {
+    const { bridge, calls } = makeBridge({
+      "workflow.get": () => workflow,
+      "workflow.save": () => ({ ...workflow, id: "ffffffff-ffff-4fff-8fff-ffffffffffff" }),
+    });
+    const service = createHostService(bridge);
+    await service.workflows.copy(workflow.id);
+    expect(calls[0]!.payload).toEqual({ id: workflow.id });
+    const saved = calls[1]!.payload as { workflow: WorkflowDraft };
+    expect(saved.workflow.nodes[0]!.id).toBe("n1-copy");
+    expect(saved.workflow).not.toHaveProperty("id");
+    expect(saved).not.toHaveProperty("expectedRevision");
+  });
+
+  it("imports lazily: validates through the Host and never persists", async () => {
+    const { bridge, calls } = makeBridge({
+      "workflow.validate": () => ({ valid: true, errors: [] }),
+    });
+    const service = createHostService(bridge);
+    const result = await service.workflows.importTemplate({
+      schemaVersion: "0.1",
+      workflow: draft,
+    });
+    expect(result.accepted).toBe(true);
+    expect(result.draft).toEqual(draft);
+    expect(calls.map((call) => call.method)).toEqual(["workflow.validate"]);
+  });
+
+  it("surfaces Host graph errors from import without persisting", async () => {
+    const { bridge, calls } = makeBridge({
+      "workflow.validate": () => ({
+        valid: false,
+        errors: [{ code: "WORKFLOW_CYCLE", message: "cycle detected" }],
+      }),
+    });
+    const service = createHostService(bridge);
+    const result = await service.workflows.importTemplate({
+      schemaVersion: "0.1",
+      workflow: draft,
+    });
+    expect(result).toEqual({
+      accepted: false,
+      errors: [{ code: "WORKFLOW_CYCLE", message: "cycle detected" }],
+      errorCode: "WORKFLOW_CYCLE",
+    });
+    expect(calls.map((call) => call.method)).toEqual(["workflow.validate"]);
+  });
+
+  it("keeps the data-version refusal on the template envelope", async () => {
+    const { bridge, calls } = makeBridge({});
+    const service = createHostService(bridge);
+    const result = await service.workflows.importTemplate({
+      schemaVersion: "9.9",
+      workflow: draft,
+    });
+    expect(result).toEqual({
+      accepted: false,
+      errors: [],
+      errorCode: "DATA_VERSION_UNSUPPORTED",
+    });
+    expect(calls).toEqual([]);
+  });
+});
+
+describe("host-backed run service", () => {
+  it("lists runs through run.list with the default page limit", async () => {
+    const { bridge, calls } = makeBridge({
+      "run.list": () => ({ runs: [run], nextCursor: null }),
+    });
+    const service = createHostService(bridge);
+    const listed = await service.runs.list();
+    expect(listed.runs[0]!.id).toBe(run.id);
+    expect(listed.nextCursor).toBeNull();
+    await service.runs.list({ status: "succeeded", limit: 5 });
+    expect(calls[0]!.payload).toEqual({ limit: 50 });
+    expect(calls[1]!.payload).toEqual({ limit: 5, status: "succeeded" });
+    expect(service.runs.playback).toBe("host");
+  });
+
+  it("composes a snapshot with derived approval baselines", async () => {
+    const { bridge, calls } = makeBridge({
+      "run.snapshot": () => ({
+        run,
+        nodeRuns: [nodeRun],
+        approvals: [approval],
+        artifacts: [],
+      }),
+    });
+    const service = createHostService(bridge);
+    const snapshot = await service.runs.snapshot(run.id);
+    expect(snapshot.run.id).toBe(run.id);
+    expect(snapshot.nodeRuns[0]!.id).toBe(nodeRun.id);
+    expect(snapshot.approvals[0]!.approval.status).toBe("pending");
+    expect(Date.parse(snapshot.approvals[0]!.requestedAt)).toBe(
+      Date.parse(approval.expiresAt) - 600_000,
+    );
+    expect(snapshot.approvals[0]!.invalidReason).toBeUndefined();
+    expect(calls[0]!.payload).toEqual({ runId: run.id });
+  });
+
+  it("subscribes from afterSequence and forwards snapshotRequired", async () => {
+    const { bridge, calls } = makeBridge({
+      "events.subscribe": () => ({ events: [], snapshotRequired: true }),
+    });
+    const service = createHostService(bridge);
+    await expect(service.runs.subscribe(run.id, 7)).resolves.toEqual({
+      events: [],
+      snapshotRequired: true,
+    });
+    expect(calls[0]!.payload).toEqual({ runId: run.id, afterSequence: 7 });
+  });
+
+  it("forwards cancel, resume, retry and approval decisions", async () => {
+    const { bridge, calls } = makeBridge({
+      "run.cancel": () => ({ ...run, status: "cancelled" }),
+      "run.resume": () => run,
+      "run.retryNode": () => nodeRun,
+      "approval.decide": () => ({ ...approval, status: "approved" }),
+    });
+    const service = createHostService(bridge);
+    await service.runs.cancel(run.id);
+    await service.runs.resume(run.id);
+    await service.runs.retryNode(nodeRun.id);
+    await expect(
+      service.runs.decideApproval({
+        approvalId: approval.id,
+        decision: "approved",
+        expectedActionDigest: approval.actionDigest,
+      }),
+    ).resolves.toMatchObject({ status: "approved" });
+    expect(calls.map((call) => call.method)).toEqual([
+      "run.cancel",
+      "run.resume",
+      "run.retryNode",
+      "approval.decide",
+    ]);
+  });
+
+  it("lists approvals through approval.list and maps expiry", async () => {
+    const expired = { ...approval, expiresAt: "2026-01-01T00:00:00.000Z" };
+    const { bridge, calls } = makeBridge({
+      "approval.list": () => ({ approvals: [expired] }),
+    });
+    const service = createHostService(bridge);
+    const baselines = await service.runs.listApprovals();
+    expect(baselines[0]!.invalidReason).toBe("expired");
+    expect(calls[0]!.payload).toEqual({ limit: 100 });
+  });
+
+  it("has no transient queue and rejects fixture-only playback", async () => {
+    const { bridge, calls } = makeBridge({});
+    const service = createHostService(bridge);
+    await expect(service.runs.pullTransient(run.id)).resolves.toEqual([]);
+    await expect(service.runs.advanceScenario(run.id)).rejects.toMatchObject({
+      code: "INVALID_INPUT",
+    });
+    expect(calls).toEqual([]);
+  });
+});

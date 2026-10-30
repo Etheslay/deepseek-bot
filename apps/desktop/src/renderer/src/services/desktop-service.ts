@@ -272,9 +272,17 @@ export interface DesktopService {
   search: {
     global(query: string): Promise<GlobalSearchHitView[]>;
   };
-  /** Workflow editor API (D07); fixture-backed, no execution/persistence. */
+  /**
+   * Workflow editor API (D07). The host service serves it from the real Host
+   * contracts (v0.12: workflow.list/get/validate/save/export); the fixture
+   * implementation stays available for offline UI development.
+   */
   workflows: WorkflowServiceApi;
-  /** Run monitor / approval API (D09); fixture playback, no real engine. */
+  /**
+   * Run monitor / approval API (D09). Host-backed since the v0.12 read surface
+   * (run.list/get/snapshot/resume/retryNode, events.subscribe, approval.*);
+   * `playback` tells the monitor whether fixture-only controls apply.
+   */
   runs: RunServiceApi;
   /** v0.5 manager orchestration: dispatched-task query + human cancel. */
   tasks: TaskServiceApi;

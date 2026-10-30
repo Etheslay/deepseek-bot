@@ -7,7 +7,12 @@
  */
 import { useState, type JSX } from "react";
 import type { ApprovalBaseline } from "../events/run-view.js";
-import { approvalDecidable, approvalTtlCopy, approvalTtlLabel } from "../events/run-view.js";
+import {
+  approvalDecidable,
+  approvalDecisionFromStatus,
+  approvalTtlCopy,
+  approvalTtlLabel,
+} from "../events/run-view.js";
 import { formatFullDateTime, t } from "../../../i18n.js";
 
 /** Resolved decisions are contract data; only the label is localized (D22). */
@@ -69,6 +74,12 @@ export function ApprovalCard(props: {
     }
     if (resolved !== undefined) {
       return t("runs.decidedOnceNoReplay", [decisionLabel(resolved.decision)]);
+    }
+    // Host-backed runs expose only the terminal status; derive the same
+    // one-shot copy instead of showing a live countdown on a decided approval.
+    const settled = approvalDecisionFromStatus(approval.status);
+    if (settled !== undefined) {
+      return t("runs.decidedOnceNoReplay", [decisionLabel(settled)]);
     }
     return approvalTtlLabel(baseline);
   };
@@ -142,6 +153,7 @@ export function ApprovalInboxItem(props: {
 }): JSX.Element {
   const { baseline, onOpen } = props;
   const { approval } = baseline;
+  const settled = approvalDecisionFromStatus(approval.status);
   return (
     <button
       type="button"
@@ -151,11 +163,13 @@ export function ApprovalInboxItem(props: {
       <span className="rm-inbox-state">
         {baseline.resolved
           ? decisionLabel(baseline.resolved.decision)
-          : baseline.invalidReason === "generation"
-            ? t("runs.invalidatedGeneration")
-            : baseline.invalidReason === "expired"
-              ? t("runs.expired")
-              : t("runs.pendingDecision")}
+          : settled !== undefined
+            ? decisionLabel(settled)
+            : baseline.invalidReason === "generation"
+              ? t("runs.invalidatedGeneration")
+              : baseline.invalidReason === "expired"
+                ? t("runs.expired")
+                : t("runs.pendingDecision")}
       </span>
       <span className="rm-inbox-res">{approval.resource}</span>
       <span className="rm-inbox-run">run {approval.runId.slice(0, 8)}</span>
