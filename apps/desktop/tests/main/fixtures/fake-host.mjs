@@ -30,6 +30,12 @@ setTimeout(() => {
       ],
     },
   });
+  // B6: one live assistant segment on the chat.stream channel.
+  write({
+    jsonrpc: "2.0",
+    method: "chat.stream",
+    params: { botId: "bot-1", sessionId: "chat:bot-1:s1", text: "live segment" },
+  });
 }, 80).unref();
 
 lines.on("line", (line) => {

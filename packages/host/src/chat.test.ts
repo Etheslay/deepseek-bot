@@ -28,6 +28,7 @@ async function hostWithBot(
   scenario = "ok",
   resolveApiKey: () => Promise<string> = async () => "sk-test-only",
   extraEnv: Record<string, string> = {},
+  options: { onTurnStream?: (notice: { botId: string; sessionId: string; text: string }) => void } = {},
 ): Promise<{ host: DeepSeekBotHost; botId: string }> {
   const root = mkdtempSync(join(tmpdir(), "dsb-chat-runtime-"));
   roots.push(root);
@@ -36,6 +37,7 @@ async function hostWithBot(
     resolveApiKey,
     dshBin: fakeHarness,
     childEnv: (parent) => ({ ...parent, ...extraEnv, FAKE_SCENARIO: scenario }),
+    ...(options.onTurnStream !== undefined ? { onTurnStream: options.onTurnStream } : {}),
   });
   hosts.push(host);
   const now = host.db.now().toISOString();
@@ -349,8 +351,7 @@ describe("chat runtime", () => {
   });
 
   it("reports live turn progress from real harness events", async () => {
-    const { host, botId } = await hostWithBot("slow-tool");
-    const idle = (await host.handleMethod("chat.status", { botId })) as { active: boolean };
+    const { host, botId } = await hostWithBot("slow-tool");    const idle = (await host.handleMethod("chat.status", { botId })) as { active: boolean };
     expect(idle.active).toBe(false);
     const sent = host.handleMethod("chat.send", { botId, text: "write hello.txt" });
     // Poll until the turn's tool stage shows up — the fake harness holds the
@@ -377,6 +378,25 @@ describe("chat runtime", () => {
     expect((await sent) as unknown).toBeDefined();
     const settled = (await host.handleMethod("chat.status", { botId })) as { active: boolean };
     expect(settled.active).toBe(false);
+  });
+
+  it("streams live assistant segments while the turn runs", async () => {
+    const notices: Array<{ botId: string; sessionId: string; text: string }> = [];
+    const { host, botId } = await hostWithBot("narrated-tool", undefined, {}, {
+      onTurnStream: (notice) => notices.push(notice),
+    });
+    const sent = (await host.handleMethod("chat.send", { botId, text: "do it" })) as {
+      text: string;
+    };
+    // The narrated-tool turn settles two assistant messages: the narration
+    // before the tool call and the final response. Both stream live.
+    expect(notices.length).toBe(2);
+    expect(notices[0]).toMatchObject({ botId, text: "先看看工作区。" });
+    expect(notices[1]).toMatchObject({ text: "fake final response" });
+    // Every notice carries the same per-turn session id.
+    expect(new Set(notices.map((notice) => notice.sessionId)).size).toBe(1);
+    // The authoritative reply is still the last segment only (D30 semantics).
+    expect(sent.text).toBe("fake final response");
   });
 
   it("injects saved skills into the prompt and keeps them out of the user row", async () => {

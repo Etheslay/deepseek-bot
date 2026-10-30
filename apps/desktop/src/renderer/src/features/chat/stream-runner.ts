@@ -110,7 +110,11 @@ export function runChatStream(deps: {
     if (!isCurrent()) {
       return;
     }
-    onAssistant(acc);
+    // B6: the host path carries the authoritative reply in `result.text` —
+    // live segments of a tool turn can include narration the reply does not
+    // carry, so the accumulated deltas are not always the message. Paths
+    // without `text` (fixture, degraded bridge) keep the accumulation.
+    onAssistant(result.text ?? acc);
     update((prev) => (prev && prev.forKey === forKey ? null : prev));
     onSettled?.(result);
   });

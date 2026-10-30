@@ -51,6 +51,9 @@ export const IPC_CHANNELS = {
 /** Main → renderer event channel for scheduler skip-and-notify notices (FR-08). */
 export const HOST_EVENT_MISSED = "host:event:missed";
 
+/** B6: Main → renderer event channel for live chat assistant segments. */
+export const HOST_EVENT_CHAT_STREAM = "host:event:chat-stream";
+
 /** D22 main → renderer: a tray menu entry was clicked. */
 export const SYSTEM_EVENT_TRAY_ACTION = "system:event:tray-action";
 /** D22 main → renderer: a system notification was clicked. */

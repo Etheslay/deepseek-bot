@@ -41,7 +41,13 @@ import {
 } from "../features/chat/attachments.js";
 
 type HostBridge = {
-  host: { call: (method: string, payload: unknown) => Promise<unknown> };
+  host: {
+    call: (method: string, payload: unknown) => Promise<unknown>;
+    /** B6: live assistant segments (absent on bridges that predate the channel). */
+    onChatStream?: (
+      listener: (notice: { botId: string; sessionId: string; text: string }) => void,
+    ) => () => void;
+  };
   settings: { saveKey: (key: string) => Promise<{ configured: boolean }> };
   backups?: { list: () => Promise<unknown[]> };
   app?: {
@@ -260,9 +266,11 @@ export function createHostService(bridge: HostBridge): DesktopService {
       },
       stream: (botId, text, handlers, options) => {
         let cancelled = false;
-        /** Pending inter-chunk timer and the resolver it belongs to (see cancel). */
-        let pacingTimer: ReturnType<typeof setTimeout> | null = null;
-        let stopPacing: (() => void) | null = null;
+        /** What handlers.onDelta has already emitted (paced, in order). */
+        let shown = "";
+        /** In-flight paced beat between two chunks (cleared on cancel). */
+        let paceTimer: ReturnType<typeof setTimeout> | null = null;
+        let releasePace: (() => void) | null = null;
         const sessionId = `chat:${botId}`;
         const skills = options?.skills;
         const primitive = options?.primitive === true;
@@ -273,55 +281,93 @@ export function createHostService(bridge: HostBridge): DesktopService {
         if (primitive) {
           payload.primitive = true;
         }
-        const done = bridge.host
-          .call("chat.send", payload)
-          .then(async (response) => {
-            const reply = (response as { text: string }).text;
-            if (cancelled) {
-              return { cancelled: true, failure: null } satisfies StreamResult;
-            }
-            // The Host answers with the whole reply, so the bubble is a replay:
-            // slice it per line (long) or per sentence (short) and advance at an
-            // interval derived from the length. See features/chat/stream-pacer.ts.
-            const plan = planPacing(reply);
+        /**
+         * B6 incremental streaming. The Host pushes one notification per
+         * settled assistant segment (the pinned harness has no token-level
+         * deltas: a segment is a whole message). Each segment is smoothed
+         * through the existing pacing rules (features/chat/stream-pacer.ts)
+         * instead of being dumped at once, and emissions serialize so a tool
+         * turn's narration keeps its order.
+         */
+        let paced: Promise<void> = Promise.resolve();
+        const emitPaced = (piece: string): Promise<void> => {
+          const run = paced.then(async () => {
+            const plan = planPacing(piece);
             for (let index = 0; index < plan.chunks.length; index += 1) {
-              if (cancelled) {
-                return { cancelled: true, failure: null } satisfies StreamResult;
-              }
-              handlers.onDelta(plan.chunks[index] ?? "");
-              if (index === plan.chunks.length - 1) {
-                break;
-              }
+              if (cancelled) return;
+              const chunk = plan.chunks[index]!;
+              shown += chunk;
+              handlers.onDelta(chunk);
+              if (index === plan.chunks.length - 1) return;
               await new Promise<void>((resolve) => {
-                stopPacing = resolve;
-                pacingTimer = setTimeout(() => {
-                  pacingTimer = null;
-                  stopPacing = null;
+                releasePace = resolve;
+                paceTimer = setTimeout(() => {
+                  paceTimer = null;
+                  releasePace = null;
                   resolve();
                 }, plan.intervalMs);
               });
             }
-            return { cancelled, failure: null } satisfies StreamResult;
+          });
+          paced = run;
+          return run;
+        };
+        const unsubscribe =
+          bridge.host.onChatStream?.((notice) => {
+            if (cancelled || notice.botId !== botId) return;
+            void emitPaced(notice.text);
+          }) ?? null;
+        const done = bridge.host
+          .call("chat.send", payload)
+          .then(async (response) => {
+            // The turn settled: no later notification belongs to this stream.
+            unsubscribe?.();
+            const reply = (response as { text: string }).text;
+            if (cancelled) {
+              return { cancelled: true, failure: null, text: reply } satisfies StreamResult;
+            }
+            /**
+             * The reply is authoritative (chat.send's response). Wait for the
+             * live pacing to settle, then converge: what was shown stays when
+             * it is a prefix of the reply (single-segment turns — only the
+             * remainder is replayed; no live segments — the whole reply is
+             * paced here exactly like the old replay path). Interim narration
+             * of a tool turn is not part of the reply, so nothing more is
+             * emitted and the caller commits `text`, replacing the bubble.
+             */
+            await paced;
+            if (cancelled) {
+              return { cancelled: true, failure: null, text: reply } satisfies StreamResult;
+            }
+            if (reply.startsWith(shown) && reply.length > shown.length) {
+              await emitPaced(reply.slice(shown.length));
+            }
+            return { cancelled, failure: null, text: reply } satisfies StreamResult;
           })
-          .catch((error: unknown) => ({
-            cancelled,
-            failure: {
-              code: (error as { code?: ErrorCode }).code ?? "RUNTIME_UNAVAILABLE",
-              message: error instanceof Error ? error.message : String(error),
-              retryable: false,
-            },
-          }));
+          .catch((error: unknown) => {
+            unsubscribe?.();
+            return {
+              cancelled,
+              failure: {
+                code: (error as { code?: ErrorCode }).code ?? "RUNTIME_UNAVAILABLE",
+                message: error instanceof Error ? error.message : String(error),
+                retryable: false,
+              },
+            } satisfies StreamResult;
+          });
         return {
           cancel: () => {
             cancelled = true;
-            // Release a replay that is waiting between two chunks, otherwise the
-            // finish promise would never settle and the bubble would stay busy.
-            if (pacingTimer !== null) {
-              clearTimeout(pacingTimer);
-              pacingTimer = null;
+            // Release a paced beat that is waiting between two chunks, otherwise
+            // the finish promise would never settle and the bubble would stay
+            // busy.
+            if (paceTimer !== null) {
+              clearTimeout(paceTimer);
+              paceTimer = null;
             }
-            stopPacing?.();
-            stopPacing = null;
+            releasePace?.();
+            releasePace = null;
+            unsubscribe?.();
             void bridge.host.call("chat.cancel", { sessionId }).catch(() => undefined);
           },
           finish: () => done,

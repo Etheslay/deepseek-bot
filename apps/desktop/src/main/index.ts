@@ -24,7 +24,7 @@ import {
   readChromeImport,
   scanChromeProfiles,
 } from "./chrome-bookmarks.js";
-import { DATA_ROOT_DIR_NAME, HOST_EVENT_MISSED, SYSTEM_EVENT_WINDOW_FOCUS } from "../shared/ipc-channels.js";
+import { DATA_ROOT_DIR_NAME, HOST_EVENT_CHAT_STREAM, HOST_EVENT_MISSED, SYSTEM_EVENT_WINDOW_FOCUS } from "../shared/ipc-channels.js";
 import { pickKnowledgeFile } from "./knowledge-import.js";
 import { pickVoiceFile } from "./voice-pick.js";
 import { listBackups, type RestoreOutcome } from "./backups.js";
@@ -415,6 +415,12 @@ function startHost(): void {
   hostClient.onMissed((notices) => {
     if (mainWindow !== null && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send(HOST_EVENT_MISSED, notices);
+    }
+  });
+  // B6: live assistant segments for the streaming bubble (best-effort push).
+  hostClient.onChatStream((notice) => {
+    if (mainWindow !== null && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send(HOST_EVENT_CHAT_STREAM, notice);
     }
   });
 }

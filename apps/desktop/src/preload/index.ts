@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
 import {
+  HOST_EVENT_CHAT_STREAM,
   HOST_EVENT_MISSED,
   IPC_CHANNELS,
   SYSTEM_EVENT_NOTIFICATION_CLICK,
@@ -31,6 +32,18 @@ export type HostMissedNotice = {
   workflowId: string;
   occurrenceUtc: string;
   reason: string;
+};
+
+/**
+ * B6: one live assistant segment of a running chat turn (the `chat.stream`
+ * host notification, forwarded over HOST_EVENT_CHAT_STREAM). The pinned
+ * harness settles a whole assistant message per model attempt, so a segment
+ * is a full message text, not a token delta.
+ */
+export type HostChatStreamNotice = {
+  botId: string;
+  sessionId: string;
+  text: string;
 };
 
 export type HostCallErrorShape = {
@@ -97,6 +110,8 @@ export type DesktopBridge = {
     call: (method: string, payload: unknown) => Promise<unknown>;
     /** Scheduler skip-and-notify notices (FR-08); returns an unsubscribe. */
     onMissed: (listener: (notices: HostMissedNotice[]) => void) => () => void;
+    /** B6: live assistant segments of a running chat turn; returns an unsubscribe. */
+    onChatStream: (listener: (notice: HostChatStreamNotice) => void) => () => void;
   };
   /** D22: mirror the UI language into main so tray/notification strings match. */
   i18n: {
@@ -186,6 +201,12 @@ const api: DesktopBridge = {
         listener(notices);
       ipcRenderer.on(HOST_EVENT_MISSED, handler);
       return () => ipcRenderer.removeListener(HOST_EVENT_MISSED, handler);
+    },
+    onChatStream: (listener) => {
+      const handler = (_event: IpcRendererEvent, notice: HostChatStreamNotice): void =>
+        listener(notice);
+      ipcRenderer.on(HOST_EVENT_CHAT_STREAM, handler);
+      return () => ipcRenderer.removeListener(HOST_EVENT_CHAT_STREAM, handler);
     },
   },
   i18n: {
