@@ -55,3 +55,9 @@ export {
   type AppToolProfileOptions,
 } from "./profile-assets.js";
 export { listenOnPrivateHttpPort } from "./loopback.js";
+export {
+  TurnUsageAccumulator,
+  estimateTokens,
+  extractUsageFromEvent,
+  type TurnUsage,
+} from "./usage.js";

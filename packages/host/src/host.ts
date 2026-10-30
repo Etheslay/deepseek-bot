@@ -53,6 +53,7 @@ import {
   LocalScheduler,
   evaluateEventRules,
   evaluateToolAction,
+  type NodeExecutor,
   type ScheduleMissNotice,
 } from "@deepseek-bot/runtime";
 import {
@@ -422,6 +423,38 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
     },
   };
   const executor = new DshSdkExecutor(executorOptions, { sessionRegistry });
+  /**
+   * One usage-ledger writer for every billed model turn: chat turns stream
+   * their counts through ChatManager's callback, workflow node attempts come
+   * back on the executor result (GAP_AUDIT G4 residual: workflow model turns
+   * were never written to usage_events). Best-effort — accounting must never
+   * fail a turn.
+   */
+  const recordTurnUsage = (usage: {
+    botId: string;
+    model: string | null;
+    sessionId: string;
+    inputTokens: number;
+    outputTokens: number;
+    cachedInputTokens: number;
+    estimated: boolean;
+  }): void => {
+    try {
+      recordUsage(db, {
+        id: randomUUID(),
+        botId: usage.botId,
+        model: usage.model,
+        sessionId: usage.sessionId,
+        occurredAt: new Date().toISOString(),
+        inputTokens: usage.inputTokens,
+        outputTokens: usage.outputTokens,
+        cachedInputTokens: usage.cachedInputTokens,
+        source: usage.estimated ? "estimated" : "harness",
+      });
+    } catch {
+      /* usage accounting is best-effort */
+    }
+  };
   const packagedBridge = fileURLToPath(new URL("./harness-bridge/", import.meta.url));
   const bridgePackageDir = existsSync(join(packagedBridge, "package.json"))
     ? packagedBridge
@@ -498,24 +531,7 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
         }),
     },
     () => uiLocale.current,
-    (usage) => {
-      /* best-effort: a usage write must never break the reply path */
-      try {
-        recordUsage(db, {
-          id: randomUUID(),
-          botId: usage.botId,
-          model: usage.model,
-          sessionId: usage.sessionId,
-          occurredAt: new Date().toISOString(),
-          inputTokens: usage.inputTokens,
-          outputTokens: usage.outputTokens,
-          cachedInputTokens: usage.cachedInputTokens,
-          source: usage.estimated ? "estimated" : "harness",
-        });
-      } catch {
-        /* usage accounting is best-effort */
-      }
-    },
+    recordTurnUsage,
     (notice) => {
       /* B6: best-effort live streaming; the sink already swallows its own errors */
       options.onTurnStream?.(notice);
@@ -551,9 +567,39 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
   // the bot workspace's attachments/ directory (shutdown sweeps strays).
   const attachmentStore = createAttachmentStore({ db, cacheDir: layout.cache });
 
+  /**
+   * The engine runs one executor call per node attempt; each attempt is a
+   * billed model turn, so its usage lands in the same ledger chat turns write.
+   * Retries record once per attempt (each attempt is billed separately), and
+   * the write stays best-effort so accounting can never fail a run.
+   */
+  const usageRecordingExecutor: NodeExecutor = {
+    executeBotNode: async (context) => {
+      const result = await executor.executeBotNode(context);
+      const usage = result.usage;
+      if (
+        usage !== undefined &&
+        result.sessionId !== null &&
+        result.sessionId !== undefined &&
+        (usage.inputTokens > 0 || usage.outputTokens > 0)
+      ) {
+        recordTurnUsage({
+          botId: context.bot.id,
+          model: usage.model,
+          sessionId: result.sessionId,
+          inputTokens: usage.inputTokens,
+          outputTokens: usage.outputTokens,
+          cachedInputTokens: usage.cachedInputTokens,
+          estimated: usage.estimated,
+        });
+      }
+      return result;
+    },
+  };
+
   const engine = new WorkflowEngine({
     db,
-    executor,
+    executor: usageRecordingExecutor,
     bootGeneration,
     artifactsRoot: layout.artifacts,
     ...(options.now !== undefined ? { now: options.now } : {}),
