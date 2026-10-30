@@ -14,6 +14,7 @@
  * stdio loop starts, and attempts only run after a caller-driven request.
  */
 import { resolveDataRoot } from "@deepseek-bot/storage";
+import type { ChatStreamNotice } from "./chat.js";
 import type { ScheduleMissNotice } from "@deepseek-bot/runtime";
 import { createHost } from "./host.js";
 import { startStdioHost } from "./stdio.js";
@@ -24,11 +25,15 @@ const credentialChannel: { resolve: (ref: string) => Promise<string> } = {
 const missedChannel: { notify: (notices: ReadonlyArray<ScheduleMissNotice>) => void } = {
   notify: () => undefined,
 };
+const streamChannel: { notify: (notice: ChatStreamNotice) => void } = {
+  notify: () => undefined,
+};
 
 const host = await createHost({
   dataRoot: resolveDataRoot(),
   resolveApiKey: (credentialRef) => credentialChannel.resolve(credentialRef),
   onMissed: (notices) => missedChannel.notify(notices),
+  onTurnStream: (notice) => streamChannel.notify(notice),
   ...(process.env.DEEPSEEK_BOT_SEARXNG_URL !== undefined
     ? { webSearch: { endpoint: process.env.DEEPSEEK_BOT_SEARXNG_URL } }
     : {}),
@@ -53,5 +58,6 @@ const controller = startStdioHost({
 });
 credentialChannel.resolve = controller.resolveCredential;
 missedChannel.notify = controller.notifyMissed;
+streamChannel.notify = controller.notifyChatStream;
 host.start();
 await controller.done;

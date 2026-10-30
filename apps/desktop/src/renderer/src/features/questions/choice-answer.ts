@@ -13,6 +13,24 @@ export type AnswerableMessage = {
 };
 
 /**
+ * A card can be answered only while it is still open in this session.
+ * Reloaded rows (`history: true`) and any card that already has an answer
+ * stay locked, including a replay whose `answered` field was lost.
+ */
+export function canAnswerChoice(message: {
+  history?: boolean | undefined;
+  choices?: { answered?: string | undefined } | undefined;
+}): boolean {
+  if (message.history === true) {
+    return false;
+  }
+  if (message.choices === undefined || message.choices.answered !== undefined) {
+    return false;
+  }
+  return true;
+}
+
+/**
  * Mark the message whose id matches as answered and return a new array.
  * Messages without a card, and every other message, are returned untouched;
  * re-answering overwrites the previous answer, which keeps the function
@@ -28,4 +46,29 @@ export function answerSeedCard<T extends AnswerableMessage>(
       ? { ...message, choices: { ...message.choices, answered: text } }
       : message,
   );
+}
+
+/** Minimal view of a thread message the pending-card lookup needs. */
+export type AnswerableThreadMessage = {
+  id: number;
+  from: string;
+  history?: boolean | undefined;
+  choices?: { answered?: string | undefined } | undefined;
+};
+
+/**
+ * The latest bot message still carrying an open seed card, if any. Free-text
+ * replies retire it (对标: the card dims instead of nagging) — the caller
+ * marks it answered with the sent text and lets the reply flow normally.
+ */
+export function findPendingChoiceCard<T extends AnswerableThreadMessage>(
+  messages: readonly T[],
+): T | undefined {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index]!;
+    if (message.from === "bot" && canAnswerChoice(message)) {
+      return message;
+    }
+  }
+  return undefined;
 }

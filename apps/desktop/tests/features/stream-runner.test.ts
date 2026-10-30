@@ -74,6 +74,18 @@ describe("runChatStream (U5: one shared starter for composer, retry and cards)",
     expect(state()).toBeNull();
   });
 
+  it("commits the authoritative reply text over the accumulated deltas (B6)", async () => {
+    // The host path streams live segments; interim narration lands in the
+    // deltas but the reply is what chat.send returned.
+    const { stream } = fakeStream({ cancelled: false, failure: null, text: "最终回复" });
+    const { update, state } = installUpdater();
+    const onAssistant = vi.fn();
+    const handle = run(stream, 7, onAssistant, update);
+    await handle.finish();
+    expect(onAssistant).toHaveBeenCalledWith("最终回复");
+    expect(state()).toBeNull();
+  });
+
   it("applies the failure instead of the assistant bubble when the turn fails", async () => {
     const { stream } = fakeStream({
       cancelled: false,

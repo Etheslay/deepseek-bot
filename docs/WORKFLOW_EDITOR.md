@@ -1,6 +1,6 @@
 # 工作流编辑器（D07）
 
-`apps/desktop` 的工作流编辑器（FR-04）：新建 / 编辑 / 保存 / 复制工作流，`bot` / `approval` 节点与连线的可视化编辑，保存前用官方契约校验器校验并**定位到节点与字段**，模板导入导出先验 `schemaVersion`。**校验器、schema、错误码全部来自 `@deepseek-bot/contracts`（D03），不自创契约；保存/复制仅为夹具内存态，持久化（D04）、执行（D06）、调度（D10）、运行监控与审批执行（D09）不在本任务内。**
+`apps/desktop` 的工作流编辑器（FR-04）：新建 / 编辑 / 保存 / 复制工作流，`bot` / `approval` 节点与连线的可视化编辑，保存前用官方契约校验器校验并**定位到节点与字段**，模板导入导出先验 `schemaVersion`。**校验器、schema、错误码全部来自 `@deepseek-bot/contracts`（D03），不自创契约；原始实现保存/复制为夹具内存态。2026-10-30 起桌面 `host-service` 已把 `workflows` 切到真实 Host（`workflow.list/get/validate/save/export`，见 [RENDERER_HOST_MAPPING](RENDERER_HOST_MAPPING.md) §6），夹具实现保留用于离线 UI 开发。执行（D06）、调度（D10）、运行监控与审批执行（D09）不在本任务内。**
 
 入口：桌面壳头部「工作流编辑器」图标（见 [桌面壳](DESKTOP_SHELL.md)），主区切换为编辑器视图。
 
@@ -18,7 +18,7 @@ src/renderer/src/features/workflow-editor/
   template/                模板导入导出弹窗（粘贴/本地文件；不接远程 URL）
 ```
 
-- `DesktopService` 接口扩展 `workflows: WorkflowServiceApi`，由 `createFixtureWorkflowService()` 组合进夹具服务；组件经 `useService()` 使用，未来接 Host 时只替换服务实现。
+- `DesktopService` 接口扩展 `workflows: WorkflowServiceApi`：夹具服务由 `createFixtureService()` 组合，`host-service.ts` 用 `createHostWorkflowService()` 覆盖；组件经 `useService()` 使用，接口不变。
 - `list / get / save / copy / validate / exportTemplate / importTemplate` 与 `workflow.*` 方法契约一一对应；所有出参经 `WorkflowSchema` 校验，非法输入抛 `ServiceError`（稳定错误码）。
 - **不新增 IPC**：编辑器全部运行在 renderer，走 D05 服务注入；preload/IPC 白名单未变。
 - 夹具种子：1 个合法工作流 `sample-review-flow`（Bot A → 审批，复用 D03 共享测试 UUID）；图校验场景（环 / 缺失绑定 / 版本拒绝）由 `packages/contracts/fixtures` 的对应夹具驱动测试。

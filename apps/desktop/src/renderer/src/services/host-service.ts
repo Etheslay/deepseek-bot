@@ -4,8 +4,8 @@
  * The renderer is a sandboxed browser context: it can only reach the Host
  * through the preload bridge (`window.deepseekBot.host.call`), which forwards
  * one allowlisted contract method at a time. This implementation replaces the
- * fixture for settings and bots; chat/workflow/run views stay on the fixture
- * until their contract methods exist (see docs/AGENT_PLATFORM.md).
+ * fixture for settings, bots, workflow editing and the run monitor; the fixture
+ * service remains the seed for surfaces without a contract method yet.
  */
 import {
   MAX_ATTACHMENT_CHUNK_BYTES,
@@ -13,6 +13,7 @@ import {
   type Bot,
   type ErrorCode,
   type Task,
+  type UiState,
 } from "@deepseek-bot/contracts";
 import { bytesToBase64 } from "../features/chat/attachments.js";
 import { planPacing } from "../features/chat/stream-pacer.js";
@@ -27,6 +28,9 @@ import {
 } from "./desktop-service.js";
 import { validateArtifactVersion, validateBotArtifact } from "./contract-validation.js";
 import { createFixtureService } from "./fixture-service.js";
+import { createHostRunService } from "./host-run-service.js";
+import { createHostWorkflowService } from "./host-workflow-service.js";
+import type { HostCall } from "./host-call.js";
 import {
   messagesForStoredSession,
   STORED_SESSION_HISTORY_LIMIT,
@@ -41,7 +45,13 @@ import {
 } from "../features/chat/attachments.js";
 
 type HostBridge = {
-  host: { call: (method: string, payload: unknown) => Promise<unknown> };
+  host: {
+    call: (method: string, payload: unknown) => Promise<unknown>;
+    /** B6: live assistant segments (absent on bridges that predate the channel). */
+    onChatStream?: (
+      listener: (notice: { botId: string; sessionId: string; text: string }) => void,
+    ) => () => void;
+  };
   settings: { saveKey: (key: string) => Promise<{ configured: boolean }> };
   backups?: { list: () => Promise<unknown[]> };
   app?: {
@@ -65,7 +75,7 @@ export function createHostService(bridge: HostBridge): DesktopService {
    * ServiceError the UI already understands. REVISION_CONFLICT keeps its
    * meaning: the file changed underneath an open editor.
    */
-  const artifactCall = async (method: string, payload: unknown): Promise<unknown> => {
+  const hostCall: HostCall = async (method, payload) => {
     try {
       return await bridge.host.call(method, payload);
     } catch (error) {
@@ -85,8 +95,23 @@ export function createHostService(bridge: HostBridge): DesktopService {
     return response.messages;
   };
 
+  // v0.12 read surface: editing and monitoring run against the real Host.
+  const workflows = createHostWorkflowService(hostCall);
+  const runs = createHostRunService(hostCall);
+
+  // G1' (v0.13): the sidebar snapshot persists in the Host's settings KV.
+  const uiState = {
+    get: async (): Promise<UiState> =>
+      ((await bridge.host.call("ui.state.get", {})) as { state: UiState }).state,
+    save: async (state: UiState): Promise<UiState> =>
+      ((await bridge.host.call("ui.state.set", { state })) as { state: UiState }).state,
+  };
+
   return {
     ...base,
+    workflows,
+    runs,
+    uiState,
     bots: {
       list: listBots,
       create: async (draft: BotDraft): Promise<Bot> =>
@@ -116,7 +141,7 @@ export function createHostService(bridge: HostBridge): DesktopService {
     },
     artifacts: {
       list: async (botId) => {
-        const response = (await artifactCall("artifacts.list", { botId })) as {
+        const response = (await hostCall("artifacts.list", { botId })) as {
           artifacts: unknown[];
         };
         return response.artifacts.map((artifact) => {
@@ -128,11 +153,11 @@ export function createHostService(bridge: HostBridge): DesktopService {
         });
       },
       read: async (botId, relativePath) =>
-        (await artifactCall("artifacts.read", { botId, path: relativePath })) as Awaited<
+        (await hostCall("artifacts.read", { botId, path: relativePath })) as Awaited<
           ReturnType<DesktopService["artifacts"]["read"]>
         >,
       save: async (botId, relativePath, content, expectedChecksum) => {
-        const response = (await artifactCall("artifacts.save", {
+        const response = (await hostCall("artifacts.save", {
           botId,
           path: relativePath,
           content,
@@ -146,7 +171,7 @@ export function createHostService(bridge: HostBridge): DesktopService {
         return { artifact: artifact.value, version: version.value };
       },
       versions: async (botId, relativePath) => {
-        const response = (await artifactCall("artifacts.versions", {
+        const response = (await hostCall("artifacts.versions", {
           botId,
           path: relativePath,
         })) as { versions: unknown[] };
@@ -159,13 +184,13 @@ export function createHostService(bridge: HostBridge): DesktopService {
         });
       },
       versionContent: async (botId, relativePath, versionId) =>
-        (await artifactCall("artifacts.versionContent", {
+        (await hostCall("artifacts.versionContent", {
           botId,
           path: relativePath,
           versionId,
         })) as Awaited<ReturnType<DesktopService["artifacts"]["versionContent"]>>,
       revert: async (botId, relativePath, versionId) => {
-        const response = (await artifactCall("artifacts.revert", {
+        const response = (await hostCall("artifacts.revert", {
           botId,
           path: relativePath,
           versionId,
@@ -186,7 +211,7 @@ export function createHostService(bridge: HostBridge): DesktopService {
         const sha256 = [...new Uint8Array(digest)]
           .map((byte) => byte.toString(16).padStart(2, "0"))
           .join("");
-        const begun = (await artifactCall("attachment.begin", {
+        const begun = (await hostCall("attachment.begin", {
           botId,
           name,
           size: bytes.byteLength,
@@ -194,12 +219,12 @@ export function createHostService(bridge: HostBridge): DesktopService {
         })) as { uploadId: string };
         for (let offset = 0; offset < bytes.byteLength; offset += MAX_ATTACHMENT_CHUNK_BYTES) {
           const chunk = bytes.subarray(offset, Math.min(offset + MAX_ATTACHMENT_CHUNK_BYTES, bytes.byteLength));
-          await artifactCall("attachment.append", {
+          await hostCall("attachment.append", {
             uploadId: begun.uploadId,
             chunkBase64: bytesToBase64(chunk),
           });
         }
-        return (await artifactCall("attachment.commit", {
+        return (await hostCall("attachment.commit", {
           uploadId: begun.uploadId,
         })) as AttachmentUploadResult;
       },
@@ -260,9 +285,11 @@ export function createHostService(bridge: HostBridge): DesktopService {
       },
       stream: (botId, text, handlers, options) => {
         let cancelled = false;
-        /** Pending inter-chunk timer and the resolver it belongs to (see cancel). */
-        let pacingTimer: ReturnType<typeof setTimeout> | null = null;
-        let stopPacing: (() => void) | null = null;
+        /** What handlers.onDelta has already emitted (paced, in order). */
+        let shown = "";
+        /** In-flight paced beat between two chunks (cleared on cancel). */
+        let paceTimer: ReturnType<typeof setTimeout> | null = null;
+        let releasePace: (() => void) | null = null;
         const sessionId = `chat:${botId}`;
         const skills = options?.skills;
         const primitive = options?.primitive === true;
@@ -273,55 +300,93 @@ export function createHostService(bridge: HostBridge): DesktopService {
         if (primitive) {
           payload.primitive = true;
         }
-        const done = bridge.host
-          .call("chat.send", payload)
-          .then(async (response) => {
-            const reply = (response as { text: string }).text;
-            if (cancelled) {
-              return { cancelled: true, failure: null } satisfies StreamResult;
-            }
-            // The Host answers with the whole reply, so the bubble is a replay:
-            // slice it per line (long) or per sentence (short) and advance at an
-            // interval derived from the length. See features/chat/stream-pacer.ts.
-            const plan = planPacing(reply);
+        /**
+         * B6 incremental streaming. The Host pushes one notification per
+         * settled assistant segment (the pinned harness has no token-level
+         * deltas: a segment is a whole message). Each segment is smoothed
+         * through the existing pacing rules (features/chat/stream-pacer.ts)
+         * instead of being dumped at once, and emissions serialize so a tool
+         * turn's narration keeps its order.
+         */
+        let paced: Promise<void> = Promise.resolve();
+        const emitPaced = (piece: string): Promise<void> => {
+          const run = paced.then(async () => {
+            const plan = planPacing(piece);
             for (let index = 0; index < plan.chunks.length; index += 1) {
-              if (cancelled) {
-                return { cancelled: true, failure: null } satisfies StreamResult;
-              }
-              handlers.onDelta(plan.chunks[index] ?? "");
-              if (index === plan.chunks.length - 1) {
-                break;
-              }
+              if (cancelled) return;
+              const chunk = plan.chunks[index]!;
+              shown += chunk;
+              handlers.onDelta(chunk);
+              if (index === plan.chunks.length - 1) return;
               await new Promise<void>((resolve) => {
-                stopPacing = resolve;
-                pacingTimer = setTimeout(() => {
-                  pacingTimer = null;
-                  stopPacing = null;
+                releasePace = resolve;
+                paceTimer = setTimeout(() => {
+                  paceTimer = null;
+                  releasePace = null;
                   resolve();
                 }, plan.intervalMs);
               });
             }
-            return { cancelled, failure: null } satisfies StreamResult;
+          });
+          paced = run;
+          return run;
+        };
+        const unsubscribe =
+          bridge.host.onChatStream?.((notice) => {
+            if (cancelled || notice.botId !== botId) return;
+            void emitPaced(notice.text);
+          }) ?? null;
+        const done = bridge.host
+          .call("chat.send", payload)
+          .then(async (response) => {
+            // The turn settled: no later notification belongs to this stream.
+            unsubscribe?.();
+            const reply = (response as { text: string }).text;
+            if (cancelled) {
+              return { cancelled: true, failure: null, text: reply } satisfies StreamResult;
+            }
+            /**
+             * The reply is authoritative (chat.send's response). Wait for the
+             * live pacing to settle, then converge: what was shown stays when
+             * it is a prefix of the reply (single-segment turns — only the
+             * remainder is replayed; no live segments — the whole reply is
+             * paced here exactly like the old replay path). Interim narration
+             * of a tool turn is not part of the reply, so nothing more is
+             * emitted and the caller commits `text`, replacing the bubble.
+             */
+            await paced;
+            if (cancelled) {
+              return { cancelled: true, failure: null, text: reply } satisfies StreamResult;
+            }
+            if (reply.startsWith(shown) && reply.length > shown.length) {
+              await emitPaced(reply.slice(shown.length));
+            }
+            return { cancelled, failure: null, text: reply } satisfies StreamResult;
           })
-          .catch((error: unknown) => ({
-            cancelled,
-            failure: {
-              code: (error as { code?: ErrorCode }).code ?? "RUNTIME_UNAVAILABLE",
-              message: error instanceof Error ? error.message : String(error),
-              retryable: false,
-            },
-          }));
+          .catch((error: unknown) => {
+            unsubscribe?.();
+            return {
+              cancelled,
+              failure: {
+                code: (error as { code?: ErrorCode }).code ?? "RUNTIME_UNAVAILABLE",
+                message: error instanceof Error ? error.message : String(error),
+                retryable: false,
+              },
+            } satisfies StreamResult;
+          });
         return {
           cancel: () => {
             cancelled = true;
-            // Release a replay that is waiting between two chunks, otherwise the
-            // finish promise would never settle and the bubble would stay busy.
-            if (pacingTimer !== null) {
-              clearTimeout(pacingTimer);
-              pacingTimer = null;
+            // Release a paced beat that is waiting between two chunks, otherwise
+            // the finish promise would never settle and the bubble would stay
+            // busy.
+            if (paceTimer !== null) {
+              clearTimeout(paceTimer);
+              paceTimer = null;
             }
-            stopPacing?.();
-            stopPacing = null;
+            releasePace?.();
+            releasePace = null;
+            unsubscribe?.();
             void bridge.host.call("chat.cancel", { sessionId }).catch(() => undefined);
           },
           finish: () => done,
@@ -403,7 +468,7 @@ export function createHostService(bridge: HostBridge): DesktopService {
         >;
       },
       createBackup: async () => {
-        const response = (await artifactCall("data.backup", {})) as {
+        const response = (await hostCall("data.backup", {})) as {
           backupId: string;
           createdAt: string;
           sizeBytes: number;
@@ -411,14 +476,14 @@ export function createHostService(bridge: HostBridge): DesktopService {
         return response;
       },
       restore: async (backupId) => {
-        const response = (await artifactCall("data.restore", { backupId })) as {
+        const response = (await hostCall("data.restore", { backupId })) as {
           restored: true;
           hostRestarted?: boolean;
         };
         return { restored: true, hostRestarted: response.hostRestarted === true };
       },
       describe: async () => {
-        const response = (await artifactCall("data.describe", {})) as {
+        const response = (await hostCall("data.describe", {})) as {
           schemaVersion: string;
           counts: Record<string, number>;
         };

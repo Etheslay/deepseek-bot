@@ -232,6 +232,37 @@ async function handleLine(line) {
         emitTurnCompletion(messageId, "fake final response");
         return;
       }
+      if (scenario === "narrated-tool") {
+        // B6 streaming: the model settles one assistant message before the
+        // tool call and one after, so a turn carries two live segments. The
+        // second one is the final response the turn returns.
+        sessionEvent({ type: "agent/inbox/spliced", data: { inserted: [{ id: messageId }] } });
+        sessionEvent({ type: "turn/start", data: { turn: 1 } });
+        sessionEvent({
+          type: "assistant/message",
+          data: { message: { role: "assistant", content: [{ type: "text", text: "先看看工作区。" }] } },
+        });
+        sessionEvent({
+          type: "tool/call",
+          data: { callId: "call-1", name: "write", arguments: { path: "hello.txt" } },
+        });
+        sessionEvent({
+          type: "tool/result",
+          data: {
+            callId: "call-1",
+            isError: false,
+            meta: { operation: "write", path: "hello.txt" },
+          },
+        });
+        sessionEvent({
+          type: "assistant/message",
+          data: { message: { role: "assistant", content: [{ type: "text", text: "fake final response" }] } },
+        });
+        sessionEvent({ type: "turn/end", data: { reason: { kind: "completed" } } });
+        status("running");
+        status("idle");
+        return;
+      }
       const text =
         scenario === "echo-model"
           ? `model=${initializeParams.model} provider=${initializeParams.provider} cwd=${initializeParams.cwd}\n${lastPrompt}`

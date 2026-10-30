@@ -8,7 +8,9 @@
  */
 import { z } from "zod";
 import {
+  APPROVAL_STATUSES,
   ApprovalSchema,
+  ArtifactSchema,
   ArtifactVersionSchema,
   AvatarSchema,
   BotArtifactSchema,
@@ -57,6 +59,7 @@ import { DEVICE_METHODS } from "./device.js";
 import { VOICE_METHODS } from "./voice.js";
 import { USAGE_METHODS } from "./usage.js";
 import { SKILL_LIBRARY_METHODS } from "./skills.js";
+import { UI_STATE_METHODS } from "./ui-state.js";
 
 export const MAX_MESSAGE_BYTES = 1_048_576;
 
@@ -127,6 +130,7 @@ export const METHODS = [
   "group.list",
   "creation.revoke",
   "workflow.list",
+  "workflow.get",
   "workflow.validate",
   "workflow.save",
   "workflow.export",
@@ -134,10 +138,12 @@ export const METHODS = [
   "run.start",
   "run.get",
   "run.list",
+  "run.snapshot",
   "run.cancel",
   "run.retryNode",
   "run.resume",
   "events.subscribe",
+  "approval.list",
   "approval.decide",
   "chat.send",
   "chat.attach",
@@ -211,6 +217,8 @@ export const METHODS = [
   "settings.update",
   "skillLibrary.get",
   "skillLibrary.save",
+  "ui.state.get",
+  "ui.state.set",
   "data.backup",
   "data.restore",
   "data.describe",
@@ -458,8 +466,8 @@ export const METHOD_CONTRACTS = {
   },
   /**
    * Workflow summaries for pickers (D20 automation panel). Metadata only —
-   * full documents stay behind workflow.get-style editor flows; summaries
-   * keep any library size under the 1 MiB message cap.
+   * full documents stay behind workflow.get; summaries keep any library size
+   * under the 1 MiB message cap.
    */
   "workflow.list": {
     request: z.object({}).strict(),
@@ -472,6 +480,16 @@ export const METHOD_CONTRACTS = {
         }),
       ),
     }),
+  },
+  /**
+   * v0.12 read surface: the editor needs the full document (nodes, edges,
+   * settings) to open a saved workflow. workflow.list only carries summaries,
+   * and workflow.export requires the caller to already know the revision, so
+   * neither could back a "open workflow by id" flow.
+   */
+  "workflow.get": {
+    request: z.object({ id: UuidSchema }).strict(),
+    response: WorkflowSchema,
   },
   "workflow.validate": {
     request: z.object({ workflow: WorkflowDraftSchema }),
@@ -530,6 +548,21 @@ export const METHOD_CONTRACTS = {
       nextCursor: z.string().nullable(),
     }),
   },
+  /**
+   * v0.12 read surface: the run monitor needs one consistent frame for a run
+   * (run row, node attempts, pending approvals and artifacts). RunSchema alone
+   * has no node runs, and the renderer cannot join them itself because each
+   * list call is a separate round trip that may observe a different state.
+   */
+  "run.snapshot": {
+    request: RunIdRefSchema,
+    response: z.object({
+      run: RunSchema,
+      nodeRuns: z.array(NodeRunSchema),
+      approvals: z.array(ApprovalSchema),
+      artifacts: z.array(ArtifactSchema),
+    }),
+  },
   "run.cancel": {
     request: RunIdRefSchema,
     response: RunSchema,
@@ -574,6 +607,22 @@ export const METHOD_CONTRACTS = {
       taskEvents: z.array(TaskEventEnvelopeSchema).optional(),
       snapshotRequired: z.boolean(),
     }),
+  },
+  /**
+   * v0.12 read surface: the run monitor renders one inbox across runs, so the
+   * filter must not be bound to a single run. permission.approval.list is the
+   * separate capability domain (grants, not run actions) and its schema does
+   * not fit this view.
+   */
+  "approval.list": {
+    request: z
+      .object({
+        runId: UuidSchema.optional(),
+        status: z.enum(APPROVAL_STATUSES).optional(),
+        limit: z.int().min(1).max(100).default(50),
+      })
+      .strict(),
+    response: z.object({ approvals: z.array(ApprovalSchema) }),
   },
   "approval.decide": {
     request: z.object({
@@ -669,8 +718,9 @@ export const METHOD_CONTRACTS = {
           sessionId: z.string().min(1).max(128),
           role: z.enum(["user", "assistant"]),
           text: z.string(),
-          // v0.5: dispatch markers and task delivery notices (optional so
-          // pre-0.5 rows and callers keep parsing unchanged).
+          // Optional row marker. v0.5 dispatch / task_notice / automation, plus
+          // the answered choice card (kind "choice"). Absent on plain rows,
+          // so older callers keep parsing.
           meta: ChatMessageMetaSchema.optional(),
           at: IsoDateTimeUtcSchema,
         }),
@@ -1616,6 +1666,7 @@ export const METHOD_CONTRACTS = {
   ...VOICE_METHODS,
   ...USAGE_METHODS,
   ...SKILL_LIBRARY_METHODS,
+  ...UI_STATE_METHODS,
 } as const satisfies Record<
   Method,
   { request: z.ZodType; response: z.ZodType }

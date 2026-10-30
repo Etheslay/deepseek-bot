@@ -218,6 +218,12 @@ describe("createHost", () => {
     };
     expect(finished.status).toBe("succeeded");
     expect(finished.finishedAt).not.toBeNull();
+    const usage = host.db.raw.prepare("SELECT bot_id, model, session_id, input_tokens, output_tokens, source FROM usage_events WHERE bot_id = ?").all(bot.id) as Array<{ bot_id: string; model: string | null; session_id: string; input_tokens: number; output_tokens: number; source: string }>;
+    expect(usage).toHaveLength(1);
+    expect(usage[0]).toMatchObject({ bot_id: bot.id, model: null, source: "estimated" });
+    expect(usage[0]?.session_id).toBeTruthy();
+    expect(usage[0]?.input_tokens).toBeGreaterThan(0);
+    expect(usage[0]?.output_tokens).toBeGreaterThan(0);
 
     const events = (await host.handleMethod("events.subscribe", {
       runId: run.id,
@@ -233,6 +239,40 @@ describe("createHost", () => {
       runs: Array<{ id: string }>;
     };
     expect(listed.runs.map((entry) => entry.id)).toContain(run.id);
+
+    // v0.12 read surface: the editor opens a saved document by id (workflow.list
+    // only carries summaries) and the run monitor renders one frame instead of
+    // joining the fixture service's separate lists.
+    const fetched = (await host.handleMethod("workflow.get", { id: workflow.id })) as {
+      id: string;
+      revision: string;
+      nodes: Array<{ id: string }>;
+    };
+    expect(fetched.id).toBe(workflow.id);
+    expect(fetched.revision).toBe(workflow.revision);
+    expect(fetched.nodes.map((node) => node.id)).toEqual(["n1"]);
+
+    const snapshot = (await host.handleMethod("run.snapshot", { runId: run.id })) as {
+      run: { id: string; status: string };
+      nodeRuns: Array<{ nodeId: string; status: string }>;
+      approvals: unknown[];
+      artifacts: unknown[];
+    };
+    expect(snapshot.run).toMatchObject({ id: run.id, status: "succeeded" });
+    expect(snapshot.nodeRuns.map((node) => node.nodeId)).toEqual(["n1"]);
+    expect(snapshot.nodeRuns[0]?.status).toBe("succeeded");
+    expect(snapshot.approvals).toEqual([]);
+    expect(snapshot.artifacts).toEqual([]);
+
+    const approvalInbox = (await host.handleMethod("approval.list", {
+      runId: run.id,
+      status: "pending",
+    })) as { approvals: unknown[] };
+    expect(approvalInbox.approvals).toEqual([]);
+
+    await expect(host.handleMethod("workflow.get", { id: randomUUID() })).rejects.toMatchObject({
+      code: "INVALID_INPUT",
+    });
   }, 60_000);
 
   it("deduplicates bot.create by envelope requestId", async () => {

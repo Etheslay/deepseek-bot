@@ -830,6 +830,24 @@ CREATE TABLE chat_summaries (
 );
 `,
   },
+  {
+    // B5 automation dedupe: one pre-execution claim per (rule, event). The
+    // claim is the processed-key ledger for trigger evaluation — a replay or
+    // cursor rewind within the window is dropped as a duplicate instead of
+    // reaching the engine again. Rows are pruned once the window passes; the
+    // per-rule cursor normally makes old events unreachable anyway.
+    id: 24,
+    name: "0024-event-rule-keys",
+    sql: /* sql */ `
+CREATE TABLE event_rule_keys (
+  rule_id TEXT NOT NULL REFERENCES event_rules(id) ON DELETE CASCADE,
+  event_id TEXT NOT NULL,
+  claimed_at TEXT NOT NULL,
+  PRIMARY KEY (rule_id, event_id)
+);
+CREATE INDEX event_rule_keys_claimed ON event_rule_keys(claimed_at);
+`,
+  },
 
 ];
 

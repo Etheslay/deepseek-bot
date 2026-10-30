@@ -15,9 +15,11 @@ import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { createInterface } from "node:readline";
 import {
+  ChatStreamNoticeSchema,
   METHODS,
   RequestEnvelopeSchema,
   isWithinMessageSizeLimit,
+  type ChatStreamNotice,
   type Method,
 } from "@deepseek-bot/contracts";
 
@@ -43,6 +45,14 @@ export interface ScheduleMissedNotice {
   readonly reason: string;
 }
 
+/**
+ * B6: one live assistant segment of a running chat turn, pushed by the Host
+ * over the `chat.stream` notification (the wire twin of schedule.missed).
+ * The shape (`ChatStreamNotice`) comes from the contracts package and the
+ * consumer validates it with `ChatStreamNoticeSchema` — malformed pushes are
+ * ignored, exactly like the previous hand-rolled field checks.
+ */
+
 /** Error surfaced to the renderer for a failed host call (CONTRACTS §6 shape). */
 export class HostCallError extends Error {
   readonly code: string;
@@ -61,6 +71,7 @@ export class HostCallError extends Error {
 export interface HostProcessClient {
   call(method: Method, payload: unknown): Promise<unknown>;
   onMissed(listener: (notices: ReadonlyArray<ScheduleMissedNotice>) => void): () => void;
+  onChatStream(listener: (notice: ChatStreamNotice) => void): () => void;
   onStatus(listener: (status: HostProcessStatus) => void): () => void;
   /** Current process status (ready until the child exits). */
   readonly status: HostProcessStatus;
@@ -88,6 +99,7 @@ export function spawnHostProcess(options: HostProcessClientOptions): HostProcess
   let status: HostProcessStatus = "starting";
   const statusListeners = new Set<(status: HostProcessStatus) => void>();
   const missedListeners = new Set<(notices: ReadonlyArray<ScheduleMissedNotice>) => void>();
+  const chatStreamListeners = new Set<(notice: ChatStreamNotice) => void>();
   const pending = new Map<
     string,
     { resolve: (result: unknown) => void; reject: (error: Error) => void }
@@ -187,6 +199,15 @@ export function spawnHostProcess(options: HostProcessClientOptions): HostProcess
       }
       return;
     }
+    if (method === "chat.stream") {
+      // Malformed pushes are ignored — the same behavior the hand-rolled
+      // field checks had, now validated by the pinned contracts schema.
+      const parsed = ChatStreamNoticeSchema.safeParse(record.params ?? {});
+      if (parsed.success) {
+        for (const listener of chatStreamListeners) listener(parsed.data);
+      }
+      return;
+    }
     if (typeof id === "string" && pending.has(id)) {
       const waiter = pending.get(id)!;
       pending.delete(id);
@@ -246,6 +267,10 @@ export function spawnHostProcess(options: HostProcessClientOptions): HostProcess
     onMissed(listener): () => void {
       missedListeners.add(listener);
       return () => missedListeners.delete(listener);
+    },
+    onChatStream(listener): () => void {
+      chatStreamListeners.add(listener);
+      return () => chatStreamListeners.delete(listener);
     },
     onStatus(listener): () => void {
       statusListeners.add(listener);

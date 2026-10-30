@@ -1,5 +1,47 @@
 # 工作记录
 
+## 2026-10-30：chat.stream 契约补记 + #150/#151 报告补录与编号勘误（两分支）
+
+- 基线：`origin/develop` = `8b9e5bf`（PR #178 合入后）。用户指示：推进工作后推送远程并开 PR，由负责人手动合并。
+- `feature/chat-stream-notice-contract`（`82107d9`）：收口 GAP_AUDIT §7.10 登记的契约漂移——`ChatStreamNoticeSchema` 钉进 contracts（events.ts 瞬态流节 + `TEXT_LIMITS.streamSegment`），host 发送端与桌面消费端改为从 contracts 取类型（单一类型源），桌面手写 typeof 三连检换成 `safeParse`（畸形通知整条忽略，行为不变）；CONTRACTS.md §4 新增「服务端→桌面 stdio 通知」段（`schedule.missed` + `chat.stream`）；不升 protocolVersion。测试：contracts 158 通过（新增 1 例）、desktop 78 文件全过（host-client 假 fixture 改用线内真实 UUID botId 并压入畸形通知断言跳过）、lint/typecheck/desktop build 全绿；host 全量首跑 2 失败为既有抖动家族（隔离复跑 18/18+1/1，develop 基线复跑同样 2 失败）。报告 `docs/reports/B6-chat-stream-contract-report.md`。
+- `feature/backfill-reports-150-151`：补录 #150/#151 两份报告（D27 语音接线、stream-pacer，均标注事后整理、复跑切片自带测试 22+10 例全绿），并**勘误台账互换的 PR 编号**——合并提交为准：#151=`feature/streaming-reply`（stream-pacer）、#150=`feature/voice-ui-wiring`（D27' 语音接线）；修正 GAP_AUDIT（第四次刷新行、§0 表、§1.1、§5、§7.9）与 SPRINTS（§4 两行、§7 审计行、§10）共 9 处。
+- 仍开放：桌面 UI 端到端人工验收（12 步清单，D23 前置）、拍板 #1（ui.* 清单 → RENDERER_HOST_MAPPING §4）、语音实机联调、D13/D23 收官；`tmp-inspect.txt`（工作区根目录未跟踪残件）待负责人处置。
+
+## 2026-10-30：波1–波2 三片落地 + 接线后台账刷新（文档）
+
+- 基线：`origin/develop` = `ad617a0`（PR #173–#177 合入后）。本会话依次交付并合入：#173 第七次刷新（GAP_AUDIT §7.10 + SPRINTS 账目）、#174 工作流回合 token 入 `usage_events`（`model=null`/`source=estimated`，用量解析迁入 `@deepseek-bot/harness-adapter`）、#175 `ui.*` 界面态契约候选（`UiStateSchema`，仅类型与校验）、#176 工作流读面 v0.12（`workflow.get`/`run.snapshot`/`approval.list`）、#177 桌面 `workflows`/`runs` 切真实 Host（导入保持惰性、`playback` 显隐夹具控件、审批 status 回退文案）。
+- 本 PR 为接线后台账刷新：GAP_AUDIT 头部加「接线后勘误」行、§0 新增 10-30 接线勘误总览、§7.10 补「接线结果/仍存差异/未完成那一步」、§8 第五批更新进度、§2 G1' 记 #175 契约候选；SPRINTS §4 补 #173–#177 五行、§10 加 10-30 接线后清点；顺带删掉 §0 中重复的一段「双语系统核实」。
+- 未推送、未自审；提交前跑 `git diff --check` 与相对链接检查，结果见 PR。
+
+## 2026-10-30：GAP_AUDIT 第七次刷新 + 工作流主路径勘误（文档）
+
+- 基线 `origin/develop` = `5248ab6`（PR #161–#172），而本地主工作区停在 `55e8d59`（第六次刷新）；本次在 `~/.codex/worktrees/workflow-contract-audit` 的分支 `feature/workflow-contract-audit` 上刷新。
+- GAP_AUDIT：新增第七次刷新行与 §0「10-30 七次刷新总览」（#161–#172 逐条）；新增 **§7.10 工作流主路径接线核对**——桌面 `createHostService` 先展开 `createFixtureService()` 且未覆盖 `workflows`/`runs`，编辑器保存只进内存、运行监控列表/快照/审批/恢复是夹具；Host 已有 `workflow.*` / `run.*` 方法清单与契约缺项；#172 新增的 `chat.stream` 服务端推送未入契约文档。据此勘误 §1.1 的 G14 与 G11' 完成口径；§7.9 第 10 条记 #163/#164/#166/#168–#172 无入库报告；§8 增加第五批收口排期（主路径→G1' ui.*→D13/D23/发布）；顺带修掉 §0 末尾一处悬空「双语系统核实」标签。
+- SPRINTS：§4 补 #161–#172 共 12 行，d14 P3 与 cm P2 两行改为已合入（#167/#165）；§10 新增 10-30 七次清点（远程零在途、三个本地在途分支、新欠账）。
+- 未推送、未自审；`git diff --check` 与相对链接检查在提交前执行，结果见 PR。
+
+## 2026-10-29：审查发现项处置两片 + 台账六次刷新（本地未推送）
+
+- 用户（Etheslay）要求重新定位进度并继续推进；origin/develop = `9d3ac5b`（PR #160），远程在途清零。盘点结论：G4 付费链验收（#159）与 D21' 真机指针/按键（#160）已由其它模型入档；Etheslay 线剩余为两项审查发现、#150/#151 报告补录决定、G1' ui.*（等拍板 #1）、语音实机联调、D13/D23 收官、大量自审签署。
+- `feature/d14-mermaid-theme-reinit`（`9058196`）：修 PREMERGE-REVIEW §2.2 P3——`mermaid.initialize` 原来只在懒加载执行一次，主题切换后新图沿用旧主题（缓存键却标新主题）。修复：新增 `initializedTheme` 跟踪，渲染取模块时主题不一致则重跑 initialize（strict 等配置不变）；切回曾用主题命中该主题缓存不触碰全局配置。新增测试钉住含缓存语义；desktop 74 文件 655 例、lint、typecheck、`git diff --check` 全绿；报告 `docs/reports/D14-mermaid-theme-report.md`。
+- `feature/context-meter-concurrency-docs`（`d9b89cd`）：处置 PREMERGE-REVIEW §2.1 P2，选「改文档」——核实 `compressTurn` 不读不设每 bot 忙锁（busy 仅约束 send，重入由 `compressingChats` 防护），任务书 §5 与报告 §4 的「忙锁下排队」断言改为如实记录真并发与限流/用量行交错/`chat.contextUsage` 最近行抖动风险；不改锁：静默后台维护回合不应把 RATE_LIMITED 递给用户，且审查已确认数据完整性不受影响（upsert 覆盖、水位快照）。
+- `feature/gap-audit-refresh6`：GAP_AUDIT 六次刷新（§0 六次总览、G4 归档+残留、缺口地图、§5 D21、§7.9 处置、§8 批次、红线行）；SPRINTS §4 修正两行过期「切片进行中」、补 D21 真机记录与两个本地切片行、§5 A6 更新、§10 六次清点；progress 本条。`git diff --check` 通过。
+- 两分支按用户指示**未推送**，PR 标题/内容已备；#150/#151 报告补录与拍板 #1（ui.* 清单）待用户定。
+
+## 2026-10-29：在途清零收官（纯文档）
+
+- #152（D17' 技能库进 Host，协议 0.11）、#153（D14 mermaid 补齐）、#154（四次刷新）均合入，develop = `d1cb448`；远程在途分支清零。
+- CONTRACTS.md 标题对齐 0.11（#147 预告的漂移如期出现，随本片修正）；THIRD_PARTY_NOTICES 补 mermaid@12.2.0 行（#148 承诺的合入后补表）。
+- GAP_AUDIT 五次刷新（轻量）：§0 总览、§1.1 两附行、§7.3/§7.9 扩展——d14 §2.2 P3 与 d17 §2.3 备忘均未处理随合并入库，与 #138 的 P2 一并待归属人定处理方式；两份新报告自审栏留空如实登记。
+- SPRINTS：§4 补两行、§10 台账收官（在途清零 + 发现项收尾状态）；`git diff --check` 与链接检查通过。
+
+## 2026-10-29：GAP_AUDIT 四次刷新 + 三切片合入收尾（纯文档）
+
+- 一次合入三片：#138 context-meter（G13 超额：计量+自动压缩，迁移 0023）、#150 stream-pacer（流式回放节奏）、#151 语音接线（D27'）；另 #149（BOT_WORKSPACE 口径）也已合入，develop = `db64e01`。
+- GAP_AUDIT 四次刷新：归档 G13、D27'（均含未验证边界与偏差如实登记）；§7 新增第 9 条治理债——#150/#151 无入库报告（PR 正文为准），且 **#138 的审查 P2 未处理即合入**（并发断言失实已进入 develop，处理方式待归属人）。
+- SPRINTS：§4 补三行（含两笔流程债注记）、§7 麦克风行改已完成（「按住说话/自动断句」未做如实注）、§10 台账六更（仅剩 d14/d17 两条在途）。
+- 纯 Markdown；`git diff --check` 与链接检查通过。
+
 ## 2026-10-29：BOT_WORKSPACE.md 陈旧口径修正（纯文档）
 
 - 该文档为 D05 交付文档但被 D26/D28 持续追加，新旧口径混杂。修正四处：①引言加时点注（夹具驱动为 D05 时口径，现聊天/历史走 host-service，夹具仅存离线演示模式）；②服务清单对齐现状（6 文件，host-service 为真实通道、新增 stored-session）；③测试用例计数改指向 TESTING.md（原文 22+5+7 例早已过期）；④「契约边界速查」表标记为 D05 历史口径不再维护，列出已推翻其「不能声称」列的交付（D30/#97/#103、D24/#78/#119、v0.2 分组），当前能力以 GAP_AUDIT 与 SPRINTS §4 为准。

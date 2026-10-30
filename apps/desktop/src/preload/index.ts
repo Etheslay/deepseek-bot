@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
 import {
+  HOST_EVENT_CHAT_STREAM,
   HOST_EVENT_MISSED,
   IPC_CHANNELS,
   SYSTEM_EVENT_NOTIFICATION_CLICK,
@@ -10,6 +11,10 @@ import {
   type WindowFocusEvent,
 } from "../shared/ipc-channels.js";
 import type { LanguagePreference } from "../shared/i18n/types.js";
+import type {
+  VoicePickKind,
+  VoicePickResult,
+} from "../shared/voice-pick.js";
 import type {
   ChromeClearResult,
   ChromeExportResult,
@@ -27,6 +32,18 @@ export type HostMissedNotice = {
   workflowId: string;
   occurrenceUtc: string;
   reason: string;
+};
+
+/**
+ * B6: one live assistant segment of a running chat turn (the `chat.stream`
+ * host notification, forwarded over HOST_EVENT_CHAT_STREAM). The pinned
+ * harness settles a whole assistant message per model attempt, so a segment
+ * is a full message text, not a token delta.
+ */
+export type HostChatStreamNotice = {
+  botId: string;
+  sessionId: string;
+  text: string;
 };
 
 export type HostCallErrorShape = {
@@ -73,6 +90,13 @@ export type DesktopBridge = {
   knowledge: {
     importFile: () => Promise<import("../shared/knowledge-import.js").KnowledgeImportResult>;
   };
+  /**
+   * D27 voice settings: local file dialogs for the whisper paths. The only
+   * argument is which kind of file; the picked path comes back, never in.
+   */
+  voice: {
+    pickFile: (kind: VoicePickKind) => Promise<VoicePickResult>;
+  };
   /** D24 leftover: backup summaries and the hardware-acceleration shell pref. */
   backups: {
     list: () => Promise<import("../shared/ipc-channels.js").BackupSummary[]>;
@@ -86,6 +110,8 @@ export type DesktopBridge = {
     call: (method: string, payload: unknown) => Promise<unknown>;
     /** Scheduler skip-and-notify notices (FR-08); returns an unsubscribe. */
     onMissed: (listener: (notices: HostMissedNotice[]) => void) => () => void;
+    /** B6: live assistant segments of a running chat turn; returns an unsubscribe. */
+    onChatStream: (listener: (notice: HostChatStreamNotice) => void) => () => void;
   };
   /** D22: mirror the UI language into main so tray/notification strings match. */
   i18n: {
@@ -139,6 +165,9 @@ const api: DesktopBridge = {
   knowledge: {
     importFile: () => ipcRenderer.invoke(IPC_CHANNELS.KNOWLEDGE_IMPORT),
   },
+  voice: {
+    pickFile: (kind) => ipcRenderer.invoke(IPC_CHANNELS.VOICE_PICK_FILE, kind),
+  },
   backups: {
     list: () => ipcRenderer.invoke(IPC_CHANNELS.BACKUPS_LIST),
   },
@@ -147,12 +176,37 @@ const api: DesktopBridge = {
       ipcRenderer.invoke(IPC_CHANNELS.APP_HARDWARE_ACCELERATION, enabled),
   },
   host: {
-    call: (method, payload) => ipcRenderer.invoke(IPC_CHANNELS.HOST_CALL, method, payload),
+    /**
+     * Humanized errors: the channel resolves an envelope ({ok, result|error})
+     * instead of throwing, so failures keep the Host's own message and stable
+     * code without Electron's "Error invoking remote method …" wrapping.
+     */
+    call: async (method, payload) => {
+      const outcome = (await ipcRenderer.invoke(IPC_CHANNELS.HOST_CALL, method, payload)) as
+        | { ok: true; result: unknown }
+        | {
+            ok: false;
+            error: { code: string; message: string; retryable: boolean };
+          };
+      if (outcome.ok) {
+        return outcome.result;
+      }
+      throw Object.assign(new Error(outcome.error.message), {
+        code: outcome.error.code,
+        retryable: outcome.error.retryable,
+      });
+    },
     onMissed: (listener) => {
       const handler = (_event: IpcRendererEvent, notices: HostMissedNotice[]): void =>
         listener(notices);
       ipcRenderer.on(HOST_EVENT_MISSED, handler);
       return () => ipcRenderer.removeListener(HOST_EVENT_MISSED, handler);
+    },
+    onChatStream: (listener) => {
+      const handler = (_event: IpcRendererEvent, notice: HostChatStreamNotice): void =>
+        listener(notice);
+      ipcRenderer.on(HOST_EVENT_CHAT_STREAM, handler);
+      return () => ipcRenderer.removeListener(HOST_EVENT_CHAT_STREAM, handler);
     },
   },
   i18n: {

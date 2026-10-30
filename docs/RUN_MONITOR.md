@@ -1,6 +1,6 @@
 # 运行监控与审批（D09）
 
-`features/run-monitor/` 交付 FR-06（审批前端）与 FR-07（运行历史前端）：运行列表/详情、契约状态机驱动的节点状态与时间线、事件流消费（去重/补齐/快照重建）、取消、审批卡片与运行历史。**全部数据来自契约夹具剧本（夹具回放）**：不执行工作流（D06）、不做后端审批拦截（D08）、不落库（D04）、不调度（D10）。
+`features/run-monitor/` 交付 FR-06（审批前端）与 FR-07（运行历史前端）：运行列表/详情、契约状态机驱动的节点状态与时间线、事件流消费（去重/补齐/快照重建）、取消、审批卡片与运行历史。原始实现**全部数据来自契约夹具剧本（夹具回放）**：不执行工作流（D06）、不做后端审批拦截（D08）、不落库（D04）、不调度（D10）。2026-10-30 起，桌面 `host-service` 的 `runs` 已切到真实 Host（`run.*` / `events.subscribe` / `approval.*`，见 [RENDERER_HOST_MAPPING](RENDERER_HOST_MAPPING.md) §6 与 [WORKFLOW-HOST-WIRING 报告](reports/WORKFLOW-HOST-WIRING-report.md)）；夹具回放保留用于离线开发，仅 `playback === "fixture"` 时显示回放徽章与推进控制。
 
 ## 目录
 
@@ -16,7 +16,7 @@ features/run-monitor/
   history/run-history.tsx  历史标签：版本快照、产物、sessionId、中断/恢复关联
 ```
 
-服务层沿用 D05/D07 注入模式：`DesktopService.runs`，UI 只依赖 `RunServiceApi` 接口；夹具实现可被未来 IPC/Host 实现替换。
+服务层沿用 D05/D07 注入模式：`DesktopService.runs`，UI 只依赖 `RunServiceApi` 接口；`RunServiceApi.playback` 标明来源（`"fixture"` 剧本回放 / `"host"` 真实引擎），UI 据此决定是否渲染回放控制。夹具实现保留，host 实现见 `services/host-run-service.ts`。
 
 ## 场景剧本（夹具回放）
 

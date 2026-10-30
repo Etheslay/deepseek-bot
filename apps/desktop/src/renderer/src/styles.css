@@ -1411,10 +1411,12 @@ body {
   color: var(--muted);
   display: grid;
   place-items: center;
-  /* D27 desktop slice: the mic is a real button now (was a placeholder span). */
+  /* D27: hold to record. touch-action keeps the pointer from scrolling away. */
   border: none;
   padding: 0;
   cursor: pointer;
+  touch-action: none;
+  user-select: none;
   transition: background 120ms ease, color 120ms ease;
 }
 
@@ -1868,17 +1870,41 @@ body {
   color: var(--bots);
 }
 
+/* ---------- 人性化失败卡（humanized errors） ----------
+   一张安静的单列卡：小错误码 chip + 一句人说的话，不再三列红字挤在一起。 */
 .chat-failure {
   align-self: center;
   display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 0.85rem;
-  color: #f87171;
+  flex-direction: column;
+  gap: 6px;
+  max-width: min(560px, 86%);
+  padding: 10px 14px;
+  border: 1px solid color-mix(in srgb, #f87171 35%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, #f87171 8%, transparent);
 }
 
-.failure-code {
+.failure-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.failure-chip {
+  font-size: 0.66rem;
   font-weight: 600;
+  letter-spacing: 0.04em;
+  color: #f87171;
+  border: 1px solid color-mix(in srgb, #f87171 40%, transparent);
+  border-radius: 6px;
+  padding: 1px 7px;
+}
+
+.failure-text {
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--text);
 }
 
 .session-history {
@@ -3417,6 +3443,13 @@ select option {
   color: var(--muted);
   font-size: 0.8rem;
   user-select: none;
+}
+
+/* G1': a replayed row is a record, so its time separator stays quieter than a new turn. */
+.chat-time.replay {
+  margin-top: 6px;
+  opacity: 0.55;
+  font-size: 0.72rem;
 }
 
 /* Delete Bot confirmation. */
@@ -6084,9 +6117,33 @@ select option {
   animation: grokFadeUp 0.18s ease-out both;
 }
 
+/* chat.history replay is a record. grokFadeUp fills every row back to
+   opacity 1, so a replay row keeps its own fill and stays quieter than
+   a live turn. Reduced motion drops the animation and keeps that opacity. */
+@keyframes grokFadeUpReplay {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 0.7;
+    transform: none;
+  }
+}
+
+.msg-row.replay {
+  opacity: 0.7;
+  animation-name: grokFadeUpReplay;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .msg-row {
     animation: none;
+  }
+
+  .msg-row.replay {
+    animation: none;
+    opacity: 0.7;
   }
 }
 
@@ -6698,6 +6755,15 @@ select option {
   color: var(--muted);
 }
 
+/* A4: image chips carry an explicit "the model cannot read this" tag. */
+.attach-chip-flag {
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0 6px;
+  font-size: 0.7rem;
+}
+
 .attach-chip-remove {
   border: none;
   background: transparent;
@@ -6762,6 +6828,14 @@ button.msg-attachment-file {
 
 .msg-attachment-size {
   color: var(--muted);
+}
+
+/* A4: one muted line on bubbles that carried images — the file reached the
+   workspace but not the model. */
+.msg-attachments-hint {
+  flex-basis: 100%;
+  color: var(--muted);
+  font-size: 0.72rem;
 }
 
 /* ============================================================
@@ -8216,6 +8290,18 @@ select:focus-visible {
 }
 
 .connector-fields .pill-btn {
+  flex: 0 0 auto;
+}
+
+/* Voice settings rows: local whisper paths are long, so the input flexes like
+   the connector fields instead of the fixed 180px key width. */
+.voice-fields .key-input {
+  width: auto;
+  flex: 1 1 10rem;
+  min-width: 0;
+}
+
+.voice-fields .pill-btn {
   flex: 0 0 auto;
 }
 

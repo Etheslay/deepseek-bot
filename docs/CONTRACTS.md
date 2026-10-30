@@ -1,4 +1,4 @@
-# 接口与数据契约 v0.10
+# 接口与数据契约 v0.13
 
 本文件定义本项目前后端契约，不是 DeepSeek Harness 官方 API。状态：v0.1 已冻结（2026-10-23，D00 验收记录见 D00 Issue）；v0.2 为 D15 写层扩展；v0.3（2026-10-26，D16 后端）新增人类权限控制方法；v0.4（2026-10-26，D28 共编侧车）新增 `artifacts.*` 方法组；v0.5（2026-10-26，manager-orchestration，TASK_MANAGER_ORCHESTRATION.md）新增 bot 协调者角色、`task.*` 方法组、`task.status` 任务事件与能力 `app.dispatch_task`，`protocolVersion` 升至 0.5，继续接受 0.1–0.4 发送方。工作流文档 `schemaVersion` 保持 0.1（存量数据可读）。后续变更按 §7 提升版本并由变更负责人自审同步使用方。可执行实现位于 `packages/contracts/`：schema、§7 夹具与双方共用契约测试见 [packages/contracts/README.md](../packages/contracts/README.md)。所有字段均需后端校验，TypeScript 类型不能替代运行时校验。
 
@@ -8,7 +8,7 @@ v0.6（D21 指定窗口截图与本地 OCR 契约片）新增 `screen.*` 受信�
 
 D26 附件理解闭环在当前协议上追加仅受信桌面的 `attachment.begin` / `attachment.append` / `attachment.commit`，不另升 `protocolVersion`；模型侧新增工具 `read_workspace_file`（能力映射 `fs.read`，走 D16 网关检查点）。网关导入仍走 `chat.attach` 与模型工具 `read`。
 
-v0.9（D27 本地语音后端切片）新增 `voice.status` / `voice.transcribe` / `voice.speak` 三个受信桌面方法：whisper.cpp 本地转写与 Windows SAPI 本地播报，全本地、无网络、不产生模型工具。语音录制（按住说话/自动断句）与播放接线归桌面后续联调。
+v0.9（D27 本地语音后端切片）新增 `voice.status` / `voice.transcribe` / `voice.speak` 三个受信桌面方法：whisper.cpp 本地转写与 Windows SAPI 本地播报，全本地、无网络、不产生模型工具。桌面按住说话把一段剪辑交给 `voice.transcribe` 并填入输入框（不自动发送）；逐条播放已接线。自动断句仍未做。
 
 v0.10 新增 `usage.summary`：把每个聊天回合的 token 用量聚合成「用量与账单」页需要的总量、按模型表、按本地日趋势与按 bot 分布。行由 Host 在回合结束时写入 `usage_events`（迁移 0021），渲染层只读。Harness 没上报用量时按字符数估算并标记 `estimated`，页面必须区分展示。当前 `protocolVersion` 为 0.10，继续接受 0.1–0.9 发送方；工作流 `schemaVersion` 仍为 0.1。
 
@@ -17,6 +17,10 @@ v0.10 新增 `usage.summary`：把每个聊天回合的 token 用量聚合成「
 上下文圆圈（TASK_CONTEXT_METER.md）在当前协议上新增受信只读方法 `chat.contextUsage`（不另升 `protocolVersion`）：返回该 bot 单会话的上下文用量 `{percent, usedTokens, windowTokens, estimated, compressedAt, compressing}`——分子优先取最近完成回合的真实 input tokens（无上报则 chars/4 估算并标 `estimated`），分母为 Host 配置的上下文窗口（默认 65,536）。Host 在用量 ≥80% 时自动后台压缩更早历史为一段摘要（新表 `chat_summaries`，迁移 0023：摘要 + 水位 `covers_message_id`），此后提示组装 = persona + 技能 + `【更早对话摘要】` + 水位后的行 + 当前消息；`chat_messages` 行不删除，删除摘要行即恢复全量回放。只读展示数据，不作为发送门槛。
 
 v0.11 新增 `skillLibrary.get` / `skillLibrary.save`（D17' 收尾）：D17 技能库（技能定义 + bot 绑定）从渲染层 localStorage 迁到 Host 持久化，存于 settings KV 行 `skills.library.v1`，整库读写、请求侧整体校验（≤30 技能、指令入库上限 20 000 字、绑定 ≤50 bot 且 id 唯一）。注入零改动：`chat.send.skills`（0.8+）仍是唯一注入路径，声明能力仍是本轮网关允许集，网关在授权前拒绝名单外工具，无能力技能只注入说明；库存字符串能力 id（旧导出可载入），强制发生在发送组装时。当前 `protocolVersion` 为 0.11，继续接受 0.1–0.10 发送方；工作流 `schemaVersion` 仍为 0.1。
+
+v0.12 新增工作流读面 `workflow.get` / `run.snapshot` / `approval.list`：桌面编辑器要按 id 打开完整工作流文档（`workflow.list` 只回摘要、`workflow.export` 还要先知道 revision），运行监控要一帧拿到 `{run, nodeRuns, approvals, artifacts}` 而不是分别调用夹具列表，审批收件箱要跨运行筛选 `{runId?, status?, limit?}`（`permission.approval.list` 属能力授权域，schema 不同）。三个方法都只是既有存储/引擎读的薄封装，不改实体、不改变既有方法语义，当前 `protocolVersion` 为 0.12，继续接受 0.1–0.11 发送方；工作流 `schemaVersion` 仍为 0.1。本片只补契约与 Host 实现，**不代表桌面已经切到真实 Host**：`DesktopService.workflows/runs` 仍由夹具提供，接线与端到端验收另片完成。
+
+v0.13 新增界面态方法 `ui.state.get` / `ui.state.set`（G1' 收口）：桌面侧栏快照（bot/分组顺序 + 选中态）存于 settings KV 行 `ui.state.v1`，整快照读写、请求侧用固定的 `UiStateSchema` 整体校验（仅稳定实体 UUID：`botOrder`/`groupOrder` 去重 ≤1000、`selectedBotId`/`selectedGroupId` 可空），缺失或损坏行降级为空态、不失败。**不存任意 UI 载荷，不可能落 Key**。只覆盖稳定实体；桌面分组目前是会话内数字 key，`groupOrder`/`selectedGroupId` 在分组实体化前由渲染层写空值。两方法只是 settings KV 的薄封装，不改实体、不改变既有方法语义，当前 `protocolVersion` 为 0.13，继续接受 0.1–0.12 发送方；工作流 `schemaVersion` 仍为 0.1。
 
 ## 1. 通用规则
 
@@ -57,7 +61,7 @@ v0.11 新增 `skillLibrary.get` / `skillLibrary.save`（D17' 收尾）：D17 技
 | AppApproval | id, invocationId, callerId, botId, sessionId, tool, capabilities, params, actionDigest, generation, status, createdAt, expiresAt, decidedAt | v0.3；精确参数预览与 10 分钟期限，独立于 D08 Approval；重启失效 |
 | PermissionAudit | id, sequence, at, actor, callerId, botId, tool, capabilities, actionDigest, grantIds, approvalId, decision | v0.3；只追加，保存摘要与决策元数据，不保存参数原文 |
 | Task | id, fromBotId, toBotId, instruction, status, resultSummary, rootTaskId, chainIndex, chainTotal, createdAt, startedAt?, finishedAt?, workerMessageIds | v0.5：协调者派发的一次指令任务；rootTaskId/chainIndex/chainTotal 标记 T7 交接链坐标（首跳 rootTaskId 即自身）；instruction ≤ 8000 字 |
-| ChatMessageMeta | kind=dispatch{taskId, fromBotId} \| kind=task_notice{taskId, status, resultSummary?} | v0.5：聊天消息行的附加标记（存储列 meta_json），渲染层据此显示"派发"样式与交付通知；普通消息无此字段 |
+| ChatMessageMeta | kind=dispatch{taskId, fromBotId} \| kind=task_notice{taskId, status, resultSummary?} \| kind=choice{question, options, other?, answered} | v0.5：聊天消息行的附加标记（存储列 meta_json），渲染层据此显示"派发"样式与交付通知；普通消息无此字段。G1' 追加 `kind=choice`（不升 protocolVersion）：已答 ask_user 卡的问题、展示用选项与 `answered`；重载后卡片保持已答，不能再答 |
 
 ## 3. 方法边界
 
@@ -72,13 +76,17 @@ MCP 实际调用使用独立能力 `mcp.call`，默认 `ask`，禁止全局 `all
 | creation.revoke | v0.2 整批撤销 | 归档该批全部 bot（无 revision 守卫，撤销必须生效），批次自建的组一并归档；重复撤销返回 INVALID_INPUT |
 | group.create / list | v0.2 分组管理 | list 仅返回未归档组 |
 | workflow.list | v0.3 工作流摘要（选择器用） | 只回 id/name/revision，不回节点图；全库摘要远低于 1 MiB 消息上限 |
+| workflow.get | v0.12 编辑器按 id 打开工作流 | 请求 `{id: UUID}`（严格字段），响应完整 `Workflow`（节点/边/设置与当前 revision）。`workflow.list` 只回摘要、`workflow.export` 要求先给 expectedRevision，都不能替代；不存在的 id 返回 INVALID_INPUT |
 | workflow.validate / save / export / import | 编辑与模板交换 | validate 返回可定位节点/字段的错误；import 先校验 schemaVersion |
 | run.start / get / list / cancel | 运行控制 | start 以 idempotencyKey 去重；cancel 重复调用返回已有终态 |
+| run.snapshot | v0.12 运行监控一帧 | 请求 `{runId: UUID}`，响应 `{run, nodeRuns[], approvals[], artifacts[]}`，均按该 run 过滤；不存在的 run 返回 INVALID_INPUT。四者在同一帧读出，避免多次调用之间状态漂移 |
 | run.retryNode | 显式重试失败/中断节点 | 新 attempt；校验下游状态与副作用；不静默恢复旧审批 |
 | events.subscribe | 按 runId + afterSequence 订阅 | 持久事件可重放；无法补齐时返回 snapshotRequired |
+| approval.list | v0.12 跨运行审批收件箱 | 请求 `{runId?: UUID, status?: pending\|approved\|denied\|expired\|consumed, limit?: 1–100（缺省 50）}` → `{approvals: Approval[]}`；按创建时间正序并截断到 limit。与 `permission.approval.list`（能力授权域）不同，本方法只针对 run 动作审批 |
 | approval.decide | 允许/拒绝指定动作 | 校验摘要、权限、有效期与 pending 状态；重复决定不得重复执行 |
 | schedule.save / enable / disable | 本地调度 | 唯一 scheduleId + occurrenceUtc 防重复 |
 | settings.testConnection / update | 接入与设置 | Key 写入与测试位于后端；前端只得到是否已配置。`update` 的 patch 支持 `ui.locale`（`"zh" \| "en"`）：桌面把解析后的界面语言推给 Host（启动与切换时各一次），Host 存入 settings KV 并即时生效——任务派发通知、交接框架（`【上游交接 · …】`）、画布冲突与凭据错误、ask_user 兜底选项等 Host 侧文案随该语言输出；缺省与非法值回落 zh。语言切换只影响之后新写入的行，历史回放保持原样 |
+| ui.state.get / set | v0.13 界面态快照（受信桌面） | `get` 无参 → `{state}`（`UiStateSchema`：botOrder/groupOrder 去重 UUID 列表 ≤1000、selectedBotId/selectedGroupId 可空）；`set` 请求 `{state}` 整体校验后整快照落 settings KV 行 `ui.state.v1` 并回显，末写胜出。缺失/损坏行降级空态。只存稳定实体 ID，不存任意载荷、不存密钥；分组实体化前 group 字段写空值 |
 | data.backup / restore / describe | 数据管理 | restore 必须停止所有运行、校验备份、备份旧数据 |
 | permission.policy.list / set | v0.3 人类读取/修改全局能力策略 | start_run 仅 ask；shell/screen 不能 allow；deny 覆盖全部授权 |
 | permission.grant.list / revoke | v0.3 人类查询/撤销授权 | botId 可筛选；默认仅有效记录，最多 100；撤销已存在授权幂等 |
@@ -115,7 +123,7 @@ MCP 实际调用使用独立能力 `mcp.call`，默认 `ask`，禁止全局 `all
 | artifacts.list / read / save / versions / versionContent / revert | v0.4 产物共编侧车：bot 工作区文件的列出、读取、保存、版本、版本内容与回退 | 路径必须相对且不穿越（`RelativeArtifactPathSchema` + realpath 夹紧）；内联内容 ≤ 768 KiB（1 MiB envelope 内留 JSON 转义余量），超限显式拒绝不截断；save 携带 expectedChecksum 时文件已变返回 REVISION_CONFLICT；save/revert 恒追加 author=user 版本，未入账的 bot 写入由 list/read/versions 先补记为 author=bot 版本；每文件保留最近 50 版 |
 | task.dispatch / list / cancel | v0.5 任务派发（manager-orchestration）；互通后（TASK_BOT_INTEROP.md）**任意在册 bot 可派发，跨组允许** | dispatch 仅由模型工具 `dispatch_task` 经网关到达，请求携带发起者 fromBotId；Host 重验身份规则（在册未归档、非自身）并执行排队上限（默认 10）；`chain` 预声明 T7 交接链：简单路径（botId 不重复、不含自身）、在册 bot（跨组允许）、全链 ≤ 4 跳（Host 可配 2–4，默认 3）；一次审批覆盖整条链，逐跳执行前重验（撤销/deny 即停，剩余跳标 skipped）。请求另带**可选 `idempotencyKey`（uuid）**：同 key 重复提交重放发起者的首个任务（first write wins，不重复建行/入队/投递标记）。list 按 fromBotId/toBotId/rootTaskId/status 过滤；cancel 仅人类：queued 直接取消、running 转 chat.cancel 语义，queued 同链跳级联取消 |
 | chat.send | D30 聊天运行时（不提升协议版本；字段随 #115/#137 附加）：`{botId: UUID, text: 1–4000 字, skills?（≤30 项，语义见「D17 技能注入」节）, primitive?（语义见文件头）}` → `{sessionId, messageId, text, at}`；流式期间经瞬态 `assistant.delta` 推送（§4），完成后落库 `chat_messages` | 会话为每 bot 单逻辑会话（Host 侧 `chat:<botId>`）；仅受信桌面调用，不是模型工具 |
-| chat.history | D30 历史回放（渲染接线 PR #97/#103）：`{botId: UUID, limit?: 1–200（缺省 100）}` → `{messages: [{id, botId, sessionId, role: user\|assistant, text, meta?, at}]}` | `meta` 为 v0.5 附加可选项（`ChatMessageMeta`，存量行无此字段也可解析）；按 botId 过滤，不回其他 bot；仅受信桌面 |
+| chat.history | D30 历史回放（渲染接线 PR #97/#103）：`{botId: UUID, limit?: 1–200（缺省 100）}` → `{messages: [{id, botId, sessionId, role: user\|assistant, text, meta?, at}]}` | `meta` 为附加可选项（`ChatMessageMeta`，存量行无此字段也可解析）。`kind=choice` 不升协议版本：question ≤2000、选项 2–4 个（id 为 A–D，label ≤1000）、必填 answered（1–4000）、可选 other。按 botId 过滤，不回其他 bot；仅受信桌面 |
 | chat.cancel | D30 取消当前活动回合：`{sessionId: string 1–128}` → `{cancelled: boolean}` | 任务派发的 running 跳取消也走该语义（见 task.dispatch 行）；仅受信桌面 |
 | chat.status | D30 回合状态快照：`{botId: UUID}` → `{active, stage: idle\|preparing\|thinking\|tool, toolName?（≤64）, startedAt?}` | 只读快照，无授权或执行含义；仅受信桌面 |
 | chat.attach | D26 附件分块上传（完整语义见「D26 聊天附件进入工作区」节）：`{botId, uploadId, name, mediaType, size ≤ 2 MiB, checksum, index 0–15, count 1–16, data ≤ 270000 字符}` → `{status: staged, received} \| {status: imported, relativePath, mediaType, size, checksum}` | 严格字段 + `index < count` 契约校验；块齐且校验和一致后经网关 `import_attachment`（`fs.write`，默认 ask）落工作区；仅受信桌面 |
@@ -142,6 +150,11 @@ MCP 实际调用使用独立能力 `mcp.call`，默认 `ask`，禁止全局 `all
 v0.5 任务事件（T7）：`task.status`。派发任务不进 runs 事件日志（其外键锚定 runs），持久化于独立 `task_events` 表，投递语义与 run 事件一致（eventId 去重、每任务 sequence 单调、`events.subscribe` 的 `taskId` 分支按 afterSequence 重放）。载荷 `{taskId, from, to, reason?}`，终态必须携带 reason。
 
 `assistant.delta` 为瞬态流，带 streamId 与 chunkIndex，不占持久 sequence，不承诺逐片段重放；重连用已提交会话快照补齐。`run.completed` 必须在持久事务成功后发送。
+
+服务端→桌面 stdio 通知（非方法调用；不占持久 sequence，不重放；旧客户端忽略未知通知方法）：
+
+- `schedule.missed`（FR-08）：params 为 `{notices: [{scheduleId, workflowId, occurrenceUtc, reason}]}`；形状声明在 `@deepseek-bot/runtime`（`ScheduleMissNotice`）。
+- `chat.stream`（B6 增量流）：params 为 `{botId, sessionId, text}`——运行中回合的实时助手分段；钉扎 Harness 按整条消息结算，分段是完整消息文本而非 token 增量，回合的权威回复仍是 `chat.send` 响应。schema 钉在 `packages/contracts`（`ChatStreamNoticeSchema`，botId 为 UUID、text 非空），随 v0.12 入库、不升 protocolVersion；桌面消费端经该 schema 校验，畸形通知整条忽略。
 
 ## 5. 状态和失败语义
 
@@ -199,7 +212,7 @@ Host 把技能指令写成有界、围栏安全的提示块，放在 bot 指令�
 
 `voice.*` 全部仅供受信桌面调用：是用户按下了按钮，不是模型在调用——因此没有能力、没有授权、没有模型工具，模型目录永远不包含 voice 工具。`voice.transcribe` 只接受一段 16 kHz、单声道、16-bit PCM 的 WAV 剪辑，最多 20 秒，base64 编码后落在 1 MiB 消息信封内；Host 校验 RIFF 头、声道、采样率、位深与数据块长度，格式不符拒绝且不落盘，不重采样、不转换、不猜测格式。转写调用用户自备的 whisper.cpp 二进制与模型（环境变量 `DEEPSEEK_BOT_WHISPER_BIN` / `DEEPSEEK_BOT_WHISPER_MODEL` 配置）：固定参数数组、无 shell、隐藏窗口，120 秒超时终止；进程输出留在本机，错误只报稳定错误码与退出码，不回传进程输出。临时剪辑在运行结束后删除，不进数据库、不进备份；转写文本只返回一次，不持久化。
 
-`voice.speak` 用 Windows SAPI（`System.Speech`）朗读至多 2000 字的文本：固定 PowerShell 脚本、文本以 base64 传入 `-EncodedCommand`，不经 shell 字符串拼接；120 秒超时终止。`voice.status` 只读汇报两侧可用性与原因，不启动进程。语音任务一次一个：后续调用排队，不并发堆积语音进程；`close()` 中止进行中的任务并拒绝新任务。识别与合成都发生在本机，无云端转写、无遥测、无远程中继；麦克风采集（按住说话）、自动断句、播放接线与设置页归桌面后续联调。
+`voice.speak` 用 Windows SAPI（`System.Speech`）朗读至多 2000 字的文本：固定 PowerShell 脚本、文本以 base64 传入 `-EncodedCommand`，不经 shell 字符串拼接；120 秒超时终止。`voice.status` 只读汇报两侧可用性与原因，不启动进程。语音任务一次一个：后续调用排队，不并发堆积语音进程；`close()` 中止进行中的任务并拒绝新任务。识别与合成都发生在本机，无云端转写、无遥测、无远程中继。桌面麦克风为按住说话：松开后把这一段交给 `voice.transcribe` 并填入输入框，不自动发送，仍受 20 秒上限与 `voice.status` 门控；逐条播放已接线。自动断句与设置页麦克风项仍未做。
 
 ## 8. 库导出文件（协议面之外）
 

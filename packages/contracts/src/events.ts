@@ -187,6 +187,22 @@ export const AssistantDeltaSchema = z.object({
 
 export type AssistantDelta = z.infer<typeof AssistantDeltaSchema>;
 
+/**
+ * B6 incremental streaming: one live assistant segment the Host pushes to the
+ * desktop over the server→client `chat.stream` notification (the wire twin of
+ * `schedule.missed`). The pinned harness settles a whole assistant message per
+ * model attempt, so a segment is a full message text, not a token delta; the
+ * turn's authoritative reply stays the `chat.send` response. Transient wire
+ * notice — no persistence, no replay; clients predating the channel ignore it.
+ */
+export const ChatStreamNoticeSchema = z.object({
+  botId: UuidSchema,
+  sessionId: NonEmptyStringSchema(TEXT_LIMITS.label),
+  text: NonEmptyStringSchema(TEXT_LIMITS.streamSegment),
+});
+
+export type ChatStreamNotice = z.infer<typeof ChatStreamNoticeSchema>;
+
 /** True when `events` has strictly increasing `sequence` values. */
 export function isSequenceMonotonic(
   events: readonly { sequence: number }[],

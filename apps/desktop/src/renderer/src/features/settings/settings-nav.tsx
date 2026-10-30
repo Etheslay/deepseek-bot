@@ -1,7 +1,7 @@
 /**
  * Settings navigation.
  *
- * A flat list of the six sections. An earlier pass put them under three group
+ * A flat list of the seven sections. An earlier pass put them under three group
  * labels (基础 / 权限与数据 / 用量与系统); the labels were small uppercase text that
  * added visual noise without helping, so the list is flat again. The component
  * stays extracted because App.tsx no longer has to carry the section list and
@@ -10,10 +10,11 @@
 import type { JSX } from "react";
 import { t, useLanguage } from "../../i18n.js";
 
-/** The six settings sections, in reading order. */
+/** The seven settings sections, in reading order. */
 export const SETTINGS_SECTION_KEYS = [
   "general",
   "computer",
+  "voice",
   "permissions",
   "vault",
   "usage",
@@ -27,6 +28,7 @@ export function settingsNavItems(): ReadonlyArray<{ readonly key: SettingsSectio
   return [
     { key: "general", label: t("shell.general") },
     { key: "computer", label: t("shell.computer") },
+    { key: "voice", label: t("shell.voiceSection") },
     { key: "permissions", label: t("d24.permissionsSection") },
     { key: "vault", label: t("shell.vault") },
     { key: "usage", label: t("shell.usageAndBilling") },

@@ -30,6 +30,23 @@ setTimeout(() => {
       ],
     },
   });
+  // B6: one live assistant segment on the chat.stream channel. A malformed
+  // push rides ahead of it — the desktop must skip it (schema-validated) and
+  // still forward the valid segment with a wire-real UUID botId.
+  write({
+    jsonrpc: "2.0",
+    method: "chat.stream",
+    params: { botId: 42, sessionId: "chat:bot-1:s1", text: "malformed" },
+  });
+  write({
+    jsonrpc: "2.0",
+    method: "chat.stream",
+    params: {
+      botId: "11111111-1111-4111-8111-111111111111",
+      sessionId: "chat:11111111-1111-4111-8111-111111111111",
+      text: "live segment",
+    },
+  });
 }, 80).unref();
 
 lines.on("line", (line) => {

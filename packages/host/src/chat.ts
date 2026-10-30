@@ -22,6 +22,9 @@ import type {
   CapabilityId,
   ChatSkillInjection,
 } from "@deepseek-bot/contracts";
+// B6: the notice shape is pinned by the contracts package (events.ts) — one
+// source of truth for the host emitter and the desktop consumer.
+import { type ChatStreamNotice } from "@deepseek-bot/contracts";
 import {
   EngineError,
   type NodePermissionHandle,
@@ -66,6 +69,17 @@ export interface TurnProgress {
   readonly startedAt: string;
 }
 
+/**
+ * B6 incremental streaming: one live assistant segment from a running turn.
+ * The pinned harness settles a whole assistant message per model attempt
+ * (there are no token-level deltas on the wire), so a tool-using turn
+ * streams its narration segment by segment; the turn's authoritative reply
+ * stays the last one (`chat.send` response). The shape is pinned by the
+ * contracts package (`ChatStreamNoticeSchema`, events.ts) — one source of
+ * truth for the host emitter and the desktop consumer.
+ */
+export type { ChatStreamNotice };
+
 interface ChatSession {
   lastSessionId: string;
   busy: boolean;
@@ -100,9 +114,24 @@ export interface ChatToolWiring {
   }) => NodePermissionHandle;
 }
 
+/** Concatenated text blocks of one assistant message (harness-attempt shape). */
+function assistantTextOf(event: SessionEventEnvelope): string | null {
+  const content = (event.data as { message?: { content?: unknown } } | undefined)?.message
+    ?.content;
+  if (!Array.isArray(content)) {
+    return null;
+  }
+  return content
+    .filter(
+      (block): block is { type: "text"; text: string } =>
+        typeof block === "object" && block !== null && (block as { type?: unknown }).type === "text",
+    )
+    .map((block) => block.text)
+    .join("");
+}
+
 /** Cancelling a turn must not wait for a desktop credential RPC to return. */
-async function whileActive<T>(task: Promise<T>, signal: AbortSignal): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
+async function whileActive<T>(task: Promise<T>, signal: AbortSignal): Promise<T> {  return new Promise<T>((resolve, reject) => {
     const detach = () => signal.removeEventListener("abort", cancel);
     const cancel = () => {
       detach();
@@ -142,6 +171,8 @@ export class ChatManager {
     private readonly onTurnUsage:
       | ((usage: TurnUsage & { estimated: boolean; botId: string; sessionId: string }) => void)
       | undefined = undefined,
+    /** B6: receives each live assistant segment while a chat turn runs. */
+    private readonly onTurnStream: ((notice: ChatStreamNotice) => void) | undefined = undefined,
   ) {}
 
   /** Live sessions (diagnostics / tests). */
@@ -193,6 +224,18 @@ export class ChatManager {
     const observeEvent = (event: SessionEventEnvelope): void => {
       /* usage rides on its own frames, independent of progress state */
       turnUsage.observe(event);
+      if (event.type === "assistant/message") {
+        // B6: forward the settled segment live. A throwing sink must never
+        // break the turn, mirroring the usage path above.
+        const text = assistantTextOf(event);
+        if (text !== null && text.length > 0) {
+          try {
+            this.onTurnStream?.({ botId: bot.id, sessionId, text });
+          } catch {
+            /* stream forwarding is best-effort */
+          }
+        }
+      }
       const current = session.progress;
       if (current === null) {
         return;
@@ -230,13 +273,22 @@ export class ChatManager {
     try {
       const inputs = await whileActive(
         this.options.resolveBotInputs(bot).catch((error: unknown) => {
+          // 人性化提醒 (humanized errors): raw system errors (ENOENT, paths,
+          // decrypt failures) never reach the chat — they go to stderr for
+          // diagnosis, and the user gets one calm sentence with the fix.
           const detail = error instanceof Error ? error.message : String(error);
+          process.stderr.write(`[host] model credential resolution failed: ${detail}\n`);
+          const missingKey = /ENOENT|no such file|credential|decrypt|api key/i.test(detail);
           throw new EngineError({
             code: "INVALID_INPUT",
             message:
               this.locale() === "en"
-                ? `Cannot resolve the model credential: ${detail}. Re-save the API Key in Settings.`
-                : `无法解析模型凭据：${detail}。请到设置里重新保存 API Key。`,
+                ? missingKey
+                  ? "I can't start yet — no usable API Key is saved on this machine for me. Re-save your key in Settings, then send that again."
+                  : "I can't resolve my model credentials. Check the API Key and model configuration in Settings, then try again."
+                : missingKey
+                  ? "还开不了对话：这台电脑上还没有我能用的 API Key（可能已失效）。到 设置 里重新保存一次，再把刚才的话发一遍就好。"
+                  : "模型凭据解析失败。到 设置 里检查 API Key 与模型配置，再试一次。",
             retryable: false,
           });
         }),

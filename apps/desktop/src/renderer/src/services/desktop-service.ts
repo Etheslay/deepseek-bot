@@ -10,10 +10,11 @@ import type {
   ArtifactVersion,
   Bot,
   BotArtifact,
+  ChatMessageMeta,
   ChatSkillInjection,
   ErrorCode,
   EventEnvelope,
-  Task,
+  UiState,
 } from "@deepseek-bot/contracts";
 import type { BackupSummary } from "../../../shared/ipc-channels.js";
 import type { WorkflowServiceApi } from "../features/workflow-editor/workflow-service.js";
@@ -49,16 +50,14 @@ export type AttachmentUploadResult = {
   checksum: string;
 };
 
-/** One persisted host chat row (chat.history) with its v0.5 meta marker. */
+/** One persisted host chat row (chat.history), including an optional meta marker. */
 export type ChatHistoryRow = {
   id: string;
   botId: string;
   sessionId: string;
   role: "user" | "assistant";
   text: string;
-  meta?:
-    | { kind: "dispatch"; taskId: string; fromBotId: string }
-    | { kind: "task_notice"; taskId: string; status: Task["status"]; resultSummary?: string };
+  meta?: ChatMessageMeta;
   at: string;
 };
 
@@ -104,6 +103,12 @@ export type ChatFailure = {
 export type StreamResult = {
   cancelled: boolean;
   failure: ChatFailure;
+  /**
+   * B6: the authoritative reply text from `chat.send`, present on the host
+   * path. The stream runner commits this over the accumulated deltas — live
+   * segments of a tool turn may include narration the reply does not carry.
+   */
+  text?: string;
 };
 
 export type StreamOptions = {
@@ -218,7 +223,10 @@ export interface DesktopService {
    * model never picks the path; reads go through read_workspace_file (fs.read).
    */
   attachments: {
-    upload(botId: string, file: { name: string; bytes: Uint8Array }): Promise<AttachmentUploadResult>;
+    upload(
+      botId: string,
+      file: { name: string; bytes: Uint8Array },
+    ): Promise<AttachmentUploadResult>;
   };
   /**
    * D28 co-edit sidecar over one bot's workspace files. Read/save address a
@@ -265,12 +273,32 @@ export interface DesktopService {
   search: {
     global(query: string): Promise<GlobalSearchHitView[]>;
   };
-  /** Workflow editor API (D07); fixture-backed, no execution/persistence. */
+  /**
+   * Workflow editor API (D07). The host service serves it from the real Host
+   * contracts (v0.12: workflow.list/get/validate/save/export); the fixture
+   * implementation stays available for offline UI development.
+   */
   workflows: WorkflowServiceApi;
-  /** Run monitor / approval API (D09); fixture playback, no real engine. */
+  /**
+   * Run monitor / approval API (D09). Host-backed since the v0.12 read surface
+   * (run.list/get/snapshot/resume/retryNode, events.subscribe, approval.*);
+   * `playback` tells the monitor whether fixture-only controls apply.
+   */
   runs: RunServiceApi;
   /** v0.5 manager orchestration: dispatched-task query + human cancel. */
   tasks: TaskServiceApi;
+
+  /**
+   * G1' interface state (v0.13 ui.state.get/set): the persisted sidebar
+   * snapshot — order + selection over stable entity IDs only. The fixture
+   * keeps the snapshot in memory; the Host persists it in a settings KV row
+   * and answers the empty state when the row is missing or corrupt.
+   */
+  uiState: {
+    get(): Promise<UiState>;
+    /** Replace the whole snapshot atomically; the caller debounces writes. */
+    save(state: UiState): Promise<UiState>;
+  };
 
   /**
    * D24 leftover vault: backup/restore entry plus data counts. listBackups

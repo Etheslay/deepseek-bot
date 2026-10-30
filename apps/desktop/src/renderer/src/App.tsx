@@ -29,7 +29,7 @@ import { nextBotName } from "./features/bots/bot-names.js";
 import { CustomSelect } from "./components/custom-select.js";
 import type { BotDraft, ChatHistoryRow, ContextUsageView } from "./services/desktop-service.js";
 import { useService } from "./services/service-context.jsx";
-import { METHOD_CONTRACTS, VOICE_MAX_CLIP_SECONDS, type VoiceStatus } from "@deepseek-bot/contracts";
+import { METHOD_CONTRACTS, type VoiceStatus } from "@deepseek-bot/contracts";
 import {
   emptyStream,
   failureMessage,
@@ -57,11 +57,15 @@ import {
   type Avatar as AvatarKind,
 } from "./features/avatars/avatar-meta.js";
 import { ChoiceCard, type ChoiceOption } from "./features/questions/choice-card.js";
-import { answerSeedCard } from "./features/questions/choice-answer.js";
-import { bytesToBase64 } from "./features/chat/attachments.js";
-import { startClipRecorder, type ClipRecorder } from "./features/voice/clip-recorder.js";
-import { clipProblem, encodeWavPcm16 } from "./features/voice/wav.js";
-import { speakButton, transcribeButton } from "./features/voice/voice-ui.js";
+import {
+  answerSeedCard,
+  canAnswerChoice,
+  findPendingChoiceCard,
+} from "./features/questions/choice-answer.js";
+import { onboardingCardFor } from "./features/bots/onboarding.js";
+import { ComposerMic } from "./features/voice/composer-mic.js";
+import { appendTranscript } from "./features/voice/hold-to-talk.js";
+import { speakButton } from "./features/voice/voice-ui.js";
 import {
   QuestionChatCards,
   type AnsweredQuestion,
@@ -107,6 +111,7 @@ import {
   type NotificationPrefs,
 } from "./features/settings/settings-store.js";
 import {
+  currentLanguage,
   formatFullDateTime,
   formatDate,
   formatTime,
@@ -122,6 +127,7 @@ import {
 } from "./features/system/notify.js";
 import { NotificationSettingsPanel } from "./features/system/notifications-panel.js";
 import { ChromeImportPanel } from "./features/system/chrome-panel.js";
+import { VoiceSettingsPanel } from "./features/settings/voice-settings.js";
 import type { TrayBotStatus } from "../../shared/system-integration.js";
 import type { LanguagePreference } from "../../shared/i18n/types.js";
 import {
@@ -141,13 +147,13 @@ import { BotSkillsPicker } from "./features/skills/bot-skills-picker.js";
 import { SkillsPanel } from "./features/skills/skills-panel.js";
 import {
   emptyLibrary,
-  localLibraryCandidate,
   loadSkills,
   setBotSkills,
   skillsForInjection,
   toRendererLibrary,
   type SkillLibrary,
 } from "./features/skills/skills.js";
+import { migrateLegacyLibrary } from "./features/skills/library-migration.js";
 
 
 type Group = { key: number; name: string };
@@ -209,6 +215,11 @@ type Msg = {
    * composer. Absent means live (notices and older call sites).
    */
   origin?: ThreadOrigin;
+  /**
+   * True when this bubble was loaded from chat.history. Live composer turns
+   * leave it unset so the pane can tell a replay from a new message.
+   */
+  history?: boolean;
   /** G6: the message re-enters the thread as 重新生成 / 编辑后重发, weakly labelled. */
   meta?: "regenerate" | "edited_resend";
 };
@@ -353,6 +364,7 @@ export function App(): JSX.Element {
     duplicate: duplicateBotEntity,
     setUi,
     moveToTop,
+    applyPersistedOrder,
     hide,
   } = useBots(UNGROUPED);
 
@@ -494,6 +506,11 @@ export function App(): JSX.Element {
   const [settingsOpen, setSettingsOpen] = useState(false);
   /** Which settings nav section is active (D24; grouping in features/settings). */
   const [settingsSection, setSettingsSection] = useState<SettingsSectionKey>("general");
+  /**
+   * D27: bumped after the voice settings panel saved a configuration, so the
+   * chat pane re-asks `voice.status` and the composer mic unlocks live.
+   */
+  const [voiceConfigVersion, setVoiceConfigVersion] = useState(0);
   const [backups, setBackups] = useState<
     import("../../shared/ipc-channels.js").BackupSummary[] | null
   >(null);
@@ -530,9 +547,10 @@ export function App(): JSX.Element {
   const skillLibraryTouchedRef = useRef(false);
 
   // D17': boot the skill library from the Host. When the Host has none, the
-  // legacy localStorage copy migrates once; the composer prompt-template
-  // store (an array under the same legacy key) is never migrated. A Host
-  // without the methods (or a broken bridge) degrades to the legacy read.
+  // legacy localStorage copy migrates once behind an idempotent marker; the
+  // composer prompt-template store (an array under the same legacy key) is
+  // never migrated. A Host without the methods (or a broken bridge) degrades
+  // to the legacy read; a failed import keeps the legacy payload and says so.
   useEffect(() => {
     let alive = true;
     void (async () => {
@@ -542,25 +560,21 @@ export function App(): JSX.Element {
         const hostLibrary = METHOD_CONTRACTS["skillLibrary.get"].response.parse(
           response,
         ).library;
-        if (hostLibrary.skills.length > 0) {
-          setSkillLibrary(toRendererLibrary(hostLibrary));
-          return;
-        }
-        const candidate = localLibraryCandidate(
-          window.localStorage.getItem("deepseek-bot.skills.v1"),
-        );
-        if (candidate === null) {
-          setSkillLibrary(toRendererLibrary(hostLibrary));
-          return;
-        }
-        const saved = await window.deepseekBot.host.call("skillLibrary.save", {
-          library: candidate,
+        const migration = await migrateLegacyLibrary({
+          storage: window.localStorage,
+          hostLibrary,
+          saveLibrary: (library) =>
+            window.deepseekBot.host.call("skillLibrary.save", { library }),
         });
         if (!alive || skillLibraryTouchedRef.current) return;
-        skillLibraryTouchedRef.current = true;
-        setSkillLibrary(
-          toRendererLibrary(METHOD_CONTRACTS["skillLibrary.save"].response.parse(saved).library),
-        );
+        if (migration.outcome === "failed") {
+          // The legacy payload stays in localStorage (retry next boot, or
+          // re-import the export file from settings).
+          setSkillLibrary(loadSkills(window.localStorage));
+          setToast(t("skills.migrateFailed"));
+          return;
+        }
+        setSkillLibrary(toRendererLibrary(migration.library));
       } catch {
         if (alive && !skillLibraryTouchedRef.current) {
           setSkillLibrary(loadSkills(window.localStorage));
@@ -633,6 +647,56 @@ export function App(): JSX.Element {
   const notifyClock = useRef<Map<string, number>>(new Map());
   const [botStatuses, setBotStatuses] = useState<Record<string, TrayBotStatus>>({});
   const activeBotId = bots.find((b) => b.key === selectedBot)?.bot.id ?? null;
+
+  /* ------------- G1': persisted interface state (ui.state, v0.13) ------------- */
+
+  /**
+   * Restore the persisted sidebar snapshot once the first bot list has
+   * landed: order first, then the selected bot — but only when it still
+   * exists (a stale snapshot must not select an archived or deleted bot).
+   * Best-effort: a dead host or corrupt row falls back to the default view.
+   */
+  const uiStateRestoredRef = useRef(false);
+  useEffect(() => {
+    if (uiStateRestoredRef.current || bots.length === 0) {
+      return;
+    }
+    uiStateRestoredRef.current = true;
+    void desktop.uiState
+      .get()
+      .then((state) => {
+        applyPersistedOrder(state.botOrder);
+        if (state.selectedBotId !== null) {
+          const target = bots.find((b) => b.bot.id === state.selectedBotId);
+          if (target !== undefined) {
+            setSelectedBot(target.key);
+          }
+        }
+      })
+      .catch(() => undefined);
+  }, [bots, desktop, applyPersistedOrder]);
+
+  /**
+   * Persist the sidebar snapshot with a debounce — one write per burst of
+   * changes, last write wins on the Host. Group fields stay empty until the
+   * sidebar's session-local groups become persisted entities (MAPPING §5).
+   */
+  useEffect(() => {
+    if (bots.length === 0) {
+      return;
+    }
+    const timer = setTimeout(() => {
+      void desktop.uiState
+        .save({
+          botOrder: bots.map((b) => b.bot.id),
+          groupOrder: [],
+          selectedBotId: activeBotId,
+          selectedGroupId: null,
+        })
+        .catch(() => undefined);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [bots, activeBotId, desktop]);
 
   const raiseNotice = useCallback(
     (input: {
@@ -1283,25 +1347,21 @@ export function App(): JSX.Element {
     setMenuDialog(null);
   };
 
+  /**
+   * Onboarding (对标学习): a freshly created bot greets the user by name and
+   * offers a choice card whose options are derived from the name — no model
+   * call, deterministic, and the trailing 「我自己说」/「其他」 always let the
+   * user answer in their own words. One message: greeting text with the card
+   * attached underneath.
+   */
   const welcomeThread = (botKey: number, botName: string): Msg[] => {
     const now = Date.now();
+    const card = onboardingCardFor(botName, currentLanguage());
     return [
       {
         id: botKey,
         from: "bot",
-        text: t("shell.welcomeMessage", [botName]),
-        quote: null,
-        reactions: {},
-        mine: [],
-        time: now,
-        system: false,
-        speakerKey: botKey,
-        origin: "seed",
-      },
-      {
-        id: botKey + 0.5,
-        from: "bot",
-        text: t("shell.welcomeChoicesHint", [botName]),
+        text: card.greeting,
         quote: null,
         reactions: {},
         mine: [],
@@ -1310,13 +1370,9 @@ export function App(): JSX.Element {
         speakerKey: botKey,
         origin: "seed",
         choices: {
-          question: t("shell.choicesQuestion"),
-          options: [
-            { id: "A", label: t("shell.choiceDeepThinking") },
-            { id: "B", label: t("shell.choiceDraftWorkflow") },
-            { id: "C", label: t("shell.choiceRunMonitor") },
-          ],
-          other: true,
+          question: card.question,
+          options: card.options,
+          other: card.other,
         },
       },
     ];
@@ -1333,7 +1389,9 @@ export function App(): JSX.Element {
       time: message.time,
       system: false,
       origin: "history" as const,
+      history: message.history,
       ...(message.speakerKey !== undefined ? { speakerKey: message.speakerKey } : {}),
+      ...(message.choices !== undefined ? { choices: message.choices } : {}),
     }));
 
   /**
@@ -2055,6 +2113,7 @@ const logout = (): void => {
               stream={streams[selectedBot] ?? null}
               streamHandles={streamHandles.current}
               onStreamUpdate={(update) => updateStreamState(selectedBot, update)}
+              voiceConfigVersion={voiceConfigVersion}
               msgs={chats[selectedBot] ?? []}
               pairTranscripts={pairTranscripts}
               quoteDraft={quoteDraft}
@@ -2526,6 +2585,7 @@ const logout = (): void => {
                       general: t("shell.general"),
                       permissions: t("d24.permissionsSection"),
                       computer: t("shell.computer"),
+                      voice: t("shell.voiceSection"),
                       vault: t("shell.vault"),
                       usage: t("shell.usageAndBilling"),
                       updates: t("shell.updates"),
@@ -2966,6 +3026,14 @@ const logout = (): void => {
                   </div>
                   </>
                 )}
+                {settingsSection === "voice" && (
+                  <div className="settings-card">
+                    <VoiceSettingsPanel
+                      onConfigSaved={() => setVoiceConfigVersion((v) => v + 1)}
+                      onToast={setToast}
+                    />
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -3071,8 +3139,12 @@ function MessageBubble({
     };
   }, [pickerOpen]);
 
+  const replayCard = msg.history === true && msg.choices !== undefined;
   return (
-    <div className={"msg-row" + (isUser ? " user" : " bot")}>
+    <div
+      className={"msg-row" + (isUser ? " user" : " bot") + (msg.history === true ? " replay" : "")}
+      {...(msg.history === true ? { "data-history": "true" } : {})}
+    >
       <div className="hover-wrap">
         <div
           className={"msg-bubble" + (isUser ? " user" : "")}
@@ -3157,9 +3229,17 @@ function MessageBubble({
                   </span>
                 );
               })}
+              {/* A4: the image reaches the workspace but not the model — say so
+                  once on the message that carried it, without touching the
+                  model-facing attachment block. */}
+              {msg.attachments.some((file) => file.kind === "image") && (
+                <span className="msg-attachments-hint">
+                  {t("shell.attachmentImageNotVisible")}
+                </span>
+              )}
             </div>
           )}
-          {isUser ? (
+          {replayCard ? null : isUser ? (
             msg.text
           ) : (
             <ChatMarkdown
@@ -3174,11 +3254,17 @@ function MessageBubble({
               options={msg.choices.options}
               fallback={msg.choices.other ? { id: "✎", label: t("shell.choiceOther") } : null}
               answered={msg.choices.answered}
-              disabled={lockedChoiceId === msg.id}
+              disabled={lockedChoiceId === msg.id || msg.history === true}
               hint={
                 lockedChoiceId === msg.id ? t("questions.explainBelowPlaceholder") : null
               }
-              onChoose={(option) => onChoice?.(msg.id, option)}
+              {...(canAnswerChoice(msg)
+                ? {
+                    onChoose: (option: ChoiceOption) => {
+                      onChoice?.(msg.id, option);
+                    },
+                  }
+                : {})}
             />
           )}
           {!isUser && EMOJIS.some((e) => (msg.reactions[e] ?? 0) > 0) && (
@@ -3374,6 +3460,7 @@ function BotsPlaceholder({
   skillContext,
   onAnswerSeedCard,
   onOpenAttachment,
+  voiceConfigVersion,
   primitiveMode,
   onTogglePrimitive,
   deepThinking,
@@ -3390,6 +3477,11 @@ function BotsPlaceholder({
   onStreamUpdate: (
     update: (prev: StreamStateForBot | null) => StreamStateForBot | null,
   ) => void;
+  /**
+   * D27: bumped by App after the voice settings saved a configuration; the
+   * pane re-asks `voice.status` so the mic unlocks without a remount.
+   */
+  voiceConfigVersion: number;
   msgs: Msg[];
   pairTranscripts: Record<
     string,
@@ -3440,14 +3532,11 @@ function BotsPlaceholder({
   /**
    * Voice (D27 desktop slice): both halves are local and optional — the mic and
    * the speak button stay disabled with a reason until `voice.status` says the
-   * whisper build or the system speech engine is present.
+   * whisper build or the system speech engine is present. The mic is hold-to-talk:
+   * release transcribes into the draft and does not send.
    */
   const [voiceStatus, setVoiceStatus] = useState<VoiceStatus | null>(null);
-  const [voicePhase, setVoicePhase] = useState<"idle" | "recording" | "transcribing">("idle");
-  const [voiceSeconds, setVoiceSeconds] = useState(0);
   const [speakingId, setSpeakingId] = useState<number | null>(null);
-  const recorderRef = useRef<ClipRecorder | null>(null);
-  const voiceTickRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [memoryOpen, setMemoryOpen] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<AttachmentDraft[]>([]);
   const [skills, setSkills] = useState<Skill[]>(() => listSkills(window.localStorage));
@@ -3880,6 +3969,13 @@ function BotsPlaceholder({
       answerClarify(clarify, text);
       return;
     }
+    // Onboarding (对标学习): a free-text reply retires an open seed card —
+    // the card dims into its answered row instead of nagging, and the reply
+    // itself flows on as a normal turn.
+    const pendingCard = findPendingChoiceCard(msgs);
+    if (pendingCard !== undefined) {
+      onAnswerSeedCard(me.key, pendingCard.id, text);
+    }
     void sendWithAttachments(text);
   };
 
@@ -3974,6 +4070,10 @@ function BotsPlaceholder({
 
   /** Card rows answer with their own label — no prefix, plain text (FR-1). */
   const handleChoice = (msgId: number, option: ChoiceOption): void => {
+    const target = msgs.find((message) => message.id === msgId);
+    if (target === undefined || !canAnswerChoice(target)) {
+      return;
+    }
     if (option.id === "✎") {
       setClarify({ forKey: me.key, kind: "seed", msgId });
       inputRef.current?.focus();
@@ -3985,7 +4085,11 @@ function BotsPlaceholder({
     startChatStream(option.label);
   };
 
-  /** Ask the Host once whether the local whisper/TTS halves are usable. */
+  /**
+   * Ask the Host whether the local whisper/TTS halves are usable — and ask
+   * again when the voice settings panel saved a new configuration, so the mic
+   * unlocks (or locks) live without switching bots.
+   */
   useEffect(() => {
     void window.deepseekBot.host
       .call("voice.status", {})
@@ -3993,92 +4097,7 @@ function BotsPlaceholder({
         setVoiceStatus(METHOD_CONTRACTS["voice.status"].response.parse(response)),
       )
       .catch(() => setVoiceStatus(null));
-  }, []);
-
-  useEffect(
-    () => () => {
-      recorderRef.current?.cancel();
-      recorderRef.current = null;
-      if (voiceTickRef.current !== null) {
-        clearInterval(voiceTickRef.current);
-        voiceTickRef.current = null;
-      }
-    },
-    [],
-  );
-
-  const stopRecording = async (): Promise<void> => {
-    const recorder = recorderRef.current;
-    if (recorder === null) {
-      return;
-    }
-    recorderRef.current = null;
-    if (voiceTickRef.current !== null) {
-      clearInterval(voiceTickRef.current);
-      voiceTickRef.current = null;
-    }
-    setVoiceSeconds(0);
-    let samples: Float32Array;
-    try {
-      samples = await recorder.stop();
-    } catch {
-      samples = new Float32Array(0);
-    }
-    const problem = clipProblem(samples);
-    if (problem !== null) {
-      onNotify(
-        problem === "empty"
-          ? t("voice.emptyClip")
-          : t("voice.tooLong", [String(VOICE_MAX_CLIP_SECONDS)]),
-      );
-      setVoicePhase("idle");
-      return;
-    }
-    setVoicePhase("transcribing");
-    try {
-      const parsed = METHOD_CONTRACTS["voice.transcribe"].response.parse(
-        await window.deepseekBot.host.call("voice.transcribe", {
-          audioBase64: bytesToBase64(encodeWavPcm16(samples)),
-        }),
-      );
-      const text = parsed.text.trim();
-      if (text.length === 0) {
-        onNotify(t("voice.transcribedEmpty"));
-      } else {
-        setDraft((prev) => (prev.trim().length > 0 ? `${prev} ${text}` : text));
-      }
-    } catch {
-      onNotify(t("voice.transcribeFailed"));
-    } finally {
-      setVoicePhase("idle");
-    }
-  };
-
-  const toggleRecording = (): void => {
-    if (voicePhase === "recording") {
-      void stopRecording();
-      return;
-    }
-    if (voicePhase !== "idle") {
-      return;
-    }
-    void startClipRecorder()
-      .then((recorder) => {
-        recorderRef.current = recorder;
-        setVoicePhase("recording");
-        setVoiceSeconds(0);
-        voiceTickRef.current = setInterval(() => {
-          setVoiceSeconds((prev) => {
-            const next = prev + 1;
-            if (next >= VOICE_MAX_CLIP_SECONDS) {
-              void stopRecording();
-            }
-            return next;
-          });
-        }, 1000);
-      })
-      .catch(() => onNotify(t("voice.micDenied")));
-  };
+  }, [voiceConfigVersion]);
 
   const speakMessage = (msgId: number, text: string): void => {
     if (speakingId !== null) {
@@ -4124,7 +4143,11 @@ function BotsPlaceholder({
             (!prev || prev.system || m.time - prev.time > 5 * 60 * 1000);
           return (
             <Fragment key={m.id}>
-              {showTime && <div className="chat-time">{formatChatTime(m.time)}</div>}
+              {showTime && (
+                <div className={"chat-time" + (m.history === true ? " replay" : "")}>
+                  {formatChatTime(m.time)}
+                </div>
+              )}
               {m.notice ? (
                 m.deliverTo ? (
                   <div className="deliver-notice" role="status">
@@ -4260,16 +4283,19 @@ function BotsPlaceholder({
             )}
             {stream.failure && (
               <div className="chat-failure" role="alert">
-                <span className="failure-code">{stream.failure.code}</span>
-                {failureMessage(stream.failure.code)}
-                {stream.failure.message ? (
-                  <span className="failure-detail">{stream.failure.message}</span>
-                ) : null}
-                {stream.failure.retryable && (
-                  <button type="button" className="pill-btn" onClick={retryStream}>
-                    {t("shell.retry")}
-                  </button>
-                )}
+                <div className="failure-head">
+                  <span className="failure-chip">{stream.failure.code}</span>
+                  {stream.failure.retryable && (
+                    <button type="button" className="pill-btn" onClick={retryStream}>
+                      {t("shell.retry")}
+                    </button>
+                  )}
+                </div>
+                {/* The Host authors the human sentence (humanized errors); the
+                    catalogue line only backs codes that carry no message. */}
+                <div className="failure-text">
+                  {stream.failure.message ? stream.failure.message : failureMessage(stream.failure.code)}
+                </div>
               </div>
             )}
           </>
@@ -4303,6 +4329,9 @@ function BotsPlaceholder({
             <span className="attach-chip" key={`${file.name}-${index}`}>
               <span className="attach-chip-name">{file.name}</span>
               <span className="attach-chip-size">{formatAttachmentSize(file.size)}</span>
+              {classifyAttachment(file.mime, file.name) === "image" && (
+                <span className="attach-chip-flag">{t("shell.attachmentNotModelReadable")}</span>
+              )}
               <button
                 type="button"
                 className="attach-chip-remove"
@@ -4521,45 +4550,11 @@ function BotsPlaceholder({
           </button>
         </div>
         <ContextRing usage={contextUsage} />
-        {(() => {
-          const mic = transcribeButton(voiceStatus, voicePhase);
-          const title =
-            mic.reasonKey !== null
-              ? t(mic.reasonKey)
-              : voicePhase === "recording"
-                ? t("voice.recording", [String(voiceSeconds)])
-                : t("voice.record");
-          return (
-            <button
-              type="button"
-              className={
-                "composer-mic" + (voicePhase === "recording" ? " recording" : "")
-              }
-              title={title}
-              aria-label={title}
-              aria-pressed={voicePhase === "recording"}
-              disabled={mic.disabled}
-              onClick={toggleRecording}
-            >
-              {voicePhase === "recording" ? (
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <rect x="7" y="7" width="10" height="10" rx="2" fill="currentColor" />
-                </svg>
-              ) : (
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <rect x="9" y="3" width="6" height="11" rx="3" fill="none" stroke="currentColor" strokeWidth="1.8" />
-                  <path
-                    d="M5 11a7 7 0 0 0 14 0M12 18v3"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.8"
-                    strokeLinecap="round"
-                  />
-                </svg>
-              )}
-            </button>
-          );
-        })()}
+        <ComposerMic
+          status={voiceStatus}
+          onNotify={onNotify}
+          onTranscript={(text) => setDraft((prev) => appendTranscript(prev, text))}
+        />
         <button type="button" className="send-btn" aria-label={t("shell.send")} disabled={!draft.trim() && pendingFiles.length === 0} onClick={send}>
           ↑
         </button>

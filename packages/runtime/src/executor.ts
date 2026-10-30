@@ -50,7 +50,28 @@ export interface BotNodeExecutionResult {
   readonly outputs: Readonly<Record<string, unknown>>;
   /** Harness session this attempt is bound to (CONTRACTS §2 NodeRun). */
   readonly sessionId?: string | null;
+  /**
+   * Token usage of the attempt, read from the harness session events. Absent
+   * only for an executor that cannot report it; a turn the harness sent no
+   * usage frame for is reported as a local estimate with `estimated: true`.
+   */
+  readonly usage?: NodeTurnUsage;
 }
+
+/**
+ * Token usage of one node attempt. The engine does not interpret these counts;
+ * it hands them back to the caller so a billed turn is never lost from the
+ * usage ledger (GAP_AUDIT G4 residual: workflow model turns were unaccounted).
+ */
+export interface NodeTurnUsage {
+  readonly inputTokens: number;
+  readonly outputTokens: number;
+  readonly cachedInputTokens: number;
+  readonly model: string | null;
+  /** True when the harness reported nothing and the counts are a local estimate. */
+  readonly estimated: boolean;
+}
+
 
 export interface NodeExecutor {
   executeBotNode(context: BotNodeExecutionContext): Promise<BotNodeExecutionResult>;

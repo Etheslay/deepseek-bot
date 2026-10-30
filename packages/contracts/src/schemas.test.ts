@@ -13,6 +13,7 @@ import {
   BotGroupSchema,
   canonicalAvatarPool,
   ContractErrorSchema,
+  ChatStreamNoticeSchema,
   ERROR_CODES,
   EventEnvelopeSchema,
   IanaTimeZoneSchema,
@@ -525,6 +526,32 @@ describe("events", () => {
     expect(
       AssistantDeltaSchema.safeParse({ streamId: "s", chunkIndex: -1 })
         .success,
+    ).toBe(false);
+  });
+
+  it("validates the chat.stream notice as a transient push", () => {
+    expect(
+      ChatStreamNoticeSchema.safeParse({
+        botId: UUID,
+        sessionId: `chat:${UUID}`,
+        text: "live segment",
+      }).success,
+    ).toBe(true);
+    // Real bot ids are UUIDs on the wire (chat.send pins the same shape).
+    expect(
+      ChatStreamNoticeSchema.safeParse({
+        botId: "bot-1",
+        sessionId: "chat:bot-1:s1",
+        text: "live segment",
+      }).success,
+    ).toBe(false);
+    // The host only emits non-empty segments (chat.ts guards text.length > 0).
+    expect(
+      ChatStreamNoticeSchema.safeParse({
+        botId: UUID,
+        sessionId: `chat:${UUID}`,
+        text: "",
+      }).success,
     ).toBe(false);
   });
 

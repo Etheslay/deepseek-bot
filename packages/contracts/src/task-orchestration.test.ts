@@ -195,7 +195,7 @@ describe("task entity and queries", () => {
 });
 
 describe("chat message meta (v0.5)", () => {
-  it("parses dispatch markers and task notices, nothing else", () => {
+  it("parses dispatch markers, task notices, and answered choice cards", () => {
     expect(
       ChatMessageMetaSchema.safeParse({
         kind: "dispatch",
@@ -211,6 +211,49 @@ describe("chat message meta (v0.5)", () => {
         resultSummary: "清单已写完",
       }).success,
     ).toBe(true);
+    expect(
+      ChatMessageMetaSchema.safeParse({
+        kind: "choice",
+        question: "Which first?",
+        options: [
+          { id: "A", label: "Alpha" },
+          { id: "D", label: "以上都不是" },
+        ],
+        other: true,
+        answered: "Alpha",
+      }).success,
+    ).toBe(true);
+    expect(
+      ChatMessageMetaSchema.safeParse({
+        kind: "choice",
+        question: "Which first?",
+        options: [
+          { id: "A", label: "Alpha" },
+          { id: "B", label: "Beta" },
+        ],
+        answered: "",
+      }).success,
+    ).toBe(false);
+    expect(
+      ChatMessageMetaSchema.safeParse({
+        kind: "choice",
+        question: "Which first?",
+        options: [{ id: "A", label: "Alpha" }],
+        answered: "Alpha",
+      }).success,
+    ).toBe(false);
+    expect(
+      ChatMessageMetaSchema.safeParse({
+        kind: "choice",
+        question: "Which first?",
+        options: [
+          { id: "A", label: "Alpha" },
+          { id: "B", label: "Beta" },
+        ],
+        answered: "Alpha",
+        secret: "no",
+      }).success,
+    ).toBe(false);
     expect(ChatMessageMetaSchema.safeParse({ kind: "relay" }).success).toBe(false);
   });
 });

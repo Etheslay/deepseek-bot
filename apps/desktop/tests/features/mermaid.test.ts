@@ -65,6 +65,74 @@ describe("local mermaid rendering", () => {
     expect(render).toHaveBeenCalledTimes(2);
   });
 
+  it("re-initializes mermaid with the new theme after a switch", async () => {
+    // mermaid.render reads the module-global config, so a theme switch is only
+    // real if initialize runs again before the next uncached render (audit P3).
+    render.mockResolvedValue({ svg: "<svg><g></g></svg>" });
+    const { renderMermaidSvg, setMermaidTheme } = await loadModule();
+    const source = "flowchart TD\n  A --> B";
+    await renderMermaidSvg(source);
+    expect(initialize).toHaveBeenCalledTimes(1);
+    expect(initialize).toHaveBeenLastCalledWith(
+      expect.objectContaining({ theme: "dark" }),
+    );
+    setMermaidTheme("light");
+    await renderMermaidSvg(source);
+    expect(initialize).toHaveBeenCalledTimes(2);
+    expect(initialize).toHaveBeenLastCalledWith(
+      expect.objectContaining({ theme: "default" }),
+    );
+    // Back on dark the cached dark svg serves without touching the config; a
+    // fresh source re-initializes to dark before rendering.
+    setMermaidTheme("dark");
+    await renderMermaidSvg(source);
+    expect(initialize).toHaveBeenCalledTimes(2);
+    expect(render).toHaveBeenCalledTimes(2);
+    await renderMermaidSvg("flowchart TD\n  B --> C");
+    expect(initialize).toHaveBeenCalledTimes(3);
+    expect(initialize).toHaveBeenLastCalledWith(
+      expect.objectContaining({ theme: "dark" }),
+    );
+  });
+
+  it("redraws mounted blocks from the theme cache without re-parsing", async () => {
+    render.mockResolvedValueOnce({ svg: "<svg>dark-svg</svg>" });
+    render.mockResolvedValueOnce({ svg: "<svg>light-svg</svg>" });
+    const { renderMermaidSvg, setMermaidTheme } = await loadModule();
+    const source = "flowchart TD\n  A --> B";
+    const dark = await renderMermaidSvg(source);
+    setMermaidTheme("light");
+    const light = await renderMermaidSvg(source);
+    expect(render).toHaveBeenCalledTimes(2);
+
+    // A mounted block (as chat-markdown mounts it) currently shows the light svg.
+    const block = document.createElement("div");
+    block.className = "mermaid-block";
+    block.dataset.mermaidMounted = "true";
+    block.dataset.mermaidSource = source;
+    block.attachShadow({ mode: "open" }).innerHTML = light ?? "";
+    document.body.appendChild(block);
+
+    setMermaidTheme("dark");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(block.shadowRoot?.innerHTML).toContain("dark-svg");
+    // The swap came straight from the cache: mermaid.parse/render never ran again.
+    expect(render).toHaveBeenCalledTimes(2);
+
+    // A block whose source was never rendered under the target theme keeps
+    // its current svg — no re-parse on a theme flip.
+    const cold = document.createElement("div");
+    cold.dataset.mermaidMounted = "true";
+    cold.dataset.mermaidSource = "flowchart TD\n  X --> Y";
+    cold.attachShadow({ mode: "open" }).innerHTML = light ?? "";
+    document.body.appendChild(cold);
+    setMermaidTheme("light");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(cold.shadowRoot?.innerHTML).toContain("light-svg");
+    expect(render).toHaveBeenCalledTimes(2);
+    expect(dark).toContain("dark-svg");
+  });
+
   it("returns null when mermaid fails to render", async () => {
     render.mockRejectedValue(new Error("syntax error"));
     const { renderMermaidSvg } = await loadModule();

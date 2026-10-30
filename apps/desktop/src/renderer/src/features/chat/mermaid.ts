@@ -19,28 +19,62 @@ type MermaidModule = (typeof import("mermaid"))["default"];
 
 let currentTheme: "dark" | "light" = "dark";
 let modulePromise: Promise<MermaidModule> | null = null;
+/** Theme the loaded module was last initialized with; mermaid.render reads the
+ * global config, so a theme switch must re-initialize before the next render. */
+let initializedTheme: "dark" | "light" | null = null;
 let renderSeq = 0;
 /** Rendered-diagram cache keyed `theme\0source`: React may reset a message's
  * innerHTML on any commit, and re-enhancement must not re-run mermaid. */
 const svgCache = new Map<string, Promise<string | null>>();
 const SVG_CACHE_LIMIT = 50;
 
-/** Theme for diagrams rendered afterwards; already-mounted ones keep theirs. */
+/**
+ * Theme for diagrams rendered afterwards. Mounted diagrams redraw immediately
+ * when their SVG for the new theme is already in the cache; a cache miss
+ * keeps the current SVG (re-parsing on every theme flip could stampede the
+ * render queue) and picks the new theme up at the block's next natural
+ * re-enhancement.
+ */
 export function setMermaidTheme(theme: "dark" | "light"): void {
   currentTheme = theme;
+  redrawMountedDiagrams();
+}
+
+/**
+ * Swap every mounted diagram (marked `data-mermaid-mounted` with its source
+ * in `data-mermaid-source`) to the current theme's cached SVG. Cache hits
+ * resolve without touching mermaid; misses are skipped entirely.
+ */
+export function redrawMountedDiagrams(scope: ParentNode = document): void {
+  for (const block of scope.querySelectorAll<HTMLElement>("[data-mermaid-mounted]")) {
+    const source = block.dataset.mermaidSource;
+    if (source === undefined) {
+      continue;
+    }
+    const hit = svgCache.get(`${currentTheme}\u0000${source}`);
+    if (hit === undefined) {
+      continue;
+    }
+    void hit.then((svg) => {
+      if (svg !== null && block.isConnected && block.shadowRoot !== null) {
+        block.shadowRoot.innerHTML = svg;
+      }
+    });
+  }
 }
 
 async function loadMermaid(): Promise<MermaidModule> {
-  modulePromise ??= (async () => {
-    const mermaid = (await import("mermaid")).default;
+  modulePromise ??= (async () => (await import("mermaid")).default)();
+  const mermaid = await modulePromise;
+  if (initializedTheme !== currentTheme) {
     mermaid.initialize({
       startOnLoad: false,
       securityLevel: "strict",
       theme: currentTheme === "dark" ? "dark" : "default",
     });
-    return mermaid;
-  })();
-  return modulePromise;
+    initializedTheme = currentTheme;
+  }
+  return mermaid;
 }
 
 function cachedRender(key: string, source: string): Promise<string | null> {

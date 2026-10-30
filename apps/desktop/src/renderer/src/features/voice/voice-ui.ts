@@ -63,3 +63,45 @@ export function speakButton(
 export function voiceFailureKey(kind: "transcribe" | "speak"): MessageKey {
   return kind === "transcribe" ? "voice.transcribeFailed" : "voice.speakFailed";
 }
+
+/**
+ * Why the voice settings panel cannot enable transcription, mapped from the
+ * Host's short English `voice.status` reason to a bilingual message key. The
+ * Host only stats existence, so "not found" is the one actionable case; an
+ * unknown reason falls back to generic copy instead of surfacing raw backend
+ * text (D22: user-visible strings stay bilingual).
+ */
+export type TranscribeProblem =
+  | "binRequired"
+  | "modelRequired"
+  | "binNotFound"
+  | "modelNotFound"
+  | "unavailable";
+
+export const TRANSCRIBE_PROBLEM_KEYS: Record<TranscribeProblem, MessageKey> = {
+  binRequired: "voice.settingsBinRequired",
+  modelRequired: "voice.settingsModelRequired",
+  binNotFound: "voice.settingsBinNotFound",
+  modelNotFound: "voice.settingsModelNotFound",
+  unavailable: "voice.settingsUnavailable",
+};
+
+/** Null when transcription is usable, the mapped problem otherwise. */
+export function transcribeProblem(status: VoiceStatus): TranscribeProblem | null {
+  if (status.transcribe.available) {
+    return null;
+  }
+  const reason = status.transcribe.reason ?? "";
+  if (reason.includes("binary was not found")) return "binNotFound";
+  if (reason.includes("model was not found")) return "modelNotFound";
+  if (reason.includes("binary is not configured")) return "binRequired";
+  if (reason.includes("model is not configured")) return "modelRequired";
+  return "unavailable";
+}
+
+/** Which field an inline error belongs to; null shows the status line only. */
+export function transcribeProblemField(problem: TranscribeProblem): "bin" | "model" | null {
+  if (problem === "binRequired" || problem === "binNotFound") return "bin";
+  if (problem === "modelRequired" || problem === "modelNotFound") return "model";
+  return null;
+}

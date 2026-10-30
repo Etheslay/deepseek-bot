@@ -37,7 +37,19 @@
 // localStorage to Host storage. Additive only: injection still rides
 // chat.send.skills (0.8+), existing methods keep their semantics, and 0.1–0.10
 // senders stay accepted.
-export const CONTRACT_VERSION = "0.11" as const;
+// v0.12 adds the workflow read surface (workflow.get, run.snapshot,
+// approval.list) so the desktop editor and run monitor can stop reading the
+// fixture service. Additive only: every method wraps an existing storage/engine
+// read, no entity changes, and 0.1–0.11 senders stay accepted.
+// The `chat.stream` notice (B6, shipped inside v0.12 without a bump) is now
+// schema-pinned in the contracts package (ChatStreamNoticeSchema): a
+// server→client notification only, additive, so older clients that ignore
+// unknown notifications are unaffected and no protocol bump is needed.
+// v0.13 adds the renderer interface-state methods (ui.state.get/set, G1'):
+// one settings-KV snapshot of sidebar order + selection, validated by the
+// fixed UiStateSchema. Additive only: two new trusted methods, no entity
+// changes, and 0.1–0.12 senders stay accepted.
+export const CONTRACT_VERSION = "0.13" as const;
 export const PROTOCOL_VERSION = CONTRACT_VERSION;
 /** Workflow documents did not change in v0.3–v0.11; keep the document version. */
 export const WORKFLOW_SCHEMA_VERSION = "0.1" as const;
@@ -53,6 +65,8 @@ export const SUPPORTED_PROTOCOL_VERSIONS: readonly string[] = [
   "0.8",
   "0.9",
   "0.10",
+  "0.11",
+  "0.12",
   PROTOCOL_VERSION,
 ];
 

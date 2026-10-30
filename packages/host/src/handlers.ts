@@ -19,6 +19,7 @@ import {
   WORKFLOW_SCHEMA_VERSION,
   validateWorkflowDraft,
   UuidSchema,
+  type ChatMessageMeta,
   type Method,
   type MethodRequest,
   type MethodResponse,
@@ -32,6 +33,7 @@ import {
   type WorkflowEngine,
 } from "@deepseek-bot/runtime";
 import { readSkillLibrary, writeSkillLibrary } from "./skill-library.js";
+import { readUiState, writeUiState } from "./ui-state.js";
 import {
   archiveBot,
   archiveBotUnchecked,
@@ -47,8 +49,11 @@ import {
   getRun,
   getWorkflow,
   listBots,
+  listApprovals,
+  listArtifacts,
   listEvents,
   listGroups,
+  listNodeRuns,
   listRuns,
   listSchedules,
   listWorkflows,
@@ -394,6 +399,21 @@ function formatAskedQuestion(request: AskUserRequest, locale: UiLocale): string 
       `${displayAskUserOption(option, locale).id}. ${displayAskUserOption(option, locale).label}`,
   );
   return ASKED_QUESTION_FRAMING[locale](request.question, lines.join("\n"));
+}
+
+/** Persisted with the question row so a reload restores a collapsed, locked card. */
+function askedChoiceMeta(
+  request: AskUserRequest,
+  locale: UiLocale,
+  answered: string,
+): Extract<ChatMessageMeta, { kind: "choice" }> {
+  return {
+    kind: "choice",
+    question: request.question,
+    options: request.options.map((option) => displayAskUserOption(option, locale)),
+    ...(request.allowOther ? { other: true } : {}),
+    answered,
+  };
 }
 
 function grantResponse(row: GrantRow): {
@@ -776,6 +796,14 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
       })),
     }),
 
+    "workflow.get": (payload) => {
+      const workflow = getWorkflow(db, payload.id);
+      if (workflow === undefined) {
+        throw invalid("workflow not found", { workflowId: payload.id });
+      }
+      return workflow;
+    },
+
     "workflow.validate": (payload) => {
       const issues = validateWorkflowDraft(payload.workflow);
       return { valid: issues.length === 0, errors: issues };
@@ -859,6 +887,22 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
       return { runs, nextCursor: null };
     },
 
+    // v0.12 read surface: one consistent frame for the run monitor. The
+    // engine owns node runs and approvals, so the renderer must not join
+    // fixtures to render a run.
+    "run.snapshot": (payload) => {
+      const run = getRun(db, payload.runId);
+      if (run === undefined) {
+        throw invalid("run not found", { runId: payload.runId });
+      }
+      return {
+        run,
+        nodeRuns: listNodeRuns(db, payload.runId),
+        approvals: listApprovals(db, { runId: payload.runId }),
+        artifacts: listArtifacts(db, { runId: payload.runId }),
+      };
+    },
+
     "run.cancel": async (payload) => engine.cancelRun(payload.runId),
 
     "run.resume": (payload) => {
@@ -905,6 +949,13 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
         snapshotRequired: false,
       };
     },
+
+    "approval.list": (payload) => ({
+      approvals: listApprovals(db, {
+        ...(payload.runId !== undefined ? { runId: payload.runId } : {}),
+        ...(payload.status !== undefined ? { status: payload.status } : {}),
+      }).slice(0, payload.limit),
+    }),
 
     "approval.decide": (payload) => {
       engine.decideApproval(payload.approvalId, payload.decision, payload.expectedActionDigest);
@@ -1141,11 +1192,13 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
         throw error;
       }
       if (pending !== undefined) {
+        const locale = context.locale.current;
         appendChatMessage(db, {
           botId: bot.id,
           sessionId: callerId,
           role: "assistant",
-          text: formatAskedQuestion(pending, context.locale.current),
+          text: formatAskedQuestion(pending, locale),
+          meta: askedChoiceMeta(pending, locale, result.text),
         });
       }
       const message = appendChatMessage(db, {
@@ -1756,6 +1809,15 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
       // contract (limits, bindings, instruction bounds); store and echo it.
       writeSkillLibrary(db, payload.library);
       return { library: payload.library };
+    },
+
+    "ui.state.get": () => ({ state: readUiState(db) }),
+
+    "ui.state.set": (payload) => {
+      // The dispatcher already validated the snapshot against the fixed
+      // UiStateSchema (stable IDs only); store and echo it.
+      writeUiState(db, payload.state);
+      return { state: payload.state };
     },
 
     "data.backup": () => {
