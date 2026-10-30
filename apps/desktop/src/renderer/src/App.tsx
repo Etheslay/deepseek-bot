@@ -3153,6 +3153,14 @@ function MessageBubble({
                   </span>
                 );
               })}
+              {/* A4: the image reaches the workspace but not the model — say so
+                  once on the message that carried it, without touching the
+                  model-facing attachment block. */}
+              {msg.attachments.some((file) => file.kind === "image") && (
+                <span className="msg-attachments-hint">
+                  {t("shell.attachmentImageNotVisible")}
+                </span>
+              )}
             </div>
           )}
           {replayCard ? null : isUser ? (
@@ -4125,6 +4133,9 @@ function BotsPlaceholder({
             <span className="attach-chip" key={`${file.name}-${index}`}>
               <span className="attach-chip-name">{file.name}</span>
               <span className="attach-chip-size">{formatAttachmentSize(file.size)}</span>
+              {classifyAttachment(file.mime, file.name) === "image" && (
+                <span className="attach-chip-flag">{t("shell.attachmentNotModelReadable")}</span>
+              )}
               <button
                 type="button"
                 className="attach-chip-remove"
