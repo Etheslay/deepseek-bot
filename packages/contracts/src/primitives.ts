@@ -92,4 +92,8 @@ export const TEXT_LIMITS = {
   voiceTranscript: 4_000,
   /** One spoken-aloud text (D27): keeps one SAPI run inside the timeout. */
   voiceSpeakText: 2_000,
+  /** One live assistant segment on the `chat.stream` notice (B6): a segment
+   * is a settled reply-sized text, so the cap mirrors the largest free-text
+   * limit instead of the 4k user-message cap. */
+  streamSegment: 100_000,
 } as const;
