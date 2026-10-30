@@ -1,5 +1,12 @@
 # 工作记录
 
+## 2026-10-30：chat.stream 契约补记 + #150/#151 报告补录与编号勘误（两分支）
+
+- 基线：`origin/develop` = `8b9e5bf`（PR #178 合入后）。用户指示：推进工作后推送远程并开 PR，由负责人手动合并。
+- `feature/chat-stream-notice-contract`（`82107d9`）：收口 GAP_AUDIT §7.10 登记的契约漂移——`ChatStreamNoticeSchema` 钉进 contracts（events.ts 瞬态流节 + `TEXT_LIMITS.streamSegment`），host 发送端与桌面消费端改为从 contracts 取类型（单一类型源），桌面手写 typeof 三连检换成 `safeParse`（畸形通知整条忽略，行为不变）；CONTRACTS.md §4 新增「服务端→桌面 stdio 通知」段（`schedule.missed` + `chat.stream`）；不升 protocolVersion。测试：contracts 158 通过（新增 1 例）、desktop 78 文件全过（host-client 假 fixture 改用线内真实 UUID botId 并压入畸形通知断言跳过）、lint/typecheck/desktop build 全绿；host 全量首跑 2 失败为既有抖动家族（隔离复跑 18/18+1/1，develop 基线复跑同样 2 失败）。报告 `docs/reports/B6-chat-stream-contract-report.md`。
+- `feature/backfill-reports-150-151`：补录 #150/#151 两份报告（D27 语音接线、stream-pacer，均标注事后整理、复跑切片自带测试 22+10 例全绿），并**勘误台账互换的 PR 编号**——合并提交为准：#151=`feature/streaming-reply`（stream-pacer）、#150=`feature/voice-ui-wiring`（D27' 语音接线）；修正 GAP_AUDIT（第四次刷新行、§0 表、§1.1、§5、§7.9）与 SPRINTS（§4 两行、§7 审计行、§10）共 9 处。
+- 仍开放：桌面 UI 端到端人工验收（12 步清单，D23 前置）、拍板 #1（ui.* 清单 → RENDERER_HOST_MAPPING §4）、语音实机联调、D13/D23 收官；`tmp-inspect.txt`（工作区根目录未跟踪残件）待负责人处置。
+
 ## 2026-10-30：波1–波2 三片落地 + 接线后台账刷新（文档）
 
 - 基线：`origin/develop` = `ad617a0`（PR #173–#177 合入后）。本会话依次交付并合入：#173 第七次刷新（GAP_AUDIT §7.10 + SPRINTS 账目）、#174 工作流回合 token 入 `usage_events`（`model=null`/`source=estimated`，用量解析迁入 `@deepseek-bot/harness-adapter`）、#175 `ui.*` 界面态契约候选（`UiStateSchema`，仅类型与校验）、#176 工作流读面 v0.12（`workflow.get`/`run.snapshot`/`approval.list`）、#177 桌面 `workflows`/`runs` 切真实 Host（导入保持惰性、`playback` 显隐夹具控件、审批 status 回退文案）。

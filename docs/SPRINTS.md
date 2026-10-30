@@ -107,8 +107,8 @@
 | 互通：任意 bot 平权派发 + 幂等 | **已交付（PR #136）**：去角色/同组门槛、跨组链放行、`idempotencyKey` 幂等重放、`Bot.role` 退役为遗留标签 | `feature/bot-interop` → PR #136 `3e21112` | [BOT_INTEROP-report](reports/BOT_INTEROP-report.md) |
 | 原始人模式 + 作曲器深度思考入口 | **已交付（PR #137）**：`chat.send` 可选 `primitive` 最短提示组装（落库不变）；深度思考入口移至输入框旁 | `feature/primitive-mode` → PR #137 `fde0953` | [PRIMITIVE_MODE-report](reports/PRIMITIVE_MODE-report.md) |
 | 上下文圆圈 + 80% 自动压缩（G13） | **已交付（PR #138）**：`chat.contextUsage` + 迁移 `0023-chat-summaries` + 后台压缩回合（无工具面、用量照记、历史行不删）；合并前审查 §2.1 P2（并发断言失实）待归属人处理（GAP_AUDIT §7.9） | `feature/context-meter` → PR #138 `a6c7cb5` | [CONTEXT_METER-report](reports/CONTEXT_METER-report.md) |
-| stream-pacer 流式回放节奏 | **已交付（PR #150）**：按行/句自适应回放（纯呈现层，契约零改动），修 finish 即 resolve 与取消定时器泄漏；无入库报告（PR 正文为准，GAP_AUDIT §7.9） | `feature/streaming-reply` → PR #150 `6659d29` | —（PR 正文） |
-| D27' 语音桌面接线 | **已交付（PR #151）**：麦克风转写只填输入框（20s 自动停）+ 逐条朗读按钮 + `voice.status` 门控；「按住说话/自动断句」未做；无入库报告 | `feature/voice-ui-wiring` → PR #151 `db64e01` | —（PR 正文） |
+| stream-pacer 流式回放节奏 | **已交付（PR #151，编号勘误见 [stream-pacer 报告](reports/stream-pacer-report.md)）**：按行/句自适应回放（纯呈现层，契约零改动），修 finish 即 resolve 与取消定时器泄漏；报告已补录（2026-10-30） | `feature/streaming-reply` → PR #151 `6659d29` | [stream-pacer-report](reports/stream-pacer-report.md) |
+| D27' 语音桌面接线 | **已交付（PR #150，编号勘误见 [D27 语音接线报告](reports/D27-voice-wiring-report.md)）**：麦克风转写只填输入框（20s 自动停）+ 逐条朗读按钮 + `voice.status` 门控；「按住说话/自动断句」未做（按住说话由下一行 PR #157 交付）；报告已补录（2026-10-30） | `feature/voice-ui-wiring` → PR #150 `db64e01` | [D27-voice-wiring-report](reports/D27-voice-wiring-report.md) |
 | D27'' 按住说话 | **本分支**：麦克风改为按住录音、松开后 `voice.transcribe` 填入输入框（不自动发送）；保留 `voice.status` 门控与 20 秒上限；不自动断句，不改 Host 语音后端 | `feature/d27-hold-to-talk-220a` | —（PR 正文） |
 | D17' 技能库进 Host | **已交付（PR #152）**：`skillLibrary.get/save`（协议 0.11）、settings KV 行整库校验、一次性迁移（composer 数组形态绝不迁移）、降级读 localStorage；审查 §2.3 备忘未处理（不阻塞） | `feature/d17-skill-host-store` → PR #152 `cf22763` | [D17-skill-host-store-report](reports/D17-skill-host-store-report.md) |
 | D14 补遗：本地 mermaid 渲染 | **已交付（PR #153）**：strict + DOMPurify svg profile + shadow DOM 三层防线、动态 import 独立 chunk、失败回退保原文；**审查 §2.2 P3（主题切换后新图仍用旧主题）未处理随合并入库** | `feature/d14-mermaid` → PR #153 `6299994` | [D14-mermaid-report](reports/D14-mermaid-report.md) |
@@ -218,7 +218,7 @@
 | 聊天 | 用户气泡颜色 | **已实现**：气泡按当前会话 bot 着色（D14 交付时未做，由 `fix/chat-user-bubble-bot-color` 补齐） | ~~D14~~ 已完成，见 [D14-report §5](reports/D14-report.md) |
 | 聊天 | 回复仍是"（占位回复）"夹具数据；横幅标注"静态占位" | **已实现**：chat.send/history/cancel 真实链路（D30 + PR #97/#103），夹具仅存于离线演示模式 | ~~Renderer↔Host 映射~~ 聊天部分已落地；剩余界面态见 **GAP_AUDIT G1'** |
 | 聊天 | ＋ 菜单"添加附件" | **已实现**（D26）：`attachment.begin/append/commit` 上传进工作区 + 模型工具 `read_workspace_file`（PR #106/#111） | ~~D26~~ 已完成，见 [GAP_AUDIT](GAP_AUDIT.md) §1.1 G8 |
-| 聊天 | 麦克风按钮 | **已实现**：按住录音、松开后 `voice.transcribe` 只填输入框不自动发送（仍 20s 上限），逐条回复朗读按钮（`voice.speak`），按 `voice.status` 门控禁用；自动断句未做 | D27'（PR #151）+ D27''（`feature/d27-hold-to-talk-220a`）；真机验收归第三批 |
+| 聊天 | 麦克风按钮 | **已实现**：按住录音、松开后 `voice.transcribe` 只填输入框不自动发送（仍 20s 上限），逐条回复朗读按钮（`voice.speak`），按 `voice.status` 门控禁用；自动断句未做 | D27'（PR #150）+ D27''（`feature/d27-hold-to-talk-220a`，PR #157）；真机验收归第三批 |
 | 顶栏 | 搜索圆钮 | **已实现**：Ctrl+K 浮层经 `search.global` 检索 Host 全库（bot/工作流/跨 bot 消息/产物，四类命中导航，不可达降级本地；PR #117 + #126） | ~~D25 后半~~ 已完成，见 [D25-host-search-renderer-report](reports/D25-host-search-renderer-report.md) |
 | 顶栏 | 最近会话 / 产物 popover | 会话部分已读真实数据（PR #103 stored-session）；产物 popover 本次刷新未逐项复核 | 同 [GAP_AUDIT](GAP_AUDIT.md) G1'/G10 |
 | 设置 | 分类"电脑 / 保险库 / 用量与账单 / 更新" | **已实现**（D24）：备份/恢复/保险库（PR #78）、用量统计（PR #119）、应用内更新（`main/updates.ts`） | ~~D24~~ 已完成 |
@@ -280,7 +280,7 @@
 - **工作区**（`git worktree list`）5 个活动项，其分支均已合入：`~/.codex/worktrees/d21-windows-acceptance`（`feature/screen-windows-acceptance`，PR #93）、`~/.codex/worktrees/resolve-pr65-connectors`（`feature/local-exec`）、`deepseek-bot-wt-connectors`（`feature/connector-registry`）、`deepseek-bot-wt-knowledge`（`feature/knowledge-import`）、`deepseek-bot-wt-memory`（`feature/memory-knowledge`，PR #57）——均属可清理死工作区，但可能含未跟踪本机数据，删除前需负责人逐个确认，本台账只登记不动手；
 - **主工作区残件**：根目录 `.tmp-d16-*` 日志与临时 electron 目录（`.gitignore` 覆盖、不入库）为 D16 会话遗留，可删；
 - **欠账复核**（对照 10-27 清点）：`docs/GAP_AUDIT.md`、`docs/TASK_MANAGER_ORCHESTRATION.md` 已入库（PR #122 起）；根目录 0 字节 `$null` 文件已不存在；手测截图 d14/d17/d25/d26 仍缺；各报告自审签署欠账清单见 [GAP_AUDIT](GAP_AUDIT.md) §7.3；
-- **未完成的计划项**：~~D21 真实键鼠复核~~（真机指针/按键已由 PR #160 记录，点击与编辑器内按键仍开放）、**D23 平台验收**（依赖 D13 与 D14–D22 全部完成，未开始）、**语音实机联调**（#151/#157 已接线）、**G1' ui.***（等拍板 #1）；下一批候选见 [GAP_AUDIT](GAP_AUDIT.md) §8。
+- **未完成的计划项**：~~D21 真实键鼠复核~~（真机指针/按键已由 PR #160 记录，点击与编辑器内按键仍开放）、**D23 平台验收**（依赖 D13 与 D14–D22 全部完成，未开始）、**语音实机联调**（#150/#157 已接线）、**G1' ui.***（等拍板 #1）；下一批候选见 [GAP_AUDIT](GAP_AUDIT.md) §8。
 
 **10-29 六次刷新清点（develop = `9d3ac5b`，PR #156–#160 合入后）**：
 

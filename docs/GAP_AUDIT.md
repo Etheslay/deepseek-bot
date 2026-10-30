@@ -7,7 +7,7 @@
 | 第二次刷新 | 2026-10-28，基线 `origin/develop` = `81a0924`（PR #121）；对照第一次刷新基线 `b22ca88`（PR #89）之间合入的 #90–#121，未完成项逐个经 `git grep` 对 develop 重新核实后保留任务书原文并更新证据 |
 | 刷新勘误（同日第二提交，基线 `968aa0b` = PR #123） | ① **G2 已由 PR #123 交付**（`feature/g2-bridge-staging-e8f4`，启动即 staging 桥包），移入 §1.1——本刷新首提交仍标开放，特此更正；② **G10 降级为部分完成**：Host 侧 `search.global` 已合入（#117），但渲染层 Ctrl+K 浮层仍只过滤渲染层本地索引（`global-search.tsx` 经 `filterSearch`，全渲染层 grep `search.global` 零调用），余项立为 **G10'**；③ D27 追加：whisper 配置已持久化进 settings KV（PR #118/#123） |
 | 第三次刷新 | 2026-10-29，基线 `origin/develop` = `3e21112`（PR #136/#137）；对照第二次刷新基线 `968aa0b`（PR #123）之后合入的 #124–#137，关闭 **G3、G9'、G10'、G11'、D20'**，并把 D21' 收窄为真实键鼠复核；已完成项逐个经 `git grep` 与交付报告核实 |
-| 第四次刷新 | 2026-10-29，基线 `origin/develop` = `db64e01`（PR #150/#151）；对照三次刷新后合入的 #138/#143–#151，关闭 **G13（#138 超额交付：计量+自动压缩）、D27'（#151 语音桌面接线）**；#150 为无编号 UX 切片；#138 的审查 P2 未处理即合入，转入治理债 §7.9；已完成项经代码与 PR 正文核实 |
+| 第四次刷新 | 2026-10-29，基线 `origin/develop` = `db64e01`（PR #150/#151）；对照三次刷新后合入的 #138/#143–#151，关闭 **G13（#138 超额交付：计量+自动压缩）、D27'（#150 语音桌面接线）**；#151 为无编号 UX 切片；#138 的审查 P2 未处理即合入，转入治理债 §7.9；已完成项经代码与 PR 正文核实（**勘误 2026-10-30：本行及 §0 下表原本把两 PR 编号写反——以合并提交为准 #150=`feature/voice-ui-wiring`、#151=`feature/streaming-reply`**） |
 | 第五次刷新 | 2026-10-29，基线 `origin/develop` = `d1cb448`（PR #152–#154）；#152/#153 合入清零在途分支；CONTRACTS 标题对齐 0.11（随本刷新修正）；d14 审查 §2.2 P3 未处理随合并入库转 §7.9；已合入项经代码核实 |
 | 第六次刷新 | 2026-10-29，基线 `origin/develop` = `9d3ac5b`（PR #156–#160）；关闭 **G4 主体（#159 付费链路验收入档，残留见 §2）**、**D21' 真机指针/按键记录（#160，文档）**；G1' 回放弱化（#156/#158）与 D27 按住说话（#157）随合并入档；§7.9 的 cm P2（改文档）与 d14 P3（改代码）以两个**未推送本地分支**处置；已合入项经报告与代码核实；后续状态以 §7.10 勘误为准 |
 | 第七次刷新 | 2026-10-30，基线 `origin/develop` = `5248ab6`（PR #161–#172）；对照六次刷新基线 `9d3ac5b` 之后合入的 #161–#172，**无新增缺口关闭**（均为 UX/流式/文档/加固切片）；新增 **§7.10 工作流主路径接线核对**，并据此勘误 G14 与 G11' 的完成口径；§7.9 中两处「未推送分支」更新为已由 #165/#167 合入；发现 #172 新增的 `chat.stream` 服务端推送未进契约文档（记 §7.10）；同步刷新 SPRINTS §4、§10 账目 |
@@ -63,8 +63,8 @@ develop 一天合入 12 个 PR，原审计多项缺口就此关闭：#73 深度�
 | --- | --- | --- |
 | #138 `feature/context-meter`（`a6c7cb5`） | 上下文用量圆环 + 80% 自动压缩：迁移 `0023-chat-summaries`、受信方法 `chat.contextUsage`、`ChatManager.compressTurn`（空工具面、无审批、用量照记）、渲染层 context-ring；**历史行不删**，删摘要行即恢复全量回放 | **G13 ✅（超额：原设想仅可见性，交付含计量+自动压缩）**；审查 §2.1 P2 未处理即合入（见 §7.9） |
 | #143/#145/#146/#147/#148/#149 文档系列 | 台账刷新 ×3、PREMERGE-REVIEW 入库、D22 断链、CONTRACTS 标题对齐 0.10、直接依赖许可索引、BOT_WORKSPACE 口径修正 | 治理债 §7.8 ✅；§7.4 体检全绿 |
-| #150 `feature/streaming-reply`（`6659d29`） | stream-pacer：长回复按行/句自适应回放节奏（纯呈现层，契约零改动），修 finish 即 resolve 与取消不释放定时器 | —（无 D 编号 UX 切片；PR 正文即交付描述，无入库报告 → §7.9） |
-| #151 `feature/voice-ui-wiring`（`db64e01`） | D27' 语音桌面接线：麦克风录音→WAV→`voice.transcribe`（只填输入框不自动发送，20s 自动停）、逐条回复朗读按钮（`voice.speak`）、按 `voice.status` 门控禁用 | **D27' ✅**（「按住说话/自动断句」交互未做；真机未验证） |
+| #151 `feature/streaming-reply`（`6659d29`） | stream-pacer：长回复按行/句自适应回放节奏（纯呈现层，契约零改动），修 finish 即 resolve 与取消不释放定时器 | —（无 D 编号 UX 切片；报告已补录 2026-10-30：[stream-pacer 报告](reports/stream-pacer-report.md)） |
+| #150 `feature/voice-ui-wiring`（`db64e01`） | D27' 语音桌面接线：麦克风录音→WAV→`voice.transcribe`（只填输入框不自动发送，20s 自动停）、逐条回复朗读按钮（`voice.speak`）、按 `voice.status` 门控禁用 | **D27' ✅**（「按住说话/自动断句」交互未做，按住说话由 #157 交付；真机未验证；报告已补录 2026-10-30：[D27 语音接线报告](reports/D27-voice-wiring-report.md)） |
 
 ### 10-29 五次刷新总览（db64e01 → d1cb448，PR #152–#154）
 
@@ -153,8 +153,8 @@ develop 一天合入 12 个 PR，原审计多项缺口就此关闭：#73 深度�
 | ~~G11'~~ | D17 工作流模板库 | PR #127；`features/workflow-editor/template/workflow-templates.ts` 冻结 schema 剥离走私策略字段 + Host 端不落库用例（[报告](reports/G11-workflow-template-library-report.md)） |
 | ~~D20'~~ | 聊天内自动化状态通知条 | PR #134/#135；meta 行（kind automation）+ `features/automation/chat-automation-notice.tsx`（错过明细/启停/待评审，20 秒轮询、静默降级，契约零改动）（[报告](reports/D20-chat-notice-report.md)） |
 | ~~G13~~ | 上下文用量可视 + 80% 自动压缩（超额） | PR #138；`chat.contextUsage` + 迁移 `0023-chat-summaries` + `compressTurn`（空工具面、无审批、用量照记）+ 渲染层 context-ring；历史行不删；**审查 §2.1 P2（并发断言）未处理随合并入库**；真实模型摘要质量与真机未验证（[报告](reports/CONTEXT_METER-report.md)） |
-| ~~D27'~~ | 语音桌面接线 | PR #151；`features/voice/`（wav 编码/clip-recorder/voice-ui 门控）+ 逐条朗读按钮。按住说话在 `feature/d27-hold-to-talk-220a`：松开后 `voice.transcribe` 只填输入框、不自动发送，20 秒上限与 `voice.status` 门控保留；自动断句未做；真机未验证 |
-| — | stream-pacer 流式回放节奏（无编号 UX 切片） | PR #150；`features/chat/stream-pacer.ts` 纯呈现层（按行/句自适应、≤7s），修 finish 即 resolve 与取消定时器泄漏；无入库报告 |
+| ~~D27'~~ | 语音桌面接线 | PR #150；`features/voice/`（wav 编码/clip-recorder/voice-ui 门控）+ 逐条朗读按钮。按住说话在 `feature/d27-hold-to-talk-220a`（PR #157）：松开后 `voice.transcribe` 只填输入框、不自动发送，20 秒上限与 `voice.status` 门控保留；自动断句未做；真机未验证（[报告](reports/D27-voice-wiring-report.md)，2026-10-30 补录） |
+| — | stream-pacer 流式回放节奏（无编号 UX 切片） | PR #151；`features/chat/stream-pacer.ts` 纯呈现层（按行/句自适应、≤7s），修 finish 即 resolve 与取消定时器泄漏（[报告](reports/stream-pacer-report.md)，2026-10-30 补录） |
 | — | D17' 技能库进 Host（协议 0.11） | PR #152；`skillLibrary.get/save` + settings KV `skills.library.v1` 整库校验 + 一次性迁移（composer 数组形态绝不迁移）+ 降级读 localStorage；审查 §2.3 备忘未处理（不阻塞）；真机未验证（[报告](reports/D17-skill-host-store-report.md)） |
 | — | D14 补遗：本地 mermaid 渲染 | PR #153；strict + DOMPurify svg + shadow DOM、动态 import chunk、失败回退保原文；**审查 §2.2 P3 未处理随合并入库**；真机截图未做（[报告](reports/D14-mermaid-report.md)） |
 
@@ -233,7 +233,7 @@ PR #159 以用户临时 Key（仅进程环境变量注入、用后即弃、不�
 - **D20**：计划内切片全部交付——聊天内状态通知条与错过可见已由 PR #134/#135 补齐（触发器、规则、评审队列、规则状态历史、重复防护、桌面评审页此前已交付：PR #66/#84/#85/#87 + D20 各报告；"同一事件不第二次启动"由本地自动启动切片完成）；
 - **D21 剩余**：真机指针移动与允许列表内按键各一次已由 PR #160 入档（`win32-input.ps1` 生产路径、精确仅本次审批、延迟 ~0.6 s；无点击，未把键送进编辑器——[D21-pointer-key 报告](reports/D21-pointer-key-report.md) §3/§6 如实列出）；真实窗口截图/OCR 已有真机证据（[D21-windows-acceptance 报告](reports/D21-windows-acceptance-report.md) §4，PR #93）；输入闸门与本地记录已交付（PR #88/#89/#104）；点击与编辑器内按键场景仍开放；
 - **D22**：全部完成（双语/托盘/通知/Chrome 导入 PR #75；硬件加速 `b57d46b`）；
-- **D27**：计划内切片全部交付——桌面语音接线由 PR #151 交付（麦克风录音转写只填输入框、逐条朗读、`voice.status` 门控禁用）。按住说话由 `feature/d27-hold-to-talk-220a` 接上（松开填入输入框，不自动发送，20 秒上限保留）；自动断句仍未做，与原验收措辞的差异由归属人自审确认；
+- **D27**：计划内切片全部交付——桌面语音接线由 PR #150 交付（麦克风录音转写只填输入框、逐条朗读、`voice.status` 门控禁用）。按住说话由 `feature/d27-hold-to-talk-220a` 接上（松开填入输入框，不自动发送，20 秒上限保留）；自动断句仍未做，与原验收措辞的差异由归属人自审确认；
 - **D13 性能预算实测**（PRD §6：未测量不得宣称达标）、**D23 平台收官**：按 DEVELOPMENT_PLAN §9 顺延至阶段二收官，与发布验收合并执行。
 
 ## 6. P3：需拍板后立项的产品增量
@@ -260,7 +260,7 @@ PR #159 以用户临时 Key（仅进程环境变量注入、用后即弃、不�
 6. ~~快赢安家~~ **SPRINTS §9.1 表已注记四项全部完成及载体**（随本刷新）；
 7. ~~本文件入库~~ **随 docs/gap-audit-refresh 分支提交**；
 8. ~~CONTRACTS.md 文档滞后~~ **已收口（2026-10-29 契约补记）**：`chat.send` / `chat.history` / `chat.cancel` / `chat.status` / `chat.attach` 五行已补入 §3 方法表，内容以 `packages/contracts` 冻结 schema 为准（此前 `chat.status` 全文零提及）；skills、primitive 与附件分块细节仍指向既有 D17/D26 节与 §4 事件段，两处漂移风险就此消除；
-9. **无报告合入与审查发现项处置（2026-10-29 四次刷新新增；同日第六次刷新记录处置；30 日七次刷新更新合入状态）**：#150（stream-pacer）/ #151（语音接线）未按 §9「每编号 + 报告」入库报告文件（PR 正文模板齐全，是否补报告由归属人定）；~~#138 的 cm P2~~ **已处置（选改文档，`feature/context-meter-concurrency-docs` → PR #165 `a6a11e9`）**——[任务书](TASK_CONTEXT_METER.md) §5 与[报告](reports/CONTEXT_METER-report.md) §4 改为如实记录「压缩回合与用户发送真并发（busy 仅约束 send，重入由 `compressingChats` 防护）」及 provider 限流/用量行交错/`chat.contextUsage` 最近行抖动风险；不改锁的理由：压缩是静默后台维护回合，复用忙锁会把 RATE_LIMITED 在用户不可控的时刻递给用户，审查已确认数据完整性不受影响；~~d14 §2.2 P3~~ **已修复（选改代码，`feature/d14-mermaid-theme-reinit` → PR #167 `417df1c`）**——按 `initializedTheme` 比对在渲染取模块时重跑 initialize，切回曾用主题命中该主题缓存不触碰全局配置，语义由新增测试钉住（[报告](reports/D14-mermaid-theme-report.md)）。两分支在第六次刷新时尚未推送，现均已合入 develop；
+9. **无报告合入与审查发现项处置（2026-10-29 四次刷新新增；同日第六次刷新记录处置；30 日七次刷新更新合入状态）**：~~#150（stream-pacer）/ #151（语音接线）未按 §9「每编号 + 报告」入库报告文件~~ **报告已于 2026-10-30 补录**（[stream-pacer 报告](reports/stream-pacer-report.md)、[D27 语音接线报告](reports/D27-voice-wiring-report.md)；补录时依合并提交勘误此前台账互换的编号：#151=`feature/streaming-reply`、#150=`feature/voice-ui-wiring`）；~~#138 的 cm P2~~ **已处置（选改文档，`feature/context-meter-concurrency-docs` → PR #165 `a6a11e9`）**——[任务书](TASK_CONTEXT_METER.md) §5 与[报告](reports/CONTEXT_METER-report.md) §4 改为如实记录「压缩回合与用户发送真并发（busy 仅约束 send，重入由 `compressingChats` 防护）」及 provider 限流/用量行交错/`chat.contextUsage` 最近行抖动风险；不改锁的理由：压缩是静默后台维护回合，复用忙锁会把 RATE_LIMITED 在用户不可控的时刻递给用户，审查已确认数据完整性不受影响；~~d14 §2.2 P3~~ **已修复（选改代码，`feature/d14-mermaid-theme-reinit` → PR #167 `417df1c`）**——按 `initializedTheme` 比对在渲染取模块时重跑 initialize，切回曾用主题命中该主题缓存不触碰全局配置，语义由新增测试钉住（[报告](reports/D14-mermaid-theme-report.md)）。两分支在第六次刷新时尚未推送，现均已合入 develop；
 10. **#161–#172 无入库报告（2026-10-30 七次刷新新增）**：#163/#164/#166/#168/#169/#170/#171/#172 八项没有 `docs/reports/` 交付报告，与 §9「每编号 + 报告」不一致（#163 为签名决策文档、#164 为审计刷新本体，是否补报告由归属人定）；#161/#162/#165/#167 已有入库报告。是否补录由各归属人自行决定，不追认事前自审；
 
 ### 7.10 工作流主路径接线核对（2026-10-30）
