@@ -1870,17 +1870,41 @@ body {
   color: var(--bots);
 }
 
+/* ---------- 人性化失败卡（humanized errors） ----------
+   一张安静的单列卡：小错误码 chip + 一句人说的话，不再三列红字挤在一起。 */
 .chat-failure {
   align-self: center;
   display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 0.85rem;
-  color: #f87171;
+  flex-direction: column;
+  gap: 6px;
+  max-width: min(560px, 86%);
+  padding: 10px 14px;
+  border: 1px solid color-mix(in srgb, #f87171 35%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, #f87171 8%, transparent);
 }
 
-.failure-code {
+.failure-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.failure-chip {
+  font-size: 0.66rem;
   font-weight: 600;
+  letter-spacing: 0.04em;
+  color: #f87171;
+  border: 1px solid color-mix(in srgb, #f87171 40%, transparent);
+  border-radius: 6px;
+  padding: 1px 7px;
+}
+
+.failure-text {
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--text);
 }
 
 .session-history {

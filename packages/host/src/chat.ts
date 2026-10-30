@@ -230,13 +230,22 @@ export class ChatManager {
     try {
       const inputs = await whileActive(
         this.options.resolveBotInputs(bot).catch((error: unknown) => {
+          // 人性化提醒 (humanized errors): raw system errors (ENOENT, paths,
+          // decrypt failures) never reach the chat — they go to stderr for
+          // diagnosis, and the user gets one calm sentence with the fix.
           const detail = error instanceof Error ? error.message : String(error);
+          process.stderr.write(`[host] model credential resolution failed: ${detail}\n`);
+          const missingKey = /ENOENT|no such file|credential|decrypt|api key/i.test(detail);
           throw new EngineError({
             code: "INVALID_INPUT",
             message:
               this.locale() === "en"
-                ? `Cannot resolve the model credential: ${detail}. Re-save the API Key in Settings.`
-                : `无法解析模型凭据：${detail}。请到设置里重新保存 API Key。`,
+                ? missingKey
+                  ? "I can't start yet — no usable API Key is saved on this machine for me. Re-save your key in Settings, then send that again."
+                  : "I can't resolve my model credentials. Check the API Key and model configuration in Settings, then try again."
+                : missingKey
+                  ? "还开不了对话：这台电脑上还没有我能用的 API Key（可能已失效）。到 设置 里重新保存一次，再把刚才的话发一遍就好。"
+                  : "模型凭据解析失败。到 设置 里检查 API Key 与模型配置，再试一次。",
             retryable: false,
           });
         }),

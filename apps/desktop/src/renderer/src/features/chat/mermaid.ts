@@ -28,9 +28,39 @@ let renderSeq = 0;
 const svgCache = new Map<string, Promise<string | null>>();
 const SVG_CACHE_LIMIT = 50;
 
-/** Theme for diagrams rendered afterwards; already-mounted ones keep theirs. */
+/**
+ * Theme for diagrams rendered afterwards. Mounted diagrams redraw immediately
+ * when their SVG for the new theme is already in the cache; a cache miss
+ * keeps the current SVG (re-parsing on every theme flip could stampede the
+ * render queue) and picks the new theme up at the block's next natural
+ * re-enhancement.
+ */
 export function setMermaidTheme(theme: "dark" | "light"): void {
   currentTheme = theme;
+  redrawMountedDiagrams();
+}
+
+/**
+ * Swap every mounted diagram (marked `data-mermaid-mounted` with its source
+ * in `data-mermaid-source`) to the current theme's cached SVG. Cache hits
+ * resolve without touching mermaid; misses are skipped entirely.
+ */
+export function redrawMountedDiagrams(scope: ParentNode = document): void {
+  for (const block of scope.querySelectorAll<HTMLElement>("[data-mermaid-mounted]")) {
+    const source = block.dataset.mermaidSource;
+    if (source === undefined) {
+      continue;
+    }
+    const hit = svgCache.get(`${currentTheme}\u0000${source}`);
+    if (hit === undefined) {
+      continue;
+    }
+    void hit.then((svg) => {
+      if (svg !== null && block.isConnected && block.shadowRoot !== null) {
+        block.shadowRoot.innerHTML = svg;
+      }
+    });
+  }
 }
 
 async function loadMermaid(): Promise<MermaidModule> {

@@ -47,3 +47,28 @@ export function answerSeedCard<T extends AnswerableMessage>(
       : message,
   );
 }
+
+/** Minimal view of a thread message the pending-card lookup needs. */
+export type AnswerableThreadMessage = {
+  id: number;
+  from: string;
+  history?: boolean | undefined;
+  choices?: { answered?: string | undefined } | undefined;
+};
+
+/**
+ * The latest bot message still carrying an open seed card, if any. Free-text
+ * replies retire it (对标: the card dims instead of nagging) — the caller
+ * marks it answered with the sent text and lets the reply flow normally.
+ */
+export function findPendingChoiceCard<T extends AnswerableThreadMessage>(
+  messages: readonly T[],
+): T | undefined {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index]!;
+    if (message.from === "bot" && canAnswerChoice(message)) {
+      return message;
+    }
+  }
+  return undefined;
+}

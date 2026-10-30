@@ -56,6 +56,9 @@ describe("chat markdown mermaid enhancement", () => {
     if (!(block instanceof HTMLElement)) throw new Error("missing mermaid block");
     expect(block.shadowRoot?.innerHTML).toContain("<svg");
     expect(block.shadowRoot?.innerHTML).toContain("diagram");
+    // The theme redraw finds mounted blocks through this marker + source.
+    expect(block.getAttribute("data-mermaid-mounted")).toBe("true");
+    expect(block.dataset.mermaidSource).toBe("flowchart TD\n  A[开始] --> B[结束]");
     // The source code block is gone; the surrounding prose stays.
     expect(container.querySelector("code.language-mermaid")).toBeNull();
     expect(container.textContent).toContain("前置说明");
