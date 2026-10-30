@@ -130,10 +130,13 @@
 | D21 本地执行守护 | **截图/OCR 主体已合入**（#70/#74/#77/#81/#83）。真实设备输入见下方功能分支。原桌面报告的 Windows 验收缺口由下一行跟进 | `feature/screen-desktop-settings-48af` → PR #83 | [D21-desktop-report](reports/D21-desktop-report.md) |
 | D21 Windows 集成修复与验收 | **已合入 develop（PR #93 `5cd86ca`）**：修复 Host 分发资源、OCR bundle、取消/清单竞态、目录链接、HTTP 端口与关闭进程；本机全量 1374 通过、2 跳过，真实窗口及 Electron 全链路通过。GitHub CI 因账户额度未执行 | `feature/screen-windows-acceptance` | [D21-windows-acceptance-report](reports/D21-windows-acceptance-report.md) |
 | D21 设备动作批准闸门 | **已合入 develop（PR #88）**：默认关闭。策略为每次询问时，一次请求需要一次精确的仅本次审批才接受，结果只有 id 和时间。不移动鼠标、不发送按键、不调用 exec daemon。无单独桌面界面，无网络。真实键鼠与 GitHub Actions 未跑 | `feature/device-action-approval-ffd6` | [D21-device-action-report](reports/D21-device-action-report.md) |
-| D21 设备动作本地记录 | **切片进行中**：一次精确审批后写入一条本地记录（id、bot id、动作名、时间），按 bot 从新到旧列出。拒绝、未启用、复用或未知动作名不写入。未知动作名在审批前拒绝。不移动鼠标、不发送按键、不调用 exec daemon。无桌面界面，无网络。真实键鼠与 GitHub Actions 未跑 | `feature/device-action-record-07ab` | [D21-device-action-record-report](reports/D21-device-action-record-report.md) |
-| D21 真实设备输入 | **切片进行中**：`device.action` 仍默认拒绝。`device.action.request` 仍只记录。`device.action.input` 在一次精确的仅本次审批后，由 exec daemon 执行一次指针移动/点击或一次允许列表内的按键。产物在本机 `device-outputs`，不进元数据备份，响应不含路径。拒绝、未启用、复用、未知键或本机没有输入辅助进程时不执行。无桌面页，无网络。这台 Linux 环境没有执行真实 Windows 键鼠，也没有复核真实窗口截图/OCR。GitHub Actions 未跑 | `feature/d21-device-input` | [D21-device-input-report](reports/D21-device-input-report.md) |
+| D21 设备动作本地记录 | **已合入 develop（PR #89 `b22ca88`）**：一次精确审批后写入一条本地记录（id、bot id、动作名、时间），按 bot 从新到旧列出。拒绝、未启用、复用或未知动作名不写入。未知动作名在审批前拒绝。不移动鼠标、不发送按键、不调用 exec daemon。无桌面界面，无网络。真实键鼠与 GitHub Actions 未跑 | `feature/device-action-record-07ab` | [D21-device-action-record-report](reports/D21-device-action-record-report.md) |
+| D21 真实设备输入 | **已合入 develop（PR #104 `b212eb2`）**：`device.action` 仍默认拒绝。`device.action.request` 仍只记录。`device.action.input` 在一次精确的仅本次审批后，由 exec daemon 执行一次指针移动/点击或一次允许列表内的按键。产物在本机 `device-outputs`，不进元数据备份，响应不含路径。拒绝、未启用、复用、未知键或本机没有输入辅助进程时不执行。无桌面页，无网络。交付时的 Linux 环境未执行真实 Windows 键鼠，真机记录见下一行。GitHub Actions 未跑 | `feature/d21-device-input` | [D21-device-input-report](reports/D21-device-input-report.md) |
+| D21 真机指针/按键记录 | **已合入 develop（PR #160）**：文档切片——真机指针移动与允许列表内按键各一次（无点击），`win32-input.ps1` 生产路径、精确仅本次审批、发送前重读前台焦点，请求到返回 ~0.6 s；延迟、焦点边界与未按的键如实入档，自审栏留空 | `feature/d21-pointer-key-fc7a` | [D21-pointer-key-report](reports/D21-pointer-key-report.md) |
 | D22 系统集成与双语 | **已合入 develop（PR #75 `9db1ae9`）**：全量中英双语（20 域 853 条 key + AST 扫描防回归守卫；计数为本次同步在合流后的树上实测）、单托盘随活跃 bot + 逐 bot 图标菜单、系统通知与设置（总开关 / 仅非前台 / 按 bot 静音 / 测试通知）、Chrome **书签**只读导入（预览→导入→导出→删除）。托盘渲染与点击、Windows 通知弹出、真实 Chrome 配置、打包版 AppUserModelId 属实机未验证项；负责人自审记录仍待本人填写 | `feature/system-integration` → PR #75 | [D22-report](reports/D22-report.md) |
 | D23 平台验收 | 未开始（依赖 D13、D14–D22 全部完成） | — | — |
+| 审查发现 d14 P3 修复 | **已交付（本地未推送，待负责人审后推送）**：`mermaid.initialize` 改为按 `initializedTheme` 比对在渲染取模块时重跑——主题切换后新图用新主题，切回曾用主题命中该主题缓存不触碰全局配置；desktop 74 文件 655 例全过，lint/typecheck 通过——PREMERGE-REVIEW §2.2 P3 | `feature/d14-mermaid-theme-reinit` @ `9058196`（基线 `9d3ac5b`） | [D14-mermaid-theme-report](reports/D14-mermaid-theme-report.md) |
+| 审查发现 cm P2 处置 | **已交付（本地未推送，待负责人审后推送）**：选文档化处置——任务书 §5 与报告 §4 改为如实记录「压缩回合与用户发送真并发（busy 仅约束 send，重入由 `compressingChats` 防护）」及 provider 限流/用量行交错/`chat.contextUsage` 最近行抖动风险；不改锁：后台维护回合不应把 RATE_LIMITED 递给用户——PREMERGE-REVIEW §2.1 P2 | `feature/context-meter-concurrency-docs` @ `d9b89cd`（基线 `9d3ac5b`） | [CONTEXT_METER-report §4](reports/CONTEXT_METER-report.md) |
 
 补记说明：B 线四项与 D17 模板库切片在合入时**未写交付报告、PR 自审记录未填**（两份 PR 清单各仅勾选 2/5）；相应报告于 2026-10-25 事后补记，**不追认事前完成自审**，自审结论仍留空待负责人签署。B 线四项挤在一条串行分支经单个 PR 合入，偏离"一任务一分支"，lockfile 与 CI 配置改动亦未拆独立小 PR；D17 技能库部分已改从最新 develop 单独切分支。后续任务（含 D24、D26 的剩余部分）同样单独切分支，不再堆叠。各任务的手测截图（`reports/assets/d14|d17|d24|d25|d26/`）仍缺，列为待补。
 
@@ -150,7 +153,7 @@
 | A3 | D18 记忆与知识 | 写入/检索/删除，默认不跨 bot；独立知识表 + 本地向量检索 + 保留策略（`feature/knowledge-base`），见 [知识导入报告](reports/D18-knowledge-import-report.md)、[知识检索报告](reports/D18-knowledge-search-report.md) |
 | A4 | D19 连接器与 MCP | 登记与本地 SD 调用已合入（PR #65）；无凭据本机 HTTP MCP 已合入，见 [MCP 报告](reports/D19-mcp-http-report.md)。`feature/d19-stdio-credentials` 增加本机 stdio MCP，并在发现和调用时注入 `cred:` 引用。视觉理解仍等模型可用 |
 | A5 | D20 事件自动化 | 评审队列已合入（PR #66）。本地自动启动切片：一个 bot 的规则可保存、列出、启停，默认关闭，命中一次启动一个运行（`feature/event-automation-rules-844b`）。本地评审切片：规则可设为评审，命中只入队，批准启动一次，拒绝记跳过（`feature/event-review-queue-0e27`）。状态记录切片：启用、停用或改为评审且状态变化时追加一条，按 bot 从新到旧列出（`feature/event-rule-state-history-d3c8`）。桌面切片：设置页为选定 bot 显示启用/停用/评审、待评审批准或拒绝，以及从新到旧的状态记录（`feature/event-rule-desktop-review-4519`）。无聊天通知条 |
-| A6 | D21 本地执行守护 | 契约、Windows OCR 与 Host 网关已在 develop。桌面设置页提供默认关闭、逐次授权的单窗口截图和本机预览。设备动作在每次询问下接受一次精确审批；通过后写入一条本地记录（id、bot id、动作名、时间），可按 bot 从新到旧列出。`device.action.request` 仍不执行输入。`feature/d21-device-input` 在另一次精确审批后，由 exec daemon 执行一次有界指针或按键，产物只留在本机 `device-outputs`。这台 Linux 环境没有执行真实 Windows 键鼠，也没有复核真实窗口截图/OCR |
+| A6 | D21 本地执行守护 | 契约、Windows OCR 与 Host 网关已在 develop。桌面设置页提供默认关闭、逐次授权的单窗口截图和本机预览。设备动作在每次询问下接受一次精确审批；通过后写入一条本地记录（id、bot id、动作名、时间），可按 bot 从新到旧列出。`device.action.input` 在另一次精确审批后由 exec daemon 执行一次有界指针或按键，产物只留在本机 `device-outputs`（PR #104）。真机指针移动与允许列表内按键各一次已入档（PR #160，无点击、未送进编辑器）；真实窗口截图/OCR 真机证据由 PR #93 覆盖。点击与编辑器内按键场景仍开放 |
 
 **B 线（Destinyian · 桌面与体验）**：
 
@@ -262,7 +265,20 @@
 - **工作区**（`git worktree list`）5 个活动项，其分支均已合入：`~/.codex/worktrees/d21-windows-acceptance`（`feature/screen-windows-acceptance`，PR #93）、`~/.codex/worktrees/resolve-pr65-connectors`（`feature/local-exec`）、`deepseek-bot-wt-connectors`（`feature/connector-registry`）、`deepseek-bot-wt-knowledge`（`feature/knowledge-import`）、`deepseek-bot-wt-memory`（`feature/memory-knowledge`，PR #57）——均属可清理死工作区，但可能含未跟踪本机数据，删除前需负责人逐个确认，本台账只登记不动手；
 - **主工作区残件**：根目录 `.tmp-d16-*` 日志与临时 electron 目录（`.gitignore` 覆盖、不入库）为 D16 会话遗留，可删；
 - **欠账复核**（对照 10-27 清点）：`docs/GAP_AUDIT.md`、`docs/TASK_MANAGER_ORCHESTRATION.md` 已入库（PR #122 起）；根目录 0 字节 `$null` 文件已不存在；手测截图 d14/d17/d25/d26 仍缺；各报告自审签署欠账清单见 [GAP_AUDIT](GAP_AUDIT.md) §7.3；
-- **未完成的计划项**：**D21 真实键鼠复核**（截图/OCR 真机证据已由 PR #93 报告覆盖）、**D23 平台验收**（依赖 D13 与 D14–D22 全部完成，未开始）；下一批候选见 [GAP_AUDIT](GAP_AUDIT.md) §8。
+- **未完成的计划项**：~~D21 真实键鼠复核~~（真机指针/按键已由 PR #160 记录，点击与编辑器内按键仍开放）、**D23 平台验收**（依赖 D13 与 D14–D22 全部完成，未开始）、**语音实机联调**（#151/#157 已接线）、**G1' ui.***（等拍板 #1）；下一批候选见 [GAP_AUDIT](GAP_AUDIT.md) §8。
+
+**10-29 六次刷新清点（develop = `9d3ac5b`，PR #156–#160 合入后）**：
+
+- **远程在途分支仍为零**；#156/#157/#158/#159/#160 均已合入（远程分支随合并删除）。
+- **新增未推送本地分支**（本会话产出，自 `9d3ac5b` 建出零落后，待负责人审后推送）：
+
+  | 分支 | 内容 | 提交 |
+  | --- | --- | --- |
+  | `feature/d14-mermaid-theme-reinit` | 审查发现 d14 P3 修复（mermaid 主题重初始化 + 测试 + 报告） | `9058196`（1 提交，3 文件） |
+  | `feature/context-meter-concurrency-docs` | 审查发现 cm P2 文档化处置（任务书 + 报告各一处改写） | `d9b89cd`（1 提交，2 文件） |
+
+- **审查发现项收尾状态（更新）**：d14 §2.2 P3 已修复、#138 §2.1 P2 已文档化处置（见上两分支）；d17 §2.3 备忘未处理（不阻塞，归属人可选把 App.tsx 两处直调收敛到服务层）；#150/#151 报告是否补录待归属人定；
+- **另见**：[GAP_AUDIT](GAP_AUDIT.md) 第六次刷新——G4 付费链验收已入档（#159，残留如实列出）。
 
 下次合并后本节照例更新。
 
