@@ -1,5 +1,11 @@
 # 工作记录
 
+## 2026-10-30：波1–波2 三片落地 + 接线后台账刷新（文档）
+
+- 基线：`origin/develop` = `ad617a0`（PR #173–#177 合入后）。本会话依次交付并合入：#173 第七次刷新（GAP_AUDIT §7.10 + SPRINTS 账目）、#174 工作流回合 token 入 `usage_events`（`model=null`/`source=estimated`，用量解析迁入 `@deepseek-bot/harness-adapter`）、#175 `ui.*` 界面态契约候选（`UiStateSchema`，仅类型与校验）、#176 工作流读面 v0.12（`workflow.get`/`run.snapshot`/`approval.list`）、#177 桌面 `workflows`/`runs` 切真实 Host（导入保持惰性、`playback` 显隐夹具控件、审批 status 回退文案）。
+- 本 PR 为接线后台账刷新：GAP_AUDIT 头部加「接线后勘误」行、§0 新增 10-30 接线勘误总览、§7.10 补「接线结果/仍存差异/未完成那一步」、§8 第五批更新进度、§2 G1' 记 #175 契约候选；SPRINTS §4 补 #173–#177 五行、§10 加 10-30 接线后清点；顺带删掉 §0 中重复的一段「双语系统核实」。
+- 未推送、未自审；提交前跑 `git diff --check` 与相对链接检查，结果见 PR。
+
 ## 2026-10-30：GAP_AUDIT 第七次刷新 + 工作流主路径勘误（文档）
 
 - 基线 `origin/develop` = `5248ab6`（PR #161–#172），而本地主工作区停在 `55e8d59`（第六次刷新）；本次在 `~/.codex/worktrees/workflow-contract-audit` 的分支 `feature/workflow-contract-audit` 上刷新。

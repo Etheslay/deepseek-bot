@@ -147,6 +147,11 @@
 | 语音设置面板 | **已合入（PR #170）**：whisper 路径经主进程对话框选择（`main/voice-pick.ts`）、麦克风即时解锁、i18n 与测试（18 文件） | `feature/a1-voice-settings` → PR #170 `cfea9a2` | —（PR 正文） |
 | 自动化触发窗口去重 | **已合入（PR #171）**：迁移 `0024-event-rule-keys`，执行前 `claimEventRuleKey` 认领，窗口内重复触发记「duplicate trigger within window」，窗口过期回到永久去重 | `feature/b5-automation-dedupe` → PR #171 `a6db352` | —（PR 正文） |
 | 增量流式（live segments） | **已合入（PR #172）**：Host 把每个 settled 助手分段经 `chat.stream` 通知推给桌面，渲染层 `stream-runner` 增量渲染（19 文件）；**该通知未入契约文档，记 [GAP_AUDIT §7.10](GAP_AUDIT.md)** | `feature/b6-incremental-streaming` → PR #172 `5248ab6` | —（PR 正文） |
+| 第七次刷新 + 主路径接线审计 | **已合入（PR #173）**：`docs/GAP_AUDIT.md` 第七次刷新、§7.10 工作流主路径接线核对、SPRINTS §4/§10 账目与 progress.md；含 `chat.stream` 未入契约文档的记录 | `feature/workflow-contract-audit` → PR #173 `0999eac` | —（审计文档） |
+| 工作流回合用量入账 | **已合入（PR #174）**：工作流节点回合 token 写入 `usage_events`（`model=null`、`source=estimated`）；用量解析移入 `@deepseek-bot/harness-adapter`，执行器结果新增 `NodeTurnUsage` | `feature/workflow-usage-accounting` → PR #174 `20d919a` | [WORKFLOW-USAGE-ACCOUNTING-report](reports/WORKFLOW-USAGE-ACCOUNTING-report.md) |
+| `ui.*` 界面态契约候选 | **已合入（PR #175）**：`UiStateSchema`（strict、bot/分组顺序与选中态、≤1000 唯一 UUID）与测试；**仅类型与校验**，不含 Host 方法、不动 IPC 版本，等拍板 #1 | `feature/ui-state-contract` → PR #175 `6254d04` | [UI-STATE-CONTRACT-report](reports/UI-STATE-CONTRACT-report.md) |
+| 工作流读面（v0.12） | **已合入（PR #176）**：协议 0.12 新增 `workflow.get`、`run.snapshot`、`approval.list` + Host 处理器与契约测试；CONTRACTS/RENDERER_HOST_MAPPING 同步，仍不代表桌面已切真实 Host | `feature/workflow-read-surface` → PR #176 `776b873` | [WORKFLOW-READ-SURFACE-report](reports/WORKFLOW-READ-SURFACE-report.md) |
+| 桌面工作流/运行监控接线 | **已合入（PR #177）**：`createHostService` 用 host 版服务覆盖 `workflows`/`runs`；编辑器导入惰性（只 `workflow.validate`，不落库）；运行监控按 `playback` 显隐夹具控件；审批按 status 推导已决定文案；桌面测试 78 文件/695 用例 | `feature/workflow-host-wiring` → PR #177 `ad617a0` | [WORKFLOW-HOST-WIRING-report](reports/WORKFLOW-HOST-WIRING-report.md) |
 
 补记说明：B 线四项与 D17 模板库切片在合入时**未写交付报告、PR 自审记录未填**（两份 PR 清单各仅勾选 2/5）；相应报告于 2026-10-25 事后补记，**不追认事前完成自审**，自审结论仍留空待负责人签署。B 线四项挤在一条串行分支经单个 PR 合入，偏离"一任务一分支"，lockfile 与 CI 配置改动亦未拆独立小 PR；D17 技能库部分已改从最新 develop 单独切分支。后续任务（含 D24、D26 的剩余部分）同样单独切分支，不再堆叠。各任务的手测截图（`reports/assets/d14|d17|d24|d25|d26/`）仍缺，列为待补。
 
@@ -303,6 +308,13 @@
 
 - **审查发现项**：d14 P3、cm P2 已合入（#167/#165）；d17 §2.3 备忘仍未处理（不阻塞）。
 - **新欠账**：#161–#172 中 8 项无入库报告（GAP_AUDIT §7.9 第 10 条）；`chat.stream` 通知未入契约文档（GAP_AUDIT §7.10）。
+
+**10-30 接线后清点（develop = `ad617a0`，PR #173–#177 合入后）**：
+
+- **远程在途分支清零**：#173–#177 均已合入（远程分支随合并删除）。七次清点登记的三个本地分支已全部合入：`feature/workflow-contract-audit` → #173、`feature/workflow-usage-accounting` → #174、`feature/ui-state-contract` → #175。
+- **本地在途**：`feature/workflow-main-path-acceptance`（本 PR：接线后台账刷新）尚未推送；合并后它和 `workflow-contract-audit`、`workflow-usage`、`ui-state-persistence` 四个 worktree 都可清理（按负责人逐个确认后执行，本台账只登记不动手）。
+- **审查发现项**：d14 P3、cm P2 已合入（#167/#165）；d17 §2.3 备忘仍未处理（不阻塞）。
+- **仍欠**：桌面 UI 端到端人工验收（保存→重启读回→三机器人运行→审批/拒绝/取消/重启恢复/历史）；`#161–#172` 中 8 项无入库报告（[GAP_AUDIT](GAP_AUDIT.md) §7.9）；`chat.stream` 仍未入契约文档（[GAP_AUDIT](GAP_AUDIT.md) §7.10）。
 - **未完成的计划项**：工作流主路径接线（GAP_AUDIT §7.10）、G1' 的 ui.*、D13/D23 与 v0.1.0 发布验收。
 - **另见**：[GAP_AUDIT](GAP_AUDIT.md) 第七次刷新。
 
