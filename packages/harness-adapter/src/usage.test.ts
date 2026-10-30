@@ -7,12 +7,12 @@
  * cumulative frames a turn sends.
  */
 import { describe, expect, it } from "vitest";
-import type { SessionEventEnvelope } from "@deepseek-bot/harness-adapter";
+import type { SessionEventEnvelope } from "./harness-attempt.js";
 import {
   TurnUsageAccumulator,
   estimateTokens,
   extractUsageFromEvent,
-} from "./usage-capture.js";
+} from "./usage.js";
 
 function event(type: string, data: unknown): SessionEventEnvelope {
   return { type, data } as unknown as SessionEventEnvelope;
@@ -90,6 +90,24 @@ describe("TurnUsageAccumulator", () => {
     accumulator.observe(event("turn/usage", { input_tokens: 5, output_tokens: 1, model: "deepseek-reasoner" }));
     accumulator.observe(event("turn/usage", { input_tokens: 5, output_tokens: 9 }));
     expect(accumulator.finish("p", "r").model).toBe("deepseek-reasoner");
+  });
+
+  it("collects a whole attempt's events the way the workflow executor does", () => {
+    const accumulator = new TurnUsageAccumulator();
+    for (const frame of [
+      event("turn/start", { turn: 1 }),
+      event("turn/usage", { input_tokens: 321, output_tokens: 45 }),
+      event("turn/end", { reason: { kind: "completed" } }),
+    ]) {
+      accumulator.observe(frame);
+    }
+    expect(accumulator.finish("ignored", "ignored")).toEqual({
+      inputTokens: 321,
+      outputTokens: 45,
+      cachedInputTokens: 0,
+      model: null,
+      estimated: false,
+    });
   });
 
   it("falls back to an estimate and says so when no frame carried usage", () => {

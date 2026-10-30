@@ -36,6 +36,7 @@ import {
   type DshLaunchSpec,
 } from "./launch.js";
 import { composeNodePrompt } from "./prompt.js";
+import { TurnUsageAccumulator } from "./usage.js";
 
 /** Everything the host resolves from storage for one attempt. */
 export interface BotRuntimeInputs {
@@ -153,12 +154,18 @@ export class DshSdkExecutor implements NodeExecutor {
       });
       const prompt = composeNodePrompt(context.bot, context.node, context.inputs);
       const outcome = await attempt.runTurn(sessionId, prompt, context.signal);
+      /* G4 residual: a workflow model turn is billed like any other; the same
+         defensive reader the chat path uses turns the attempt's collected
+         session events into counts (an estimate when no frame carried usage). */
+      const turnUsage = new TurnUsageAccumulator();
+      for (const event of outcome.events) turnUsage.observe(event);
       return {
         outputs: {
           response: outcome.finalResponse,
           turnEndKind: outcome.turnEndKind ?? null,
         },
         sessionId,
+        usage: turnUsage.finish(prompt, outcome.finalResponse),
       };
     } finally {
       this.sessionRegistry.unregister(sessionId);
