@@ -14,6 +14,7 @@ import type {
   ChatSkillInjection,
   ErrorCode,
   EventEnvelope,
+  UiState,
 } from "@deepseek-bot/contracts";
 import type { BackupSummary } from "../../../shared/ipc-channels.js";
 import type { WorkflowServiceApi } from "../features/workflow-editor/workflow-service.js";
@@ -286,6 +287,18 @@ export interface DesktopService {
   runs: RunServiceApi;
   /** v0.5 manager orchestration: dispatched-task query + human cancel. */
   tasks: TaskServiceApi;
+
+  /**
+   * G1' interface state (v0.13 ui.state.get/set): the persisted sidebar
+   * snapshot — order + selection over stable entity IDs only. The fixture
+   * keeps the snapshot in memory; the Host persists it in a settings KV row
+   * and answers the empty state when the row is missing or corrupt.
+   */
+  uiState: {
+    get(): Promise<UiState>;
+    /** Replace the whole snapshot atomically; the caller debounces writes. */
+    save(state: UiState): Promise<UiState>;
+  };
 
   /**
    * D24 leftover vault: backup/restore entry plus data counts. listBackups

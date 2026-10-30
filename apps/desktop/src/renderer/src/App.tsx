@@ -359,6 +359,7 @@ export function App(): JSX.Element {
     duplicate: duplicateBotEntity,
     setUi,
     moveToTop,
+    applyPersistedOrder,
     hide,
   } = useBots(UNGROUPED);
 
@@ -618,6 +619,56 @@ export function App(): JSX.Element {
   const notifyClock = useRef<Map<string, number>>(new Map());
   const [botStatuses, setBotStatuses] = useState<Record<string, TrayBotStatus>>({});
   const activeBotId = bots.find((b) => b.key === selectedBot)?.bot.id ?? null;
+
+  /* ------------- G1': persisted interface state (ui.state, v0.13) ------------- */
+
+  /**
+   * Restore the persisted sidebar snapshot once the first bot list has
+   * landed: order first, then the selected bot — but only when it still
+   * exists (a stale snapshot must not select an archived or deleted bot).
+   * Best-effort: a dead host or corrupt row falls back to the default view.
+   */
+  const uiStateRestoredRef = useRef(false);
+  useEffect(() => {
+    if (uiStateRestoredRef.current || bots.length === 0) {
+      return;
+    }
+    uiStateRestoredRef.current = true;
+    void desktop.uiState
+      .get()
+      .then((state) => {
+        applyPersistedOrder(state.botOrder);
+        if (state.selectedBotId !== null) {
+          const target = bots.find((b) => b.bot.id === state.selectedBotId);
+          if (target !== undefined) {
+            setSelectedBot(target.key);
+          }
+        }
+      })
+      .catch(() => undefined);
+  }, [bots, desktop, applyPersistedOrder]);
+
+  /**
+   * Persist the sidebar snapshot with a debounce — one write per burst of
+   * changes, last write wins on the Host. Group fields stay empty until the
+   * sidebar's session-local groups become persisted entities (MAPPING §5).
+   */
+  useEffect(() => {
+    if (bots.length === 0) {
+      return;
+    }
+    const timer = setTimeout(() => {
+      void desktop.uiState
+        .save({
+          botOrder: bots.map((b) => b.bot.id),
+          groupOrder: [],
+          selectedBotId: activeBotId,
+          selectedGroupId: null,
+        })
+        .catch(() => undefined);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [bots, activeBotId, desktop]);
 
   const raiseNotice = useCallback(
     (input: {

@@ -9,6 +9,7 @@ import type {
   Bot,
   BotArtifact,
   EventEnvelope,
+  UiState,
 } from "@deepseek-bot/contracts";
 import {
   validateArtifactVersion,
@@ -194,6 +195,12 @@ export function createFixtureService(): DesktopService {
     | undefined;
   let keyConfigured = false;
   let connectionScenario: ConnectionScenario = "unverified";
+  let uiStateStore: UiState = {
+    botOrder: [],
+    groupOrder: [],
+    selectedBotId: null,
+    selectedGroupId: null,
+  };
 
   const requireBot = (botId: string): Bot => {
     const bot = bots.find((b) => b.id === botId);
@@ -785,6 +792,16 @@ export function createFixtureService(): DesktopService {
     workflows: createFixtureWorkflowService(),
     runs: createFixtureRunService(),
     tasks: createFixtureTaskService(),
+
+    // G1': the fixture keeps the snapshot in memory — session state like
+    // everything else here, gone on restart.
+    uiState: {
+      get: () => Promise.resolve(uiStateStore),
+      save: (state) => {
+        uiStateStore = state;
+        return Promise.resolve(state);
+      },
+    },
 
     // The fixture chat is renderer-local only, so there is no Host corpus to
     // query; the overlay degrades to its local index without a failure notice.

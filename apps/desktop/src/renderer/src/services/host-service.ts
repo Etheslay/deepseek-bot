@@ -13,6 +13,7 @@ import {
   type Bot,
   type ErrorCode,
   type Task,
+  type UiState,
 } from "@deepseek-bot/contracts";
 import { bytesToBase64 } from "../features/chat/attachments.js";
 import { planPacing } from "../features/chat/stream-pacer.js";
@@ -98,10 +99,19 @@ export function createHostService(bridge: HostBridge): DesktopService {
   const workflows = createHostWorkflowService(hostCall);
   const runs = createHostRunService(hostCall);
 
+  // G1' (v0.13): the sidebar snapshot persists in the Host's settings KV.
+  const uiState = {
+    get: async (): Promise<UiState> =>
+      ((await bridge.host.call("ui.state.get", {})) as { state: UiState }).state,
+    save: async (state: UiState): Promise<UiState> =>
+      ((await bridge.host.call("ui.state.set", { state })) as { state: UiState }).state,
+  };
+
   return {
     ...base,
     workflows,
     runs,
+    uiState,
     bots: {
       list: listBots,
       create: async (draft: BotDraft): Promise<Bot> =>

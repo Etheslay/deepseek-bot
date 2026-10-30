@@ -283,3 +283,22 @@ describe("FixtureService vault (D24 leftover)", () => {
     });
   });
 });
+
+describe("FixtureService uiState (G1')", () => {
+  it("answers the empty snapshot and keeps saves in memory", async () => {
+    await expect(service.uiState.get()).resolves.toEqual({
+      botOrder: [],
+      groupOrder: [],
+      selectedBotId: null,
+      selectedGroupId: null,
+    });
+    const state = {
+      botOrder: ["11111111-1111-4111-8111-111111111111"],
+      groupOrder: [],
+      selectedBotId: "11111111-1111-4111-8111-111111111111",
+      selectedGroupId: null,
+    };
+    await expect(service.uiState.save(state)).resolves.toEqual(state);
+    await expect(service.uiState.get()).resolves.toEqual(state);
+  });
+});
