@@ -6,6 +6,7 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import {
+  claimEventRuleKey,
   listEventRuleRecords,
   listPendingEventRuleReviews,
   saveEventRule,
@@ -361,6 +362,81 @@ describe("local event rules", () => {
     expect(listPendingEventRuleReviews(db, { botId, limit: 20 })).toEqual([]);
     const records = listEventRuleRecords(db, { botId, outcome: "skipped", limit: 5 });
     expect(records[0]).toMatchObject({ eventId, reason: "rule disabled", runId: null });
+    db.close();
+  });
+
+  it("drops an in-window replay as a duplicate with the window reason", () => {
+    const { db, engine, botId, workflowId } = setup();
+    const rule = saveEventRule(db, {
+      botId,
+      name: "窗口防重",
+      workflowId,
+      eventType: "run.failed",
+    });
+    setEventRuleEnabled(db, { id: rule.id, botId, enabled: true });
+    const eventId = randomUUID();
+    seedEvent(db, botId, eventId, "run.failed");
+    expect(evaluateEventRules(db, engine).started).toBe(1);
+    const runsAfterFirst = runCount(db);
+
+    // A replay (cursor rewind) inside the dedupe window is claimed live, so
+    // the sighting drops before reaching the engine again.
+    db.raw.prepare("UPDATE event_rules SET cursor_event_rowid = 0 WHERE id = ?;").run(rule.id);
+    const again = evaluateEventRules(db, engine);
+    expect(again).toMatchObject({ started: 0, duplicates: 1 });
+    expect(runCount(db)).toBe(runsAfterFirst);
+    const records = listEventRuleRecords(db, { botId, ruleId: rule.id, outcome: "duplicate", limit: 5 });
+    expect(records[0]).toMatchObject({
+      eventId,
+      outcome: "duplicate",
+      reason: "duplicate trigger within window",
+    });
+    db.close();
+  });
+
+  it("recovers a claim whose pass crashed before executing", () => {
+    const { db, engine, botId, workflowId } = setup();
+    const rule = saveEventRule(db, {
+      botId,
+      name: "崩溃恢复",
+      workflowId,
+      eventType: "run.failed",
+    });
+    setEventRuleEnabled(db, { id: rule.id, botId, enabled: true });
+    const eventId = randomUUID();
+    seedEvent(db, botId, eventId, "run.failed");
+    // A crashed pass claimed the key but never executed and never recorded
+    // anything. The next evaluation must start the run, not lose the trigger.
+    expect(claimEventRuleKey(db, { ruleId: rule.id, eventId })).toBe(true);
+    const result = evaluateEventRules(db, engine);
+    expect(result).toMatchObject({ started: 1, duplicates: 0 });
+    expect(runCount(db)).toBe(2);
+    expect(listEventRuleRecords(db, { botId, outcome: "started", limit: 5 })).toHaveLength(1);
+    db.close();
+  });
+
+  it("falls back to the permanent record dedupe once the window has passed", () => {
+    const { db, engine, botId, workflowId } = setup();
+    const rule = saveEventRule(db, {
+      botId,
+      name: "过期回落",
+      workflowId,
+      eventType: "run.failed",
+    });
+    setEventRuleEnabled(db, { id: rule.id, botId, enabled: true });
+    const eventId = randomUUID();
+    seedEvent(db, botId, eventId, "run.failed");
+    expect(evaluateEventRules(db, engine).started).toBe(1);
+    // The claim expired long ago; the pass prunes it and the primary record
+    // still blocks a second run — with the permanent reason, not the window's.
+    db.raw
+      .prepare("UPDATE event_rule_keys SET claimed_at = '2020-01-01T00:00:00.000Z' WHERE event_id = ?;")
+      .run(eventId);
+    db.raw.prepare("UPDATE event_rules SET cursor_event_rowid = 0 WHERE id = ?;").run(rule.id);
+    const again = evaluateEventRules(db, engine);
+    expect(again).toMatchObject({ started: 0, duplicates: 1 });
+    const records = listEventRuleRecords(db, { botId, ruleId: rule.id, outcome: "duplicate", limit: 5 });
+    expect(records[0]).toMatchObject({ eventId, outcome: "duplicate", reason: "duplicate event" });
     db.close();
   });
 });

@@ -13,11 +13,21 @@
  * Runs are started with a manual trigger whose idempotency key is derived
  * from (rule, event), so a crash between start and the ledger write still
  * collapses to the same run. This module does not open sockets.
+ *
+ * B5 automation dedupe: before anything executes, the evaluator claims a
+ * (rule, event) key in `event_rule_keys`. A sighting whose key is still live
+ * inside the window is a windowed duplicate — dropped with the reason
+ * "duplicate trigger within window" — while a post-window sighting falls
+ * back to the permanent primary-record dedupe ("duplicate event"). A live
+ * claim with no primary record and no review item means a crashed pass
+ * claimed the key before executing; the sighting recovers through the
+ * normal handling and the engine idempotency key instead of being lost.
  */
 import { createHash } from "node:crypto";
 import type { WorkflowEngine } from "./engine.js";
 import {
   appendEventRuleRecord,
+  claimEventRuleKey,
   decideEventRuleReview,
   enqueueEventRuleReview,
   findEventRulePrimary,
@@ -26,6 +36,7 @@ import {
   getEventRuleReview,
   invalidInput,
   listEventRules,
+  pruneEventRuleKeys,
   setEventRuleCursor,
   wasRunStartedByEventRule,
   type EventRule,
@@ -166,6 +177,7 @@ export function evaluateEventRules(
   const maxRow = (
     db.raw.prepare("SELECT COALESCE(MAX(rowid), 0) AS m FROM events;").get() as { m: number }
   ).m;
+  pruneEventRuleKeys(db);
   for (const rule of listEventRules(db)) {
     if (maxRow <= rule.cursorEventRowId) continue;
     const events = db.raw
@@ -177,6 +189,10 @@ export function evaluateEventRules(
     for (const event of events) {
       if (event.type !== rule.eventType) continue;
       if (!runInvolvesBot(db, event.run_id, rule.botId)) continue;
+      // B5: claim before anything executes. A live claim inside the window
+      // marks the sighting as a windowed duplicate; an expired claim is
+      // refreshed and falls back to the permanent record dedupe below.
+      const keyClaimed = claimEventRuleKey(db, { ruleId: rule.id, eventId: event.event_id });
       const primary = findEventRulePrimary(db, rule.id, event.event_id);
       if (primary !== undefined) {
         appendEventRuleRecord(db, {
@@ -184,7 +200,7 @@ export function evaluateEventRules(
           eventId: event.event_id,
           outcome: "duplicate",
           runId: primary.runId,
-          reason: "duplicate event",
+          reason: keyClaimed ? "duplicate event" : "duplicate trigger within window",
         });
         duplicates += 1;
         continue;
@@ -196,7 +212,7 @@ export function evaluateEventRules(
           eventId: event.event_id,
           outcome: "duplicate",
           runId: review.runId,
-          reason: "duplicate event",
+          reason: keyClaimed ? "duplicate event" : "duplicate trigger within window",
         });
         duplicates += 1;
         continue;
