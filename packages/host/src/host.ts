@@ -44,6 +44,7 @@ import {
   type RunningApprovalBridge,
 } from "@deepseek-bot/harness-adapter";
 import { ChatManager, type ChatStreamNotice } from "./chat.js";
+import { DEFAULT_CONTEXT_WINDOW_TOKENS } from "./context-window.js";
 import { createAttachmentStore, readWorkspaceFileText } from "./attachments.js";
 import { createWorkspaceArtifacts } from "./artifacts.js";
 import {
@@ -200,9 +201,10 @@ export interface HostOptions {
     readonly runSpeak?: VoiceSpeakRunner;
   };
   /**
-   * Context meter (TASK_CONTEXT_METER.md): the model context window the
-   * usage percentage divides by. One host-wide default (65,536); per-model
-   * windows are a documented follow-up.
+   * Context meter (TASK_CONTEXT_METER.md): overrides the fallback context
+   * window the meter divides by for models absent from MODEL_CONTEXT_WINDOWS
+   * (default 65,536). Precedence per bot: DSB_CONTEXT_WINDOW_TOKENS →
+   * MODEL_CONTEXT_WINDOWS[model] → this value (context-window.ts).
    */
   readonly contextWindowTokens?: number;
 }
@@ -715,7 +717,7 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
     tasks,
     locale: uiLocale,
     attachmentUploads: attachmentStore,
-    contextWindowTokens: options.contextWindowTokens ?? 65_536,
+    contextWindowFallbackTokens: options.contextWindowTokens ?? DEFAULT_CONTEXT_WINDOW_TOKENS,
     compressingChats: new Set<string>(),
     get agentTools(): ToolGateway {
       if (agentToolsHolder.current === undefined) {
