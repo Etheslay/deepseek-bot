@@ -232,6 +232,25 @@ export function useBots(defaultGroupKey: number) {
     });
   }, []);
 
+  /**
+   * G1': reorder the loaded list by a persisted id sequence (ui.state). Keys
+   * stay stable; entries missing from the snapshot keep their relative order
+   * at the end, so a stale snapshot can never drop a bot from the sidebar.
+   */
+  const applyPersistedOrder = useCallback((ids: readonly string[]): void => {
+    setBots((prev) => {
+      if (ids.length === 0 || prev.length === 0) {
+        return prev;
+      }
+      const rank = new Map(ids.map((id, index) => [id, index]));
+      return [...prev].sort(
+        (a, b) =>
+          (rank.get(a.bot.id) ?? Number.MAX_SAFE_INTEGER) -
+          (rank.get(b.bot.id) ?? Number.MAX_SAFE_INTEGER),
+      );
+    });
+  }, []);
+
   const hide = useCallback((botKey: number): void => {
     setBots((prev) => prev.filter((b) => b.key !== botKey));
   }, []);
@@ -248,6 +267,7 @@ export function useBots(defaultGroupKey: number) {
     duplicate,
     setUi,
     moveToTop,
+    applyPersistedOrder,
     hide,
   };
 }

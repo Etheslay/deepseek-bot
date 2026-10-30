@@ -737,3 +737,32 @@ describe("host-backed run service", () => {
     expect(calls).toEqual([]);
   });
 });
+
+describe("host-backed uiState (G1')", () => {
+  it("round-trips the snapshot through ui.state.get/set", async () => {
+    const empty = {
+      botOrder: [],
+      groupOrder: [],
+      selectedBotId: null,
+      selectedGroupId: null,
+    };
+    const snapshot = {
+      botOrder: [bot.id],
+      groupOrder: [],
+      selectedBotId: bot.id,
+      selectedGroupId: null,
+    };
+    let stored = empty;
+    const { bridge } = makeBridge({
+      "ui.state.get": () => ({ state: stored }),
+      "ui.state.set": (payload) => {
+        stored = (payload as { state: typeof empty }).state;
+        return { state: stored };
+      },
+    });
+    const service = createHostService(bridge);
+    await expect(service.uiState.get()).resolves.toEqual(empty);
+    await expect(service.uiState.save(snapshot)).resolves.toEqual(snapshot);
+    await expect(service.uiState.get()).resolves.toEqual(snapshot);
+  });
+});
