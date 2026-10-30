@@ -42,6 +42,13 @@ type DesktopBridge = {
       | { ok: false; code: "format" | "size" | "empty" | "encoding" | "cancelled" | "read" }
     >;
   };
+  /** D27 voice settings: pick dialogs whose only argument is the file kind. */
+  voice: {
+    pickFile: (kind: "bin" | "model") => Promise<
+      | { ok: true; path: string }
+      | { ok: false; code: "cancelled" }
+    >;
+  };
   host: {
     call: (method: string, payload: unknown) => Promise<unknown>;
     onMissed: (listener: (notices: unknown[]) => void) => () => void;

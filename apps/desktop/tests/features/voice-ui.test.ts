@@ -3,6 +3,8 @@ import type { VoiceStatus } from "@deepseek-bot/contracts";
 import {
   speakButton,
   transcribeButton,
+  transcribeProblem,
+  transcribeProblemField,
   voiceFailureKey,
 } from "../../src/renderer/src/features/voice/voice-ui.js";
 
@@ -72,5 +74,36 @@ describe("voiceFailureKey", () => {
   it("maps each half to its own toast", () => {
     expect(voiceFailureKey("transcribe")).toBe("voice.transcribeFailed");
     expect(voiceFailureKey("speak")).toBe("voice.speakFailed");
+  });
+});
+
+describe("transcribeProblem", () => {
+  const withReason = (reason: string | null, available = false): VoiceStatus => ({
+    transcribe: { available, reason },
+    speak: { available: true, reason: null },
+  });
+
+  it("reports no problem while transcription is usable", () => {
+    expect(transcribeProblem(withReason(null, true))).toBeNull();
+  });
+
+  it("maps the Host's four short reasons to a field-level problem", () => {
+    expect(transcribeProblem(withReason("whisper.cpp binary is not configured"))).toBe("binRequired");
+    expect(transcribeProblem(withReason("whisper.cpp model is not configured"))).toBe("modelRequired");
+    expect(transcribeProblem(withReason("whisper.cpp binary was not found"))).toBe("binNotFound");
+    expect(transcribeProblem(withReason("whisper.cpp model was not found"))).toBe("modelNotFound");
+  });
+
+  it("falls back to generic copy for an unknown reason instead of leaking raw text", () => {
+    expect(transcribeProblem(withReason("something else went wrong"))).toBe("unavailable");
+    expect(transcribeProblem(withReason(null))).toBe("unavailable");
+  });
+
+  it("points the inline error at the offending field", () => {
+    expect(transcribeProblemField("binNotFound")).toBe("bin");
+    expect(transcribeProblemField("binRequired")).toBe("bin");
+    expect(transcribeProblemField("modelNotFound")).toBe("model");
+    expect(transcribeProblemField("modelRequired")).toBe("model");
+    expect(transcribeProblemField("unavailable")).toBeNull();
   });
 });
