@@ -157,7 +157,14 @@ import {
 import { migrateLegacyLibrary } from "./features/skills/library-migration.js";
 
 
-type Group = { key: number; name: string };
+type Group = {
+  key: number;
+  name: string;
+  /** v0.14 分组实体化: the persisted group's UUID, null for 未分组. */
+  groupId: string | null;
+  /** Host-side revision for optimistic concurrency; null for 未分组. */
+  revision: string | null;
+};
 const UNGROUPED = 1;
 
 /**
@@ -353,7 +360,10 @@ export function App(): JSX.Element {
   const [createName, setCreateName] = useState("");
   const [tplDraft, setTplDraft] = useState<BotDraft | null>(null);
 
-  const [groups, setGroups] = useState<Group[]>([{ key: UNGROUPED, name: "" }]);
+  const [groups, setGroups] = useState<Group[]>([
+    { key: UNGROUPED, name: "", groupId: null, revision: null },
+  ]);
+  const nextGroupKey = useRef(2);
   const {
     bots,
     create: createBotEntity,
@@ -520,25 +530,23 @@ export function App(): JSX.Element {
   /** D17': any local edit wins over the in-flight boot load. */
   const skillLibraryTouchedRef = useRef(false);
 
-  // D17': boot the skill library from the Host. When the Host has none, the
-  // legacy localStorage copy migrates once behind an idempotent marker; the
-  // composer prompt-template store (an array under the same legacy key) is
-  // never migrated. A Host without the methods (or a broken bridge) degrades
-  // to the legacy read; a failed import keeps the legacy payload and says so.
+  // D17': boot the skill library from the Host (via the service layer). When
+  // the Host has none, the legacy localStorage copy migrates once behind an
+  // idempotent marker; the composer prompt-template store (an array under the
+  // same legacy key) is never migrated. A Host without the methods (or a
+  // broken bridge) degrades to the legacy read; a failed import keeps the
+  // legacy payload and says so.
   useEffect(() => {
     let alive = true;
     void (async () => {
       try {
-        const response = await window.deepseekBot.host.call("skillLibrary.get", {});
+        const hostLibrary = await desktop.skills.getLibrary();
         if (!alive || skillLibraryTouchedRef.current) return;
-        const hostLibrary = METHOD_CONTRACTS["skillLibrary.get"].response.parse(
-          response,
-        ).library;
         const migration = await migrateLegacyLibrary({
           storage: window.localStorage,
           hostLibrary,
           saveLibrary: (library) =>
-            window.deepseekBot.host.call("skillLibrary.save", { library }),
+            desktop.skills.saveLibrary(library).then(() => undefined),
         });
         if (!alive || skillLibraryTouchedRef.current) return;
         if (migration.outcome === "failed") {
@@ -559,7 +567,7 @@ export function App(): JSX.Element {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [desktop]);
 
   /**
    * D17': optimistic local update + whole-library Host save. A failed save
@@ -569,15 +577,13 @@ export function App(): JSX.Element {
   const updateLibrary = useCallback((next: SkillLibrary) => {
     skillLibraryTouchedRef.current = true;
     setSkillLibrary(next);
-    void window.deepseekBot.host
-      .call("skillLibrary.save", { library: next })
-      .then((response) => {
-        METHOD_CONTRACTS["skillLibrary.save"].response.parse(response);
-      })
+    void desktop.skills
+      .saveLibrary(next)
+      .then(() => undefined)
       .catch(() => {
         setToast(t("skills.hostSaveFailed"));
       });
-  }, []);
+  }, [desktop]);
 
   const saveBotTemplate = (target: UiBot): void => {
     const result = saveTemplate(window.localStorage, {
@@ -622,23 +628,97 @@ export function App(): JSX.Element {
   const [botStatuses, setBotStatuses] = useState<Record<string, TrayBotStatus>>({});
   const activeBotId = bots.find((b) => b.key === selectedBot)?.bot.id ?? null;
 
-  /* ------------- G1': persisted interface state (ui.state, v0.13) ------------- */
+  /* -------- G1': persisted interface state (ui.state v0.13/v0.14) -------- */
 
   /**
-   * Restore the persisted sidebar snapshot once the first bot list has
-   * landed: order first, then the selected bot — but only when it still
-   * exists (a stale snapshot must not select an archived or deleted bot).
-   * Best-effort: a dead host or corrupt row falls back to the default view.
+   * G1' 分组实体化: load the persisted groups once. The sidebar keeps its
+   * numeric session keys for rendering, but each group now carries the
+   * entity's UUID + revision from here on.
+   */
+  const [hostGroupsLoaded, setHostGroupsLoaded] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    void desktop.groups
+      .list()
+      .then((hostGroups) => {
+        if (cancelled || hostGroups.length === 0) {
+          return;
+        }
+        setGroups((prev) => [
+          ...prev,
+          ...hostGroups.map((group) => ({
+            key: nextGroupKey.current++,
+            name: group.name,
+            groupId: group.id,
+            revision: group.revision,
+          })),
+        ]);
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (!cancelled) {
+          setHostGroupsLoaded(true);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [desktop]);
+
+  /**
+   * Restore the persisted snapshot once the bot list AND the group list have
+   * landed, in this order: members follow their contract `groupId`, groups
+   * follow the snapshot's order (未分组 pinned first), collapse state comes
+   * back, and finally the selected bot — only when it still exists (a stale
+   * snapshot must not select an archived or deleted bot). Best-effort: a dead
+   * host or corrupt row falls back to the default view.
    */
   const uiStateRestoredRef = useRef(false);
   useEffect(() => {
-    if (uiStateRestoredRef.current || bots.length === 0) {
+    if (uiStateRestoredRef.current || !hostGroupsLoaded || bots.length === 0) {
       return;
     }
     uiStateRestoredRef.current = true;
     void desktop.uiState
       .get()
       .then((state) => {
+        const keyByGroupId = new Map(
+          groups
+            .filter((g) => g.groupId !== null)
+            .map((g) => [g.groupId as string, g.key]),
+        );
+        for (const b of bots) {
+          const wanted =
+            b.bot.groupId !== undefined && b.bot.groupId !== null
+              ? (keyByGroupId.get(b.bot.groupId) ?? UNGROUPED)
+              : UNGROUPED;
+          if (b.group !== wanted) {
+            setUi(b.key, { group: wanted });
+          }
+        }
+        setGroups((prev) => {
+          const rank = new Map(
+            state.groupOrder.map((id, index) => [id, index] as const),
+          );
+          const pinned = prev.filter((g) => g.groupId === null);
+          const rest = prev.filter((g) => g.groupId !== null);
+          rest.sort(
+            (a, b) =>
+              (rank.get(a.groupId ?? "") ?? Number.MAX_SAFE_INTEGER) -
+              (rank.get(b.groupId ?? "") ?? Number.MAX_SAFE_INTEGER),
+          );
+          return [...pinned, ...rest];
+        });
+        const collapsed = [
+          ...new Set(
+            (state.collapsedGroupIds ?? [])
+              .map((id) => keyByGroupId.get(id))
+              .filter((key): key is number => key !== undefined),
+          ),
+        ];
+        if (collapsed.length > 0) {
+          setCollapsedGroups(collapsed);
+        }
         applyPersistedOrder(state.botOrder);
         if (state.selectedBotId !== null) {
           const target = bots.find((b) => b.bot.id === state.selectedBotId);
@@ -648,29 +728,35 @@ export function App(): JSX.Element {
         }
       })
       .catch(() => undefined);
-  }, [bots, desktop, applyPersistedOrder]);
+  }, [hostGroupsLoaded, bots, groups, desktop, applyPersistedOrder, setUi]);
 
   /**
    * Persist the sidebar snapshot with a debounce — one write per burst of
-   * changes, last write wins on the Host. Group fields stay empty until the
-   * sidebar's session-local groups become persisted entities (MAPPING §5).
+   * changes, last write wins on the Host. `selectedGroupId` stays null until
+   * the sidebar grows an explicit group-selection interaction.
    */
   useEffect(() => {
-    if (bots.length === 0) {
+    if (!hostGroupsLoaded || bots.length === 0) {
       return;
     }
     const timer = setTimeout(() => {
       void desktop.uiState
         .save({
           botOrder: bots.map((b) => b.bot.id),
-          groupOrder: [],
+          groupOrder: groups
+            .filter((g) => g.groupId !== null)
+            .map((g) => g.groupId as string),
           selectedBotId: activeBotId,
           selectedGroupId: null,
+          collapsedGroupIds: collapsedGroups
+            .map((key) => groups.find((g) => g.key === key)?.groupId)
+            .filter((id): id is string => typeof id === "string"),
         })
         .catch(() => undefined);
     }, 500);
     return () => clearTimeout(timer);
-  }, [bots, activeBotId, desktop]);
+  }, [hostGroupsLoaded, bots, groups, collapsedGroups, activeBotId, desktop]);
+
 
   const raiseNotice = useCallback(
     (input: {
@@ -1121,7 +1207,7 @@ export function App(): JSX.Element {
 
   const moveToGroup = (botKey: number, groupKey: number): void => {
     const g = groups.find((x) => x.key === groupKey);
-    setUi(botKey, { group: groupKey });
+    moveBotToGroup(botKey, groupKey);
     setToast(g ? t("shell.movedToGroup", [groupLabel(g)]) : t("shell.moved"));
     setMenu(null);
   };
@@ -1309,6 +1395,32 @@ export function App(): JSX.Element {
     }));
   };
 
+  /**
+   * G1' 分组实体化: membership persists through bot.update's `groupId` patch
+   * (null = 未分组). The local UI moves first and reverts when the Host
+   * refuses; REVISION_CONFLICT additionally triggers the hook's refresh.
+   */
+  const moveBotToGroup = (botKey: number, groupKey: number): void => {
+    const b = bots.find((x) => x.key === botKey);
+    const g = groups.find((x) => x.key === groupKey);
+    if (!b || !g) {
+      return;
+    }
+    const previousGroup = b.group;
+    setUi(botKey, { group: groupKey });
+    void updateBotEntity(b.bot.id, { groupId: g.groupId }).then((result) => {
+      if (!result.ok) {
+        setUi(botKey, { group: previousGroup });
+        setToast(t("shell.moveFailed"));
+      }
+    });
+  };
+
+  /**
+   * G1' 分组实体化: creating a group persists it (`group.create`) before it
+   * shows up, so it survives restarts; an optional bot moves in through the
+   * entity-backed move (bot.update's groupId patch).
+   */
   const submitDialog = (): void => {
     if (!menuDialog) {
       return;
@@ -1317,15 +1429,26 @@ export function App(): JSX.Element {
     if (!name) {
       return;
     }
-    const key = Date.now();
-    setGroups((prev) => [...prev, { key, name }]);
-    if (menuDialog.moveBot !== null) {
-      setUi(menuDialog.moveBot, { group: key });
-      setToast(t("shell.groupCreatedAndMovedIn", [name]));
-    } else {
-      setToast(t("shell.groupCreated", [name]));
-    }
+    const moveBot = menuDialog.moveBot;
     setMenuDialog(null);
+    void desktop.groups
+      .create(name)
+      .then((group) => {
+        const key = nextGroupKey.current++;
+        setGroups((prev) => [
+          ...prev,
+          { key, name: group.name, groupId: group.id, revision: group.revision },
+        ]);
+        if (moveBot !== null) {
+          moveBotToGroup(moveBot, key);
+          setToast(t("shell.groupCreatedAndMovedIn", [name]));
+        } else {
+          setToast(t("shell.groupCreated", [name]));
+        }
+      })
+      .catch(() => {
+        setToast(t("shell.moveFailed"));
+      });
   };
 
   /**
@@ -1429,7 +1552,7 @@ export function App(): JSX.Element {
       setToast(t("shell.alreadyInGroup"));
       return;
     }
-    setUi(botKey, { group: groupKey });
+    moveBotToGroup(botKey, groupKey);
     setToast(t("shell.draggedToGroup", [b.bot.name, groupLabel(g)]));
   };
 
@@ -1444,10 +1567,25 @@ export function App(): JSX.Element {
       setGroupMenu(null);
       return;
     }
-    setGroups((prev) => prev.filter((x) => x.key !== groupKey));
-    setCollapsedGroups((prev) => prev.filter((k) => k !== groupKey));
-    setToast(t("shell.groupDeleted", [groupLabel(g)]));
-    setGroupMenu(null);
+    const removeLocal = (): void => {
+      setGroups((prev) => prev.filter((x) => x.key !== groupKey));
+      setCollapsedGroups((prev) => prev.filter((k) => k !== groupKey));
+      setToast(t("shell.groupDeleted", [groupLabel(g)]));
+      setGroupMenu(null);
+    };
+    // G1' 分组实体化: persisted groups archive through group.archive so the
+    // deletion survives restarts; 未分组 (no UUID) stays local-only.
+    if (g.groupId === null || g.revision === null) {
+      removeLocal();
+      return;
+    }
+    void desktop.groups
+      .archive(g.groupId, g.revision)
+      .then(removeLocal)
+      .catch(() => {
+        setToast(t("shell.groupDeleteFailed"));
+        setGroupMenu(null);
+      });
   };
 
 const logout = (): void => {

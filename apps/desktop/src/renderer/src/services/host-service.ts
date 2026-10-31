@@ -11,7 +11,9 @@ import {
   MAX_ATTACHMENT_CHUNK_BYTES,
   METHOD_CONTRACTS,
   type Bot,
+  type BotGroup,
   type ErrorCode,
+  type SkillLibrary,
   type Task,
   type UiState,
 } from "@deepseek-bot/contracts";
@@ -115,12 +117,37 @@ export function createHostService(bridge: HostBridge): DesktopService {
       ),
   };
 
+  // G1' 分组实体化 (v0.14): the sidebar's persisted groups.
+  const groups = {
+    list: async (): Promise<BotGroup[]> =>
+      ((await bridge.host.call("group.list", {})) as { groups: BotGroup[] }).groups,
+    create: async (name: string): Promise<BotGroup> =>
+      (await bridge.host.call("group.create", { name })) as BotGroup,
+    archive: async (id: string, expectedRevision: string): Promise<BotGroup> =>
+      (await bridge.host.call("group.archive", { id, expectedRevision })) as BotGroup,
+  };
+
+  // D17' (v0.11): the skill library persists in the Host's settings KV; the
+  // contract schemas stay the validation authority on both calls.
+  const skills = {
+    getLibrary: async (): Promise<SkillLibrary> =>
+      METHOD_CONTRACTS["skillLibrary.get"].response.parse(
+        await bridge.host.call("skillLibrary.get", {}),
+      ).library,
+    saveLibrary: async (library: SkillLibrary): Promise<SkillLibrary> =>
+      METHOD_CONTRACTS["skillLibrary.save"].response.parse(
+        await bridge.host.call("skillLibrary.save", { library }),
+      ).library,
+  };
+
   return {
     ...base,
     workflows,
     runs,
     uiState,
     vision,
+    groups,
+    skills,
     bots: {
       list: listBots,
       create: async (draft: BotDraft): Promise<Bot> =>

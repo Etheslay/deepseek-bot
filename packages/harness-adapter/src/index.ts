@@ -60,5 +60,6 @@ export {
   TurnUsageAccumulator,
   estimateTokens,
   extractUsageFromEvent,
+  tokenWeight,
   type TurnUsage,
 } from "./usage.js";

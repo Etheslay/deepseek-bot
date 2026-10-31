@@ -4,6 +4,14 @@ export default defineConfig({
   test: {
     include: ["src/**/*.test.ts"],
     testTimeout: 30_000,
+    // Nine test files each spawn a fake-harness child process; at full
+    // worker parallelism the CPU saturates and the "wait for the task
+    // status to become done" polls starve before their deadline. Two
+    // workers keep those child processes from competing for cores.
+    // (vitest 3 defaults to the 'forks' pool, so the cap belongs there.)
+    poolOptions: {
+      forks: { minForks: 1, maxForks: 2 },
+    },
     coverage: {
       provider: "v8",
       reporter: ["text", "text-summary"],

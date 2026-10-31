@@ -128,6 +128,7 @@ export const METHODS = [
   "bot.batchCreate",
   "group.create",
   "group.list",
+  "group.archive",
   "creation.revoke",
   "workflow.list",
   "workflow.get",
@@ -452,6 +453,19 @@ export const METHOD_CONTRACTS = {
   "group.list": {
     request: z.object({}),
     response: z.object({ groups: z.array(BotGroupSchema) }),
+  },
+  /**
+   * Archive one group (G1' 分组实体化): the desktop's sidebar groups become
+   * persisted entities, so deleting an (empty) group must survive restarts.
+   * Optimistic concurrency like bot.archive — archiving rotates the
+   * revision, so a retry must address the group by the revision the first
+   * call returned. `group.list` never returns archived groups, and members
+   * keep their `groupId` (the desktop renders them ungrouped; the
+   * empty-group rule lives in the UI policy).
+   */
+  "group.archive": {
+    request: RevisionRefSchema,
+    response: BotGroupSchema,
   },
   /**
    * Revoke a whole creation batch (FR-12 整批撤销): archives every

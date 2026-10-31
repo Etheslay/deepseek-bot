@@ -8,7 +8,9 @@ import type {
   ArtifactVersion,
   Bot,
   BotArtifact,
+  BotGroup,
   EventEnvelope,
+  SkillLibrary,
   UiState,
 } from "@deepseek-bot/contracts";
 import {
@@ -201,6 +203,12 @@ export function createFixtureService(): DesktopService {
     selectedBotId: null,
     selectedGroupId: null,
   };
+  // G1' 分组实体化: the fixture's groups are session state like everything
+  // else here — it starts with none, so the sidebar shows only 未分组.
+  const fixtureGroups: BotGroup[] = [];
+  // D17': the fixture skill library is session memory too — the boot
+  // migration fills it from localStorage once; nothing persists a refresh.
+  let fixtureSkillLibrary: SkillLibrary = { skills: [], bindings: {} };
 
   const requireBot = (botId: string): Bot => {
     const bot = bots.find((b) => b.id === botId);
@@ -793,6 +801,16 @@ export function createFixtureService(): DesktopService {
     runs: createFixtureRunService(),
     tasks: createFixtureTaskService(),
 
+    // D17': the fixture skill library is session memory — save echoes and
+    // keeps the library for the rest of the session, nothing more.
+    skills: {
+      getLibrary: () => Promise.resolve(fixtureSkillLibrary),
+      saveLibrary: (library) => {
+        fixtureSkillLibrary = library;
+        return Promise.resolve(library);
+      },
+    },
+
     // G1': the fixture keeps the snapshot in memory — session state like
     // everything else here, gone on restart.
     uiState: {
@@ -809,6 +827,45 @@ export function createFixtureService(): DesktopService {
     vision: {
       status: () =>
         Promise.resolve({ model: "fixture-model", visionAvailable: false, visionKnown: false }),
+    },
+
+    // G1' 分组实体化: in-memory groups with the same archive semantics as
+    // the Host (optimistic concurrency, list skips archived).
+    groups: {
+      list: () => Promise.resolve(fixtureGroups.filter((g) => g.archivedAt === null)),
+      create: (name) => {
+        const group: BotGroup = {
+          id: crypto.randomUUID(),
+          revision: crypto.randomUUID(),
+          name,
+          archivedAt: null,
+        };
+        fixtureGroups.push(group);
+        return Promise.resolve(group);
+      },
+      archive: (id, expectedRevision) => {
+        const group = fixtureGroups.find((g) => g.id === id);
+        if (!group) {
+          return Promise.reject(
+            new ServiceError("INVALID_INPUT", `group not found: ${id}`),
+          );
+        }
+        if (group.revision !== expectedRevision) {
+          return Promise.reject(
+            new ServiceError("REVISION_CONFLICT", "group was modified by someone else"),
+          );
+        }
+        if (group.archivedAt !== null) {
+          return Promise.resolve(group);
+        }
+        const archived: BotGroup = {
+          ...group,
+          revision: crypto.randomUUID(),
+          archivedAt: new Date().toISOString(),
+        };
+        fixtureGroups.splice(fixtureGroups.indexOf(group), 1, archived);
+        return Promise.resolve(archived);
+      },
     },
 
     // The fixture chat is renderer-local only, so there is no Host corpus to
