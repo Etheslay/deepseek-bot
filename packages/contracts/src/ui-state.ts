@@ -12,6 +12,12 @@ export const UiStateSchema = z.object({
   groupOrder: orderedIds,
   selectedBotId: UuidSchema.nullable(),
   selectedGroupId: UuidSchema.nullable(),
+  /**
+   * v0.14: collapsed sidebar groups by persisted UUID. Optional on purpose —
+   * 0.13 writers omit it and stay accepted; readers treat missing as "none
+   * collapsed".
+   */
+  collapsedGroupIds: orderedIds.optional(),
 }).strict();
 
 export type UiState = z.infer<typeof UiStateSchema>;
