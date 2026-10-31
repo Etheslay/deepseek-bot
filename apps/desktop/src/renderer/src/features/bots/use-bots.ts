@@ -8,7 +8,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Bot } from "@deepseek-bot/contracts";
-import type { BotDraft } from "../../services/desktop-service.js";
+import type { BotDraft, BotUpdatePatch } from "../../services/desktop-service.js";
 import { ServiceError } from "../../services/desktop-service.js";
 import { useService } from "../../services/service-context.js";
 import { defaultAvatarFor, type Avatar } from "../avatars/avatar-meta.js";
@@ -134,7 +134,7 @@ export function useBots(defaultGroupKey: number) {
   );
 
   const update = useCallback(
-    async (botId: string, patch: Partial<BotDraft>): Promise<BotsOperationResult> => {
+    async (botId: string, patch: BotUpdatePatch): Promise<BotsOperationResult> => {
       const target = bots.find((b) => b.bot.id === botId);
       if (!target) {
         return { ok: false, errorCode: "INVALID_INPUT", errorMessage: t("bots.botNotFound") };
