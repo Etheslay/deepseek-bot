@@ -11,11 +11,11 @@ const runId = "22222222-2222-4222-8222-222222222222";
 
 describe("v0.12 workflow read surface", () => {
   it("is an additive protocol bump that still accepts 0.11 senders", () => {
-    expect(PROTOCOL_VERSION).toBe("0.13");
-    for (const version of ["0.1", "0.10", "0.11", "0.12"]) {
+    expect(PROTOCOL_VERSION).toBe("0.14");
+    for (const version of ["0.1", "0.10", "0.11", "0.12", "0.13"]) {
       expect(isProtocolVersionSupported(version)).toBe(true);
     }
-    expect(isProtocolVersionSupported("0.14")).toBe(false);
+    expect(isProtocolVersionSupported("0.15")).toBe(false);
   });
 
   it("whitelists workflow.get as an id-only strict request", () => {

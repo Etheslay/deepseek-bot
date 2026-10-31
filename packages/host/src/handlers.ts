@@ -756,6 +756,11 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
 
     "group.list": () => ({ groups: listGroups(db) }),
 
+    "group.archive": (payload) =>
+      // The dispatcher validated the revision ref; the repo keeps optimistic
+      // concurrency and is idempotent for an already-archived group.
+      archiveGroup(db, { id: payload.id, expectedRevision: payload.expectedRevision }),
+
     /** FR-12 整批撤销: archive what the batch created, then close the ledger row. */
     "creation.revoke": (payload) => {
       const batch = getBatch(db, payload.batchId);

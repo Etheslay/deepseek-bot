@@ -56,11 +56,11 @@ Host 内实现 `ui.*` 命名空间的会话服务（读写 Harness 会话日志 
 - **D 步**：聊天/历史事实接线已先行落地（运行监控真实化、`chat.history` 接线、存储会话列表——PR #97/#103；工作流读面 #176/#177）；界面标注口径仍待 Destinyian。
 - **B 步 ui.***：**Etheslay 于 2026-10-31 指示按 G1' 既定草案推进**（GAP_AUDIT §2 G1' 的实现方式），采纳方案 B 的 ui.* 清单为：`ui.state.get` / `ui.state.set`（v0.13）+ 固定 `UiStateSchema` 快照（botOrder/groupOrder/selectedBotId/selectedGroupId，仅稳定实体 UUID，不收任意载荷）。Destinyian 对本清单的会签**待补**；分组实体（现会话内数字 key）映射另行核实，`groupOrder`/`selectedGroupId` 在实体化前由渲染层写空值。
 
-## 5. 界面状态契约（候选已采纳，方法面见 v0.13）
+## 5. 界面状态契约（候选已采纳，方法面见 v0.13；分组实体化见 v0.14）
 
-`UiStateSchema`（#175 契约候选，本片随 v0.13 采纳）：`botOrder` 与 `groupOrder` 为去重的持久 UUID 列表，各最多 1000 项；`selectedBotId` 与 `selectedGroupId` 为 UUID 或 null。对象严格校验，不接受额外字段或任意文本。Host 方法面为 `ui.state.get` / `ui.state.set`（settings KV 行 `ui.state.v1`，缺失/损坏行降级空态，见 [CONTRACTS](CONTRACTS.md) §3 与 `packages/host/src/ui-state.ts`）。
+`UiStateSchema`（#175 契约候选，v0.13 采纳）：`botOrder` 与 `groupOrder` 为去重的持久 UUID 列表，各最多 1000 项；`selectedBotId` 与 `selectedGroupId` 为 UUID 或 null；v0.14 增加可选 `collapsedGroupIds`（折叠态恢复）。对象严格校验，不接受额外字段或任意文本。Host 方法面为 `ui.state.get` / `ui.state.set`（settings KV 行 `ui.state.v1`，缺失/损坏行降级空态，见 [CONTRACTS](CONTRACTS.md) §3 与 `packages/host/src/ui-state.ts`）。
 
-现有桌面分组使用会话内数字 key，不能作为持久 UUID 使用；`groupOrder`/`selectedGroupId` 的启用以分组实体化（核实真实分组实体、创建/移动行为与标识映射）为前提，渲染层在实体化前写空值。快照不含任何密钥/敏感数据（schema 只收 UUID）。
+**分组实体化（v0.14）**：桌面侧栏分组升级为持久实体——创建走 `group.create`、删除走 `group.archive`（空组才可删的规则仍在 UI 策略层）、成员移动走 `bot.update` 的 `groupId` patch（null 即移回未分组）；`groupOrder`/`collapsedGroupIds` 随快照恢复。BotSchema 自带 `groupId`，启动时按其映射会话分组；指向已归档组的陈旧 `groupId` 渲染为未分组，不自动改写。渲染层接线随方法面之后的桌面 PR 落地。
 
 ## 6. 工作流读面与桌面接线（v0.12，2026-10-30）
 
