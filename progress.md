@@ -1,5 +1,14 @@
 # 工作记录
 
+## 2026-10-31：G1' 全链收口（ui.* 方法面/接线 + 分组实体化）+ 台账八次刷新
+
+- 基线：`origin/develop` = `c7288e1`（PR #179–#182 合入后）。用户指示继续推进。
+- `feature/ui-state-methods`（`557228d` → PR #181，协议 **v0.13**）：`ui.state.get/set` 受信方法 + `UiStateSchema`（#175 候选采纳）+ settings KV `ui.state.v1`（损坏降级空态，镜像 skills.library.v1 模式）；拍板 #1 记录进 RENDERER_HOST_MAPPING §4（Etheslay 授权推进，Destinyian 会签待补）；contracts 161 过。
+- `feature/ui-state-wiring`（`d1d3e7e` → PR #182）：DesktopService.uiState + 启动恢复（bot 顺序/选中，过期快照不选已归档 bot）+ 500ms 防抖写整快照；useBots.applyPersistedOrder；desktop 697 过。**插曲**：`git add -A` 误提交 tmp-inspect.txt，amend 移出（残件仍未跟踪待处置）。
+- `feature/group-entity-contract`（`2401380` → PR #183，协议 **v0.14**）：`group.archive` + `UiStateSchema.collapsedGroupIds` 可选；语义核对修正——仓库先校验 revision 再走幂等分支，归档轮换 revision，重试须用首次返回的 revision；host groups.test 3 例；contracts 161 过。
+- `feature/group-entity-wiring`（`0697b9e` → PR #184）：分组加载携 UUID+revision、建组先落库、移动共用 moveBotToGroup（失败回退）、删空组走 archive、启动恢复成员映射/分组顺序/折叠、防抖快照加 groupOrder/collapsedGroupIds；i18n +2 键；desktop 699 过。**教训**：makeBridge handler 类型为 `(payload: unknown) => unknown`（逆变），带类型解构参数不过 typecheck，用 unknown 入参内部断言。
+- `feature/gap-audit-refresh8`（本 PR）：GAP_AUDIT 八次刷新（§0 总览 #178–#184、**G1' 归档**、缺口地图、§7.3 自审清单、§8 批次、头部行）；SPRINTS §4 补六行、§5 A7、§7 审计行、§10 八次清点；progress 本条。G1' 全链收口：A 线工程切片基本清零，余真机验收（工作流 12 步/分组 ui.state 四条/语音）、D13/D23、Destinyian 会签与自审签署。
+
 ## 2026-10-30：chat.stream 契约补记 + #150/#151 报告补录与编号勘误（两分支）
 
 - 基线：`origin/develop` = `8b9e5bf`（PR #178 合入后）。用户指示：推进工作后推送远程并开 PR，由负责人手动合并。

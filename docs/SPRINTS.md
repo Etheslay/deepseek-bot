@@ -152,6 +152,13 @@
 | `ui.*` 界面态契约候选 | **已合入（PR #175）**：`UiStateSchema`（strict、bot/分组顺序与选中态、≤1000 唯一 UUID）与测试；**仅类型与校验**，不含 Host 方法、不动 IPC 版本，等拍板 #1 | `feature/ui-state-contract` → PR #175 `6254d04` | [UI-STATE-CONTRACT-report](reports/UI-STATE-CONTRACT-report.md) |
 | 工作流读面（v0.12） | **已合入（PR #176）**：协议 0.12 新增 `workflow.get`、`run.snapshot`、`approval.list` + Host 处理器与契约测试；CONTRACTS/RENDERER_HOST_MAPPING 同步，仍不代表桌面已切真实 Host | `feature/workflow-read-surface` → PR #176 `776b873` | [WORKFLOW-READ-SURFACE-report](reports/WORKFLOW-READ-SURFACE-report.md) |
 | 桌面工作流/运行监控接线 | **已合入（PR #177）**：`createHostService` 用 host 版服务覆盖 `workflows`/`runs`；编辑器导入惰性（只 `workflow.validate`，不落库）；运行监控按 `playback` 显隐夹具控件；审批按 status 推导已决定文案；桌面测试 78 文件/695 用例 | `feature/workflow-host-wiring` → PR #177 `ad617a0` | [WORKFLOW-HOST-WIRING-report](reports/WORKFLOW-HOST-WIRING-report.md) |
+| 工作流主路径验收清单与台账 | **已合入（PR #178）**：接线后台账刷新（GAP_AUDIT 勘误行/§7.10 接线结果与未消项/§8 第五批）+ [12 步人工验收清单](reports/WORKFLOW-MAIN-PATH-ACCEPTANCE-checklist.md)（未执行，D23 前置） | `feature/workflow-main-path-acceptance` → PR #178 `8b9e5bf` | —（清单 + 审计文档） |
+| chat.stream 通知契约补记 | **已合入（PR #179）**：`ChatStreamNoticeSchema` 钉进 contracts（UUID botId、非空 text）+ host/桌面单一类型源 + 桌面 safeParse（畸形通知忽略，行为不变）+ CONTRACTS §4 两通知通道；不升协议 | `feature/chat-stream-notice-contract` → PR #179 `dd1aa18` | [B6-chat-stream-contract-report](reports/B6-chat-stream-contract-report.md) |
+| #150/#151 报告补录与编号勘误 | **已合入（PR #180）**：补录 stream-pacer（#151）与 D27' 语音接线（#150）报告（标注事后整理、复跑自带测试 51 例绿）；勘误台账互换的 PR 编号 9 处（以合并提交为准） | `feature/backfill-reports-150-151` → PR #180 `8c1cf2d` | [stream-pacer-report](reports/stream-pacer-report.md)、[D27-voice-wiring-report](reports/D27-voice-wiring-report.md) |
+| `ui.state` 方法面（v0.13） | **已合入（PR #181）**：`ui.state.get/set` + `UiStateSchema`（#175 候选采纳）+ settings KV `ui.state.v1`（损坏降级空态）；拍板 #1 记录进 MAPPING §4（Etheslay 授权推进，Destinyian 会签待补）；contracts 161 通过 | `feature/ui-state-methods` → PR #181 `1c1a162` | [UI-STATE-METHODS-report](reports/UI-STATE-METHODS-report.md) |
+| `ui.state` 渲染层接线 | **已合入（PR #182）**：启动恢复 bot 顺序/选中（过期快照不选已归档 bot）+ 500ms 防抖写整快照；`useBots.applyPersistedOrder`（快照外 bot 排末尾）；desktop 697 通过 | `feature/ui-state-wiring` → PR #182 `c7288e1` | [UI-STATE-WIRING-report](reports/UI-STATE-WIRING-report.md) |
+| 分组实体化方法面（v0.14） | **已合入（PR #183）**：`group.archive`（乐观并发，重试用返回的 revision——仓库先校验 revision 再走幂等分支，契约注释按实际行为表述）+ `UiStateSchema.collapsedGroupIds` 可选；host groups.test 3 例 | `feature/group-entity-contract` → PR #183 `ef5d9ec` | [GROUP-ENTITY-CONTRACT-report](reports/GROUP-ENTITY-CONTRACT-report.md) |
+| 分组实体化渲染层接线 | **已合入（PR #184）**：分组加载携 UUID+revision；建组先落库；移动共用 `moveBotToGroup`（本地先动→`bot.update.groupId`→失败回退）；删空组走 archive；启动恢复成员映射/分组顺序/折叠；防抖快照加 groupOrder/collapsedGroupIds；i18n +2 键；desktop 699 通过 | `feature/group-entity-wiring` → PR #184 `081580e` | [GROUP-ENTITY-WIRING-report](reports/GROUP-ENTITY-WIRING-report.md) |
 
 补记说明：B 线四项与 D17 模板库切片在合入时**未写交付报告、PR 自审记录未填**（两份 PR 清单各仅勾选 2/5）；相应报告于 2026-10-25 事后补记，**不追认事前完成自审**，自审结论仍留空待负责人签署。B 线四项挤在一条串行分支经单个 PR 合入，偏离"一任务一分支"，lockfile 与 CI 配置改动亦未拆独立小 PR；D17 技能库部分已改从最新 develop 单独切分支。后续任务（含 D24、D26 的剩余部分）同样单独切分支，不再堆叠。各任务的手测截图（`reports/assets/d14|d17|d24|d25|d26/`）仍缺，列为待补。
 
@@ -169,6 +176,7 @@
 | A4 | D19 连接器与 MCP | 登记与本地 SD 调用已合入（PR #65）；无凭据本机 HTTP MCP 已合入，见 [MCP 报告](reports/D19-mcp-http-report.md)。`feature/d19-stdio-credentials` 增加本机 stdio MCP，并在发现和调用时注入 `cred:` 引用。视觉理解仍等模型可用 |
 | A5 | D20 事件自动化 | 评审队列已合入（PR #66）。本地自动启动切片：一个 bot 的规则可保存、列出、启停，默认关闭，命中一次启动一个运行（`feature/event-automation-rules-844b`）。本地评审切片：规则可设为评审，命中只入队，批准启动一次，拒绝记跳过（`feature/event-review-queue-0e27`）。状态记录切片：启用、停用或改为评审且状态变化时追加一条，按 bot 从新到旧列出（`feature/event-rule-state-history-d3c8`）。桌面切片：设置页为选定 bot 显示启用/停用/评审、待评审批准或拒绝，以及从新到旧的状态记录（`feature/event-rule-desktop-review-4519`）。无聊天通知条 |
 | A6 | D21 本地执行守护 | 契约、Windows OCR 与 Host 网关已在 develop。桌面设置页提供默认关闭、逐次授权的单窗口截图和本机预览。设备动作在每次询问下接受一次精确审批；通过后写入一条本地记录（id、bot id、动作名、时间），可按 bot 从新到旧列出。`device.action.input` 在另一次精确审批后由 exec daemon 执行一次有界指针或按键，产物只留在本机 `device-outputs`（PR #104）。真机指针移动与允许列表内按键各一次已入档（PR #160，无点击、未送进编辑器）；真实窗口截图/OCR 真机证据由 PR #93 覆盖。点击与编辑器内按键场景仍开放 |
+| A7 | G1' 界面态与分组实体化 | **已交付（PR #181–#184，协议 v0.13/v0.14）**：`ui.state.get/set`（快照=settings KV `ui.state.v1`，损坏降级空态）+ 启动恢复 bot 顺序/选中 + 防抖写入；`group.archive`/侧栏分组持久化/成员移动（bot.update.groupId）/折叠恢复；拍板 #1 记录于 MAPPING §4（Destinyian 会签待补）。真机重启验收归真机清单 |
 
 **B 线（Destinyian · 桌面与体验）**：
 
@@ -226,7 +234,7 @@
 | 设置 | API Key 保存 / 测试连接 | 本次刷新未逐项复核；保险库 safeStorage 通道已备（PR #78） | 真实 Key 全链验收挂 [GAP_AUDIT](GAP_AUDIT.md) G4（未验证） |
 | 设置 | 全部设置项不持久化 | **已实现**（D24）：`deepseek-bot.settings.v2` 写本地存储 | ~~D24~~ 已完成 |
 | 侧栏 | 账户"退出登录" | 占位（无账号体系） | 维持占位（边界：不引入账户体系），D26 改为"本地资料"卡片 |
-| 全局 | bot / 分组 / 会话状态持久化 | **部分实现**：bot/分组/会话历史随 Host SQLite 持久化、`chat.history` 回放已接（PR #97/#103）；已答选项卡可从消息 meta 恢复，回放行带 `history: true`；侧栏排列/选中态等界面态仍重启即失 | **GAP_AUDIT G1'**（界面态仍等拍板 #1 的 ui.* 清单） |
+| 全局 | bot / 分组 / 会话状态持久化 | **已实现**：bot/分组/会话历史随 Host SQLite 持久化、`chat.history` 回放已接（PR #97/#103）；已答选项卡可从消息 meta 恢复，回放行带 `history: true`；侧栏 bot 顺序/选中 bot/分组实体（建/删/成员）/折叠态跨重启恢复（G1'，PR #181–#184，协议 v0.13/v0.14）；真机重启验收归真机清单 | ~~GAP_AUDIT G1'~~ 已收口 |
 
 ## 8. 待拍板事项
 
@@ -317,6 +325,14 @@
 - **仍欠**：桌面 UI 端到端人工验收（保存→重启读回→三机器人运行→审批/拒绝/取消/重启恢复/历史）；`#161–#172` 中 8 项无入库报告（[GAP_AUDIT](GAP_AUDIT.md) §7.9）；`chat.stream` 仍未入契约文档（[GAP_AUDIT](GAP_AUDIT.md) §7.10）。
 - **未完成的计划项**：工作流主路径接线（GAP_AUDIT §7.10）、G1' 的 ui.*、D13/D23 与 v0.1.0 发布验收。
 - **另见**：[GAP_AUDIT](GAP_AUDIT.md) 第七次刷新。
+
+**10-31 八次刷新清点（develop = `081580e`，PR #179–#184 合入后）**：
+
+- **远程在途分支清零**：#178（接线后台账）与 #179–#184（本会话六片）均已合入（远程分支随合并删除）。`feature/chat-stream-notice-contract` → #179、`feature/backfill-reports-150-151` → #180、`feature/ui-state-methods` → #181、`feature/ui-state-wiring` → #182、`feature/group-entity-contract` → #183、`feature/group-entity-wiring` → #184。
+- **审查发现项**：`chat.stream` 契约漂移已由 #179 收口；#150/#151 报告欠账已由 #180 补录（并勘误台账互换的 PR 编号）；d17 §2.3 备忘仍未处理（不阻塞，归属人可选收敛到服务层）。
+- **仍未欠变欠**：桌面 UI 端到端人工验收（12 步清单）；真机 ui.state/分组验收（建组→重启→仍在等四条，GROUP-ENTITY-WIRING 报告 §3）；语音实机联调；D13 性能预算实测 + D23 平台验收；`tmp-inspect.txt`（工作区根目录未跟踪残件）待负责人处置。
+- **未完成的计划项**：D13/D23 与 v0.1.0 发布验收（收官，D23 主责 Destinyian）；G12 多会话（拍板后立项）；D19 视觉理解（等模型）。
+- **另见**：[GAP_AUDIT](GAP_AUDIT.md) 第八次刷新（G1' 归档）。
 
 下次合并后本节照例更新。
 
