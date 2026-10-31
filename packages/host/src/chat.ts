@@ -35,6 +35,7 @@ import {
   resolveDshSpec,
   type DshSdkExecutorOptions,
   type HarnessAttemptOptions,
+  type PromptContentBlock,
   type SessionEventEnvelope,
   type TurnOutcome,
 } from "@deepseek-bot/harness-adapter";
@@ -185,7 +186,15 @@ export class ChatManager {
     text: string,
     history: ReadonlyArray<ChatHistoryEntry> = [],
     skills: readonly ChatSkillInjection[] = [],
-    options: { primitive?: boolean; summary?: string } = {},
+    options: {
+      primitive?: boolean;
+      summary?: string;
+      /** B3'': canonical base64 rasters riding this turn as image blocks. */
+      images?: ReadonlyArray<{
+        data: string;
+        mimeType: "image/png" | "image/jpeg" | "image/webp" | "image/gif";
+      }>;
+    } = {},
   ): Promise<TurnOutcome & { sessionId: string }> {
     if (this.closed)
       throw new EngineError({
@@ -349,7 +358,18 @@ export class ChatManager {
         primitive: options.primitive === true,
         ...(options.summary !== undefined ? { summary: options.summary } : {}),
       });
-      const outcome = await attempt.runTurn(sessionId, prompt, controller.signal, observeEvent);
+      // B3'': the prompt text rides as the first block, admitted image blocks
+      // follow. The upstream LLM layer gates per model — a text-only route
+      // receives the deterministic text projection (TASK_B3P_VISION_INPUT.md).
+      const contentBlocks: PromptContentBlock[] = [
+        { type: "text", text: prompt },
+        ...(options.images ?? []).map((image) => ({
+          type: "image" as const,
+          data: image.data,
+          mimeType: image.mimeType,
+        })),
+      ];
+      const outcome = await attempt.runTurn(sessionId, contentBlocks, controller.signal, observeEvent);
       session.lastSessionId = sessionId;
       /*
        * Accounting must never fail a turn: a usage write error is swallowed so

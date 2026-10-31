@@ -20,6 +20,12 @@ describe("UI state snapshot contract", () => {
   it("rejects lists that exceed their bound", () => {
     expect(UiStateSchema.safeParse({ ...state, botOrder: Array.from({ length: 1001 }, (_, i) => `11111111-1111-4111-8111-${i.toString(16).padStart(12, "0")}`) }).success).toBe(false);
   });
+  it("treats collapsedGroupIds as optional (0.13 writers stay valid)", () => {
+    // 0.13 shape without the field still parses.
+    expect(UiStateSchema.safeParse(state).success).toBe(true);
+    expect(UiStateSchema.safeParse({ ...state, collapsedGroupIds: [groupId] }).success).toBe(true);
+    expect(UiStateSchema.safeParse({ ...state, collapsedGroupIds: ["junk"] }).success).toBe(false);
+  });
 });
 
 describe("ui.state methods", () => {

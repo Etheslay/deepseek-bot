@@ -142,11 +142,20 @@ export type AttachmentCard = AttachmentDraft & {
 };
 
 /**
+/**
  * Model-facing per-attachment lines (i18n-ignore: model context, not UI copy).
  * Small text files keep the inline fenced block; everything else is announced
  * by its workspace path so the bot can read it with `read_workspace_file`.
+ * `visionRideAlong` marks image cards that are ALSO riding the request as
+ * real image content blocks (B3''): the note then says so instead of the
+ * pre-vision "cannot see" line. An image never disappears from the request
+ * unnoticed — when vision is off the workspace pointer stays, exactly as
+ * before.
  */
-export function composeAttachmentBlocks(cards: readonly AttachmentCard[]): string[] {
+export function composeAttachmentBlocks(
+  cards: readonly AttachmentCard[],
+  visionRideAlong = false,
+): string[] {
   const blocks: string[] = [];
   for (const card of cards) {
     if (card.path === undefined) {
@@ -164,8 +173,13 @@ export function composeAttachmentBlocks(cards: readonly AttachmentCard[]): strin
         // i18n-ignore: model-facing pointer to the read tool
         `${header}\n（文本超过 ${MAX_TEXT_INLINE_BYTES} 字节注入上限，未随消息附带；可用 read_workspace_file 工具读取以上路径。）`,
       );
+    } else if (card.kind === "image" && visionRideAlong) {
+      blocks.push(
+        // i18n-ignore: model-facing attachment note (B3'' 视觉输入)
+        `${header}\n（图片已随本条消息作为图像内容交给模型；能否实际看图取决于模型视觉能力，不支持时上游以占位文本降级。工作区副本：${card.path}。）`,
+      );
     } else if (card.kind === "image") {
-      // i18n-ignore: model-facing attachment note
+      // i18n-ignore: model-facing attachment note (pre-vision fallback)
       blocks.push(`${header}\n（图片已保存到工作区；当前模型暂不支持视觉理解，无法看图。）`);
     } else {
       // i18n-ignore: model-facing attachment note

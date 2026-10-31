@@ -64,6 +64,22 @@ export interface TurnOutcome {
   readonly turnEndKind: TurnEndKind;
 }
 
+/**
+ * One prompt content block (B3'' 视觉输入, TASK_B3P_VISION_INPUT.md). Shapes
+ * mirror the upstream `SdkPromptContentBlock` union (dsh-sdk-protocol
+ * 0.2.1-rc.2): text is the pre-existing prompt; an image block carries
+ * canonical base64 raster bytes and is admitted into the runtime's durable
+ * attachment store, where the LLM layer gates per model — a text-only route
+ * receives the deterministic text projection, never the bytes.
+ */
+export type PromptContentBlock =
+  | { readonly type: "text"; readonly text: string }
+  | {
+      readonly type: "image";
+      readonly data: string;
+      readonly mimeType: "image/png" | "image/jpeg" | "image/webp" | "image/gif";
+    };
+
 interface Notification {
   readonly method: string;
   readonly params: Record<string, unknown>;
@@ -201,7 +217,7 @@ export class HarnessAttempt {
    */
   async runTurn(
     sessionId: string,
-    prompt: string,
+    prompt: string | readonly PromptContentBlock[],
     signal?: AbortSignal,
     onEvent?: (event: SessionEventEnvelope) => void,
   ): Promise<TurnOutcome> {
@@ -215,9 +231,12 @@ export class HarnessAttempt {
     };
     signal?.addEventListener("abort", abort, { once: true });
     try {
+      // A bare string stays byte-identical to the pre-vision wire shape.
+      const contentBlocks: PromptContentBlock[] =
+        typeof prompt === "string" ? [{ type: "text", text: prompt }] : [...prompt];
       const messageId = (await this.request("session/prompt", {
         sessionId,
-        contentBlocks: [{ type: "text", text: prompt }],
+        contentBlocks,
       })) as { messageId?: unknown } | undefined;
       if (typeof messageId?.messageId !== "string") {
         throw new NodeExecutionError({

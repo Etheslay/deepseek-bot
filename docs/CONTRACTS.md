@@ -1,4 +1,4 @@
-# 接口与数据契约 v0.13
+# 接口与数据契约 v0.14
 
 本文件定义本项目前后端契约，不是 DeepSeek Harness 官方 API。状态：v0.1 已冻结（2026-10-23，D00 验收记录见 D00 Issue）；v0.2 为 D15 写层扩展；v0.3（2026-10-26，D16 后端）新增人类权限控制方法；v0.4（2026-10-26，D28 共编侧车）新增 `artifacts.*` 方法组；v0.5（2026-10-26，manager-orchestration，TASK_MANAGER_ORCHESTRATION.md）新增 bot 协调者角色、`task.*` 方法组、`task.status` 任务事件与能力 `app.dispatch_task`，`protocolVersion` 升至 0.5，继续接受 0.1–0.4 发送方。工作流文档 `schemaVersion` 保持 0.1（存量数据可读）。后续变更按 §7 提升版本并由变更负责人自审同步使用方。可执行实现位于 `packages/contracts/`：schema、§7 夹具与双方共用契约测试见 [packages/contracts/README.md](../packages/contracts/README.md)。所有字段均需后端校验，TypeScript 类型不能替代运行时校验。
 
@@ -22,7 +22,11 @@ v0.12 新增每 bot 多会话（G12，TASK_G12_MULTI_SESSION.md，语义决定�
 
 v0.12 新增工作流读面 `workflow.get` / `run.snapshot` / `approval.list`：桌面编辑器要按 id 打开完整工作流文档（`workflow.list` 只回摘要、`workflow.export` 还要先知道 revision），运行监控要一帧拿到 `{run, nodeRuns, approvals, artifacts}` 而不是分别调用夹具列表，审批收件箱要跨运行筛选 `{runId?, status?, limit?}`（`permission.approval.list` 属能力授权域，schema 不同）。三个方法都只是既有存储/引擎读的薄封装，不改实体、不改变既有方法语义，当前 `protocolVersion` 为 0.12，继续接受 0.1–0.11 发送方；工作流 `schemaVersion` 仍为 0.1。本片只补契约与 Host 实现，**不代表桌面已经切到真实 Host**：`DesktopService.workflows/runs` 仍由夹具提供，接线与端到端验收另片完成。
 
-v0.13 新增界面态方法 `ui.state.get` / `ui.state.set`（G1' 收口）：桌面侧栏快照（bot/分组顺序 + 选中态）存于 settings KV 行 `ui.state.v1`，整快照读写、请求侧用固定的 `UiStateSchema` 整体校验（仅稳定实体 UUID：`botOrder`/`groupOrder` 去重 ≤1000、`selectedBotId`/`selectedGroupId` 可空），缺失或损坏行降级为空态、不失败。**不存任意 UI 载荷，不可能落 Key**。只覆盖稳定实体；桌面分组目前是会话内数字 key，`groupOrder`/`selectedGroupId` 在分组实体化前由渲染层写空值。两方法只是 settings KV 的薄封装，不改实体、不改变既有方法语义，当前 `protocolVersion` 为 0.13，继续接受 0.1–0.12 发送方；工作流 `schemaVersion` 仍为 0.1。
+v0.13 新增界面态方法 `ui.state.get` / `ui.state.set`（G1' 收口）：桌面侧栏快照（bot/分组顺序 + 选中态）存于 settings KV 行 `ui.state.v1`，整快照读写、请求侧用固定的 `UiStateSchema` 整体校验（仅稳定实体 UUID：`botOrder`/`groupOrder` 去重 ≤1000、`selectedBotId`/`selectedGroupId` 可空），缺失或损坏行降级为空态、不失败。**不存任意 UI 载荷，不可能落 Key**。两方法只是 settings KV 的薄封装，不改实体、不改变既有方法语义；工作流 `schemaVersion` 仍为 0.1。
+
+v0.14 分组实体化（G1' 后半）：新增 `group.archive`（RevisionRef 请求 → 归档后的 `BotGroup`）——桌面侧栏分组从会话内数字 key 升级为持久实体（`bot_groups` 表既有），删组跨重启生效；乐观并发同 `bot.archive`（归档轮换 revision，重试须用首次返回的 revision），`group.list` 不回归档组，成员保留 `groupId` 由桌面渲染为未分组（空组才可删是 UI 策略）。同片给 `UiStateSchema` 增加可选 `collapsedGroupIds`（去重 UUID 列表）：折叠态随快照恢复，0.13 写方省略该字段仍被接受。渲染层接线（建组/移动成员/折叠恢复走真实方法）随本片后续 PR 落地。当前 `protocolVersion` 为 0.14，继续接受 0.1–0.13 发送方。
+
+v0.14 新增聊天视觉输入（B3''，TASK_B3P_VISION_INPUT.md，上游验证证据链以该文件为准）：`chat.send` 请求新增**可选** `images?: { data: base64 ≤4MB, mimeType: png/jpeg/webp/gif }[]`（≤4 项）；缺省 = 无图片块 = pre-vision 线上形状。图片块经 harness `session/prompt` 准入其持久附件存储，**按模型门控**：vision 路由真实看图（Files API 或限额内 inline），text-only 路由由上游投影确定性占位文本——像素要么送达要么被宣告，绝不静默丢弃。新增受信只读方法 `vision.status` `{botId}` → `{model, visionAvailable, visionKnown}`（voice.status 能力标志模式；pinned 目录快照 `deepseek-flash` 声明视觉模态；目录外模型 `visionKnown=false`，UI 中性，发送时上游门控仍是权威）。成本（上游 v41 公式实测）：1024²=652 tokens、1568 长边=1001 tokens、单图上限 1024 tokens。当前 `protocolVersion` 为 0.14，继续接受 0.1–0.13 发送方；工作流 `schemaVersion` 仍为 0.1。
 
 ## 1. 通用规则
 
@@ -77,6 +81,7 @@ MCP 实际调用使用独立能力 `mcp.call`，默认 `ask`，禁止全局 `all
 | bot.batchCreate | v0.2 聊天驱动批量创建（FR-12） | 单事务：newGroup 与 groupId 互斥；逐字段回退 batch defaults；头像显式优先、自动分配组内不重复（组合用尽才允许重复）；以 idempotencyKey 去重；返回 batchId 供 creation.revoke |
 | creation.revoke | v0.2 整批撤销 | 归档该批全部 bot（无 revision 守卫，撤销必须生效），批次自建的组一并归档；重复撤销返回 INVALID_INPUT |
 | group.create / list | v0.2 分组管理 | list 仅返回未归档组 |
+| group.archive | v0.14 归档一个分组 | RevisionRef 请求（id + expectedRevision）→ 归档后的 `BotGroup`；归档轮换 revision，重试须用首次返回的 revision；list 不回归档组，成员保留 `groupId` 由桌面渲染为未分组（空组才可删是 UI 策略） |
 | workflow.list | v0.3 工作流摘要（选择器用） | 只回 id/name/revision，不回节点图；全库摘要远低于 1 MiB 消息上限 |
 | workflow.get | v0.12 编辑器按 id 打开工作流 | 请求 `{id: UUID}`（严格字段），响应完整 `Workflow`（节点/边/设置与当前 revision）。`workflow.list` 只回摘要、`workflow.export` 要求先给 expectedRevision，都不能替代；不存在的 id 返回 INVALID_INPUT |
 | workflow.validate / save / export / import | 编辑与模板交换 | validate 返回可定位节点/字段的错误；import 先校验 schemaVersion |
@@ -88,7 +93,7 @@ MCP 实际调用使用独立能力 `mcp.call`，默认 `ask`，禁止全局 `all
 | approval.decide | 允许/拒绝指定动作 | 校验摘要、权限、有效期与 pending 状态；重复决定不得重复执行 |
 | schedule.save / enable / disable | 本地调度 | 唯一 scheduleId + occurrenceUtc 防重复 |
 | settings.testConnection / update | 接入与设置 | Key 写入与测试位于后端；前端只得到是否已配置。`update` 的 patch 支持 `ui.locale`（`"zh" \| "en"`）：桌面把解析后的界面语言推给 Host（启动与切换时各一次），Host 存入 settings KV 并即时生效——任务派发通知、交接框架（`【上游交接 · …】`）、画布冲突与凭据错误、ask_user 兜底选项等 Host 侧文案随该语言输出；缺省与非法值回落 zh。语言切换只影响之后新写入的行，历史回放保持原样 |
-| ui.state.get / set | v0.13 界面态快照（受信桌面） | `get` 无参 → `{state}`（`UiStateSchema`：botOrder/groupOrder 去重 UUID 列表 ≤1000、selectedBotId/selectedGroupId 可空）；`set` 请求 `{state}` 整体校验后整快照落 settings KV 行 `ui.state.v1` 并回显，末写胜出。缺失/损坏行降级空态。只存稳定实体 ID，不存任意载荷、不存密钥；分组实体化前 group 字段写空值 |
+| ui.state.get / set | v0.13 界面态快照（受信桌面） | `get` 无参 → `{state}`（`UiStateSchema`：botOrder/groupOrder 去重 UUID 列表 ≤1000、selectedBotId/selectedGroupId 可空；v0.14 起可选 collapsedGroupIds，0.13 写方省略仍被接受）；`set` 请求 `{state}` 整体校验后整快照落 settings KV 行 `ui.state.v1` 并回显，末写胜出。缺失/损坏行降级空态。只存稳定实体 ID，不存任意载荷、不存密钥 |
 | data.backup / restore / describe | 数据管理 | restore 必须停止所有运行、校验备份、备份旧数据 |
 | permission.policy.list / set | v0.3 人类读取/修改全局能力策略 | start_run 仅 ask；shell/screen 不能 allow；deny 覆盖全部授权 |
 | permission.grant.list / revoke | v0.3 人类查询/撤销授权 | botId 可筛选；默认仅有效记录，最多 100；撤销已存在授权幂等 |
@@ -124,7 +129,8 @@ MCP 实际调用使用独立能力 `mcp.call`，默认 `ask`，禁止全局 `all
 | search.global | D25 host 检索（仅受信桌面；不提升协议版本）：`{query: string≤200, limit?: 1–50}` → `{results: {kind: bot\|workflow\|message\|artifact, id: UUID, botId: UUID\|null, title: string≤200, snippet: string≤400\|null, at: UTC ISO\|null}[]≤200}` | 字面子串检索（LIKE 通配符转义）覆盖 bot 名、工作流名、跨 bot 持久聊天消息与产物路径（每文件只取最新版），按时间倒序；消息只回有界摘要，产物不含文件系统路径与内容；打开命中走既有逐 bot 方法，检索本身不授权。不产生模型工具 |
 | artifacts.list / read / save / versions / versionContent / revert | v0.4 产物共编侧车：bot 工作区文件的列出、读取、保存、版本、版本内容与回退 | 路径必须相对且不穿越（`RelativeArtifactPathSchema` + realpath 夹紧）；内联内容 ≤ 768 KiB（1 MiB envelope 内留 JSON 转义余量），超限显式拒绝不截断；save 携带 expectedChecksum 时文件已变返回 REVISION_CONFLICT；save/revert 恒追加 author=user 版本，未入账的 bot 写入由 list/read/versions 先补记为 author=bot 版本；每文件保留最近 50 版 |
 | task.dispatch / list / cancel | v0.5 任务派发（manager-orchestration）；互通后（TASK_BOT_INTEROP.md）**任意在册 bot 可派发，跨组允许** | dispatch 仅由模型工具 `dispatch_task` 经网关到达，请求携带发起者 fromBotId；Host 重验身份规则（在册未归档、非自身）并执行排队上限（默认 10）；`chain` 预声明 T7 交接链：简单路径（botId 不重复、不含自身）、在册 bot（跨组允许）、全链 ≤ 4 跳（Host 可配 2–4，默认 3）；一次审批覆盖整条链，逐跳执行前重验（撤销/deny 即停，剩余跳标 skipped）。请求另带**可选 `idempotencyKey`（uuid）**：同 key 重复提交重放发起者的首个任务（first write wins，不重复建行/入队/投递标记）。list 按 fromBotId/toBotId/rootTaskId/status 过滤；cancel 仅人类：queued 直接取消、running 转 chat.cancel 语义，queued 同链跳级联取消 |
-| chat.send | D30 聊天运行时（不提升协议版本；字段随 #115/#137 附加）：`{botId: UUID, text: 1–4000 字, sessionId?（v0.14，缺省=默认会话）, skills?（≤30 项，语义见「D17 技能注入」节）, primitive?（语义见文件头）}` → `{sessionId, messageId, text, at}`；流式期间经瞬态 `assistant.delta` 推送（§4），完成后落库 `chat_messages` | 会话为每 bot 多条（v0.14，缺省 `chat:<botId>` 与旧单线为同一条）；仅受信桌面调用，不是模型工具 |
+| chat.send | D30 聊天运行时（不提升协议版本；字段随 #115/#137 附加）：`{botId: UUID, text: 1–4000 字, sessionId?（v0.14，缺省=默认会话）, images?（v0.14 视觉输入，≤4 项 base64+光栅 MIME，见文件头 v0.14 段）, skills?（≤30 项，语义见「D17 技能注入」节）, primitive?（语义见文件头）}` → `{sessionId, messageId, text, at}`；流式期间经瞬态 `assistant.delta` 推送（§4），完成后落库 `chat_messages` | 会话为每 bot 多条（v0.14，缺省 `chat:<botId>` 与旧单线为同一条）；图片按模型门控、text-only 上游投影降级；仅受信桌面调用，不是模型工具 |
+| vision.status | v0.14 视觉能力标志（B3''，受信桌面只读；见文件头 v0.14 段）：`{botId: UUID}` → `{model: string≤128, visionAvailable: boolean, visionKnown: boolean}` | pinned 目录快照判断（deepseek-flash 有视觉）；目录外模型 `visionKnown=false`、UI 中性；发送时上游 per-model 门控仍是权威 |
 | chat.history | D30 历史回放（渲染接线 PR #97/#103）：`{botId: UUID, sessionId?（v0.14，缺省=默认会话）, limit?: 1–200（缺省 100）}` → `{messages: [{id, botId, sessionId, role: user\|assistant, text, meta?, at}]}` | `meta` 为附加可选项（`ChatMessageMeta`，存量行无此字段也可解析）。`kind=choice` 不升协议版本：question ≤2000、选项 2–4 个（id 为 A–D，label ≤1000）、必填 answered（1–4000）、可选 other。按 botId 过滤，不回其他 bot；仅受信桌面 |
 | chat.cancel | D30 取消当前活动回合：`{sessionId: string 1–128}` → `{cancelled: boolean}` | 任务派发的 running 跳取消也走该语义（见 task.dispatch 行）；取消按 bot 生效（同一 bot 同时至多一个回合，与发起会话无关）；仅受信桌面 |
 | chat.session.list / create / rename / archive | v0.14 每 bot 多会话（G12，语义决定见文件头 v0.14 段与 TASK_G12_MULTI_SESSION.md）：list `{botId}` → `{sessions: ChatSession[]}`（`lastMessageAt` 倒序，惰性物化默认会话）；create `{botId, title?}` → `{session}`（新 id `cs:` 前缀）；rename `{botId, sessionId, title 1–200}` → `{session}`；archive `{botId, sessionId}` → `{session}` | `ChatSession = {sessionId, botId, title, archived, messageCount, createdAt, lastMessageAt}`；rename 拒绝归档会话，archive 不可逆且默认会话拒绝；发送/历史/计量按 `sessionId` 定位（缺省=默认会话）；仅受信桌面 |

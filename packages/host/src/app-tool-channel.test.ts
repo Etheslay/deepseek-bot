@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, readFileSync } from "node:fs";
+import { mkdtempSync, rmSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -7,6 +7,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AppApproval } from "@deepseek-bot/contracts";
 import { createHost, type DeepSeekBotHost } from "./host.js";
 import { startApplicationToolServer, type ApplicationToolServer } from "./app-tool-channel.js";
+import { estimateTokens } from "./usage-capture.js";
+import { MAX_TOOL_RESULT_TOKENS } from "./tool-result-cap.js";
 
 const hosts: DeepSeekBotHost[] = [];
 const servers: ApplicationToolServer[] = [];
@@ -57,12 +59,17 @@ async function setup(now?: () => Date) {
 }
 async function pending(host: DeepSeekBotHost): Promise<AppApproval> {
   let result: AppApproval[] = [];
-  await vi.waitFor(async () => {
-    result = (
-      (await host.handleMethod("permission.approval.list", {})) as { approvals: AppApproval[] }
-    ).approvals;
-    expect(result).toHaveLength(1);
-  });
+  await vi.waitFor(
+    async () => {
+      result = (
+        (await host.handleMethod("permission.approval.list", {})) as { approvals: AppApproval[] }
+      ).approvals;
+      expect(result).toHaveLength(1);
+    },
+    // Approvals surface after the fake-harness child boots; the 1s default
+    // poll budget starves under CPU saturation, so poll on a deadline.
+    { timeout: 20_000, interval: 100 },
+  );
   return result[0]!;
 }
 async function approve(host: DeepSeekBotHost, approval: AppApproval, scope = "once") {
@@ -161,14 +168,17 @@ describe("authenticated chat application tool channel", () => {
         },
       });
     const answerOnce = async (questionText: string) => {
-      const listed = await vi.waitFor(async () => {
-        const response = (await host.handleMethod("question.list", { botId: bot.id })) as {
-          questions: Array<{ requestId: string; question: string }>;
-        };
-        const match = response.questions.find((item) => item.question === questionText);
-        expect(match).toBeDefined();
-        return match!;
-      });
+      const listed = await vi.waitFor(
+        async () => {
+          const response = (await host.handleMethod("question.list", { botId: bot.id })) as {
+            questions: Array<{ requestId: string; question: string }>;
+          };
+          const match = response.questions.find((item) => item.question === questionText);
+          expect(match).toBeDefined();
+          return match!;
+        },
+        { timeout: 20_000, interval: 100 },
+      );
       await host.handleMethod("question.answer", {
         botId: bot.id,
         requestId: listed.requestId,
@@ -218,11 +228,13 @@ describe("authenticated chat application tool channel", () => {
     const approval = await pending(host);
     requestAbort.abort();
     await rejected;
-    await vi.waitFor(async () =>
-      expect(
-        ((await host.handleMethod("permission.approval.list", {})) as { approvals: unknown[] })
-          .approvals,
-      ).toEqual([]),
+    await vi.waitFor(
+      async () =>
+        expect(
+          ((await host.handleMethod("permission.approval.list", {})) as { approvals: unknown[] })
+            .approvals,
+        ).toEqual([]),
+      { timeout: 20_000, interval: 100 },
     );
     await expect(approve(host, approval)).rejects.toMatchObject({ code: "INVALID_INPUT" });
     expect(await host.handleMethod("group.list", {})).toEqual({ groups: [] });
@@ -378,12 +390,15 @@ describe("authenticated chat application tool channel", () => {
       }),
     });
     let approvals: AppApproval[] = [];
-    await vi.waitFor(async () => {
-      approvals = (
-        (await host.handleMethod("permission.approval.list", {})) as { approvals: AppApproval[] }
-      ).approvals;
-      expect(approvals).toHaveLength(2);
-    });
+    await vi.waitFor(
+      async () => {
+        approvals = (
+          (await host.handleMethod("permission.approval.list", {})) as { approvals: AppApproval[] }
+        ).approvals;
+        expect(approvals).toHaveLength(2);
+      },
+      { timeout: 20_000, interval: 100 },
+    );
     await approve(host, approvals.find((approval) => approval.botId === bot.id)!);
     expect(await (await first).json()).toMatchObject({ ok: true, result: { name: "first actor" } });
     const remaining = (await host.handleMethod("permission.approval.list", {})) as {
@@ -396,5 +411,34 @@ describe("authenticated chat application tool channel", () => {
       result: { name: "second actor" },
     });
     await other.close();
+  });
+  it("caps an oversized tool result in the prompt copy while the workspace file stays intact", async () => {
+    const { host, call } = await setup();
+    await host.handleMethod("permission.policy.set", { capability: "fs.read", mode: "allow" });
+    const workspace = host.db.raw
+      .prepare("SELECT canonical_path FROM workspaces WHERE id = '55555555-5555-4555-8555-555555555555'")
+      .get() as { canonical_path: string } | undefined;
+    expect(workspace).toBeDefined();
+    const filePath = join(workspace!.canonical_path, "big.log");
+    const content = `HEAD-MARK${"a".repeat(200_000)}TAIL-MARK`;
+    writeFileSync(filePath, content, "utf8");
+    // Short results still pass through as their real shape.
+    const short = (await (await call("list_bots")).json()) as { ok: boolean; result: unknown };
+    expect(short.ok).toBe(true);
+    expect(typeof short.result).toBe("object");
+    // The oversized read comes back capped: head, tail and marker, within budget.
+    const payload = (await (await call("read_workspace_file", { path: "big.log" })).json()) as {
+      ok: boolean;
+      result: unknown;
+    };
+    expect(payload.ok).toBe(true);
+    expect(typeof payload.result).toBe("string");
+    const text = payload.result as string;
+    expect(text.startsWith("{\"path\":\"big.log\",\"content\":\"HEAD-MARK")).toBe(true);
+    expect(text.endsWith('TAIL-MARK"}')).toBe(true);
+    expect(text).toContain("工具输出已截断");
+    expect(estimateTokens(text)).toBeLessThanOrEqual(MAX_TOOL_RESULT_TOKENS);
+    // The cap only shrinks the prompt copy; the file on disk keeps every byte.
+    expect(readFileSync(filePath, "utf8")).toBe(content);
   });
 });

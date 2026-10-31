@@ -136,10 +136,16 @@ async function waitForTask(
   status: Task["status"],
 ): Promise<Task> {
   let task: Task | undefined;
-  await vi.waitFor(async () => {
-    task = await taskOf(host, taskId);
-    expect(task.status).toBe(status);
-  });
+  await vi.waitFor(
+    async () => {
+      task = await taskOf(host, taskId);
+      expect(task.status).toBe(status);
+    },
+    // The executor runs a whole fake-harness turn per hop; the 1s default
+    // poll budget starves whenever the suite runs alongside other
+    // harness children, so poll on a deadline instead.
+    { timeout: 20_000, interval: 100 },
+  );
   return task!;
 }
 
@@ -378,13 +384,16 @@ describe("U5 approval wiring for app.dispatch_task", () => {
       { toBotId: fx.workerA, task: "写本周选题清单" },
     );
     let approval: AppApproval | undefined;
-    await vi.waitFor(async () => {
-      const list = (await fx.host.handleMethod("permission.approval.list", {
-        botId: fx.coordinator,
-      })) as { approvals: AppApproval[] };
-      approval = list.approvals[0];
-      expect(approval).toBeDefined();
-    });
+    await vi.waitFor(
+      async () => {
+        const list = (await fx.host.handleMethod("permission.approval.list", {
+          botId: fx.coordinator,
+        })) as { approvals: AppApproval[] };
+        approval = list.approvals[0];
+        expect(approval).toBeDefined();
+      },
+      { timeout: 20_000, interval: 100 },
+    );
     expect(approval!.capabilities).toEqual(["app.dispatch_task"]);
     expect(approval!.params).toEqual({ toBotId: fx.workerA, task: "写本周选题清单" });
     await fx.host.handleMethod("permission.approval.decide", {
@@ -456,13 +465,16 @@ describe("U7 dual-identity audit (FR-5)", () => {
     // The executor's own in-turn create_group still needs its own approval —
     // dispatching never borrows the coordinator's authorization.
     let approval: AppApproval | undefined;
-    await vi.waitFor(async () => {
-      const list = (await fx.host.handleMethod("permission.approval.list", {
-        botId: fx.workerA,
-      })) as { approvals: AppApproval[] };
-      approval = list.approvals[0];
-      expect(approval).toBeDefined();
-    });
+    await vi.waitFor(
+      async () => {
+        const list = (await fx.host.handleMethod("permission.approval.list", {
+          botId: fx.workerA,
+        })) as { approvals: AppApproval[] };
+        approval = list.approvals[0];
+        expect(approval).toBeDefined();
+      },
+      { timeout: 20_000, interval: 100 },
+    );
     await fx.host.handleMethod("permission.approval.decide", {
       approvalId: approval!.id,
       expectedActionDigest: approval!.actionDigest,
@@ -563,13 +575,16 @@ describe("T7 relay chains (U8–U11)", () => {
       chain: [{ botId: fx.workerB, instruction: "永远不该跑" }],
     })) as Task;
     let approval: AppApproval | undefined;
-    await vi.waitFor(async () => {
-      const list = (await fx.host.handleMethod("permission.approval.list", {
-        botId: fx.workerA,
-      })) as { approvals: AppApproval[] };
-      approval = list.approvals[0];
-      expect(approval).toBeDefined();
-    });
+    await vi.waitFor(
+      async () => {
+        const list = (await fx.host.handleMethod("permission.approval.list", {
+          botId: fx.workerA,
+        })) as { approvals: AppApproval[] };
+        approval = list.approvals[0];
+        expect(approval).toBeDefined();
+      },
+      { timeout: 20_000, interval: 100 },
+    );
     // Revocation-equivalent: deny the capability while hop 1 is in flight.
     await fx.host.handleMethod("permission.policy.set", {
       capability: "app.dispatch_task",

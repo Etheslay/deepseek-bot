@@ -10,10 +10,12 @@ import type {
   ArtifactVersion,
   Bot,
   BotArtifact,
+  BotGroup,
   ChatMessageMeta,
   ChatSkillInjection,
   ErrorCode,
   EventEnvelope,
+  SkillLibrary,
   UiState,
 } from "@deepseek-bot/contracts";
 import type { BackupSummary } from "../../../shared/ipc-channels.js";
@@ -44,6 +46,14 @@ export type BotDraft = {
   /** v0.5 coordinator role (FR-1): human editor only, never the model. */
   role?: BotRoleDraft;
 };
+
+/**
+ * Patch for `bots.update` → bot.update. Wider than BotDraft because moves
+ * between persisted groups ride the same method (G1' 分组实体化): `groupId`
+ * null puts the bot back into 未分组. The Host's BotPatchSchema stays the
+ * validation authority.
+ */
+export type BotUpdatePatch = Partial<BotDraft> & { groupId?: string | null };
 
 /** Result of one D26 attachment upload commit (trusted desktop only). */
 export type AttachmentUploadResult = {
@@ -135,6 +145,16 @@ export type StreamOptions = {
    * default session — the pre-sessions single thread.
    */
   sessionId?: string;
+  /**
+   * B3'' 视觉输入: raster attachments riding this turn as real image content
+   * blocks (canonical base64, admitted MIME types). Omitted means no image
+   * blocks — the pre-vision wire shape; images stay saved to the workspace
+   * regardless, so read_workspace_file keeps working.
+   */
+  images?: readonly {
+    data: string;
+    mimeType: "image/png" | "image/jpeg" | "image/webp" | "image/gif";
+  }[];
 };
 
 export type StreamHandle = {
@@ -167,7 +187,7 @@ export interface DesktopService {
   bots: {
     list(): Promise<Bot[]>;
     create(draft: BotDraft): Promise<Bot>;
-    update(botId: string, expectedRevision: string, patch: Partial<BotDraft>): Promise<Bot>;
+    update(botId: string, expectedRevision: string, patch: BotUpdatePatch): Promise<Bot>;
     archive(botId: string, expectedRevision: string): Promise<Bot>;
     /** New id/revision, name gets a "副本" suffix; sessions are never copied. */
     duplicate(botId: string): Promise<Bot>;
@@ -318,6 +338,38 @@ export interface DesktopService {
     get(): Promise<UiState>;
     /** Replace the whole snapshot atomically; the caller debounces writes. */
     save(state: UiState): Promise<UiState>;
+  };
+
+  /**
+   * B3'' 视觉能力标志: whether the bot's configured model is known to accept
+   * image input. visionKnown=false (model id outside the pinned catalog)
+   * means the UI stays neutral; the send-time harness gating is the truth.
+   */
+  vision: {
+    status(botId: string): Promise<{ model: string; visionAvailable: boolean; visionKnown: boolean }>;
+  };
+
+  /**
+   * G1' 分组实体化 (v0.14): the sidebar's persisted groups. `list` never
+   * returns archived groups; `archive` uses optimistic concurrency (the
+   * archive rotates the revision, so retries use the returned one). The
+   * empty-group rule stays a UI policy. Members move via `bots.update` with
+   * a `groupId` patch (null = ungrouped).
+   */
+  groups: {
+    list(): Promise<BotGroup[]>;
+    create(name: string): Promise<BotGroup>;
+    archive(id: string, expectedRevision: string): Promise<BotGroup>;
+  };
+
+  /**
+   * D17' skill library (v0.11 skillLibrary.get/save): whole-library reads
+   * and writes. The Host validates the full shape on save and echoes it;
+   * the fixture keeps the library in session memory.
+   */
+  skills: {
+    getLibrary(): Promise<SkillLibrary>;
+    saveLibrary(library: SkillLibrary): Promise<SkillLibrary>;
   };
 
   /**

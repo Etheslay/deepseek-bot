@@ -35,6 +35,7 @@ export * from "./repos/settings.js";
 export * from "./repos/permissions.js";
 export * from "./repos/chat.js";
 export * from "./repos/chat-summaries.js";
+export * from "./repos/attachment-parses.js";
 export * from "./repos/chat-sessions.js";
 export * from "./repos/memories.js";
 export * from "./repos/knowledge.js";

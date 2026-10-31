@@ -51,6 +51,8 @@ export function runChatStream(deps: {
    * default session — the pre-sessions single thread.
    */
   sessionId?: string;
+  /** B3'': raster attachments riding this turn as image content blocks. */
+  images?: StreamOptions["images"];
   forKey: number;
   update: StreamUpdater;
   onAssistant: (text: string) => void;
@@ -67,19 +69,21 @@ export function runChatStream(deps: {
    */
   onSettled?: (result: StreamResult) => void;
 }): StreamHandle {
-  const { stream, botId, text, skills, primitive, sessionId, forKey, update, onAssistant, isCurrent, onSettled } = deps;
+  const { stream, botId, text, skills, primitive, sessionId, images, forKey, update, onAssistant, isCurrent, onSettled } = deps;
   let acc = "";
-  const hasExtras =
+  const hasImages = images !== undefined && images.length > 0;
+  const options: StreamOptions | undefined =
     (skills !== undefined && skills.length > 0) ||
     primitive === true ||
-    sessionId !== undefined;
-  const options: StreamOptions | undefined = hasExtras
-    ? {
-        ...(skills !== undefined && skills.length > 0 ? { skills } : {}),
-        ...(primitive === true ? { primitive: true } : {}),
-        ...(sessionId !== undefined ? { sessionId } : {}),
-      }
-    : undefined;
+    sessionId !== undefined ||
+    hasImages
+      ? {
+          ...(skills !== undefined && skills.length > 0 ? { skills } : {}),
+          ...(primitive === true ? { primitive: true } : {}),
+          ...(sessionId !== undefined ? { sessionId } : {}),
+          ...(hasImages ? { images } : {}),
+        }
+      : undefined;
   const handle = stream(botId, text, {
     onDelta: (chunk) => {
       acc += chunk;

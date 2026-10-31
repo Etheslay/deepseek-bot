@@ -10,6 +10,7 @@ import {
 } from "@deepseek-bot/agent-tools";
 import { stableStringify } from "@deepseek-bot/runtime";
 import type { McpService, McpCatalogTool } from "./mcp.js";
+import { capToolResultValue } from "./tool-result-cap.js";
 import { listenOnPrivateHttpPort } from "@deepseek-bot/harness-adapter";
 
 const APPLICATION_TOOLS = [
@@ -329,7 +330,17 @@ export async function startApplicationToolServer(
     response.once("close", disconnect);
     if (response.destroyed) active.controller.abort();
     try {
-      send(response, 200, await active.result);
+      // Single-result cap: the bridge renders this value verbatim into the
+      // harness prompt, so an oversized tool output is cut here (the raw data
+      // stays wherever the tool persisted it).
+      const outcome = await active.result;
+      send(
+        response,
+        200,
+        outcome.ok
+          ? { ok: true, result: capToolResultValue(outcome.result).value }
+          : outcome,
+      );
     } finally {
       response.removeListener("close", disconnect);
     }

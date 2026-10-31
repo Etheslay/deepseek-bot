@@ -30,9 +30,10 @@ describe("method whitelist", () => {
     // develop (with voice, search.global, usage.summary and chat.contextUsage)
     // is 120; D17' adds skillLibrary.get/save; v0.12 adds the workflow read
     // surface (workflow.get, run.snapshot, approval.list); v0.13 adds the
-    // interface-state methods (ui.state.get/set); v0.14 adds the four
-    // chat.session.* methods (G12 多会话).
-    expect(METHODS).toHaveLength(131);
+    // interface-state methods (ui.state.get/set); v0.14 adds group.archive,
+    // vision.status (B3'' 视觉输入 — chat.send.images is a field, not a
+    // method) and the four chat.session.* methods (G12 多会话), for 133.
+    expect(METHODS).toHaveLength(133);
   });
 
   it("covers every method group from CONTRACTS §3", () => {
@@ -67,6 +68,7 @@ describe("method whitelist", () => {
       "trigger",
       "ui",
       "usage",
+      "vision",
       "voice",
       "workflow",
     ]);

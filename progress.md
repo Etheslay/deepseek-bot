@@ -1,5 +1,20 @@
 # 工作记录
 
+## 2026-10-31：在途分支 triage（11 个未合并远程分支）
+
+- 合并 #186/#187 后发现 11 个未合并远程分支：两组并行开发线与已合入工作撞车（链条 B：g12→g1-ui-state→b3 视觉→b4 解析→persona→composer 串行堆叠 16 提交、基于 #153；链条 A：equal-bots 六特性→g12 多会话；另有基于 #182 尖端的两个精简重做版与两个独立分支）。
+- 逐个 merge-tree 试算 + 内容比对后写入 SPRINTS §10 triage 表：`fix/host-test-stability`（vitest forks 限 2，治抖动家族，零冲突）最先合；`context-window-metering` 与 #138 互补；PDF/视觉各有精简版与大链版二选一；`g1-ui-state` 已被 #181–#184 取代建议废弃；`g12` 需拍板；`equal-bots-ui` 的「去分组选择器」与 #183/#184 分组实体化方向相反需重点审。
+- GAP_AUDIT 状态行指向该 triage。处置决定（采纳/废弃/摘链）属两位负责人。
+
+## 2026-10-31：G1' 全链收口（ui.* 方法面/接线 + 分组实体化）+ 台账八次刷新
+
+- 基线：`origin/develop` = `c7288e1`（PR #179–#182 合入后）。用户指示继续推进。
+- `feature/ui-state-methods`（`557228d` → PR #181，协议 **v0.13**）：`ui.state.get/set` 受信方法 + `UiStateSchema`（#175 候选采纳）+ settings KV `ui.state.v1`（损坏降级空态，镜像 skills.library.v1 模式）；拍板 #1 记录进 RENDERER_HOST_MAPPING §4（Etheslay 授权推进，Destinyian 会签待补）；contracts 161 过。
+- `feature/ui-state-wiring`（`d1d3e7e` → PR #182）：DesktopService.uiState + 启动恢复（bot 顺序/选中，过期快照不选已归档 bot）+ 500ms 防抖写整快照；useBots.applyPersistedOrder；desktop 697 过。**插曲**：`git add -A` 误提交 tmp-inspect.txt，amend 移出（残件仍未跟踪待处置）。
+- `feature/group-entity-contract`（`2401380` → PR #183，协议 **v0.14**）：`group.archive` + `UiStateSchema.collapsedGroupIds` 可选；语义核对修正——仓库先校验 revision 再走幂等分支，归档轮换 revision，重试须用首次返回的 revision；host groups.test 3 例；contracts 161 过。
+- `feature/group-entity-wiring`（`0697b9e` → PR #184）：分组加载携 UUID+revision、建组先落库、移动共用 moveBotToGroup（失败回退）、删空组走 archive、启动恢复成员映射/分组顺序/折叠、防抖快照加 groupOrder/collapsedGroupIds；i18n +2 键；desktop 699 过。**教训**：makeBridge handler 类型为 `(payload: unknown) => unknown`（逆变），带类型解构参数不过 typecheck，用 unknown 入参内部断言。
+- `feature/gap-audit-refresh8`（本 PR）：GAP_AUDIT 八次刷新（§0 总览 #178–#184、**G1' 归档**、缺口地图、§7.3 自审清单、§8 批次、头部行）；SPRINTS §4 补六行、§5 A7、§7 审计行、§10 八次清点；progress 本条。G1' 全链收口：A 线工程切片基本清零，余真机验收（工作流 12 步/分组 ui.state 四条/语音）、D13/D23、Destinyian 会签与自审签署。
+
 ## 2026-10-30：chat.stream 契约补记 + #150/#151 报告补录与编号勘误（两分支）
 
 - 基线：`origin/develop` = `8b9e5bf`（PR #178 合入后）。用户指示：推进工作后推送远程并开 PR，由负责人手动合并。

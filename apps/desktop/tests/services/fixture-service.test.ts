@@ -317,3 +317,46 @@ describe("FixtureService uiState (G1')", () => {
     await expect(service.uiState.get()).resolves.toEqual(state);
   });
 });
+
+describe("FixtureService groups (G1' 分组实体化)", () => {
+  it("creates, lists and archives with optimistic concurrency", async () => {
+    const created = await service.groups.create("临时组");
+    expect(created.archivedAt).toBeNull();
+    await expect(service.groups.list()).resolves.toContainEqual(created);
+    const archived = await service.groups.archive(created.id, created.revision);
+    expect(archived.archivedAt).not.toBeNull();
+    const listed = await service.groups.list();
+    expect(listed).not.toContainEqual(archived);
+    await expect(
+      service.groups.archive(created.id, created.revision),
+    ).rejects.toMatchObject({ code: "REVISION_CONFLICT" });
+    await expect(
+      service.groups.archive("99999999-9999-4999-8999-999999999999", created.revision),
+    ).rejects.toMatchObject({ code: "INVALID_INPUT" });
+  });
+});
+
+describe("FixtureService skills (D17' service layer)", () => {
+  it("keeps the library in session memory", async () => {
+    await expect(service.skills.getLibrary()).resolves.toEqual({
+      skills: [],
+      bindings: {},
+    });
+    const library = {
+      skills: [
+        {
+          id: "11111111-1111-4111-8111-111111111111",
+          name: "周报",
+          instructions: "输出三段式周报。",
+          capabilities: [],
+          version: 1,
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ],
+      bindings: {},
+    };
+    await expect(service.skills.saveLibrary(library)).resolves.toEqual(library);
+    await expect(service.skills.getLibrary()).resolves.toEqual(library);
+  });
+});
