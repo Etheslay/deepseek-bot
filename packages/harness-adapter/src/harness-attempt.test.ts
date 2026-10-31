@@ -34,7 +34,7 @@ function attemptOptions(scenario: string, root: string) {
       ...process.env,
       FAKE_SCENARIO: scenario,
       DSH_HOME: join(root, "dsh-home"),
-    },
+    } as NodeJS.ProcessEnv,
   };
 }
 
