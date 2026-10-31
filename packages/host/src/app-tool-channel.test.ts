@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, readFileSync } from "node:fs";
+import { mkdtempSync, rmSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -7,6 +7,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AppApproval } from "@deepseek-bot/contracts";
 import { createHost, type DeepSeekBotHost } from "./host.js";
 import { startApplicationToolServer, type ApplicationToolServer } from "./app-tool-channel.js";
+import { estimateTokens } from "./usage-capture.js";
+import { MAX_TOOL_RESULT_TOKENS } from "./tool-result-cap.js";
 
 const hosts: DeepSeekBotHost[] = [];
 const servers: ApplicationToolServer[] = [];
@@ -409,5 +411,34 @@ describe("authenticated chat application tool channel", () => {
       result: { name: "second actor" },
     });
     await other.close();
+  });
+  it("caps an oversized tool result in the prompt copy while the workspace file stays intact", async () => {
+    const { host, call } = await setup();
+    await host.handleMethod("permission.policy.set", { capability: "fs.read", mode: "allow" });
+    const workspace = host.db.raw
+      .prepare("SELECT canonical_path FROM workspaces WHERE id = '55555555-5555-4555-8555-555555555555'")
+      .get() as { canonical_path: string } | undefined;
+    expect(workspace).toBeDefined();
+    const filePath = join(workspace!.canonical_path, "big.log");
+    const content = `HEAD-MARK${"a".repeat(200_000)}TAIL-MARK`;
+    writeFileSync(filePath, content, "utf8");
+    // Short results still pass through as their real shape.
+    const short = (await (await call("list_bots")).json()) as { ok: boolean; result: unknown };
+    expect(short.ok).toBe(true);
+    expect(typeof short.result).toBe("object");
+    // The oversized read comes back capped: head, tail and marker, within budget.
+    const payload = (await (await call("read_workspace_file", { path: "big.log" })).json()) as {
+      ok: boolean;
+      result: unknown;
+    };
+    expect(payload.ok).toBe(true);
+    expect(typeof payload.result).toBe("string");
+    const text = payload.result as string;
+    expect(text.startsWith("{\"path\":\"big.log\",\"content\":\"HEAD-MARK")).toBe(true);
+    expect(text.endsWith('TAIL-MARK"}')).toBe(true);
+    expect(text).toContain("工具输出已截断");
+    expect(estimateTokens(text)).toBeLessThanOrEqual(MAX_TOOL_RESULT_TOKENS);
+    // The cap only shrinks the prompt copy; the file on disk keeps every byte.
+    expect(readFileSync(filePath, "utf8")).toBe(content);
   });
 });

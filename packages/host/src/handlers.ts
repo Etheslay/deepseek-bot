@@ -45,6 +45,7 @@ import {
   getApproval,
   getBatch,
   getBot,
+  getModelProfile,
   getGroup,
   getRun,
   getWorkflow,
@@ -137,6 +138,7 @@ import {
 } from "./host.js";
 import { writeAutomationNotice } from "./automation-notices.js";
 import { chatSessionIdFor, type ChatManager } from "./chat.js";
+import { reportContextOverflow, resolveContextWindowTokens } from "./context-window.js";
 import { estimateTokens } from "./usage-capture.js";
 import type { AttachmentIngress } from "./workspace-attachments.js";
 import { KNOWN_CAPABILITIES, policyKey, readPolicy, type PolicyLevel } from "./permissions.js";
@@ -177,10 +179,25 @@ const CONTEXT_METER_HEADROOM_TOKENS = 2_048;
 const COMPRESS_ROW_CHARS = 800;
 const COMPRESS_TOTAL_CHARS = 24_000;
 
+/** The bot's model profile model name, or null when unresolvable. */
+function botModelName(db: OpenedDatabase, botId: string): string | null {
+  const bot = getBot(db, botId);
+  if (bot?.modelProfileId === undefined) return null;
+  return getModelProfile(db, bot.modelProfileId)?.model ?? null;
+}
+
+/** Per-bot context window: env override → model table → host fallback. */
+function botContextWindowTokens(context: HostContext, db: OpenedDatabase, botId: string): number {
+  return resolveContextWindowTokens({
+    model: botModelName(db, botId),
+    fallbackTokens: context.contextWindowFallbackTokens,
+  });
+}
+
 /**
- * The meter's numerator. With an active session summary it is a chars/4
- * estimate of what the next prompt would fold (persona + digest + kept rows
- * + headroom), because the summary already replaced those rows in the
+ * The meter's numerator. With an active session summary it is a weighted
+ * token estimate of what the next prompt would fold (persona + digest + kept
+ * rows + headroom), because the summary already replaced those rows in the
  * replay; without one it is the last completed turn's real input tokens.
  */
 function contextMeterState(
@@ -263,11 +280,11 @@ function buildCompressionPrompt(
  * the full replay). Failures degrade silently to the status-quo replay.
  */
 async function maybeCompressChat(context: HostContext, botId: string): Promise<void> {
-  const { db, chat, compressingChats, contextWindowTokens, locale } = context;
+  const { db, chat, compressingChats, locale } = context;
   if (compressingChats.has(botId)) {
     return;
   }
-  const meter = contextMeterState(db, botId, contextWindowTokens);
+  const meter = contextMeterState(db, botId, botContextWindowTokens(context, db, botId));
   if (meter.percent < COMPRESSION_THRESHOLD_PERCENT) {
     return;
   }
@@ -356,8 +373,12 @@ export interface HostContext {
    * handoff framing and the ask_user fallback label come out in this language.
    */
   readonly locale: { current: UiLocale };
-  /** Context meter (TASK_CONTEXT_METER.md): the host's context window size. */
-  readonly contextWindowTokens: number;
+  /**
+   * Context meter (TASK_CONTEXT_METER.md): fallback denominator for models
+   * absent from MODEL_CONTEXT_WINDOWS (constructor option ?? 65_536). The
+   * per-bot window is resolved per call — see context-window.ts.
+   */
+  readonly contextWindowFallbackTokens: number;
   /** Bot ids with a background compression turn currently in flight. */
   readonly compressingChats: Set<string>;
 }
@@ -756,6 +777,11 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
 
     "group.list": () => ({ groups: listGroups(db) }),
 
+    "group.archive": (payload) =>
+      // The dispatcher validated the revision ref; the repo keeps optimistic
+      // concurrency and is idempotent for an already-archived group.
+      archiveGroup(db, { id: payload.id, expectedRevision: payload.expectedRevision }),
+
     /** FR-12 整批撤销: archive what the batch created, then close the ledger row. */
     "creation.revoke": (payload) => {
       const batch = getBatch(db, payload.batchId);
@@ -1047,10 +1073,24 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
         role: "user",
         text: payload.text,
       });
-      const outcome = await chat.send(bot, payload.text, history, payload.skills ?? [], {
-        primitive,
-        ...(summaryRow !== undefined ? { summary: summaryRow.summary } : {}),
-      });
+      let outcome;
+      try {
+        outcome = await chat.send(bot, payload.text, history, payload.skills ?? [], {
+          primitive,
+          ...(summaryRow !== undefined ? { summary: summaryRow.summary } : {}),
+        });
+      } catch (error) {
+        // Safety net: a provider context-overflow error means the configured
+        // window may be larger than what the model accepts. Warn once and
+        // rethrow unchanged — never auto-adjust the window here.
+        reportContextOverflow(error, {
+          botId: bot.id,
+          model: botModelName(db, bot.id),
+          windowTokens: botContextWindowTokens(context, db, bot.id),
+          lastInputTokens: getLatestUsageForBot(db, bot.id)?.inputTokens ?? null,
+        });
+        throw error;
+      }
       const assistant = appendChatMessage(db, {
         botId: bot.id,
         sessionId,
@@ -1110,11 +1150,12 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
     "chat.status": (payload) => chat.status(payload.botId),
 
     "chat.contextUsage": (payload) => {
-      const meter = contextMeterState(db, payload.botId, context.contextWindowTokens);
+      const windowTokens = botContextWindowTokens(context, db, payload.botId);
+      const meter = contextMeterState(db, payload.botId, windowTokens);
       const summary = getChatSummary(db, payload.botId, chatSessionIdFor(payload.botId));
       return {
         ...meter,
-        windowTokens: context.contextWindowTokens,
+        windowTokens,
         compressedAt: summary?.createdAt ?? null,
         compressing: context.compressingChats.has(payload.botId),
       };

@@ -91,14 +91,44 @@ export function extractUsageFromEvent(event: SessionEventEnvelope): TurnUsage | 
 }
 
 /**
- * Rough count for a turn the harness did not report usage for: about four
- * characters per token, which is the usual rule of thumb for mixed Chinese and
- * code. Deliberately conservative — the page labels this as an estimate.
+ * Rough count for a turn the harness did not report usage for, and the meter
+ * numerator elsewhere. Weighted per UTF-16 code unit: ASCII (letters, digits,
+ * common punctuation) ≈ 0.25 tokens per unit, CJK (han ideographs, kana,
+ * Hangul syllables) ≈ 1.0, everything else (fullwidth punctuation, emoji,
+ * other scripts) ≈ 0.5 — a surrogate pair therefore lands at 1.0, not 0.5.
+ *
+ * The scale is deliberately conservative: it must over-estimate rather than
+ * under-estimate, because a low estimate lets the context meter trigger
+ * compression too late and a request can overflow at the API layer. It can be
+ * calibrated later against the provider tokenizer (real usage frames from chat
+ * turns give counts to fit against); until then it stays on the high side.
  */
+const ASCII_TOKEN_WEIGHT = 0.25;
+const CJK_TOKEN_WEIGHT = 1.0;
+const OTHER_TOKEN_WEIGHT = 0.5;
+
+/** Token weight of one UTF-16 code unit; shared with slice-budget callers. */
+export function tokenWeight(unit: number): number {
+  if (unit < 0x80) return ASCII_TOKEN_WEIGHT;
+  if (
+    (unit >= 0x4e00 && unit <= 0x9fff) || // CJK unified ideographs
+    (unit >= 0x3400 && unit <= 0x4dbf) || // CJK extension A
+    (unit >= 0x3040 && unit <= 0x30ff) || // hiragana + katakana
+    (unit >= 0xac00 && unit <= 0xd7af) // Hangul syllables
+  ) {
+    return CJK_TOKEN_WEIGHT;
+  }
+  return OTHER_TOKEN_WEIGHT;
+}
+
 export function estimateTokens(text: string): number {
   const trimmed = text.trim();
   if (trimmed.length === 0) return 0;
-  return Math.max(1, Math.ceil(trimmed.length / 4));
+  let total = 0;
+  for (let index = 0; index < trimmed.length; index += 1) {
+    total += tokenWeight(trimmed.charCodeAt(index));
+  }
+  return Math.max(1, Math.ceil(total));
 }
 
 /** Accumulates the usage events of one turn. */

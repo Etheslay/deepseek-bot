@@ -8,10 +8,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
-import { afterAll, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import type { ContextUsageResult } from "./handlers.js";
 import { createHost, type DeepSeekBotHost } from "./host.js";
 import { createBot, listChatMessages, upsertChatSummary } from "@deepseek-bot/storage";
+import { CONTEXT_WINDOW_ENV_VAR } from "./context-window.js";
 
 const fakeHarness = fileURLToPath(
   new URL("../../harness-adapter/src/testing/fake-harness.mjs", import.meta.url),
@@ -28,13 +29,31 @@ afterAll(async () => {
   }
 });
 
+afterEach(() => {
+  // Window resolution reads the env at call time; never leak it across tests.
+  delete process.env[CONTEXT_WINDOW_ENV_VAR];
+});
+
 /**
  * The "ok" fake answers a fixed short reply, so a compression turn produces
  * a genuinely shorter digest — the percentage visibly drops after the fold.
- * Each message is 3900 chars plus a distinct tail, so history crosses the
- * 8k test window within a few turns while every row stays identifiable.
+ * Each message is ~900 CJK chars plus a distinct tail (≈905 tokens under the
+ * weighted estimator), so history crosses the 8k test window within a few
+ * turns while every row stays identifiable.
+ *
+ * The 8k denominator rides the debug env override (DSB_CONTEXT_WINDOW_TOKENS),
+ * which outranks MODEL_CONTEXT_WINDOWS — the fixture bot's deepseek-chat would
+ * otherwise resolve to its documented 128k window.
  */
-async function meterHost(scenario = "ok"): Promise<{ host: DeepSeekBotHost; botId: string }> {
+async function meterHost(
+  scenario = "ok",
+  envWindowTokens: string | null = "8000",
+): Promise<{ host: DeepSeekBotHost; botId: string }> {
+  if (envWindowTokens === null) {
+    delete process.env[CONTEXT_WINDOW_ENV_VAR];
+  } else {
+    process.env[CONTEXT_WINDOW_ENV_VAR] = envWindowTokens;
+  }
   const root = mkdtempSync(join(tmpdir(), "dsb-context-meter-"));
   roots.push(root);
   const host = await createHost({
@@ -42,7 +61,6 @@ async function meterHost(scenario = "ok"): Promise<{ host: DeepSeekBotHost; botI
     resolveApiKey: async () => "sk-test-only",
     dshBin: fakeHarness,
     childEnv: (parent) => ({ ...parent, FAKE_SCENARIO: scenario }),
-    contextWindowTokens: 8_000,
   });
   hosts.push(host);
   const now = host.db.now().toISOString();
@@ -124,7 +142,7 @@ describe("context meter (TASK_CONTEXT_METER.md)", () => {
     for (let turn = 1; turn <= 10; turn += 1) {
       await host.handleMethod("chat.send", {
         botId,
-        text: `${"长".repeat(3_900)}第${turn}条`,
+        text: `${"长".repeat(900)}第${turn}条`,
       });
       const usage = await usageOf(host, botId);
       if (usage.compressedAt !== null) {
@@ -216,5 +234,70 @@ describe("context meter (TASK_CONTEXT_METER.md)", () => {
     expect(usage.percent).toBeLessThan(80);
     expect(usage.compressedAt).toBeNull();
     expect(usage.compressing).toBe(false);
+  });
+});
+
+describe("per-model context windows", () => {
+  /** A second bot whose profile carries an arbitrary model name. */
+  function botWithModel(host: DeepSeekBotHost, model: string): string {
+    const now = host.db.now().toISOString();
+    const ref = `cred:${randomUUID()}`;
+    host.db.raw
+      .prepare("INSERT INTO credentials (ref, label, created_at, updated_at) VALUES (?, 't', ?, ?);")
+      .run(ref, now, now);
+    const profileId = randomUUID();
+    host.db.raw
+      .prepare(
+        "INSERT INTO model_profiles (id, provider, model, endpoint, credential_ref, limits_json, created_at, updated_at) " +
+          "VALUES (?, 'deepseek', ?, 'https://api.deepseek.com', ?, '{}', ?, ?);",
+      )
+      .run(profileId, model, ref, now, now);
+    const bot = createBot(host.db, {
+      bot: {
+        id: randomUUID(),
+        revision: randomUUID(),
+        name: `model-${model}`,
+        instructions: "be brief",
+        modelProfileId: profileId,
+        workspaceId: "55555555-5555-4555-8555-555555555555",
+        toolPolicyId: "66666666-6666-4666-8666-666666666666",
+        role: "standard",
+        archivedAt: null,
+      },
+    });
+    return bot.bot.id;
+  }
+
+  it("resolves the documented window for a deepseek-chat bot", async () => {
+    const { host, botId } = await meterHost("ok", null);
+    const usage = await usageOf(host, botId);
+    expect(usage.windowTokens).toBe(128_000);
+    expect(Number.isFinite(usage.percent)).toBe(true);
+    expect(usage.percent).toBe(0);
+  });
+
+  it("lets the debug env value outrank the model table", async () => {
+    const { host, botId } = await meterHost("ok", "200000");
+    const usage = await usageOf(host, botId);
+    expect(usage.windowTokens).toBe(200_000);
+  });
+
+  it("ignores invalid env values and falls through to the model table", async () => {
+    for (const raw of ["abc", "0", "-1", "9999999"]) {
+      const { host, botId } = await meterHost("ok", raw);
+      const usage = await usageOf(host, botId);
+      expect(usage.windowTokens).toBe(128_000);
+      expect(Number.isFinite(usage.percent)).toBe(true);
+      expect(usage.percent).toBe(0);
+    }
+  });
+
+  it("falls back to 65_536 with a sane gauge for an unknown model", async () => {
+    const { host } = await meterHost("ok", null);
+    const unknownBotId = botWithModel(host, "deepseek-foo");
+    const usage = await usageOf(host, unknownBotId);
+    expect(usage.windowTokens).toBe(65_536);
+    expect(Number.isFinite(usage.percent)).toBe(true);
+    expect(usage.percent).toBe(0);
   });
 });
