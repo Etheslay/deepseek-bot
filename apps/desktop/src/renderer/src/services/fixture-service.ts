@@ -821,6 +821,14 @@ export function createFixtureService(): DesktopService {
       },
     },
 
+    // B3'' fixture: no pinned-catalog knowledge in the preview, so the UI
+    // stays neutral (visionKnown=false) and image cards keep the fallback
+    // note — an honest "unknown", not a fabricated "supported".
+    vision: {
+      status: () =>
+        Promise.resolve({ model: "fixture-model", visionAvailable: false, visionKnown: false }),
+    },
+
     // G1' 分组实体化: in-memory groups with the same archive semantics as
     // the Host (optimistic concurrency, list skips archived).
     groups: {

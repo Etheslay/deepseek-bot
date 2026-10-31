@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -8,6 +8,10 @@ import { afterAll, describe, expect, it, vi } from "vitest";
 import type { AppApproval } from "@deepseek-bot/contracts";
 import { createBot } from "@deepseek-bot/storage";
 import { createHost, type DeepSeekBotHost } from "./host.js";
+
+// 1×1 red PNG, base64 — the smallest valid raster.
+const pngBase64 =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
 
 const fakeHarness = fileURLToPath(
   new URL("../../harness-adapter/src/testing/fake-harness.mjs", import.meta.url),
@@ -266,6 +270,37 @@ describe("chat runtime", () => {
     expect(failure?.message).not.toContain("ENOENT");
     expect(failure?.message).not.toContain("credentials");
     expect(failure?.message).not.toContain("\\");
+  });
+
+  it("carries payload images as prompt content blocks (B3'')", async () => {
+    const records = mkdtempSync(join(tmpdir(), "dsb-chat-vision-records-"));
+    roots.push(records);
+    const { host, botId } = await hostWithBot("ok", async () => "unused", {
+      FAKE_RECORD_DIR: records,
+    });
+    await host.handleMethod("chat.send", {
+      botId,
+      text: "这张图片里是什么颜色？",
+      images: [{ data: pngBase64, mimeType: "image/png" }],
+    });
+    const lines = readFileSync(join(records, "fake-harness.jsonl"), "utf8")
+      .split("\n")
+      .filter((line) => line.trim().length > 0)
+      .map((line) => JSON.parse(line) as { method: string; params: Record<string, unknown> });
+    const prompt = lines.find((entry) => entry.method === "session/prompt");
+    expect(prompt?.params.contentBlocks).toEqual([
+      { type: "text", text: expect.stringContaining("这张图片里是什么颜色？") },
+      { type: "image", data: pngBase64, mimeType: "image/png" },
+    ]);
+    // The capability flag is queryable per bot; the pinned catalog does not
+    // know `deepseek-chat`, so the UI stays neutral (visionKnown=false).
+    const vision = (await host.handleMethod("vision.status", { botId })) as {
+      model: string;
+      visionAvailable: boolean;
+      visionKnown: boolean;
+    };
+    expect(vision.model).toBe("deepseek-chat");
+    expect(vision.visionKnown).toBe(false);
   });
 
   it("replays history as context because each turn opens a fresh session", async () => {

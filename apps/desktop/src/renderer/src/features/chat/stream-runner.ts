@@ -46,6 +46,8 @@ export function runChatStream(deps: {
   skills?: StreamOptions["skills"];
   /** 原始人模式: terse one-step prompt on the Host. Independent of skills. */
   primitive?: boolean;
+  /** B3'': raster attachments riding this turn as image content blocks. */
+  images?: StreamOptions["images"];
   forKey: number;
   update: StreamUpdater;
   onAssistant: (text: string) => void;
@@ -62,13 +64,15 @@ export function runChatStream(deps: {
    */
   onSettled?: (result: StreamResult) => void;
 }): StreamHandle {
-  const { stream, botId, text, skills, primitive, forKey, update, onAssistant, isCurrent, onSettled } = deps;
+  const { stream, botId, text, skills, primitive, images, forKey, update, onAssistant, isCurrent, onSettled } = deps;
   let acc = "";
+  const hasImages = images !== undefined && images.length > 0;
   const options: StreamOptions | undefined =
-    (skills !== undefined && skills.length > 0) || primitive === true
+    (skills !== undefined && skills.length > 0) || primitive === true || hasImages
       ? {
           ...(skills !== undefined && skills.length > 0 ? { skills } : {}),
           ...(primitive === true ? { primitive: true } : {}),
+          ...(hasImages ? { images } : {}),
         }
       : undefined;
   const handle = stream(botId, text, {

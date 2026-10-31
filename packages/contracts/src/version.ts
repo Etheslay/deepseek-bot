@@ -49,14 +49,17 @@
 // one settings-KV snapshot of sidebar order + selection, validated by the
 // fixed UiStateSchema. Additive only: two new trusted methods, no entity
 // changes, and 0.1–0.12 senders stay accepted.
-// v0.14 groups the desktop sidebar (G1' 分组实体化): `group.archive` turns the
-// session-local groups into persisted entities, and UiStateSchema grows the
-// optional collapsedGroupIds list so collapse state survives restarts too.
-// Additive only: one new trusted method + one optional snapshot field, and
+// v0.14 adds chat vision input (B3'', TASK_B3P_VISION_INPUT.md): an optional
+// images array on chat.send (canonical base64 raster blocks, admitted MIME
+// types) and the vision.status capability flag, AND it groups the desktop
+// sidebar (G1' 分组实体化): `group.archive` turns the session-local groups
+// into persisted entities, and UiStateSchema grows the optional
+// collapsedGroupIds list so collapse state survives restarts too. Both are
+// additive only: omitted images mean the pre-vision wire shape, and
 // 0.1–0.13 senders stay accepted.
 export const CONTRACT_VERSION = "0.14" as const;
 export const PROTOCOL_VERSION = CONTRACT_VERSION;
-/** Workflow documents did not change in v0.3–v0.11; keep the document version. */
+/** Workflow documents did not change in v0.3–v0.14; keep the document version. */
 export const WORKFLOW_SCHEMA_VERSION = "0.1" as const;
 
 export const SUPPORTED_PROTOCOL_VERSIONS: readonly string[] = [

@@ -138,6 +138,7 @@ import {
 } from "./host.js";
 import { writeAutomationNotice } from "./automation-notices.js";
 import { chatSessionIdFor, type ChatManager } from "./chat.js";
+import { visionCapabilityFor } from "./vision-capability.js";
 import {
   collectAttachmentParsePaths,
   composeAttachmentParseBlocks,
@@ -1100,6 +1101,13 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
         outcome = await chat.send(bot, turnText, history, payload.skills ?? [], {
           primitive,
           ...(summaryRow !== undefined ? { summary: summaryRow.summary } : {}),
+          // B3'' 视觉输入: named raster attachments ride the turn as image
+          // blocks; the upstream LLM layer gates per model (text-only routes
+          // get the deterministic text projection — pixels are never silently
+          // dropped, they are either delivered or announced).
+          ...(payload.images !== undefined && payload.images.length > 0
+            ? { images: payload.images }
+            : {}),
         });
       } catch (error) {
         // Safety net: a provider context-overflow error means the configured
@@ -1170,6 +1178,11 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
     // Polled by the renderer's pending status line; stages are real harness
     // events only (see ChatManager.status).
     "chat.status": (payload) => chat.status(payload.botId),
+
+    // B3'' 视觉能力标志: whether the bot's configured model is known to
+    // accept image input. UI-neutral for unknown model ids; the send-time
+    // per-model gating stays the authority.
+    "vision.status": (payload) => visionCapabilityFor(db, payload.botId),
 
     "chat.contextUsage": (payload) => {
       const windowTokens = botContextWindowTokens(context, db, payload.botId);

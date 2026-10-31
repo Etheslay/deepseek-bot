@@ -87,6 +87,8 @@ import {
   MAX_ATTACHMENT_BYTES,
   type AttachmentDraft,
 } from "./features/chat/attachments.js";
+import { prepareVisionImage } from "./features/chat/image-vision.js";
+import type { StreamOptions } from "./services/desktop-service.js";
 import { GlobalSearch } from "./features/search/global-search.js";
 import { ContextRing } from "./features/chat/context-ring.js";
 import {
@@ -3894,7 +3896,7 @@ function BotsPlaceholder({
    * cards (FR-3): cancels any in-flight turn, resets the stream state and
    * wires cancel/failure/assistant-bubble transitions identically everywhere.
    */
-  const startChatStream = (text: string): void => {
+  const startChatStream = (text: string, images?: StreamOptions["images"]): void => {
     const injected = skillContext(me.bot.id);
     if (!injected.ok) {
       onNotify(
@@ -3920,6 +3922,7 @@ function BotsPlaceholder({
       text,
       skills: injected.skills,
       primitive: primitiveMode,
+      images,
       forKey,
       update: setStream,
       onAssistant,
@@ -4008,6 +4011,17 @@ function BotsPlaceholder({
     const meta = pendingMeta ?? undefined;
     const outgoing: NonNullable<Msg["attachments"]> = [];
     const pointers: string[] = [];
+    // B3'' 视觉输入: when the capability flag says the model is known to
+    // accept images, raster attachments also ride the request as real image
+    // content blocks (downscaled to the provider budget). The workspace copy
+    // and pointer text stay regardless — an image is never silently dropped.
+    let visionRideAlong = false;
+    try {
+      visionRideAlong = (await service.vision.status(me.bot.id)).visionAvailable;
+    } catch {
+      visionRideAlong = false;
+    }
+    const imageBlocks: { data: string; mimeType: "image/png" | "image/jpeg" | "image/webp" | "image/gif" }[] = [];
     for (const file of files) {
       if (file.bytes === undefined) {
         continue;
@@ -4026,17 +4040,47 @@ function BotsPlaceholder({
           path: uploaded.path,
           relativePath: uploaded.path,
         });
-        pointers.push(
-          ...composeAttachmentBlocks([
-            {
-              name: file.name,
-              size: file.size,
-              mime: file.mime,
-              kind,
-              ...(file.text !== undefined ? { text: file.text } : {}),
-              path: uploaded.path,
+        if (visionRideAlong && kind === "image") {
+          const prepared = await prepareVisionImage(
+            { bytes: file.bytes, mime: file.mime },
+            async (bytes, longEdge, quality) => {
+              const bitmap = await createImageBitmap(
+                new Blob([bytes as BlobPart], { type: file.mime || "image/png" }),
+              );
+              const scale = Math.min(1, longEdge / Math.max(bitmap.width, bitmap.height));
+              const width = Math.max(1, Math.round(bitmap.width * scale));
+              const height = Math.max(1, Math.round(bitmap.height * scale));
+              const canvas = document.createElement("canvas");
+              canvas.width = width;
+              canvas.height = height;
+              const ctx = canvas.getContext("2d");
+              if (ctx === null) {
+                throw new Error("canvas 2d context unavailable");
+              }
+              ctx.fillStyle = "#ffffff";
+              ctx.fillRect(0, 0, width, height);
+              ctx.drawImage(bitmap, 0, 0, width, height);
+              bitmap.close();
+              const data = canvas.toDataURL("image/jpeg", quality);
+              return { data: data.split(",")[1] ?? "", width, height };
             },
-          ]),
+          );
+          imageBlocks.push({ data: prepared.data, mimeType: prepared.mimeType });
+        }
+        pointers.push(
+          ...composeAttachmentBlocks(
+            [
+              {
+                name: file.name,
+                size: file.size,
+                mime: file.mime,
+                kind,
+                ...(file.text !== undefined ? { text: file.text } : {}),
+                path: uploaded.path,
+              },
+            ],
+            visionRideAlong && kind === "image",
+          ),
           buildAttachmentContext({
             name: file.name,
             size: file.size,
@@ -4055,7 +4099,7 @@ function BotsPlaceholder({
     setPendingFiles([]);
     setFailedText(text);
     setDraft("");
-    startChatStream(composeAttachmentPrompt(text, pointers));
+    startChatStream(composeAttachmentPrompt(text, pointers), imageBlocks);
   };
 
   /** G6: 重新生成 — re-ask the latest user question as a new labelled turn. */
