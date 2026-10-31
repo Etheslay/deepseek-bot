@@ -8,6 +8,7 @@
  * service remains the seed for surfaces without a contract method yet.
  */
 import {
+  ChatSessionSchema,
   MAX_ATTACHMENT_CHUNK_BYTES,
   METHOD_CONTRACTS,
   type Bot,
@@ -24,6 +25,7 @@ import {
   type AttachmentUploadResult,
   type BotDraft,
   type ChatHistoryRow,
+  type ChatSessionView,
   type DesktopService,
   type StreamResult,
   type TestConnectionResult,
@@ -34,10 +36,7 @@ import { createHostRunService } from "./host-run-service.js";
 import { createHostWorkflowService } from "./host-workflow-service.js";
 import type { HostCall } from "./host-call.js";
 import {
-  messagesForStoredSession,
   STORED_SESSION_HISTORY_LIMIT,
-  storedChatSession,
-  storedSessionBotId,
 } from "./stored-session.js";
 import { t } from "../i18n.js";
 import {
@@ -89,10 +88,11 @@ export function createHostService(bridge: HostBridge): DesktopService {
     }
   };
 
-  const readHistory = async (botId: string, limit: number): Promise<ChatHistoryRow[]> => {
+  const readHistory = async (botId: string, limit: number, sessionId?: string): Promise<ChatHistoryRow[]> => {
     const response = (await bridge.host.call("chat.history", {
       botId,
       limit,
+      ...(sessionId !== undefined ? { sessionId } : {}),
     })) as { messages: ChatHistoryRow[] };
     return response.messages;
   };
@@ -107,6 +107,33 @@ export function createHostService(bridge: HostBridge): DesktopService {
       ((await bridge.host.call("ui.state.get", {})) as { state: UiState }).state,
     save: async (state: UiState): Promise<UiState> =>
       ((await bridge.host.call("ui.state.set", { state })) as { state: UiState }).state,
+  };
+
+  /**
+   * G12: one host ChatSession row → the ChatSessionView the UI renders. The
+   * response is parsed against the frozen contract so a malformed reply
+   * cannot reach the sidebar.
+   */
+  const toSessionView = (session: unknown): ChatSessionView => {
+    const row = ChatSessionSchema.parse(session);
+    return {
+      sessionId: row.sessionId,
+      botId: row.botId,
+      title: row.title,
+      startedAt: row.createdAt,
+      replayEventCount: row.messageCount,
+      status: row.archived ? "ended" : "active",
+      archived: row.archived,
+      lastMessageAt: row.lastMessageAt,
+    };
+  };
+
+  const sessionCall = async (
+    method: "chat.session.create" | "chat.session.rename" | "chat.session.archive",
+    payload: Record<string, unknown>,
+  ): Promise<ChatSessionView> => {
+    const response = (await hostCall(method, payload)) as { session: unknown };
+    return toSessionView(response.session);
   };
 
   // B3'' (v0.14): the vision capability flag for the composer UI.
@@ -266,24 +293,34 @@ export function createHostService(bridge: HostBridge): DesktopService {
       },
     },
     chat: {
-      // One logical chat per bot. The open thread reads the same rows.
+      // G12: real session metadata; the default session materializes host-side.
       listSessions: async (botId) => {
-        const messages = await readHistory(botId, STORED_SESSION_HISTORY_LIMIT);
-        return storedChatSession(botId, messages);
-      },
-      openSession: async (sessionId) => {
-        const botId = storedSessionBotId(sessionId);
-        if (botId === null) return { events: [], messages: [] };
-        const messages = await readHistory(botId, STORED_SESSION_HISTORY_LIMIT);
-        return {
-          events: [],
-          messages: messagesForStoredSession(sessionId, messages),
+        const response = (await hostCall("chat.session.list", { botId })) as {
+          sessions: unknown[];
         };
+        return response.sessions.map(toSessionView);
       },
-      history: async (botId, limit = 100) => readHistory(botId, limit),
-      contextUsage: async (botId) =>
+      createSession: (botId, title) =>
+        sessionCall("chat.session.create", {
+          botId,
+          ...(title !== undefined ? { title } : {}),
+        }),
+      renameSession: (botId, sessionId, title) =>
+        sessionCall("chat.session.rename", { botId, sessionId, title }),
+      archiveSession: (botId, sessionId) =>
+        sessionCall("chat.session.archive", { botId, sessionId }),
+      openSession: async (botId, sessionId) => ({
+        events: [],
+        messages: await readHistory(botId, STORED_SESSION_HISTORY_LIMIT, sessionId),
+      }),
+      history: async (botId, limit = 100, sessionId) =>
+        readHistory(botId, limit, sessionId),
+      contextUsage: async (botId, sessionId) =>
         METHOD_CONTRACTS["chat.contextUsage"].response.parse(
-          await bridge.host.call("chat.contextUsage", { botId }),
+          await bridge.host.call("chat.contextUsage", {
+            botId,
+            ...(sessionId !== undefined ? { sessionId } : {}),
+          }),
         ),
       importAttachment: async (botId, file) => {
         if (file.bytes.byteLength === 0) {
@@ -326,11 +363,17 @@ export function createHostService(bridge: HostBridge): DesktopService {
         /** In-flight paced beat between two chunks (cleared on cancel). */
         let paceTimer: ReturnType<typeof setTimeout> | null = null;
         let releasePace: (() => void) | null = null;
-        const sessionId = `chat:${botId}`;
+        // The cancel key stays bot-scoped: one turn per bot runs at a time,
+        // no matter which session it was started from.
+        const cancelSessionId = `chat:${botId}`;
         const skills = options?.skills;
         const primitive = options?.primitive === true;
+        const storageSessionId = options?.sessionId;
         const images = options?.images;
         const payload: Record<string, unknown> = { botId, text };
+        if (storageSessionId !== undefined) {
+          payload.sessionId = storageSessionId;
+        }
         if (skills !== undefined && skills.length > 0) {
           payload.skills = skills;
         }
@@ -427,7 +470,7 @@ export function createHostService(bridge: HostBridge): DesktopService {
             releasePace?.();
             releasePace = null;
             unsubscribe?.();
-            void bridge.host.call("chat.cancel", { sessionId }).catch(() => undefined);
+            void bridge.host.call("chat.cancel", { sessionId: cancelSessionId }).catch(() => undefined);
           },
           finish: () => done,
         };

@@ -15,6 +15,7 @@ describe("v0.12 workflow read surface", () => {
     for (const version of ["0.1", "0.10", "0.11", "0.12", "0.13"]) {
       expect(isProtocolVersionSupported(version)).toBe(true);
     }
+    expect(isProtocolVersionSupported("0.14")).toBe(true);
     expect(isProtocolVersionSupported("0.15")).toBe(false);
   });
 

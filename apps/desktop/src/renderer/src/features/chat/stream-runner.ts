@@ -46,6 +46,11 @@ export function runChatStream(deps: {
   skills?: StreamOptions["skills"];
   /** 原始人模式: terse one-step prompt on the Host. Independent of skills. */
   primitive?: boolean;
+  /**
+   * G12: storage session the turn belongs to. Omitted means the bot's
+   * default session — the pre-sessions single thread.
+   */
+  sessionId?: string;
   /** B3'': raster attachments riding this turn as image content blocks. */
   images?: StreamOptions["images"];
   forKey: number;
@@ -64,14 +69,18 @@ export function runChatStream(deps: {
    */
   onSettled?: (result: StreamResult) => void;
 }): StreamHandle {
-  const { stream, botId, text, skills, primitive, images, forKey, update, onAssistant, isCurrent, onSettled } = deps;
+  const { stream, botId, text, skills, primitive, sessionId, images, forKey, update, onAssistant, isCurrent, onSettled } = deps;
   let acc = "";
   const hasImages = images !== undefined && images.length > 0;
   const options: StreamOptions | undefined =
-    (skills !== undefined && skills.length > 0) || primitive === true || hasImages
+    (skills !== undefined && skills.length > 0) ||
+    primitive === true ||
+    sessionId !== undefined ||
+    hasImages
       ? {
           ...(skills !== undefined && skills.length > 0 ? { skills } : {}),
           ...(primitive === true ? { primitive: true } : {}),
+          ...(sessionId !== undefined ? { sessionId } : {}),
           ...(hasImages ? { images } : {}),
         }
       : undefined;

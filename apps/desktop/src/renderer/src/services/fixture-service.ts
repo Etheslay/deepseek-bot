@@ -103,6 +103,16 @@ const SESSION_FIXTURES: Record<string, { events: unknown[] }> = {
 };
 
 /**
+ * G12 fixture session store: the seeded run sessions plus any sessions the
+ * preview user creates. Mutations are preview-local (never persisted), and
+ * re-seeding on module load keeps tests deterministic.
+ */
+const fixtureSessions = new Map<string, ChatSessionView[]>(
+  SEED_BOTS.map((bot) => [bot.id, [] as ChatSessionView[]]),
+);
+let fixtureSessionCounter = 0;
+
+/**
  * D28 co-edit fixture seeds: an in-memory workspace for the seeded bot, one
  * text/markdown file plus one HTML file (blocked, QA-14). Each file starts
  * with a v1 version row so the version panel has history out of the box.
@@ -375,10 +385,56 @@ export function createFixtureService(): DesktopService {
 
     chat: {
       async listSessions(botId) {
-        return seedSessions().filter((s) => s.botId === botId);
+        const created = fixtureSessions.get(botId) ?? [];
+        return [...seedSessions().filter((s) => s.botId === botId), ...created];
       },
 
-      async openSession(sessionId) {
+      async createSession(botId, title) {
+        requireBot(botId);
+        fixtureSessionCounter += 1;
+        const session: ChatSessionView = {
+          sessionId: `cs:fixture-${fixtureSessionCounter}`,
+          botId,
+          title: title ?? t("chat.sessionUntitled"),
+          startedAt: isoNow(),
+          replayEventCount: 0,
+          status: "active",
+          archived: false,
+          lastMessageAt: isoNow(),
+        };
+        fixtureSessions.set(botId, [...(fixtureSessions.get(botId) ?? []), session]);
+        return session;
+      },
+
+      async renameSession(botId, sessionId, title) {
+        const sessions = fixtureSessions.get(botId) ?? [];
+        const found = sessions.find((s) => s.sessionId === sessionId);
+        if (!found) {
+          throw new ServiceError("INVALID_INPUT", `unknown session: ${sessionId}`);
+        }
+        const renamed = { ...found, title };
+        fixtureSessions.set(
+          botId,
+          sessions.map((s) => (s.sessionId === sessionId ? renamed : s)),
+        );
+        return renamed;
+      },
+
+      async archiveSession(botId, sessionId) {
+        const sessions = fixtureSessions.get(botId) ?? [];
+        const found = sessions.find((s) => s.sessionId === sessionId);
+        if (!found) {
+          throw new ServiceError("INVALID_INPUT", `unknown session: ${sessionId}`);
+        }
+        const archived = { ...found, archived: true, status: "ended" as const };
+        fixtureSessions.set(
+          botId,
+          sessions.map((s) => (s.sessionId === sessionId ? archived : s)),
+        );
+        return archived;
+      },
+
+      async openSession(_botId, sessionId) {
         const fixture = SESSION_FIXTURES[sessionId];
         if (!fixture) {
           throw new ServiceError("INVALID_INPUT", `unknown session: ${sessionId}`);

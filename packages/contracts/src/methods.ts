@@ -108,6 +108,29 @@ export const ChatSkillInjectionSchema = z
   );
 export type ChatSkillInjection = z.infer<typeof ChatSkillInjectionSchema>;
 
+/**
+ * One persisted chat session (G12 多会话). The default session of a bot keeps
+ * the historical id `chat:<botId>` so every row written before sessions
+ * existed is already a member of it; extra sessions mint `cs:` ids. Titles
+ * are host-derived (first user line) or user-renamed; `messageCount` is a
+ * read-time count for list rendering.
+ */
+export const ChatSessionSchema = z
+  .object({
+    sessionId: z.string().min(1).max(128),
+    botId: UuidSchema,
+    title: z.string().min(1).max(200),
+    archived: z.boolean(),
+    messageCount: z.int().min(0),
+    createdAt: IsoDateTimeUtcSchema,
+    lastMessageAt: IsoDateTimeUtcSchema,
+  })
+  .strict();
+export type ChatSession = z.infer<typeof ChatSessionSchema>;
+
+/** Storage session id bound to a bot: the default plus optional extra sessions. */
+export const ChatStorageSessionIdSchema = z.string().min(1).max(128);
+
 export function messageSizeBytes(value: unknown): number {
   return new TextEncoder().encode(JSON.stringify(value ?? null)).length;
 }
@@ -152,6 +175,10 @@ export const METHODS = [
   "chat.cancel",
   "chat.status",
   "chat.contextUsage",
+  "chat.session.list",
+  "chat.session.create",
+  "chat.session.rename",
+  "chat.session.archive",
   "vision.status",
   "task.dispatch",
   "task.list",
@@ -676,6 +703,12 @@ export const METHOD_CONTRACTS = {
       botId: UuidSchema,
       text: z.string().min(1).max(4000),
       /**
+       * G12: storage session the turn belongs to. Omitted means the bot's
+       * default session (`chat:<botId>`) — byte-for-byte the pre-sessions
+       * behavior, so older senders keep replaying and writing one thread.
+       */
+      sessionId: ChatStorageSessionIdSchema.optional(),
+      /**
        * B3'' 视觉输入 (TASK_B3P_VISION_INPUT.md): raster attachments riding
        * THIS turn as real image content blocks — canonical base64 + admitted
        * MIME types, ≤4 per turn, each ≤4 MB of base64 (≈3 MB raster, under
@@ -761,6 +794,8 @@ export const METHOD_CONTRACTS = {
   "chat.history": {
     request: z.object({
       botId: UuidSchema,
+      /** G12: omit for the bot's default session (the pre-sessions thread). */
+      sessionId: ChatStorageSessionIdSchema.optional(),
       limit: z.int().min(1).max(200).default(100),
     }),
     response: z.object({
@@ -810,7 +845,11 @@ export const METHOD_CONTRACTS = {
    * turn in flight. Read-only display data — it never gates a send.
    */
   "chat.contextUsage": {
-    request: z.object({ botId: UuidSchema }),
+    request: z.object({
+      botId: UuidSchema,
+      /** G12: gauge for one session; omitted means the default session. */
+      sessionId: ChatStorageSessionIdSchema.optional(),
+    }),
     response: z.object({
       percent: z.int().min(0).max(100),
       usedTokens: z.int().min(0),
@@ -819,6 +858,40 @@ export const METHOD_CONTRACTS = {
       compressedAt: IsoDateTimeUtcSchema.nullable(),
       compressing: z.boolean(),
     }),
+  },
+  /**
+   * G12 多会话 (TASK_G12_MULTI_SESSION.md). Sessions are per-bot: the default
+   * session keeps the historical `chat:<botId>` id so pre-session rows are
+   * already its members, extra sessions mint `cs:` ids. `list` materializes
+   * the default session row on first read and orders by `lastMessageAt`
+   * descending. `rename`/`archive` reject archived sessions / the default
+   * session respectively; archiving is final (read-only) with no unarchive.
+   */
+  "chat.session.list": {
+    request: z.object({ botId: UuidSchema }),
+    response: z.object({ sessions: z.array(ChatSessionSchema) }),
+  },
+  "chat.session.create": {
+    request: z.object({
+      botId: UuidSchema,
+      title: z.string().min(1).max(200).optional(),
+    }),
+    response: z.object({ session: ChatSessionSchema }),
+  },
+  "chat.session.rename": {
+    request: z.object({
+      botId: UuidSchema,
+      sessionId: ChatStorageSessionIdSchema,
+      title: z.string().trim().min(1).max(200),
+    }),
+    response: z.object({ session: ChatSessionSchema }),
+  },
+  "chat.session.archive": {
+    request: z.object({
+      botId: UuidSchema,
+      sessionId: ChatStorageSessionIdSchema,
+    }),
+    response: z.object({ session: ChatSessionSchema }),
   },
   /**
    * v0.5 manager orchestration (TASK_MANAGER_ORCHESTRATION.md §3.3), relaxed

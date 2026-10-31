@@ -39,7 +39,7 @@ export function SessionHistory(props: {
   const open = async (sessionId: string): Promise<void> => {
     setError(null);
     try {
-      const { events } = await props.service.chat.openSession(sessionId);
+      const { events } = await props.service.chat.openSession(props.botId, sessionId);
       setReplay({ items: replayTimeline(events) });
       setOpenSessionId(sessionId);
       setArtifacts(await props.service.artifacts.list(props.botId));

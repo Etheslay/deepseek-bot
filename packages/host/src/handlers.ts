@@ -116,6 +116,16 @@ import {
   getChatSummary,
   getLatestUsageForBot,
   upsertChatSummary,
+  archiveChatSession,
+  createChatSession,
+  chatSessionMessageCount,
+  ensureDefaultChatSession,
+  getChatSession,
+  listChatSessions,
+  renameChatSession,
+  touchChatSession,
+  defaultChatSessionId,
+  type ChatSessionRow,
 } from "@deepseek-bot/storage";
 import type { AgentPermissionService } from "./agent-permissions.js";
 import type { McpService } from "./mcp.js";
@@ -210,11 +220,12 @@ function contextMeterState(
   db: OpenedDatabase,
   botId: string,
   windowTokens: number,
+  /** G12: meter belongs to one session; omitted means the default session. */
+  sessionId: string = chatSessionIdFor(botId),
 ): { percent: number; usedTokens: number; estimated: boolean } {
-  const sessionId = chatSessionIdFor(botId);
   const summary = getChatSummary(db, botId, sessionId);
   if (summary !== undefined) {
-    const rows = rowsAfterWatermark(db, botId, summary.coversMessageId);
+    const rows = rowsAfterWatermark(db, botId, summary.coversMessageId, sessionId);
     const bot = getBot(db, botId);
     const folded =
       (bot?.instructions ?? "") + summary.summary + rows.map((row) => row.text).join("\n");
@@ -240,8 +251,9 @@ function rowsAfterWatermark(
   db: OpenedDatabase,
   botId: string,
   coversMessageId: string,
+  sessionId: string,
 ): Array<{ id: string; role: "user" | "assistant"; text: string }> {
-  const rows = listChatMessages(db, botId, 20);
+  const rows = listChatMessages(db, botId, 20, sessionId);
   const watermark = rows.findIndex((row) => row.id === coversMessageId);
   const kept = watermark < 0 ? rows : rows.slice(watermark + 1);
   return kept.map((row) => ({ id: row.id, role: row.role, text: row.text }));
@@ -285,18 +297,22 @@ function buildCompressionPrompt(
  * summary, and never touches `chat_messages` (deleting the summary restores
  * the full replay). Failures degrade silently to the status-quo replay.
  */
-async function maybeCompressChat(context: HostContext, botId: string): Promise<void> {
+async function maybeCompressChat(
+  context: HostContext,
+  botId: string,
+  /** G12: fold one session's history; omitted means the default session. */
+  sessionId: string = chatSessionIdFor(botId),
+): Promise<void> {
   const { db, chat, compressingChats, locale } = context;
   if (compressingChats.has(botId)) {
     return;
   }
-  const meter = contextMeterState(db, botId, botContextWindowTokens(context, db, botId));
+  const meter = contextMeterState(db, botId, botContextWindowTokens(context, db, botId), sessionId);
   if (meter.percent < COMPRESSION_THRESHOLD_PERCENT) {
     return;
   }
-  const sessionId = chatSessionIdFor(botId);
   const summary = getChatSummary(db, botId, sessionId);
-  const rows = listChatMessages(db, botId, 10_000);
+  const rows = listChatMessages(db, botId, 10_000, sessionId);
   let lastAssistant = -1;
   for (let index = rows.length - 1; index >= 0; index -= 1) {
     if (rows[index]!.role === "assistant") {
@@ -334,6 +350,80 @@ async function maybeCompressChat(context: HostContext, botId: string): Promise<v
   } finally {
     compressingChats.delete(botId);
   }
+}
+
+// --- Chat sessions (G12 多会话, TASK_G12_MULTI_SESSION.md) ------------------
+
+/** Wire shape of one ChatSession (contract mirror for tests). */
+type ChatSessionResponse = {
+  sessionId: string;
+  botId: string;
+  title: string;
+  archived: boolean;
+  messageCount: number;
+  createdAt: string;
+  lastMessageAt: string;
+};
+
+function toChatSessionResponse(
+  db: OpenedDatabase,
+  row: ChatSessionRow,
+  locale: UiLocale,
+): ChatSessionResponse {
+  return {
+    sessionId: row.id,
+    botId: row.botId,
+    title: sessionDisplayTitle(db, row, locale),
+    archived: row.archivedAt !== null,
+    messageCount: chatSessionMessageCount(db, row.botId, row.id),
+    createdAt: row.createdAt,
+    lastMessageAt: row.lastMessageAt,
+  };
+}
+
+/**
+ * Display title of a session: the stored (user-set) title, else the
+ * thread's first plain user line — the same source the pre-sessions
+ * sidebar used — else a locale fallback. Untitled sessions stay untitled in
+ * storage so the derivation follows new rows until the user renames.
+ */
+function sessionDisplayTitle(db: OpenedDatabase, row: ChatSessionRow, locale: UiLocale): string {
+  const stored = row.title.trim();
+  if (stored.length > 0) {
+    return stored;
+  }
+  const rows = listChatMessages(db, row.botId, 50, row.id);
+  const firstUser = rows.find(
+    (candidate) =>
+      candidate.role === "user" && candidate.meta === undefined && candidate.text.trim().length > 0,
+  );
+  const line = (firstUser?.text ?? "").replace(/\s+/g, " ").trim();
+  if (line.length > 0) {
+    return line.slice(0, 48);
+  }
+  return locale === "en" ? "New session" : "新的会话";
+}
+
+/**
+ * Resolve the storage session a turn reads from / writes to. Omitted means
+ * the bot's default session — the exact pre-sessions thread — materializing
+ * its metadata row on demand. An explicit id must exist and belong to the
+ * bot; archived sessions stay readable but reject writes.
+ */
+function resolveChatSession(
+  db: OpenedDatabase,
+  botId: string,
+  requested: string | undefined,
+): { id: string; archived: boolean } {
+  if (requested === undefined) {
+    ensureDefaultChatSession(db, botId);
+    return { id: chatSessionIdFor(botId), archived: false };
+  }
+  const row = getChatSession(db, botId, requested);
+  if (row === undefined) {
+    throw invalid(`chat session '${requested}' was not found`);
+  }
+  return { id: row.id, archived: row.archivedAt !== null };
 }
 
 export interface HostContext {
@@ -1057,12 +1147,18 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
       if (bot.archivedAt !== null) {
         throw invalid("archived bots cannot chat");
       }
-      const sessionId = chatSessionIdFor(bot.id);
+      // G12: the storage session this turn belongs to. Omitted resolves to
+      // the default session, so the pre-sessions wire behavior is unchanged.
+      const session = resolveChatSession(db, bot.id, payload.sessionId);
+      if (session.archived) {
+        throw invalid("archived sessions cannot receive messages");
+      }
+      const sessionId = session.id;
       // 原始人模式 composes a one-step prompt: rows are still persisted (and
       // still replay for later normal turns), so the replay read is skipped.
       const primitive = payload.primitive === true;
       const summaryRow = primitive ? undefined : getChatSummary(db, bot.id, sessionId);
-      const allRows = primitive ? [] : listChatMessages(db, bot.id, 20);
+      const allRows = primitive ? [] : listChatMessages(db, bot.id, 20, sessionId);
       // Context meter: with an active summary only the post-watermark rows
       // replay verbatim; everything earlier rides in the digest block.
       const replayRows =
@@ -1127,9 +1223,10 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
         role: "assistant",
         text: outcome.finalResponse,
       });
+      touchChatSession(db, bot.id, sessionId);
       // Context meter: fold older history in the background at ≥80% — the
       // reply has already been returned above; failures degrade silently.
-      void maybeCompressChat(context, bot.id).catch(() => undefined);
+      void maybeCompressChat(context, bot.id, sessionId).catch(() => undefined);
       return {
         sessionId: outcome.sessionId,
         messageId: assistant.id,
@@ -1138,17 +1235,23 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
       };
     },
 
-    "chat.history": (payload) => ({
-      messages: listChatMessages(db, payload.botId, payload.limit).map((row) => ({
-        id: row.id,
-        botId: row.botId,
-        sessionId: row.sessionId,
-        role: row.role,
-        text: row.text,
-        ...(row.meta !== undefined ? { meta: row.meta } : {}),
-        at: row.createdAt,
-      })),
-    }),
+    "chat.history": (payload) => {
+      // G12: omitted sessionId reads the default session — for any caller
+      // that has not opted into extra sessions this is the same single
+      // thread chat.history has always returned.
+      const sessionId = payload.sessionId ?? chatSessionIdFor(payload.botId);
+      return {
+        messages: listChatMessages(db, payload.botId, payload.limit, sessionId).map((row) => ({
+          id: row.id,
+          botId: row.botId,
+          sessionId: row.sessionId,
+          role: row.role,
+          text: row.text,
+          ...(row.meta !== undefined ? { meta: row.meta } : {}),
+          at: row.createdAt,
+        })),
+      };
+    },
 
     "chat.attach": async (payload) => {
       try {
@@ -1185,15 +1288,75 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
     "vision.status": (payload) => visionCapabilityFor(db, payload.botId),
 
     "chat.contextUsage": (payload) => {
+      // G12: the gauge follows the session; omitted means the default one.
+      const sessionId = payload.sessionId ?? chatSessionIdFor(payload.botId);
       const windowTokens = botContextWindowTokens(context, db, payload.botId);
-      const meter = contextMeterState(db, payload.botId, windowTokens);
-      const summary = getChatSummary(db, payload.botId, chatSessionIdFor(payload.botId));
+      const meter = contextMeterState(db, payload.botId, windowTokens, sessionId);
+      const summary = getChatSummary(db, payload.botId, sessionId);
       return {
         ...meter,
         windowTokens,
         compressedAt: summary?.createdAt ?? null,
         compressing: context.compressingChats.has(payload.botId),
       };
+    },
+
+    // G12 多会话: session metadata CRUD. The default session materializes on
+    // first list; display titles derive from the thread until renamed;
+    // archive is final and never applies to the default session.
+    "chat.session.list": (payload) => {
+      const bot = getBot(db, payload.botId);
+      if (bot === undefined) {
+        throw invalid(`bot '${payload.botId}' was not found`);
+      }
+      ensureDefaultChatSession(db, payload.botId);
+      return {
+        sessions: listChatSessions(db, payload.botId).map((row) =>
+          toChatSessionResponse(db, row, context.locale.current),
+        ),
+      };
+    },
+
+    "chat.session.create": (payload) => {
+      const bot = getBot(db, payload.botId);
+      if (bot === undefined) {
+        throw invalid(`bot '${payload.botId}' was not found`);
+      }
+      if (bot.archivedAt !== null) {
+        throw invalid("archived bots cannot chat");
+      }
+      const row = createChatSession(db, {
+        botId: payload.botId,
+        title: payload.title?.trim() ?? "",
+      });
+      return { session: toChatSessionResponse(db, row, context.locale.current) };
+    },
+
+    "chat.session.rename": (payload) => {
+      const row = getChatSession(db, payload.botId, payload.sessionId);
+      if (row === undefined) {
+        throw invalid(`chat session '${payload.sessionId}' was not found`);
+      }
+      if (row.archivedAt !== null) {
+        throw invalid("archived sessions cannot be renamed");
+      }
+      const updated = renameChatSession(db, payload.botId, payload.sessionId, payload.title.trim());
+      return { session: toChatSessionResponse(db, updated, context.locale.current) };
+    },
+
+    "chat.session.archive": (payload) => {
+      const row = getChatSession(db, payload.botId, payload.sessionId);
+      if (row === undefined) {
+        throw invalid(`chat session '${payload.sessionId}' was not found`);
+      }
+      if (row.id === defaultChatSessionId(payload.botId)) {
+        throw invalid("the default session cannot be archived");
+      }
+      if (row.archivedAt !== null) {
+        throw invalid("session is already archived");
+      }
+      const updated = archiveChatSession(db, payload.botId, payload.sessionId);
+      return { session: toChatSessionResponse(db, updated, context.locale.current) };
     },
 
     /**

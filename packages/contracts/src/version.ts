@@ -54,9 +54,13 @@
 // types) and the vision.status capability flag, AND it groups the desktop
 // sidebar (G1' 分组实体化): `group.archive` turns the session-local groups
 // into persisted entities, and UiStateSchema grows the optional
-// collapsedGroupIds list so collapse state survives restarts too. Both are
-// additive only: omitted images mean the pre-vision wire shape, and
-// 0.1–0.13 senders stay accepted.
+// collapsedGroupIds list so collapse state survives restarts too. It also
+// adds per-bot multi-session (G12, TASK_G12_MULTI_SESSION.md): the
+// chat.session.* method group and an optional sessionId on chat.send /
+// chat.history / chat.contextUsage. Omitted sessionId resolves to the bot's
+// default session `chat:<botId>` — the exact pre-session thread. All three
+// are additive only: omitted images/sessionId mean the pre-existing wire
+// shape, and 0.1–0.13 senders stay accepted with unchanged behavior.
 export const CONTRACT_VERSION = "0.14" as const;
 export const PROTOCOL_VERSION = CONTRACT_VERSION;
 /** Workflow documents did not change in v0.3–v0.14; keep the document version. */

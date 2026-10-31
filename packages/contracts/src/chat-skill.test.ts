@@ -7,8 +7,9 @@ describe("chat.send skill injection", () => {
   const request = METHOD_CONTRACTS["chat.send"].request;
 
   it("stays on the current protocol and still accepts a turn without skills", () => {
-    // v0.14 (B3'') added the optional chat.send.images array and the
-    // vision.status flag — a plain turn still parses exactly as before.
+    // v0.14 (G12) added the chat.session.* group; chat.send itself only grew
+    // the optional sessionId (and, from B3'', the optional images array plus
+    // the vision.status flag) — a plain turn still parses exactly as before.
     expect(PROTOCOL_VERSION).toBe("0.14");
     expect(request.safeParse({ botId, text: "你好" }).success).toBe(true);
   });

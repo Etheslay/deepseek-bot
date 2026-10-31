@@ -27,7 +27,12 @@ import { SettingsNav, type SettingsSectionKey } from "./features/settings/settin
 import { BotForm } from "./features/bots/bot-form.js";
 import { nextBotName } from "./features/bots/bot-names.js";
 import { CustomSelect } from "./components/custom-select.js";
-import type { BotDraft, ChatHistoryRow, ContextUsageView } from "./services/desktop-service.js";
+import type {
+  BotDraft,
+  ChatHistoryRow,
+  ChatSessionView,
+  ContextUsageView,
+} from "./services/desktop-service.js";
 import { useService } from "./services/service-context.jsx";
 import { METHOD_CONTRACTS, type VoiceStatus } from "@deepseek-bot/contracts";
 import {
@@ -47,6 +52,7 @@ import {
   type ThreadOrigin,
 } from "./features/chat/thread-history.js";
 import { StoredSessionReplay } from "./features/chat/stored-session-replay.js";
+import { storedSessionId } from "./services/stored-session.js";
 import type { StreamHandle } from "./services/desktop-service.js";
 import { Avatar as AvatarView } from "./features/avatars/avatar.js";
 import { AvatarPicker } from "./features/avatars/avatar-picker.js";
@@ -248,7 +254,8 @@ type ClarifyTarget =
 type AnsweredQuestionMap = Record<string, AnsweredQuestion>;
 
 
-type MenuState = { x: number; y: number; botKey: number };
+/** G12: `sessionId` targets a session row instead of a bot row. */
+type MenuState = { x: number; y: number; botKey: number; sessionId?: string };
 type DialogState = { type: "newGroup"; moveBot: number | null };
 
 /** 配对视图（两个 bot 之间的真实往来记录）：消息行或状态行。 */
@@ -384,9 +391,11 @@ export function App(): JSX.Element {
   // Inline rename: the key of the sidebar row being edited and its draft name.
   // `renameScope` matters because the same bot is shown twice — once in the
   // sidebar row and once in the header plate — and only the place the gesture
-  // came from may turn into a field, or two editors appear at once.
+  // came from may turn into a field, or two editors appear at once. G12:
+  // scope "session" renames a session row instead, keyed by renameSessionId.
   const [renameKey, setRenameKey] = useState<number | null>(null);
-  const [renameScope, setRenameScope] = useState<"row" | "header">("row");
+  const [renameScope, setRenameScope] = useState<"row" | "header" | "session">("row");
+  const [renameSessionId, setRenameSessionId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState("");
   const renameInputRef = useRef<HTMLInputElement | null>(null);
   const renameOpenedAtRef = useRef(0);
@@ -428,9 +437,19 @@ export function App(): JSX.Element {
   const [toast, setToast] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [artifactsOpen, setArtifactsOpen] = useState(false);
-  const [historySessions, setHistorySessions] = useState<
-    { sessionId: string; botId: string; title: string; startedAt: string; status: string }[] | null
-  >(null);
+  /**
+   * G12 多会话: the selected bot's sessions — the sidebar sub-list and the
+   * recent-sessions popover read the same list — plus the storage session
+   * each bot's visible thread belongs to and a per-session thread cache so
+   * switching back neither refetches nor loses in-memory turns. The ref
+   * mirrors the map for settle-time callbacks that must not read a stale
+   * prop (a turn's commit target is decided at settle time, not render time).
+   */
+  const [historySessions, setHistorySessions] = useState<ChatSessionView[] | null>(null);
+  const [sessionByBot, setSessionByBot] = useState<Record<number, string>>({});
+  const activeSessionRef = useRef<Record<number, string>>({});
+  const sessionThreadCache = useRef(new Map<string, Msg[]>());
+  const sessionSwitchRequest = useRef(0);
   const [artifactList, setArtifactList] = useState<
     import("@deepseek-bot/contracts").BotArtifact[] | null
   >(null);
@@ -438,12 +457,7 @@ export function App(): JSX.Element {
   const [canvas, setCanvas] = useState<
     { botKey: number; botId: string; botName: string; path: string } | null
   >(null);
-  const [restoredSession, setRestoredSession] = useState<{
-    sessionId: string;
-    title: string;
-    startedAt: string;
-    status: string;
-  } | null>(null);
+  const [restoredSession, setRestoredSession] = useState<ChatSessionView | null>(null);
   const [restoredMessages, setRestoredMessages] = useState<ChatHistoryRow[] | null>(null);
   const restoredSessionRequest = useRef(0);
 
@@ -926,7 +940,11 @@ export function App(): JSX.Element {
     }
   }, [modalOpen, editingBot]);
   useEffect(() => {
-    if (!historyOpen || selectedBot === null) {
+    // G12: the selected bot's sessions load once per selection and feed both
+    // the sidebar sub-list and the recent-sessions popover; a switch clears
+    // the previous bot's list instead of flashing it under the new bot.
+    setHistorySessions(null);
+    if (selectedBot === null) {
       return;
     }
     const bot = bots.find((b) => b.key === selectedBot);
@@ -949,7 +967,7 @@ export function App(): JSX.Element {
     return () => {
       cancelled = true;
     };
-  }, [historyOpen, selectedBot, bots, desktop]);
+  }, [selectedBot, bots, desktop]);
 
   useEffect(() => {
     restoredSessionRequest.current += 1;
@@ -1538,7 +1556,7 @@ export function App(): JSX.Element {
       return { ...prev, [botKey]: welcomeThread(botKey, botName) };
     });
     void desktop.chat
-      .history(bot.bot.id, CHAT_THREAD_HISTORY_LIMIT)
+      .history(bot.bot.id, CHAT_THREAD_HISTORY_LIMIT, activeSessionIdFor(bot))
       .then((rows) => {
         const history = storedThread(rows, botKey);
         const seed = welcomeThread(botKey, botName);
@@ -1550,6 +1568,137 @@ export function App(): JSX.Element {
       .catch(() => {
         threadHistoryLoaded.current.delete(botKey);
       });
+  };
+
+  // --- G12 多会话 -----------------------------------------------------------
+  // The visible thread of a bot always belongs to exactly one storage
+  // session. Switching parks the current thread in a cache keyed by
+  // (botKey, sessionId) and swaps in the target session's rows; a turn's
+  // reply is committed to the session it was started from, so a switch
+  // mid-turn never drops or misfiles the answer.
+
+  /** The storage session the visible thread belongs to (ref first, map second). */
+  const activeSessionIdFor = (bot: UiBot): string =>
+    activeSessionRef.current[bot.key] ?? sessionByBot[bot.key] ?? storedSessionId(bot.bot.id);
+
+  const setActiveSession = (botKey: number, sessionId: string): void => {
+    activeSessionRef.current = { ...activeSessionRef.current, [botKey]: sessionId };
+    setSessionByBot((prev) => ({ ...prev, [botKey]: sessionId }));
+  };
+
+  const switchSession = (bot: UiBot, sessionId: string): void => {
+    const botKey = bot.key;
+    if (activeSessionIdFor(bot) === sessionId) {
+      return;
+    }
+    const token = sessionSwitchRequest.current + 1;
+    sessionSwitchRequest.current = token;
+    sessionThreadCache.current.set(`${botKey}|${activeSessionIdFor(bot)}`, chats[botKey] ?? []);
+    setActiveSession(botKey, sessionId);
+    const cached = sessionThreadCache.current.get(`${botKey}|${sessionId}`);
+    const seed = welcomeThread(botKey, bot.bot.name);
+    setChats((prev) => ({ ...prev, [botKey]: cached ?? seed }));
+    if (cached === undefined) {
+      void desktop.chat
+        .history(bot.bot.id, CHAT_THREAD_HISTORY_LIMIT, sessionId)
+        .then((rows) => {
+          if (sessionSwitchRequest.current !== token) {
+            return;
+          }
+          const history = storedThread(rows, botKey);
+          setChats((prev) => ({
+            ...prev,
+            [botKey]: mergeOpenedThread(history, prev[botKey] ?? [], seed),
+          }));
+        })
+        .catch(() => undefined);
+    }
+  };
+
+  const createChatSessionFor = (bot: UiBot): void => {
+    void desktop.chat.createSession(bot.bot.id).then(
+      (session) => {
+        setHistorySessions((prev) => [session, ...(prev ?? [])]);
+        switchSession(bot, session.sessionId);
+        setToast(t("chat.sessionCreated"));
+      },
+      () => setToast(t("chat.sessionCreateFailed")),
+    );
+  };
+
+  const archiveChatSessionFor = (bot: UiBot, sessionId: string): void => {
+    void desktop.chat.archiveSession(bot.bot.id, sessionId).then(
+      (session) => {
+        setHistorySessions((prev) =>
+          (prev ?? []).map((s) => (s.sessionId === sessionId ? session : s)),
+        );
+        setToast(t("chat.sessionArchivedDone"));
+        // The default session is never archived, so there is always a live
+        // thread to fall back to when the visible one just went read-only.
+        if (activeSessionIdFor(bot) === sessionId) {
+          switchSession(bot, storedSessionId(bot.bot.id));
+        }
+      },
+      () => setToast(t("chat.sessionArchiveFailed")),
+    );
+  };
+
+  /** Open a session read-only in the replay view (archived rows, popover). */
+  const openRestoredSessionView = (session: ChatSessionView): void => {
+    if (selectedBotEntry === undefined) {
+      return;
+    }
+    const token = restoredSessionRequest.current + 1;
+    restoredSessionRequest.current = token;
+    setRestoredSession(session);
+    setRestoredMessages(null);
+    void desktop.chat.openSession(session.botId, session.sessionId).then(
+      (opened) => {
+        if (restoredSessionRequest.current === token) {
+          setRestoredMessages(opened.messages);
+        }
+      },
+      () => {
+        if (restoredSessionRequest.current === token) {
+          setRestoredMessages([]);
+        }
+      },
+    );
+  };
+
+  const startSessionRename = (bot: UiBot, session: ChatSessionView): void => {
+    window.setTimeout(() => {
+      renameOpenedAtRef.current = performance.now();
+      setRenameScope("session");
+      setRenameKey(bot.key);
+      setRenameSessionId(session.sessionId);
+      setRenameDraft(session.title);
+    }, 0);
+  };
+
+  const handleSessionRenameBlur = (bot: UiBot, sessionId: string, raw: string): void => {
+    if (performance.now() - renameOpenedAtRef.current < 400) {
+      renameInputRef.current?.focus();
+      return;
+    }
+    void commitSessionRename(bot, sessionId, raw);
+  };
+
+  const commitSessionRename = async (bot: UiBot, sessionId: string, raw: string): Promise<void> => {
+    setRenameKey(null);
+    const title = raw.trim();
+    if (title === "") {
+      return;
+    }
+    try {
+      const session = await desktop.chat.renameSession(bot.bot.id, sessionId, title);
+      setHistorySessions((prev) =>
+        (prev ?? []).map((s) => (s.sessionId === sessionId ? session : s)),
+      );
+      setToast(t("chat.sessionRenamed"));
+    } catch {
+      setToast(t("chat.sessionRenameFailed"));
+    }
   };
 
   useEffect(() => {
@@ -1842,29 +1991,37 @@ const logout = (): void => {
             <div className="menu-overlay" onClick={() => setHistoryOpen(false)} />
             <div className="top-popover" role="dialog" aria-label={t("shell.recentSessions")}>
               <div className="popover-title">{t("shell.recentSessions")}</div>
+              {selectedBotEntry !== undefined && (
+                <button
+                  type="button"
+                  className="pill-btn session-new-in-popover"
+                  onClick={() => createChatSessionFor(selectedBotEntry)}
+                >
+                  + {t("chat.newSession")}
+                </button>
+              )}
               {(historySessions ?? []).slice(0, 8).map((session) => (
                 <button
                   key={session.sessionId}
                   type="button"
-                  className="session-item"
+                  className={
+                    "session-item" +
+                    (selectedBotEntry !== undefined &&
+                    !session.archived &&
+                    activeSessionIdFor(selectedBotEntry) === session.sessionId
+                      ? " active"
+                      : "")
+                  }
                   onClick={() => {
-                    const token = restoredSessionRequest.current + 1;
-                    restoredSessionRequest.current = token;
-                    setRestoredSession(session);
-                    setRestoredMessages(null);
                     setHistoryOpen(false);
-                    void desktop.chat.openSession(session.sessionId).then(
-                      (opened) => {
-                        if (restoredSessionRequest.current === token) {
-                          setRestoredMessages(opened.messages);
-                        }
-                      },
-                      () => {
-                        if (restoredSessionRequest.current === token) {
-                          setRestoredMessages([]);
-                        }
-                      },
-                    );
+                    if (selectedBotEntry === undefined) {
+                      return;
+                    }
+                    if (session.archived === true) {
+                      openRestoredSessionView(session);
+                    } else {
+                      switchSession(selectedBotEntry, session.sessionId);
+                    }
                   }}
                 >
                   <span className="tab-title">{session.title}</span>
@@ -2144,6 +2301,93 @@ const logout = (): void => {
                   </button>
                   )
                 )}
+                {selectedBot !== null &&
+                  selectedBotEntry !== undefined &&
+                  selectedBotEntry.key === selectedBot &&
+                  members.some((b) => b.key === selectedBot) &&
+                  historySessions !== null && (
+                  <div className="session-sublist" aria-label={t("chat.sessionListAria")}>
+                    <button
+                      type="button"
+                      className="session-item session-new"
+                      onClick={() => createChatSessionFor(selectedBotEntry)}
+                    >
+                      <span className="session-new-plus" aria-hidden="true">
+                        +
+                      </span>
+                      <span className="tab-title">{t("chat.newSession")}</span>
+                    </button>
+                    {historySessions.map((s) =>
+                      renameKey === selectedBot &&
+                      renameScope === "session" &&
+                      renameSessionId === s.sessionId ? (
+                        <div key={s.sessionId} className="session-item session-renaming">
+                          <input
+                            className="tab-rename"
+                            value={renameDraft}
+                            ref={(el) => {
+                              renameInputRef.current = el;
+                              el?.focus();
+                              el?.select();
+                            }}
+                            maxLength={200}
+                            aria-label={t("chat.renameSession")}
+                            onChange={(e) => setRenameDraft(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                void commitSessionRename(selectedBotEntry, s.sessionId, renameDraft);
+                              } else if (e.key === "Escape") {
+                                e.preventDefault();
+                                setRenameKey(null);
+                              }
+                            }}
+                            onBlur={() =>
+                              handleSessionRenameBlur(selectedBotEntry, s.sessionId, renameDraft)
+                            }
+                          />
+                        </div>
+                      ) : (
+                        <button
+                          key={s.sessionId}
+                          type="button"
+                          className={
+                            "session-item" +
+                            (activeSessionIdFor(selectedBotEntry) === s.sessionId ? " active" : "")
+                          }
+                          title={s.title}
+                          onClick={() => {
+                            if (s.archived === true) {
+                              openRestoredSessionView(s);
+                            } else {
+                              switchSession(selectedBotEntry, s.sessionId);
+                            }
+                          }}
+                          onDoubleClick={() => startSessionRename(selectedBotEntry, s)}
+                          onContextMenu={(e) => {
+                            e.preventDefault();
+                            setMenu({
+                              x: e.clientX,
+                              y: e.clientY,
+                              botKey: selectedBotEntry.key,
+                              sessionId: s.sessionId,
+                            });
+                          }}
+                        >
+                          <span className="tab-title">
+                            {s.title}
+                            {s.archived === true && (
+                              <span className="session-archived-mark">{t("chat.archivedMark")}</span>
+                            )}
+                          </span>
+                          <span className="session-meta">
+                            {formatFullDateTime(s.lastMessageAt ?? s.startedAt)}
+                          </span>
+                        </button>
+                      ),
+                    )}
+                  </div>
+                )}
                 {dragging && members.length === 0 && (
                   <div className="drop-hint">{t("shell.dropToMove", [groupLabel(g)])}</div>
                 )}
@@ -2338,6 +2582,33 @@ const logout = (): void => {
                 setSettingsOpen(true);
                 setSettingsSection("general");
               }}
+              activeSessionRef={activeSessionRef}
+              onAssistantElsewhere={(botKey, sessionId, text) => {
+                // The turn's session is no longer the visible thread: park the
+                // reply in that session's cache so switching back shows it.
+                // Without a cached thread the host already has the row and the
+                // switch-back reload picks it up.
+                const key = `${botKey}|${sessionId}`;
+                const cached = sessionThreadCache.current.get(key);
+                if (cached !== undefined) {
+                  const now = Date.now();
+                  sessionThreadCache.current.set(key, [
+                    ...cached,
+                    {
+                      id: now + 1,
+                      from: "bot",
+                      text,
+                      quote: null,
+                      reactions: {},
+                      mine: [],
+                      time: now,
+                      system: false,
+                      speakerKey: botKey,
+                      origin: "live",
+                    },
+                  ]);
+                }
+              }}
               skillContext={(botId) => skillsForInjection(botId, skillLibrary)}
               onOpenBot={(botKey) => {
                 const target = bots.find((b) => b.key === botKey);
@@ -2374,7 +2645,53 @@ const logout = (): void => {
       )}
       </div>
 
-      {menu && menuBot && (
+      {menu && menuBot && menu.sessionId !== undefined && (
+        <>
+          <div className="menu-overlay" onClick={() => setMenu(null)} />
+          <div
+            ref={menuRef}
+            className="menu"
+            role="menu"
+            aria-label={t("chat.sessionMenuAria")}
+            style={{ left: menu.x, top: menu.y }}
+          >
+            <button
+              type="button"
+              role="menuitem"
+              className="menu-item"
+              onClick={() => {
+                const session = (historySessions ?? []).find(
+                  (s) => s.sessionId === menu.sessionId,
+                );
+                if (session !== undefined && !session.archived) {
+                  startSessionRename(menuBot, session);
+                }
+                setMenu(null);
+              }}
+            >
+              <MenuIcon d="M4 7h10M4 12h7M4 17h10M18 5v9M15 11l3 3 3-3" />
+              {t("chat.renameSession")}
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className="menu-item danger"
+              onClick={() => {
+                const sessionId = menu.sessionId;
+                setMenu(null);
+                if (sessionId !== undefined) {
+                  archiveChatSessionFor(menuBot, sessionId);
+                }
+              }}
+            >
+              <MenuIcon d="M4 7h16M9 7V4h6v3m-8 0 1 13h8l1-13" />
+              {t("chat.archiveSession")}
+            </button>
+          </div>
+        </>
+      )}
+
+      {menu && menuBot && menu.sessionId === undefined && (
         <>
           <div className="menu-overlay" onClick={() => setMenu(null)} />
           <div
@@ -3606,6 +3923,10 @@ function BotsPlaceholder({
   deepThinking,
   onToggleDeepThinking,
   onOpenAutomation,
+  /** G12: live (botKey → storage session) map; read at settle time, not render time. */
+  activeSessionRef,
+  /** G12: park a reply whose session the user has already switched away from. */
+  onAssistantElsewhere,
 }: {
   bots: UiBot[];
   groups: Group[];
@@ -3661,6 +3982,10 @@ function BotsPlaceholder({
   onToggleDeepThinking: () => void;
   /** D20': jump from the chat automation notice to the settings panel. */
   onOpenAutomation: () => void;
+  /** G12: live (botKey → storage session) map; read at settle time, not render time. */
+  activeSessionRef: { current: Record<number, string> };
+  /** G12: the reply lands in the session it was sent from, not the visible one. */
+  onAssistantElsewhere: (botKey: number, sessionId: string, text: string) => void;
 }): JSX.Element {
   const service = useService();
   const [draft, setDraft] = useState("");
@@ -3789,10 +4114,13 @@ function BotsPlaceholder({
     if (meBotId === undefined) {
       return;
     }
+    // G12: the gauge follows the visible session, read at call time — a turn
+    // settling after the user switched sessions meters the new session.
+    const sessionId = activeSessionRef.current[selectedBot];
     const requestId = contextUsageRequest.current + 1;
     contextUsageRequest.current = requestId;
     service.chat
-      .contextUsage(meBotId)
+      .contextUsage(meBotId, sessionId)
       .then((view) => {
         if (contextUsageRequest.current !== requestId) {
           return;
@@ -3804,7 +4132,7 @@ function BotsPlaceholder({
               return;
             }
             service.chat
-              .contextUsage(meBotId)
+              .contextUsage(meBotId, activeSessionRef.current[selectedBot])
               .then((later) => {
                 if (contextUsageRequest.current === requestId) {
                   setContextUsage(later);
@@ -3815,7 +4143,7 @@ function BotsPlaceholder({
         }
       })
       .catch(() => undefined);
-  }, [service, meBotId]);
+  }, [service, meBotId, selectedBot]);
   useEffect(() => {
     refreshContextUsage();
   }, [refreshContextUsage]);
@@ -4034,6 +4362,11 @@ function BotsPlaceholder({
     // 同一 bot 的新回合取代自己的旧回合；其他 bot 的流互不影响（跨 bot 并行思考）。
     streamHandles.get(me.key)?.cancel();
     const forKey = me.key;
+    // G12: the turn is filed under the session it was started from. If the
+    // user switches sessions while it runs, the reply parks in that session's
+    // cache instead of the now-visible thread.
+    const turnSession =
+      activeSessionRef.current[forKey] ?? storedSessionId(me.bot.id);
     onStreamUpdate(() => ({ ...emptyStream(), forKey }));
     onBotStatus(me.bot.id, "running");
     const started = runChatStream({
@@ -4042,10 +4375,19 @@ function BotsPlaceholder({
       text,
       skills: injected.skills,
       primitive: primitiveMode,
+      sessionId: turnSession,
       images,
       forKey,
       update: (update) => onStreamUpdate(update),
-      onAssistant,
+      onAssistant: (assistantText) => {
+        if (
+          (activeSessionRef.current[forKey] ?? storedSessionId(me.bot.id)) === turnSession
+        ) {
+          onAssistant(assistantText);
+        } else {
+          onAssistantElsewhere(forKey, turnSession, assistantText);
+        }
+      },
       /* Only this handle may commit its answer. Once a newer turn of the same
          bot owns the handle map entry, this one is stale — and that has to be
          asked here rather than inferred inside the state updater, which React
