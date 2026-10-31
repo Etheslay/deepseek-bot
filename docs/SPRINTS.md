@@ -346,6 +346,17 @@
 
 建议顺序：`fix/host-test-stability` → `context-window-metering` → `feat/pdf-office-attachment-parse` → `equal-bots-ui`（重点核「去分组」）→ `g12` 拍板 → vision 二选一 → 链条 B 按取舍摘链或废弃。全部处置完成后本节再刷新。
 
+**10-31 链条 B 摘链（develop = `3359fa6`，PR #189–#194 已合入）**：
+
+建议顺序的前六支已合入：#189 context-window-metering、#190 host-test-stability、#191 pdf-office-attachment-parse、#192 image-vision-input、#193 equal-bots-ui、#194 g12-multi-session。视觉与 PDF 按上表选了精简版。`feature/g1-ui-state` 仍由 #181–#184 取代，分支留档。`feature/b3-vision` 与 `feature/b4-binary-parsing` 不回灌。
+
+`feature/composer-modes-menu`（链尾 `c59cc78`）整链对 `3359fa6` 做 `merge-tree` 仍有二十余处内容冲突，冲突来自已被取代的 g1 / b3 / b4 / 另一套 g12。本分支只摘尚未入库的链尾，叠在 `3359fa6` 上：
+
+- `21c03fe` 性格改为单选，每条预设写成模型能执行的指令；旧的多选裸词后缀按第一个预设收回。边界清扫里与当前契约仍对应的部分补了测试：另一个 bot 不能读写这条会话，归档后历史仍可读、写入仍拒绝。路径型 `images`、`ui.state.patch`、`chat.send.documents` 属于未采纳的 b3 / g1 线，当前契约分别是 base64 `images`、`ui.state.set`、附件解析缓存，不回灌。
+- `c59cc78` 原始人 / 深度思考从输入行收进 ＋ 菜单，勾选后面板保持打开。
+
+远程分支 `feature/g1-ui-state`、`feature/b3-vision`、`feature/b4-binary-parsing`、`feature/persona-and-boundary-sweep`、`feature/composer-modes-menu` 仍留在远端作档案，本 PR 不删除它们。GitHub Actions `quality` 自账单/支出上限起未真正启动（例如 develop 上 run `41178324878` 的注解），红叉不代表本分支的测试结果；本机检查记在 PR 验证表。
+
 **10-31 八次刷新清点（develop = `081580e`，PR #179–#184 合入后）**：
 
 - **远程在途分支清零**：#178（接线后台账）与 #179–#184（本会话六片）均已合入（远程分支随合并删除）。`feature/chat-stream-notice-contract` → #179、`feature/backfill-reports-150-151` → #180、`feature/ui-state-methods` → #181、`feature/ui-state-wiring` → #182、`feature/group-entity-contract` → #183、`feature/group-entity-wiring` → #184。

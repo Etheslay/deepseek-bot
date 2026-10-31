@@ -64,9 +64,25 @@ describe("tone presets and the instruction suffix", () => {
     expect(MINIMAL_TONE_IDS.has(NORMAL_TONE_ID)).toBe(true);
   });
 
-  it("appends one suffix from the resolved phrases", () => {
-    expect(mergeToneInstructions("You review deliverables.", ["傲娇", "幽默"])).toBe(
-      "You review deliverables.（语气：傲娇、幽默）",
+  it("writes one strong persona directive per preset — a bare word would not survive the model", () => {
+    for (const tone of TONE_PRESETS) {
+      expect(tone.instruction.length).toBeGreaterThan(8);
+      expect(tone.word.length).toBeGreaterThan(0);
+      expect(tone.instruction).not.toMatch(/[（）]/);
+    }
+    // 呆萌可爱 must be fully spelled out: reactions, catchphrases, pacing,
+    // and the promise that the answer still lands.
+    const adorkable = TONE_PRESETS.find((tone) => tone.id === "adorkable")!;
+    expect(adorkable.instruction).toContain("呆萌");
+    expect(adorkable.instruction).toContain("慢半拍");
+    expect(adorkable.instruction).toContain("诶诶");
+    expect(adorkable.instruction).toContain("呆是萌的一部分");
+  });
+
+  it("appends one suffix from the single resolved phrase", () => {
+    const adorkable = TONE_PRESETS.find((tone) => tone.id === "adorkable")!;
+    expect(mergeToneInstructions("You review deliverables.", [adorkable.instruction])).toBe(
+      `You review deliverables.（语气：${adorkable.instruction}）`,
     );
     expect(toneSuffix([])).toBe("");
     expect(mergeToneInstructions("You review deliverables.", [])).toBe(
@@ -75,17 +91,41 @@ describe("tone presets and the instruction suffix", () => {
   });
 
   it("replaces the stored suffix instead of accumulating (edit safety)", () => {
-    const stored = "整理资料（语气：可爱、温柔）";
-    expect(mergeToneInstructions(stored, ["傲娇"])).toBe("整理资料（语气：傲娇）");
-    // Unchecking every chip removes the suffix entirely.
+    const cute = TONE_PRESETS.find((tone) => tone.id === "cute")!;
+    const stored = `整理资料（语气：${cute.instruction}）`;
+    const tsundere = TONE_PRESETS.find((tone) => tone.id === "tsundere")!;
+    expect(mergeToneInstructions(stored, [tsundere.instruction])).toBe(
+      `整理资料（语气：${tsundere.instruction}）`,
+    );
+    // Unchecking the single chip removes the suffix entirely.
     expect(mergeToneInstructions(stored, [])).toBe("整理资料");
     expect(stripToneSuffix("（语气：可爱）")).toBe("");
   });
 
-  it("parses the stored suffix back onto chips, custom text included", () => {
-    const parsed = parseToneSelection("整理资料（语气：傲娇、神秘、幽默）");
-    expect(parsed.ids).toEqual(["tsundere", "humorous"]);
-    expect(parsed.custom).toBe("神秘");
-    expect(parseToneSelection("no suffix here")).toEqual({ ids: [], custom: null });
+  it("parses the stored suffix back onto the single chip", () => {
+    const cute = TONE_PRESETS.find((tone) => tone.id === "cute")!;
+    expect(parseToneSelection(`整理资料（语气：${cute.instruction}）`)).toEqual({
+      id: "cute",
+      custom: null,
+    });
+    expect(parseToneSelection("no suffix here")).toEqual({ id: null, custom: null });
+    expect(parseToneSelection("整理资料（语气：神秘）")).toEqual({
+      id: null,
+      custom: "神秘",
+    });
+  });
+
+  it("maps legacy bare-word suffixes to their preset and collapses legacy multi-tones to the first", () => {
+    // Old multi-select stores: 呆萌、可爱 as bare words.
+    expect(parseToneSelection("整理资料（语气：呆萌、可爱）")).toEqual({
+      id: "adorkable",
+      custom: null,
+    });
+    expect(parseToneSelection("整理资料（语气：温柔）")).toEqual({ id: "gentle", custom: null });
+    // A legacy mix of preset words and custom text keeps the first preset.
+    expect(parseToneSelection("整理资料（语气：傲娇、神秘）")).toEqual({
+      id: "tsundere",
+      custom: null,
+    });
   });
 });

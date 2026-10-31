@@ -207,4 +207,88 @@ describe("chat sessions (G12 多会话)", () => {
     expect(renamed.session.title).toBe("主线");
     expect(renamed.session.archived).toBe(false);
   });
+
+  it("rejects a second bot from addressing the first bot's sessions", async () => {
+    const { host, botId } = await hostWithBot();
+    const created = (await host.handleMethod("chat.session.create", {
+      botId,
+    })) as { session: ChatSessionWire };
+    await host.handleMethod("chat.send", {
+      botId,
+      text: "只属于第一个",
+      sessionId: created.session.sessionId,
+    });
+    const bots = (await host.handleMethod("bot.list", {})) as {
+      bots: Array<{
+        id: string;
+        modelProfileId: string;
+        workspaceId: string;
+        toolPolicyId: string;
+      }>;
+    };
+    const owner = bots.bots.find((bot) => bot.id === botId)!;
+    const other = (await host.handleMethod("bot.create", {
+      name: "sibling",
+      instructions: "",
+      modelProfileId: owner.modelProfileId,
+      workspaceId: owner.workspaceId,
+      toolPolicyId: owner.toolPolicyId,
+    })) as { id: string };
+    await expect(
+      host.handleMethod("chat.send", {
+        botId: other.id,
+        text: "x",
+        sessionId: created.session.sessionId,
+      }),
+    ).rejects.toMatchObject({ code: "INVALID_INPUT" });
+    await expect(
+      host.handleMethod("chat.history", {
+        botId: other.id,
+        sessionId: created.session.sessionId,
+        limit: 10,
+      }),
+    ).resolves.toEqual({ messages: [] });
+    await expect(
+      host.handleMethod("chat.session.rename", {
+        botId: other.id,
+        sessionId: created.session.sessionId,
+        title: "steal",
+      }),
+    ).rejects.toMatchObject({ code: "INVALID_INPUT" });
+    const history = (await host.handleMethod("chat.history", {
+      botId,
+      sessionId: created.session.sessionId,
+      limit: 10,
+    })) as { messages: Array<{ text: string }> };
+    expect(history.messages.some((row) => row.text.includes("只属于第一个"))).toBe(true);
+  });
+
+  it("keeps an archived session readable while writes stay shut", async () => {
+    const { host, botId } = await hostWithBot();
+    const created = (await host.handleMethod("chat.session.create", { botId })) as {
+      session: ChatSessionWire;
+    };
+    await host.handleMethod("chat.send", {
+      botId,
+      text: "归档前的话",
+      sessionId: created.session.sessionId,
+    });
+    await host.handleMethod("chat.session.archive", {
+      botId,
+      sessionId: created.session.sessionId,
+    });
+    const history = (await host.handleMethod("chat.history", {
+      botId,
+      sessionId: created.session.sessionId,
+      limit: 10,
+    })) as { messages: Array<{ text: string }> };
+    expect(history.messages.some((row) => row.text.includes("归档前的话"))).toBe(true);
+    await expect(
+      host.handleMethod("chat.send", {
+        botId,
+        text: "x",
+        sessionId: created.session.sessionId,
+      }),
+    ).rejects.toMatchObject({ code: "INVALID_INPUT" });
+  });
 });
