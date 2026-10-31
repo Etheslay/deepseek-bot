@@ -326,6 +326,26 @@
 - **未完成的计划项**：工作流主路径接线（GAP_AUDIT §7.10）、G1' 的 ui.*、D13/D23 与 v0.1.0 发布验收。
 - **另见**：[GAP_AUDIT](GAP_AUDIT.md) 第七次刷新。
 
+**10-31 在途分支 triage（develop = `b257334`，PR #186/#187 合入后；11 个未合并远程分支）**：
+
+两组并行开发线与本会话已合入的工作撞车，处置需负责人拍板。冲突数来自 `git merge-tree --write-tree` 试算。
+
+| 分支 | 内容 | 领先 | 冲突 | 建议处置 |
+| --- | --- | --- | --- | --- |
+| `fix/host-test-stability` | host vitest forks 限 2——直击「全量首跑抖动家族」（九个测试文件各起 fake-harness 子进程，CPU 饱和饿死轮询） | 1 | 0 | **最先合**：治本机登记的 task-dispatch/real-app-tools 首跑失败 |
+| `feature/context-window-metering` | CJK 感知 token 估算、工具结果截断进提示、每模型上下文窗口（debug 可覆盖） | 3 | 0 | 与 #138（计量+压缩）互补而非重复；审后合 |
+| `feat/pdf-office-attachment-parse` | PDF/Office 附件解析进聊天提示（精简重做版，9 文件 +942） | 1 | 0 | 与 b4 同主题的精简版；零冲突——**建议以此为准** |
+| `feat/image-vision-input` | 用户图片进模型（上游支持时，22 文件 +542） | 1 | 6 | 与 b3 同主题的精简版；需解 #183/#184 的 App.tsx 冲突，与 b3 **二选一** |
+| `feature/equal-bots-ui` | 六个桌面特性：双 bot 对话视图、审批卡已决状态行、按 bot 流隔离（切 bot 不丢运行中回合）、Grok 式从不/始终/一次审批卡、默认语气、**去分组选择器** | 7 | 0 | 零冲突；但「去分组选择器」与 #183/#184 分组实体化方向相反——**审阅重点核对** |
+| `feature/g12-multi-session` | G12 多会话（`chat.session.*` 契约 + 会话域回放/摘要 + 侧栏会话列表），基于 equal-bots | 9 | 5 | G12 原为「拍板后立项」——**需拍板是否采纳**；与链条 B 的 g12 是不同实现（40 文件差异） |
+| `feature/g1-ui-state` | 另一版 ui.state（get/patch，300ms 防抖） | 10 | 18 | **已被 #181–#184 取代**——建议废弃（分支留档） |
+| `feature/b3-vision` | b3 视觉：工作区图片作为真实内容块 + 上游验证证据（基线 `6299994`=#153） | 12 | 18 | 与 feat/image-vision-input 二选一；堆叠在已废弃的 g1 上，选它需先摘链 |
+| `feature/b4-binary-parsing` | b4 PDF/docx 解析（unpdf 0-dep 2.07MB + fflate 依赖预算文档） | 14 | 19 | 与 feat/pdf-office-attachment-parse 二选一；同上需摘链 |
+| `feature/persona-and-boundary-sweep` | persona 单选人格 + B1–B4 边界清扫 | 15 | 19 | 堆叠在 b4 上，随 b4 取舍 |
+| `feature/composer-modes-menu` | primitive/深度思考开关移入 ＋ 菜单 | 16 | 19 | 链尾，同上 |
+
+建议顺序：`fix/host-test-stability` → `context-window-metering` → `feat/pdf-office-attachment-parse` → `equal-bots-ui`（重点核「去分组」）→ `g12` 拍板 → vision 二选一 → 链条 B 按取舍摘链或废弃。全部处置完成后本节再刷新。
+
 **10-31 八次刷新清点（develop = `081580e`，PR #179–#184 合入后）**：
 
 - **远程在途分支清零**：#178（接线后台账）与 #179–#184（本会话六片）均已合入（远程分支随合并删除）。`feature/chat-stream-notice-contract` → #179、`feature/backfill-reports-150-151` → #180、`feature/ui-state-methods` → #181、`feature/ui-state-wiring` → #182、`feature/group-entity-contract` → #183、`feature/group-entity-wiring` → #184。
