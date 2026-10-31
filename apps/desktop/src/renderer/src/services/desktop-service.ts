@@ -15,6 +15,7 @@ import type {
   ChatSkillInjection,
   ErrorCode,
   EventEnvelope,
+  SkillLibrary,
   UiState,
 } from "@deepseek-bot/contracts";
 import type { BackupSummary } from "../../../shared/ipc-channels.js";
@@ -320,6 +321,16 @@ export interface DesktopService {
     list(): Promise<BotGroup[]>;
     create(name: string): Promise<BotGroup>;
     archive(id: string, expectedRevision: string): Promise<BotGroup>;
+  };
+
+  /**
+   * D17' skill library (v0.11 skillLibrary.get/save): whole-library reads
+   * and writes. The Host validates the full shape on save and echoes it;
+   * the fixture keeps the library in session memory.
+   */
+  skills: {
+    getLibrary(): Promise<SkillLibrary>;
+    saveLibrary(library: SkillLibrary): Promise<SkillLibrary>;
   };
 
   /**
