@@ -59,12 +59,17 @@ async function setup(now?: () => Date) {
 }
 async function pending(host: DeepSeekBotHost): Promise<AppApproval> {
   let result: AppApproval[] = [];
-  await vi.waitFor(async () => {
-    result = (
-      (await host.handleMethod("permission.approval.list", {})) as { approvals: AppApproval[] }
-    ).approvals;
-    expect(result).toHaveLength(1);
-  });
+  await vi.waitFor(
+    async () => {
+      result = (
+        (await host.handleMethod("permission.approval.list", {})) as { approvals: AppApproval[] }
+      ).approvals;
+      expect(result).toHaveLength(1);
+    },
+    // Approvals surface after the fake-harness child boots; the 1s default
+    // poll budget starves under CPU saturation, so poll on a deadline.
+    { timeout: 20_000, interval: 100 },
+  );
   return result[0]!;
 }
 async function approve(host: DeepSeekBotHost, approval: AppApproval, scope = "once") {
@@ -163,14 +168,17 @@ describe("authenticated chat application tool channel", () => {
         },
       });
     const answerOnce = async (questionText: string) => {
-      const listed = await vi.waitFor(async () => {
-        const response = (await host.handleMethod("question.list", { botId: bot.id })) as {
-          questions: Array<{ requestId: string; question: string }>;
-        };
-        const match = response.questions.find((item) => item.question === questionText);
-        expect(match).toBeDefined();
-        return match!;
-      });
+      const listed = await vi.waitFor(
+        async () => {
+          const response = (await host.handleMethod("question.list", { botId: bot.id })) as {
+            questions: Array<{ requestId: string; question: string }>;
+          };
+          const match = response.questions.find((item) => item.question === questionText);
+          expect(match).toBeDefined();
+          return match!;
+        },
+        { timeout: 20_000, interval: 100 },
+      );
       await host.handleMethod("question.answer", {
         botId: bot.id,
         requestId: listed.requestId,
@@ -220,11 +228,13 @@ describe("authenticated chat application tool channel", () => {
     const approval = await pending(host);
     requestAbort.abort();
     await rejected;
-    await vi.waitFor(async () =>
-      expect(
-        ((await host.handleMethod("permission.approval.list", {})) as { approvals: unknown[] })
-          .approvals,
-      ).toEqual([]),
+    await vi.waitFor(
+      async () =>
+        expect(
+          ((await host.handleMethod("permission.approval.list", {})) as { approvals: unknown[] })
+            .approvals,
+        ).toEqual([]),
+      { timeout: 20_000, interval: 100 },
     );
     await expect(approve(host, approval)).rejects.toMatchObject({ code: "INVALID_INPUT" });
     expect(await host.handleMethod("group.list", {})).toEqual({ groups: [] });
@@ -380,12 +390,15 @@ describe("authenticated chat application tool channel", () => {
       }),
     });
     let approvals: AppApproval[] = [];
-    await vi.waitFor(async () => {
-      approvals = (
-        (await host.handleMethod("permission.approval.list", {})) as { approvals: AppApproval[] }
-      ).approvals;
-      expect(approvals).toHaveLength(2);
-    });
+    await vi.waitFor(
+      async () => {
+        approvals = (
+          (await host.handleMethod("permission.approval.list", {})) as { approvals: AppApproval[] }
+        ).approvals;
+        expect(approvals).toHaveLength(2);
+      },
+      { timeout: 20_000, interval: 100 },
+    );
     await approve(host, approvals.find((approval) => approval.botId === bot.id)!);
     expect(await (await first).json()).toMatchObject({ ok: true, result: { name: "first actor" } });
     const remaining = (await host.handleMethod("permission.approval.list", {})) as {
