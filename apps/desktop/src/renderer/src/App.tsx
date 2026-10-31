@@ -528,25 +528,23 @@ export function App(): JSX.Element {
   /** D17': any local edit wins over the in-flight boot load. */
   const skillLibraryTouchedRef = useRef(false);
 
-  // D17': boot the skill library from the Host. When the Host has none, the
-  // legacy localStorage copy migrates once behind an idempotent marker; the
-  // composer prompt-template store (an array under the same legacy key) is
-  // never migrated. A Host without the methods (or a broken bridge) degrades
-  // to the legacy read; a failed import keeps the legacy payload and says so.
+  // D17': boot the skill library from the Host (via the service layer). When
+  // the Host has none, the legacy localStorage copy migrates once behind an
+  // idempotent marker; the composer prompt-template store (an array under the
+  // same legacy key) is never migrated. A Host without the methods (or a
+  // broken bridge) degrades to the legacy read; a failed import keeps the
+  // legacy payload and says so.
   useEffect(() => {
     let alive = true;
     void (async () => {
       try {
-        const response = await window.deepseekBot.host.call("skillLibrary.get", {});
+        const hostLibrary = await desktop.skills.getLibrary();
         if (!alive || skillLibraryTouchedRef.current) return;
-        const hostLibrary = METHOD_CONTRACTS["skillLibrary.get"].response.parse(
-          response,
-        ).library;
         const migration = await migrateLegacyLibrary({
           storage: window.localStorage,
           hostLibrary,
           saveLibrary: (library) =>
-            window.deepseekBot.host.call("skillLibrary.save", { library }),
+            desktop.skills.saveLibrary(library).then(() => undefined),
         });
         if (!alive || skillLibraryTouchedRef.current) return;
         if (migration.outcome === "failed") {
@@ -567,7 +565,7 @@ export function App(): JSX.Element {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [desktop]);
 
   /**
    * D17': optimistic local update + whole-library Host save. A failed save
@@ -577,15 +575,13 @@ export function App(): JSX.Element {
   const updateLibrary = useCallback((next: SkillLibrary) => {
     skillLibraryTouchedRef.current = true;
     setSkillLibrary(next);
-    void window.deepseekBot.host
-      .call("skillLibrary.save", { library: next })
-      .then((response) => {
-        METHOD_CONTRACTS["skillLibrary.save"].response.parse(response);
-      })
+    void desktop.skills
+      .saveLibrary(next)
+      .then(() => undefined)
       .catch(() => {
         setToast(t("skills.hostSaveFailed"));
       });
-  }, []);
+  }, [desktop]);
 
   const saveBotTemplate = (target: UiBot): void => {
     const result = saveTemplate(window.localStorage, {

@@ -10,6 +10,7 @@ import type {
   BotArtifact,
   BotGroup,
   EventEnvelope,
+  SkillLibrary,
   UiState,
 } from "@deepseek-bot/contracts";
 import {
@@ -205,6 +206,9 @@ export function createFixtureService(): DesktopService {
   // G1' 分组实体化: the fixture's groups are session state like everything
   // else here — it starts with none, so the sidebar shows only 未分组.
   const fixtureGroups: BotGroup[] = [];
+  // D17': the fixture skill library is session memory too — the boot
+  // migration fills it from localStorage once; nothing persists a refresh.
+  let fixtureSkillLibrary: SkillLibrary = { skills: [], bindings: {} };
 
   const requireBot = (botId: string): Bot => {
     const bot = bots.find((b) => b.id === botId);
@@ -796,6 +800,16 @@ export function createFixtureService(): DesktopService {
     workflows: createFixtureWorkflowService(),
     runs: createFixtureRunService(),
     tasks: createFixtureTaskService(),
+
+    // D17': the fixture skill library is session memory — save echoes and
+    // keeps the library for the rest of the session, nothing more.
+    skills: {
+      getLibrary: () => Promise.resolve(fixtureSkillLibrary),
+      saveLibrary: (library) => {
+        fixtureSkillLibrary = library;
+        return Promise.resolve(library);
+      },
+    },
 
     // G1': the fixture keeps the snapshot in memory — session state like
     // everything else here, gone on restart.

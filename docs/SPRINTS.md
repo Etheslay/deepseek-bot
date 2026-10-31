@@ -329,7 +329,7 @@
 **10-31 八次刷新清点（develop = `081580e`，PR #179–#184 合入后）**：
 
 - **远程在途分支清零**：#178（接线后台账）与 #179–#184（本会话六片）均已合入（远程分支随合并删除）。`feature/chat-stream-notice-contract` → #179、`feature/backfill-reports-150-151` → #180、`feature/ui-state-methods` → #181、`feature/ui-state-wiring` → #182、`feature/group-entity-contract` → #183、`feature/group-entity-wiring` → #184。
-- **审查发现项**：`chat.stream` 契约漂移已由 #179 收口；#150/#151 报告欠账已由 #180 补录（并勘误台账互换的 PR 编号）；d17 §2.3 备忘仍未处理（不阻塞，归属人可选收敛到服务层）。
+- **审查发现项**：`chat.stream` 契约漂移已由 #179 收口；#150/#151 报告欠账已由 #180 补录（并勘误台账互换的 PR 编号）；d17 §2.3 备忘已处置（App.tsx 三处直调收敛到 `DesktopService.skills`，[报告](reports/D17-SERVICE-LAYER-report.md)）。
 - **仍未欠变欠**：桌面 UI 端到端人工验收（12 步清单）；真机 ui.state/分组验收（建组→重启→仍在等四条，GROUP-ENTITY-WIRING 报告 §3）；语音实机联调；D13 性能预算实测 + D23 平台验收；`tmp-inspect.txt`（工作区根目录未跟踪残件）待负责人处置。
 - **未完成的计划项**：D13/D23 与 v0.1.0 发布验收（收官，D23 主责 Destinyian）；G12 多会话（拍板后立项）；D19 视觉理解（等模型）。
 - **另见**：[GAP_AUDIT](GAP_AUDIT.md) 第八次刷新（G1' 归档）。

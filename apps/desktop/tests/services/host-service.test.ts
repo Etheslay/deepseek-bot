@@ -810,3 +810,42 @@ describe("host-backed groups (G1' 分组实体化)", () => {
     expect(calls[2]?.payload).toEqual({ id: group.id, expectedRevision: group.revision });
   });
 });
+
+describe("host-backed skills (D17' service layer)", () => {
+  it("round-trips the library through skillLibrary.get/save", async () => {
+    const library = {
+      skills: [
+        {
+          id: "11111111-1111-4111-8111-111111111111",
+          name: "周报",
+          instructions: "输出三段式周报。",
+          capabilities: ["fs.read"],
+          version: 1,
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ],
+      bindings: {},
+    };
+    let stored = { skills: [], bindings: {} };
+    const { bridge, calls } = makeBridge({
+      "skillLibrary.get": () => ({ library: stored }),
+      "skillLibrary.save": (payload) => {
+        stored = (payload as { library: typeof stored }).library;
+        return { library: stored };
+      },
+    });
+    const service = createHostService(bridge);
+    await expect(service.skills.getLibrary()).resolves.toEqual({
+      skills: [],
+      bindings: {},
+    });
+    await expect(service.skills.saveLibrary(library)).resolves.toEqual(library);
+    await expect(service.skills.getLibrary()).resolves.toEqual(library);
+    expect(calls.map((call) => call.method)).toEqual([
+      "skillLibrary.get",
+      "skillLibrary.save",
+      "skillLibrary.get",
+    ]);
+  });
+});
