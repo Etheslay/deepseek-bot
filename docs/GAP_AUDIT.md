@@ -13,9 +13,10 @@
 | 第七次刷新 | 2026-10-30，基线 `origin/develop` = `5248ab6`（PR #161–#172）；对照六次刷新基线 `9d3ac5b` 之后合入的 #161–#172，**无新增缺口关闭**（均为 UX/流式/文档/加固切片）；新增 **§7.10 工作流主路径接线核对**，并据此勘误 G14 与 G11' 的完成口径；§7.9 中两处「未推送分支」更新为已由 #165/#167 合入；发现 #172 新增的 `chat.stream` 服务端推送未进契约文档（记 §7.10）；同步刷新 SPRINTS §4、§10 账目 |
 | 接线后勘误（2026-10-30，本 PR） | 基线 `origin/develop` = `ad617a0`（PR #173–#177）：#173 入库第七次刷新；#174 工作流回合 token 入 `usage_events`；#175 `ui.*` 界面态契约候选；#176 工作流读面（协议 v0.12：`workflow.get`/`run.snapshot`/`approval.list`）；#177 桌面 `workflows`/`runs` 切真实 Host。据此更新 §7.10 状态、§8 第五批进度与 SPRINTS 账目；**桌面 UI 端到端人工验收仍未执行**，§7.10 结论保持「接线完成、验收未完成」 |
 | 第八次刷新 | 2026-10-31，基线 `origin/develop` = `081580e`（PR #179–#184）；关闭 **G1'（ui.* 方法面 v0.13 #181、渲染接线 #182、分组实体化 v0.14 #183/#184）**；#179 收口 §7.10 的 `chat.stream` 契约漂移；#180 补录 #150/#151 报告并勘误台账互换的编号；拍板 #1 按 Etheslay 2026-10-31 授权记录到 RENDERER_HOST_MAPPING §4（**Destinyian 会签待补**）；已完成项经报告与代码核实 |
-| 已完成并归档 | 第一次刷新已归档 G5/G9（大部）；本次归档 **G6、G7、G8、G10、G11（能力强制部分）、D19（除视觉理解）、D21（真机复核除外）、D22、D27（后端）**、拍板 #2；第三次刷新归档 **G3、G9'、G10'、G11'、D20'**，第四次刷新归档 **G13、D27'**，第六次刷新归档 **G4（主体入档）**，**第八次刷新归档 G1'（ui.* 全链 + 分组实体化）**，见 §1.1；#152/#153 为既有任务收尾，记 §1.1 附行；第七次刷新无新增归档 |
+| 第九次刷新 | 2026-10-31，基线 `origin/develop` = `3110004`（PR #185–#196）；对照第八次刷新基线 `081580e` 之后合入的 #185–#196：在途分支处置完毕（#188 triage → #189–#194 逐支合入 → #195 链尾摘入 → #196 远端收口，`origin` 只剩 `develop`/`main`），关闭 **G12（#194 多会话）**；D19 视觉理解**接线**交付（#192，真实模型往返待真机，归 MANUAL_ACCEPTANCE E4）；发现并修正 CONTRACTS.md 文件头 G12 段落的协议版本漂移（写 v0.12/0.12，实为 v0.14）；新增治理债 §7 第 11 条（#189–#195 七个代码切片无入库报告 + 远程 CI `quality` 自账单/支出上限起未真正运行） |
+| 已完成并归档 | 第一次刷新已归档 G5/G9（大部）；本次归档 **G6、G7、G8、G10、G11（能力强制部分）、D19（除视觉理解）、D21（真机复核除外）、D22、D27（后端）**、拍板 #2；第三次刷新归档 **G3、G9'、G10'、G11'、D20'**，第四次刷新归档 **G13、D27'**，第六次刷新归档 **G4（主体入档）**，第八次刷新归档 **G1'（ui.* 全链 + 分组实体化）**，**第九次刷新归档 G12（多会话）**，见 §1.1；#152/#153 为既有任务收尾，记 §1.1 附行；第七次刷新无新增归档 |
 | 红线 | 遵守 AGENTS.md 与 SPRINTS 三铁律；契约变更小型独立 PR 先行；未运行检查不得声称通过；不伪造自审；消费红线（零订阅、数据本地）见 SPRINTS §9；**付费调用已执行一次（G4，#159）；再次付费调用仍需负责人逐次授权** |
-| 状态 | 待两位负责人评审、认领与拍板；**11 个未合并在途远程分支的 triage 见 [SPRINTS](SPRINTS.md) §10（2026-10-31）** |
+| 状态 | 待两位负责人评审、认领与拍板；在途分支已全部收口（triage/摘链/远端删除记录见 [SPRINTS](SPRINTS.md) §10，2026-10-31）；**下一关口为 [MANUAL_ACCEPTANCE](MANUAL_ACCEPTANCE.md) 真机人工验收 → D13 → D23** |
 
 ---
 
@@ -127,6 +128,27 @@ develop 一天合入 12 个 PR，原审计多项缺口就此关闭：#73 深度�
 
 双语系统核实（第一次刷新记录，仍有效）：语言切换在 设置 → 通用 → 外观 → 语言，持久化于 `deepseek-bot.settings.v2`，Host 文案随 `settings.update { patch: { "ui.locale" } }` 同步（`feature/host-dispatch-bilingual` 线，CONTRACTS.md settings.update 行已补记）。
 
+### 10-31 九次刷新总览（081580e → 3110004，PR #185–#196）
+
+在途分支处置链：#188 triage（11 支，冲突数与建议顺序入 [SPRINTS](SPRINTS.md) §10）→ 负责人按建议顺序逐支合入 #189–#194 → #195 摘入链条 B 尚未入库的链尾 → #196 处置删除远端残余 7 支，`origin` 长期分支只剩 `develop`/`main`。
+
+| PR | 内容 | 关闭 / 更新的审计项 |
+| --- | --- | --- |
+| #185 `feature/gap-audit-refresh8`（`c54a3b7`） | 第八次刷新本体入库 | 本文件第八次刷新 |
+| #186 `feature/d17-service-layer`（`570e152`） | App.tsx 技能库直调收敛到 `DesktopService.skills`（服务层一致性） | §1.1 D17' 行的「审查 §2.3 备忘未处理」 ✅（[报告](reports/D17-SERVICE-LAYER-report.md)） |
+| #187 `feature/acceptance-runbook`（`b257334`） | 散落各报告「未验证」栏的真机项汇总为 [MANUAL_ACCEPTANCE](MANUAL_ACCEPTANCE.md) 执行手册（A–G 节，状态待执行） | §8 第五批③的执行手册就位（文档） |
+| #188 `feature/inflight-triage`（`c6709ec`） | 11 个未合并远程分支 triage：零冲突 3 支、链条 A/B 撞车与二选一、建议顺序 | 台账登记（文档；处置结论见下两行） |
+| #189 `feature/context-window-metering`（`c8ee52f`） | Host 每模型上下文窗口解析（debug 可覆盖）+ 工具结果进提示前截断（`tool-result-cap.ts`）+ harness-adapter CJK 感知 token 估算 | 与 G13（#138 计量+压缩）互补的加固切片，无新缺口 |
+| #190 `fix/host-test-stability`（`8e7bf8c`） | host vitest forks 限 2、语义折叠断言、有界等待 | 治 §10 记录的「全量首跑抖动家族」（测试稳定化） |
+| #191 `feat/pdf-office-attachment-parse`（`479e425`） | Host 侧 PDF/Office 附件解析进聊天提示（`attachment-parse.ts` + 存档表 + 依赖入 lockfile） | 附件能力增量（b4 主题精简版；依赖预算见 [TASK_B4P_ATTACHMENT_PARSE](TASK_B4P_ATTACHMENT_PARSE.md)） |
+| #192 `feat/image-vision-input`（`8159c72`） | `chat.send` 可选 base64 `images` 数组 + `vision.status` 能力标志（v0.14 组成部分）；对 pinned dsh 运行时的协议准入实验与 SDK 证据链见 [TASK_B3P_VISION_INPUT](TASK_B3P_VISION_INPUT.md) | **D19 视觉理解接线 ✅**——「模型真的能描述图片内容」需有效 Key 真实往返，归 MANUAL_ACCEPTANCE E4（本刷新补行） |
+| #193 `feature/equal-bots-ui`（`c93d42c`） | 六桌面特性：双 bot 对话视图、审批卡已决折叠为状态行、按 bot 流隔离（切 bot 不丢运行中回合）、Grok 式审批卡（从不/始终/一次）、默认语气、bot 对话框去分组选择器 | triage 标记的「去分组选择器 vs #183/#184 分组实体化」经核对**共存**：只移除 bot 对话框内的下拉入口，`group.archive`/`collapsedGroupIds` 方法面与侧栏分组菜单（App.tsx `groupMenu`）未被移除 |
+| #194 `integration/g12-multi-session`（`3359fa6`） | G12 多会话：`chat.session.list/create/rename/archive`（v0.14）+ `chat.send/history/contextUsage` 可选 `sessionId`（缺省=默认会话）+ 侧栏会话子列表；集成时迁移 0025→**0026** 改号（0025 已被 #191 占用，`database.ts` 注释明示） | **G12 ✅**（§6 收口；契约文档版本段落漂移随本刷新修正） |
+| #195 `cursor/integrate-chain-tail-417d`（`206a8af`） | 链条 B 摘链：性格单选（预设写成模型可执行指令）+ 边界清扫中仍对应当前契约的会话越权测试；primitive/深度思考移入 ＋ 菜单 | 链条 B 处置完成；未采纳的路径型 `images`/`ui.state.patch`/`chat.send.documents` 不回灌（SPRINTS §10 记录） |
+| #196 `cursor/close-zombie-branches-417d`（`3110004`） | 远端 7 条残余分支处置删除（2 条尖端已在 develop 历史、5 条为另一套实现），找回方式记 SPRINTS §10 | 台账收口（文档） |
+
+**环境债（随本刷新记入 §7 第 11 条）**：GitHub Actions `quality` 自账单/支出上限起未真正运行（SPRINTS §10 记有 develop 上 run `41178324878` 注解），远程 CI 红叉/绿叉都不再是检查通过的证据，合入判断以各 PR 记录的本机检查为准。
+
 ## 1. 缺口地图（总览）
 
 优先级定义：**P0** 数据完整性/安全（不修就是缺陷）；**P1** 用户每天碰到的标配（对标承诺已立未兑现）；**P2** 计划内切片收尾；**P3** 需拍板后才立项的产品增量。
@@ -136,8 +158,8 @@ develop 一天合入 12 个 PR，原审计多项缺口就此关闭：#73 深度�
 | ~~G1'~~ | ~~界面状态持久化与回放补全~~ 已完成（#181/#182/#183/#184，见 §2） | ~~P0~~ | A | ~~拍板 #1~~ 已按实际进展记录（Destinyian 会签待补）；真机重启验收归真机清单 |
 | G4 | ~~付费真实 Key 全链验收~~ 已执行入档（#159，残留见 §2） | ~~P0~~ | A+B | ~~临时 Key~~ 已执行 |
 | D21' | 真实 Windows 键鼠输入复核（真机指针/按键已记录：[D21-pointer-key 报告](reports/D21-pointer-key-report.md)，PR #160；点击与编辑器内按键仍开放） | P2 | A | 真机 |
-| G12 | 多会话管理（会话列表已上，多会话未立） | P3 | A+B | 拍板（新契约面） |
-| — | D19 剩余（视觉理解，等模型）/ D13 性能预算实测 / D23 平台收官 | 见 §5 | 按原计划 | — |
+| ~~G12~~ | ~~多会话管理~~ 已完成（#194，见 §6/§1.1） | ~~P3~~ | A+B | ~~拍板~~ 已随 #194 采纳 |
+| — | D19 剩余（视觉理解**接线已交付** #192，真实往返待真机 E4）/ D13 性能预算实测 / D23 平台收官 | 见 §5 | 按原计划 | 真机/发布 |
 | — | 治理债（拍板 #1/自审签署/截图/CONTRACTS.md 文档滞后） | 持续 | 双方 | §7 |
 
 ### 1.1 已完成（编号保留备查）
@@ -154,7 +176,7 @@ develop 一天合入 12 个 PR，原审计多项缺口就此关闭：#73 深度�
 | — | D27 whisper 配置持久化（settings KV） | PR #118/#123（`voice-config-kv`；契约 `voice.*` 配置面扩展，见 D27-voice-config 报告） |
 | ~~G11~~（大部） | D17 技能注入与能力强制 | PR #115；工作流模板注入余项改记 G11' |
 | G14 | interrupted 运行恢复入口 | Host 已提供 `run.resume`；桌面运行监控当前仍使用夹具，不能据此认定真实恢复入口已贯通，见 §7.10 |
-| — | D19 主体（MCP HTTP/stdio、凭据、连接器注册、SD 生图） | PR #65/#66、D19 各报告、PR #107；**视觉理解等模型可用**（§5） |
+| — | D19 主体（MCP HTTP/stdio、凭据、连接器注册、SD 生图） | PR #65/#66、D19 各报告、PR #107；视觉理解**接线**已交付（#192，真实往返待真机，见 §5） |
 | — | D20 主体（触发器、规则、评审队列、状态历史、桌面评审页、重复防护） | PR #66/#84/#85/#87 + D20 各报告；"同一事件不第二次启动"由本地自动启动切片完成 |
 | — | D21 主体（契约、Windows 采集/OCR、设备动作审批/记录、真实输入切片） | PR #70/#74/#77/#93/#88/#89/#104；真机复核欠账记 D21' |
 | — | D22 系统集成（双语、托盘、通知、Chrome 导入、硬件加速） | PR #75 + 硬件加速 `b57d46b`（`hardware-acceleration.ts`、`App.tsx:2807`、`shell.hardwareAcceleration`） |
@@ -173,6 +195,7 @@ develop 一天合入 12 个 PR，原审计多项缺口就此关闭：#73 深度�
 | — | D17' 技能库进 Host（协议 0.11） | PR #152；`skillLibrary.get/save` + settings KV `skills.library.v1` 整库校验 + 一次性迁移（composer 数组形态绝不迁移）+ 降级读 localStorage；~~审查 §2.3 备忘未处理~~ **已处置**（App.tsx 直调收敛到 `DesktopService.skills`，[报告](reports/D17-SERVICE-LAYER-report.md)，2026-10-31）；真机未验证（[报告](reports/D17-skill-host-store-report.md)） |
 | — | D14 补遗：本地 mermaid 渲染 | PR #153；strict + DOMPurify svg + shadow DOM、动态 import chunk、失败回退保原文；主题重初始化随 #167 收口（[报告](reports/D14-mermaid-theme-report.md)）；真机截图未做（[报告](reports/D14-mermaid-report.md)） |
 | ~~G1'~~ | 界面状态持久化与分组实体化（协议 v0.13/v0.14） | PR #181/#182/#183/#184；`ui.state.get/set`（settings KV `ui.state.v1`，损坏降级空态）+ 渲染层恢复（bot 顺序/选中）+ 500ms 防抖写入 + `group.archive`/侧栏分组持久化/成员移动/折叠恢复；拍板 #1 记录于 MAPPING §4（Destinyian 会签待补）；真机重启验收欠（[报告一](reports/UI-STATE-METHODS-report.md)、[二](reports/UI-STATE-WIRING-report.md)、[三](reports/GROUP-ENTITY-CONTRACT-report.md)、[四](reports/GROUP-ENTITY-WIRING-report.md)） |
+| ~~G12~~ | 每 bot 多会话管理 | PR #194；`chat.session.list/create/rename/archive`（v0.14，[CONTRACTS](CONTRACTS.md) §3）+ `chat.send/history/contextUsage` 可选 `sessionId`（缺省=默认会话 `chat:<botId>`，存量数据零改写，摘要按会话归属）+ 迁移 `0026-chat-sessions`（只加表与索引；草案写 0024、分支为 0025，集成时因 #191 占用 0025 改号）+ 侧栏会话子列表（新建/重命名/归档）；语义决定见 [TASK_G12_MULTI_SESSION](TASK_G12_MULTI_SESSION.md)；真机手测未做，交付报告欠（§7 第 11 条） |
 
 ---
 
@@ -222,7 +245,7 @@ PR #159 以用户临时 Key（仅进程环境变量注入、用后即弃、不�
 
 以下在 [DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md) §6 已有验收定义，仅列 2026-10-28 对 `81a0924` 的现状：
 
-- **D19 剩余**：视觉理解（DeepSeek 视觉模型可用后接入；凭据引用解析、本地 SD 生图、MCP HTTP/stdio 均已交付，见 D19 各报告与 PR #65/#107）；
+- **D19 剩余**：视觉理解**接线已交付**（PR #192，B3''：`chat.send` 可选 base64 `images` 数组 + `vision.status` 能力标志，v0.14 组成部分；对 pinned dsh 运行时的协议准入实验——图片块被准入、text-only 模型由上游投影占位文本——与 SDK 证据链见 [TASK_B3P_VISION_INPUT](TASK_B3P_VISION_INPUT.md)）。「模型真的能描述图片内容」需有效 Key 的真实往返，归 [MANUAL_ACCEPTANCE](MANUAL_ACCEPTANCE.md) E4（需上游声明 `inputModalities` 含 image）；凭据引用解析、本地 SD 生图、MCP HTTP/stdio 均已交付，见 D19 各报告与 PR #65/#107；
 - **D20**：计划内切片全部交付——聊天内状态通知条与错过可见已由 PR #134/#135 补齐（触发器、规则、评审队列、规则状态历史、重复防护、桌面评审页此前已交付：PR #66/#84/#85/#87 + D20 各报告；"同一事件不第二次启动"由本地自动启动切片完成）；
 - **D21 剩余**：真机指针移动与允许列表内按键各一次已由 PR #160 入档（`win32-input.ps1` 生产路径、精确仅本次审批、延迟 ~0.6 s；无点击，未把键送进编辑器——[D21-pointer-key 报告](reports/D21-pointer-key-report.md) §3/§6 如实列出）；真实窗口截图/OCR 已有真机证据（[D21-windows-acceptance 报告](reports/D21-windows-acceptance-report.md) §4，PR #93）；输入闸门与本地记录已交付（PR #88/#89/#104）；点击与编辑器内按键场景仍开放；
 - **D22**：全部完成（双语/托盘/通知/Chrome 导入 PR #75；硬件加速 `b57d46b`）；
@@ -231,10 +254,14 @@ PR #159 以用户临时 Key（仅进程环境变量注入、用后即弃、不�
 
 ## 6. P3：需拍板后立项的产品增量
 
-### G12 多会话管理
+### G12 多会话管理 —— **已完成（PR #194，2026-10-31 合入），移入 §1.1**
+
+> 原 §6 草案正文保留如下作历史记录。
 **缺口**：D30 每 bot 单逻辑会话（`chat:<botId>`）；PR #103 已交付基于 `chat.history` 的**单会话**列表/打开（`stored-session.ts`，一个 bot 有消息即一个会话）。真正的多会话/重命名/清理仍未立项；Grok 对标存在多会话体验。
 **实现草案**：契约附加 `chat.session.list/open/new`（每 bot 多个 session，Host 侧 session id 由 `chat:<botId>:<n>` 扩展）；UI 为 bot 会话页头部加会话下拉/列表。**涉及 chat.send 语义扩展（activeSession），须契约负责人评审后再立任务书**。
 **状态（2026-10-29，feature/g12-multi-session）**：已按 TASK_G12_MULTI_SESSION.md 立项实现（契约 v0.12：`chat.session.list/create/rename/archive` + `chat.send/history/contextUsage` 可选 `sessionId`，缺省=默认会话 `chat:<botId>`，存量数据零改写；迁移 0024 只加 `chat_sessions` 元数据表与索引；渲染层侧栏会话子列表 + 新建/重命名/归档 + 发送归属会话）。待负责人审查合并后本条关闭。
+
+**收口勘误（2026-10-31 第九次刷新，随 #194 合入关闭）**：① 草案的迁移号在集成时两度改号——分支内 0025、合入后 **0026**（0025 已被 #191 的 `attachment-parses` 占用，`packages/storage/src/database.ts` 注释明示 Renumbered）；② 草案写的「契约 v0.12」实为 **v0.14** 一部分（`version.ts`：v0.14 三合一 = 视觉输入 B3'' + 分组实体化 + 多会话）；CONTRACTS.md 文件头 G12 段落仍写「v0.12 / 当前 protocolVersion 为 0.12」的漂移随本刷新修正；③ triage 标记的「去分组选择器与分组实体化方向相反」核对结论：#193 只移除 bot 对话框内的下拉入口，`group.archive`/`collapsedGroupIds` 方法面与侧栏分组菜单未被移除，两者共存；④ 任务书按「语义决定先行（B1）」入库，交付报告与自审签署仍欠（§7 第 11 条）。
 
 ### G13 上下文窗口可见性 —— **已完成（PR #138，2026-10-29 合入，超额交付计量+自动压缩），移入 §1.1**
 
@@ -248,7 +275,7 @@ PR #159 以用户临时 Key（仅进程环境变量注入、用后即弃、不�
 
 1. **拍板 #1**（Renderer→Host 方案）：聊天/历史部分已上线（`chat.history` 接线、存储会话列表）；D 步的工作流编辑器和运行监控仍为夹具，见 §7.10，但 **G1' 剩余的 ui.* 界面态持久化仍需拍板 #1 对 ui.* 清单的正式记录**（记录到 RENDERER_HOST_MAPPING §4）后开工；
 2. ~~拍板 #2~~ **已定案并合入 develop（PR #99，2026-10-27）**：develop 头像线为基准，`feature/mono-shape` 作废；
-3. **自审签署**：B 线四项（D14/D24/D25/D26）、D17、D18/D19 报告的自审栏仍空；10-28/29 合入的 G3、G9'、G10'、G11'、D20'（两份）、D21-windows-acceptance、BOT_INTEROP、PRIMITIVE_MODE 各报告自审栏同样留空，PR #136/#137 任务书 §6 亦未填，#152/#153 两份报告自审栏同样留空（不追认，由负责人本人针对最新提交 SHA 签署）；10-30/31 合入的 B6-chat-stream、D14-mermaid-theme、UI-STATE-METHODS、UI-STATE-WIRING、GROUP-ENTITY-CONTRACT、GROUP-ENTITY-WIRING 六份报告与补录的 stream-pacer、D27-voice-wiring 两份报告自审栏同样留空；
+3. **自审签署**：B 线四项（D14/D24/D25/D26）、D17、D18/D19 报告的自审栏仍空；10-28/29 合入的 G3、G9'、G10'、G11'、D20'（两份）、D21-windows-acceptance、BOT_INTEROP、PRIMITIVE_MODE 各报告自审栏同样留空，PR #136/#137 任务书 §6 亦未填，#152/#153 两份报告自审栏同样留空（不追认，由负责人本人针对最新提交 SHA 签署）；10-30/31 合入的 B6-chat-stream、D14-mermaid-theme、UI-STATE-METHODS、UI-STATE-WIRING、GROUP-ENTITY-CONTRACT、GROUP-ENTITY-WIRING 六份报告与补录的 stream-pacer、D27-voice-wiring 两份报告自审栏同样留空；同日随 #186 合入的 D17-SERVICE-LAYER 报告自审栏亦留空；
 4. **手测截图**：`docs/reports/assets/` 现有 chat-diag/d02/d05/d07/d09/d16/d19-mcp/d21/d22/d24-data/d28/d30/settings-nav/sidebar-footer/ui-settings/usage-charts/usage-stats，**d14/d17/d25/d26 仍缺**（d21 两张为合成文本证据图）；
 5. ~~SPRINTS §7 审计表刷新~~ **随本刷新更新**（语言、备份、更新、设置持久化、附件、搜索、硬件加速行改为已完成并登记去向 GAP_AUDIT）；
 6. ~~快赢安家~~ **SPRINTS §9.1 表已注记四项全部完成及载体**（随本刷新）；
@@ -256,6 +283,7 @@ PR #159 以用户临时 Key（仅进程环境变量注入、用后即弃、不�
 8. ~~CONTRACTS.md 文档滞后~~ **已收口（2026-10-29 契约补记）**：`chat.send` / `chat.history` / `chat.cancel` / `chat.status` / `chat.attach` 五行已补入 §3 方法表，内容以 `packages/contracts` 冻结 schema 为准（此前 `chat.status` 全文零提及）；skills、primitive 与附件分块细节仍指向既有 D17/D26 节与 §4 事件段，两处漂移风险就此消除；
 9. **无报告合入与审查发现项处置（2026-10-29 四次刷新新增；同日第六次刷新记录处置；30 日七次刷新更新合入状态）**：~~#150（stream-pacer）/ #151（语音接线）未按 §9「每编号 + 报告」入库报告文件~~ **报告已于 2026-10-30 补录**（[stream-pacer 报告](reports/stream-pacer-report.md)、[D27 语音接线报告](reports/D27-voice-wiring-report.md)；补录时依合并提交勘误此前台账互换的编号：#151=`feature/streaming-reply`、#150=`feature/voice-ui-wiring`）；~~#138 的 cm P2~~ **已处置（选改文档，`feature/context-meter-concurrency-docs` → PR #165 `a6a11e9`）**——[任务书](TASK_CONTEXT_METER.md) §5 与[报告](reports/CONTEXT_METER-report.md) §4 改为如实记录「压缩回合与用户发送真并发（busy 仅约束 send，重入由 `compressingChats` 防护）」及 provider 限流/用量行交错/`chat.contextUsage` 最近行抖动风险；不改锁的理由：压缩是静默后台维护回合，复用忙锁会把 RATE_LIMITED 在用户不可控的时刻递给用户，审查已确认数据完整性不受影响；~~d14 §2.2 P3~~ **已修复（选改代码，`feature/d14-mermaid-theme-reinit` → PR #167 `417df1c`）**——按 `initializedTheme` 比对在渲染取模块时重跑 initialize，切回曾用主题命中该主题缓存不触碰全局配置，语义由新增测试钉住（[报告](reports/D14-mermaid-theme-report.md)）。两分支在第六次刷新时尚未推送，现均已合入 develop；
 10. **#161–#172 无入库报告（2026-10-30 七次刷新新增）**：#163/#164/#166/#168/#169/#170/#171/#172 八项没有 `docs/reports/` 交付报告，与 §9「每编号 + 报告」不一致（#163 为签名决策文档、#164 为审计刷新本体，是否补报告由归属人定）；#161/#162/#165/#167 已有入库报告。是否补录由各归属人自行决定，不追认事前自审；
+11. **#185–#196 的入库形态与远程 CI 失效（2026-10-31 九次刷新新增）**：#186 有入库报告（[D17-SERVICE-LAYER](reports/D17-SERVICE-LAYER-report.md)）；#185/#187/#188/#196 为审计/手册/台账文档本体（同 #164 先例，是否补报告由归属人定）；**#189/#190/#191/#192/#193/#194/#195 七个代码切片均无 `docs/reports/` 交付报告**（#191/#192 以 [TASK_B4P_ATTACHMENT_PARSE](TASK_B4P_ATTACHMENT_PARSE.md)/[TASK_B3P_VISION_INPUT](TASK_B3P_VISION_INPUT.md) 任务书代部分证据，#194 以 [TASK_G12_MULTI_SESSION](TASK_G12_MULTI_SESSION.md) 记语义决定，自审栏均待签署），与 §9「每编号 + 报告」不一致，是否补录由各归属人定，不追认事前自审。**远程 CI `quality` 自账单/支出上限起未真正运行**（develop 上 run `41178324878` 注解，SPRINTS §10 10-31 摘链节同记）：此后 GitHub 上的红叉/绿叉都不构成检查通过或失败的证据，合入判断以各 PR 记录的本机检查为准，恢复 CI 运行前 §9 的「远程 CI」门槛按本机全绿等效执行；CONTRACTS.md 文件头 G12 段落的协议版本漂移随本刷新修正（见 §0 九次刷新总览 #194 行）；
 
 ### 7.10 工作流主路径接线核对（2026-10-30）
 
@@ -284,8 +312,8 @@ PR #159 以用户临时 Key（仅进程环境变量注入、用后即弃、不�
 | ~~第二批~~ | ~~G1' 的 ui.*~~（#175 契约候选 → #181/#182 方法面与接线 → #183/#184 分组实体化） | **已全部交付（2026-10-31）**，见 §2；真机重启验收归真机清单 |
 | ~~第三批~~ | ~~D21'（真实键鼠，真机）~~；语音实机联调（录音/朗读真机验收，#151/#157 已接线） | D21' 真机指针/按键已记录（#160；点击与编辑器内按键仍开放）；语音实机仍欠 |
 | ~~第四批~~ | ~~G4 全链验收~~（#159 已入档）+ D13/D23 收官 | 剩 **D13 性能预算实测 + D23 平台验收**（收官，与发布验收合并执行） |
-| 第五批（收口，2026-10-30 排定） | ①工作流主路径接线：契约 + Host（#176）与桌面替换夹具（#177）**已合入**，剩桌面端到端人工验收报告 → ②G1' 的 ui.*（**已由 #181–#184 全链交付**）→ ③D13/D23 与 v0.1.0 发布验收 | 主路径是 D07/D09 的集成验收与 D23 前置；释放前 P0/P1 必须清零；**全部真机人工项已汇总为 [MANUAL_ACCEPTANCE](MANUAL_ACCEPTANCE.md) 执行手册** |
-| 另行立项 | G12（拍板后）；D19 视觉理解（等模型） | G13 已完成（#138） |
+| 第五批（收口，2026-10-30 排定） | ①工作流主路径接线：契约 + Host（#176）与桌面替换夹具（#177）**已合入**，剩桌面端到端人工验收报告 → ②G1' 的 ui.*（**已由 #181–#184 全链交付**）→ ③D13/D23 与 v0.1.0 发布验收 | 主路径是 D07/D09 的集成验收与 D23 前置；释放前 P0/P1 必须清零；**全部真机人工项已汇总为 [MANUAL_ACCEPTANCE](MANUAL_ACCEPTANCE.md) 执行手册**；在途分支已收口（#188–#196），台账见 SPRINTS §10 |
+| 另行立项 | ~~G12~~（**已随 #194 交付**）；~~D19 视觉理解接线~~（**已随 #192 交付**，真实往返归 MANUAL_ACCEPTANCE E4） | G13 已完成（#138）；新增拍板/立项项暂无 |
 
 并行保障：G2→G3 为 Host/桥一线；G9'/G1'/D20'/D27' 主要在渲染层与文档，文件面与 Host 线基本不交叉；跨线任务按 SPRINTS 铁律拆分文件边界。
 

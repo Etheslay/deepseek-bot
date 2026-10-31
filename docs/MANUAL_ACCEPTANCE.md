@@ -53,6 +53,7 @@
 | E1 | 配置本机 SearXNG（或自建实例）后执行一次 `web_search` | 返回真实结果卡片；`usage_events` 无模型行 | 未执行 |
 | E2 | 聊天回合内让模型调用受闸门约束的原生工具（fs/exec 类） | 原生审批卡出现（ChatNativeGate→D16 卡面）；拒绝无副作用；超时/取消终止回合 | 未执行 |
 | E3 | 一次真实调用后打开服务商账单页 | 核对账单侧模型名与请求侧 `deepseek-chat`/`deepseek-reasoner`（G4 报告 §2 的残留） | 未执行 |
+| E4 | 对声明 `inputModalities` 含 image 的上游（九次刷新时为 `deepseek-flash`）发一条带图片的消息（PR #192 的 `chat.send.images`，v0.14） | 回合正常完成，模型对图片内容的描述与图片相符——把 TASK_B3P_VISION_INPUT.md 的「协议准入证实、宣告不丢弃」升级为「真实往返证实」；`vision.status` 为 true | 未执行 |
 
 ## F. 设备动作扩展（D21'，可选、谨慎）
 

@@ -159,6 +159,19 @@
 | `ui.state` 渲染层接线 | **已合入（PR #182）**：启动恢复 bot 顺序/选中（过期快照不选已归档 bot）+ 500ms 防抖写整快照；`useBots.applyPersistedOrder`（快照外 bot 排末尾）；desktop 697 通过 | `feature/ui-state-wiring` → PR #182 `c7288e1` | [UI-STATE-WIRING-report](reports/UI-STATE-WIRING-report.md) |
 | 分组实体化方法面（v0.14） | **已合入（PR #183）**：`group.archive`（乐观并发，重试用返回的 revision——仓库先校验 revision 再走幂等分支，契约注释按实际行为表述）+ `UiStateSchema.collapsedGroupIds` 可选；host groups.test 3 例 | `feature/group-entity-contract` → PR #183 `ef5d9ec` | [GROUP-ENTITY-CONTRACT-report](reports/GROUP-ENTITY-CONTRACT-report.md) |
 | 分组实体化渲染层接线 | **已合入（PR #184）**：分组加载携 UUID+revision；建组先落库；移动共用 `moveBotToGroup`（本地先动→`bot.update.groupId`→失败回退）；删空组走 archive；启动恢复成员映射/分组顺序/折叠；防抖快照加 groupOrder/collapsedGroupIds；i18n +2 键；desktop 699 通过 | `feature/group-entity-wiring` → PR #184 `081580e` | [GROUP-ENTITY-WIRING-report](reports/GROUP-ENTITY-WIRING-report.md) |
+| 第八次刷新入库 | **已合入（PR #185）**：GAP_AUDIT 第八次刷新（G1' 关闭） | `feature/gap-audit-refresh8` → PR #185 `c54a3b7` | —（审计文档） |
+| D17 技能库服务层收敛 | **已合入（PR #186）**：App.tsx 技能库直调收敛到 `DesktopService.skills`（§2.3 备忘处置） | `feature/d17-service-layer` → PR #186 `570e152` | [D17-SERVICE-LAYER-report](reports/D17-SERVICE-LAYER-report.md) |
+| 真机验收执行手册 | **已合入（PR #187）**：散落各报告「未验证」栏的真机项汇总为 MANUAL_ACCEPTANCE（A–G 节，状态待执行） | `feature/acceptance-runbook` → PR #187 `b257334` | —（手册文档） |
+| 在途分支 triage | **已合入（PR #188）**：11 个未合并远程分支 triage 入 §10（冲突数、二选一、建议顺序） | `feature/inflight-triage` → PR #188 `c6709ec` | —（台账文档） |
+| 上下文计量加固 | **已合入（PR #189）**：Host 每模型上下文窗口（debug 可覆盖）+ 工具结果进提示前截断（`tool-result-cap.ts`）+ harness-adapter CJK 感知 token 估算 | `feature/context-window-metering` → PR #189 `c8ee52f` | —（无报告，GAP_AUDIT §7 第 11 条） |
+| host 测试稳定化 | **已合入（PR #190）**：vitest forks 限 2、语义折叠断言、有界等待——治「全量首跑抖动家族」 | `fix/host-test-stability` → PR #190 `8e7bf8c` | —（无报告，同上） |
+| PDF/Office 附件解析 | **已合入（PR #191）**：Host 侧解析进聊天提示（`attachment-parse.ts`）+ 存档表；集成时占用迁移 0025 | `feat/pdf-office-attachment-parse` → PR #191 `479e425` | —（依赖预算见 [TASK_B4P_ATTACHMENT_PARSE](TASK_B4P_ATTACHMENT_PARSE.md)） |
+| 图片视觉输入（B3''） | **已合入（PR #192）**：`chat.send` 可选 base64 `images` + `vision.status`（v0.14 组成部分）；上游准入实验与 SDK 证据链见任务书；真实往返归 MANUAL_ACCEPTANCE E4 | `feat/image-vision-input` → PR #192 `8159c72` | —（证据链见 [TASK_B3P_VISION_INPUT](TASK_B3P_VISION_INPUT.md)） |
+| equal-bots UI 六特性 | **已合入（PR #193）**：双 bot 对话视图、审批卡已决折叠为状态行、按 bot 流隔离（切 bot 不丢运行中回合）、Grok 式审批卡（从不/始终/一次）、默认语气、bot 对话框去分组选择器（经核对与 #183/#184 分组实体化共存） | `feature/equal-bots-ui` → PR #193 `c93d42c` | —（无报告，GAP_AUDIT §7 第 11 条） |
+| G12 多会话 | **已合入（PR #194）**：`chat.session.*`（v0.14）+ `chat.send/history/contextUsage` 可选 `sessionId`（缺省=默认会话）+ 侧栏会话子列表；迁移 0025→0026 集成改号；语义决定先行（B1）见任务书 | `integration/g12-multi-session` → PR #194 `3359fa6` | —（语义决定见 [TASK_G12_MULTI_SESSION](TASK_G12_MULTI_SESSION.md)） |
+| 链条 B 摘链收尾 | **已合入（PR #195）**：性格单选（预设写成模型可执行指令）+ 边界清扫中对应当前契约的会话越权测试；primitive/深度思考移入 ＋ 菜单 | `cursor/integrate-chain-tail-417d` → PR #195 `206a8af` | —（无报告，GAP_AUDIT §7 第 11 条） |
+| 远端分支收口 | **已合入（PR #196）**：7 条残余远程分支处置删除，`origin` 只剩 `develop`/`main` | `cursor/close-zombie-branches-417d` → PR #196 `3110004` | —（台账文档） |
+| 第九次刷新 | **本 PR**：GAP_AUDIT 第九次刷新（G12 关闭、D19 视觉接线入档、§7 第 11 条治理债）+ CONTRACTS.md G12 段落版本勘误（v0.12→v0.14）+ MANUAL_ACCEPTANCE E4 | `feature/gap-audit-refresh9` → 待建 PR | —（审计文档） |
 
 补记说明：B 线四项与 D17 模板库切片在合入时**未写交付报告、PR 自审记录未填**（两份 PR 清单各仅勾选 2/5）；相应报告于 2026-10-25 事后补记，**不追认事前完成自审**，自审结论仍留空待负责人签署。B 线四项挤在一条串行分支经单个 PR 合入，偏离"一任务一分支"，lockfile 与 CI 配置改动亦未拆独立小 PR；D17 技能库部分已改从最新 develop 单独切分支。后续任务（含 D24、D26 的剩余部分）同样单独切分支，不再堆叠。各任务的手测截图（`reports/assets/d14|d17|d24|d25|d26/`）仍缺，列为待补。
 
