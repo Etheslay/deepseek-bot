@@ -5000,6 +5000,42 @@ function BotsPlaceholder({
                   {t("memory.dialogTitle")}
                 </button>
                 <div className="menu-sep" />
+                {/* 回答方式：两个开关从输入行收进＋菜单。
+                    menuitemcheckbox + 行尾勾选；点击后菜单保持打开，
+                    让勾选状态当场可见。状态来源不变（localStorage / 模型配置）。 */}
+                <button
+                  type="button"
+                  role="menuitemcheckbox"
+                  aria-checked={deepThinking}
+                  className="menu-item"
+                  title={deepThinking ? t("reasoner.tooltipOn") : t("reasoner.tooltipOff")}
+                  onClick={onToggleDeepThinking}
+                >
+                  <MenuIcon d="M12 3.5a5.5 5.5 0 0 1 3.7 9.6c-.7.6-1.2 1.5-1.2 2.4v.5h-5v-.5c0-.9-.5-1.8-1.2-2.4A5.5 5.5 0 0 1 12 3.5ZM9.5 19.5h5M10.5 21.5h3" />
+                  {t("reasoner.toggleLabel")}
+                  {deepThinking && (
+                    <span className="menu-check menu-check-end" aria-hidden="true">
+                      ✓
+                    </span>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  role="menuitemcheckbox"
+                  aria-checked={primitiveMode}
+                  className="menu-item"
+                  title={t("shell.primitiveModeTitle")}
+                  onClick={onTogglePrimitive}
+                >
+                  <MenuIcon d="M5 19 15 9M13 4l7 7-4 1-4-4 1-4Z" />
+                  {t("shell.primitiveMode")}
+                  {primitiveMode && (
+                    <span className="menu-check menu-check-end" aria-hidden="true">
+                      ✓
+                    </span>
+                  )}
+                </button>
+                <div className="menu-sep" />
                 <div className="menu-sub-wrap">
                   <button
                     type="button"
@@ -5053,26 +5089,6 @@ function BotsPlaceholder({
             }
           }}
         />
-        <div className="composer-modes">
-          <button
-            type="button"
-            className={"composer-mode" + (primitiveMode ? " active" : "")}
-            aria-pressed={primitiveMode}
-            title={t("shell.primitiveModeTitle")}
-            onClick={onTogglePrimitive}
-          >
-            {t("shell.primitiveMode")}
-          </button>
-          <button
-            type="button"
-            className={"composer-mode" + (deepThinking ? " active" : "")}
-            aria-pressed={deepThinking}
-            title={deepThinking ? t("reasoner.tooltipOn") : t("reasoner.tooltipOff")}
-            onClick={onToggleDeepThinking}
-          >
-            {t("reasoner.toggleLabel")}
-          </button>
-        </div>
         <ContextRing usage={contextUsage} />
         <ComposerMic
           status={voiceStatus}

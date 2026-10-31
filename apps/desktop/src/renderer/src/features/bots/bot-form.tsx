@@ -41,7 +41,14 @@ export type FieldErrors = Partial<Record<keyof BotDraft, string>>;
 export type TonePreset = {
   readonly id: string;
   readonly labelKey: MessageKey;
+  /**
+   * Model-facing persona directive (性格单选): one strong, style-carrying
+   * sentence — a bare word like 「呆萌」 never survives the model's
+   * indifference, so every preset tells the model exactly how to talk.
+   */
   readonly instruction: string;
+  /** The pre-2026-10 single word stored by the old multi-select suffixes. */
+  readonly word: string;
 };
 
 export const CUSTOM_TONE_ID = "custom";
@@ -49,23 +56,102 @@ export const CUSTOM_TONE_ID = "custom";
 export const NORMAL_TONE_ID = "normal";
 
 export const TONE_PRESETS: readonly TonePreset[] = [
+  // 人格指令里不出现全角括号「（）」：后缀标记 `（语气：…）` 依赖第一个 `）`
+  // 收尾，指令文本携带括号会被截断解析——引用一律用「」，停顿用——。
   {
     id: "normal",
     labelKey: "bots.toneNormal",
-    // i18n-ignore: model-facing
-    instruction: "自然平和的日常口语，不刻意卖萌也不过分正式",
+    word: "正常", // i18n-ignore: model-facing legacy word
+    instruction: "自然平和的日常口语，不刻意卖萌也不过分正式", // i18n-ignore: model-facing
   },
-  { id: "tsundere", labelKey: "bots.toneTsundere", instruction: "傲娇" }, // i18n-ignore: model-facing
-  { id: "coquettish", labelKey: "bots.toneCoquettish", instruction: "撒娇" }, // i18n-ignore: model-facing
-  { id: "cute", labelKey: "bots.toneCute", instruction: "可爱" }, // i18n-ignore: model-facing
-  { id: "adorkable", labelKey: "bots.toneAdorkable", instruction: "呆萌" }, // i18n-ignore: model-facing
-  { id: "serious", labelKey: "bots.toneSerious", instruction: "严肃" }, // i18n-ignore: model-facing
-  { id: "fierce", labelKey: "bots.toneFierce", instruction: "凶悍" }, // i18n-ignore: model-facing
-  { id: "humorous", labelKey: "bots.toneHumorous", instruction: "幽默" }, // i18n-ignore: model-facing
-  { id: "gentle", labelKey: "bots.toneGentle", instruction: "温柔" }, // i18n-ignore: model-facing
-  { id: "sharp", labelKey: "bots.toneSharpTongued", instruction: "毒舌" }, // i18n-ignore: model-facing
-  { id: "calm", labelKey: "bots.toneCalm", instruction: "冷静" }, // i18n-ignore: model-facing
-  { id: "hot-blooded", labelKey: "bots.toneHotBlooded", instruction: "热血" }, // i18n-ignore: model-facing
+  {
+    id: "tsundere",
+    labelKey: "bots.toneTsundere",
+    word: "傲娇", // i18n-ignore: model-facing legacy word
+    instruction:
+      // i18n-ignore: model-facing persona directive
+      "傲娇：嘴硬心软、句句口是心非——先否认「才、才不是为了你！」再用行动偷偷关心；被戳穿时慌张炸毛、句尾拖长音；偶尔漏出一句真心话后立刻恼羞成怒地找补，语气里永远带着一点别扭的骄傲。",
+  },
+  {
+    id: "coquettish",
+    labelKey: "bots.toneCoquettish",
+    word: "撒娇", // i18n-ignore: model-facing legacy word
+    instruction:
+      // i18n-ignore: model-facing persona directive
+      "撒娇：软软糯糯又黏人的语气，多用「嘛」「啦」「～」和叠词，爱讨关注、撒小任性「就一次嘛～」，被答应会开心得冒泡，被拒绝就瘪着嘴再撒娇一次，凶不起来。",
+  },
+  {
+    id: "cute",
+    labelKey: "bots.toneCute",
+    word: "可爱", // i18n-ignore: model-facing legacy word
+    instruction:
+      // i18n-ignore: model-facing persona directive
+      "元气可爱：语气软糯活泼，句尾自带「～」，爱用叠词「好哒」「惹」「叭叭」和颜文字或 emoji，为一点点小事就欢呼雀跃，偶尔俏皮地哼两句歌，整个人热乎乎、亮晶晶的。",
+  },
+  {
+    id: "adorkable",
+    labelKey: "bots.toneAdorkable",
+    word: "呆萌", // i18n-ignore: model-facing legacy word
+    instruction:
+      // i18n-ignore: model-facing persona directive
+      "呆萌可爱，每一句回复都要体现：反应永远慢半拍——先愣一下「诶？……哦哦！」，常常一脸认真地理解错题目，再歪着头理直气壮地说出歪答案；口癖「呜哇」「诶诶？！」「唔…让我想想哦」；发现自己说错了会鼓起脸小小声道歉，但下一秒就忘；说话用短句、自带省略号停顿，软乎乎、迷糊又元气，像一只努力帮忙的小仓鼠——呆是萌的一部分，答案最终还是要给对。",
+  },
+  {
+    id: "serious",
+    labelKey: "bots.toneSerious",
+    word: "严肃", // i18n-ignore: model-facing legacy word
+    instruction:
+      // i18n-ignore: model-facing persona directive
+      "严肃：用词精确克制、句子完整，先结论后依据，不闲聊不玩梗，要点分条罗列；语气沉稳但不冷漠，重要事项单独强调。",
+  },
+  {
+    id: "fierce",
+    labelKey: "bots.toneFierce",
+    word: "凶悍", // i18n-ignore: model-facing legacy word
+    instruction:
+      // i18n-ignore: model-facing persona directive
+      "凶悍：气势压人、句子短促有力，直接指出问题不留情面，惯用反问和感叹号施压——但始终对事不对人，吼完一定给得出解决办法。",
+  },
+  {
+    id: "humorous",
+    labelKey: "bots.toneHumorous",
+    word: "幽默", // i18n-ignore: model-facing legacy word
+    instruction:
+      // i18n-ignore: model-facing persona directive
+      "幽默：轻松机智，善用比喻、反差和自嘲来抖包袱，每条回复都藏一个小笑点——但关键信息永远准确，正事从不拿来开玩笑。",
+  },
+  {
+    id: "gentle",
+    labelKey: "bots.toneGentle",
+    word: "温柔", // i18n-ignore: model-facing legacy word
+    instruction:
+      // i18n-ignore: model-facing persona directive
+      "温柔：语速放缓、多用请求式和安抚句「没关系哦」「慢慢来」，先共情再给建议，措辞柔软、句尾温和，让人感觉被稳稳接住。",
+  },
+  {
+    id: "sharp",
+    labelKey: "bots.toneSharpTongued",
+    word: "毒舌", // i18n-ignore: model-facing legacy word
+    instruction:
+      // i18n-ignore: model-facing persona directive
+      "毒舌：犀利吐槽、一针见血，损得让人会心一笑而不是人身攻击，吐槽完依然给出靠谱的结论和方案。",
+  },
+  {
+    id: "calm",
+    labelKey: "bots.toneCalm",
+    word: "冷静", // i18n-ignore: model-facing legacy word
+    instruction:
+      // i18n-ignore: model-facing persona directive
+      "冷静：情绪零波动，条理化输出——第一、其次——先拆解问题再给方案，措辞中性克制，几乎不用感叹号和语气词。",
+  },
+  {
+    id: "hot-blooded",
+    labelKey: "bots.toneHotBlooded",
+    word: "热血", // i18n-ignore: model-facing legacy word
+    instruction:
+      // i18n-ignore: model-facing persona directive
+      "热血：干劲十足、句句带感叹号，爱用「上吧」「燃烧起来」式的打气，把每个任务都当征程，先冲再调整，永远先看到可能性。",
+  },
 ];
 
 /** Create dialog keeps the default plus the lighter, positive presets. */
@@ -88,7 +174,7 @@ export function stripToneSuffix(instructions: string): string {
   return instructions.replace(new RegExp(TONE_SUFFIX_PATTERN.source, "g"), "").trimEnd();
 }
 
-/** Build the suffix from resolved tone phrases (custom text included by the caller). */
+/** Build the suffix from the single resolved tone phrase (custom included by the caller). */
 export function toneSuffix(phrases: readonly string[]): string {
   const parts = phrases.map((phrase) => phrase.trim()).filter((phrase) => phrase.length > 0);
   // i18n-ignore: model-facing prompt text
@@ -102,30 +188,49 @@ export function mergeToneInstructions(instructions: string, phrases: readonly st
   return suffix === "" ? base : `${base}${suffix}`;
 }
 
-/**
- * Recover the chip state from stored instructions: preset phrases map back to
- * their ids, anything else becomes the custom tone (first non-preset part).
- */
-export function parseToneSelection(instructions: string): {
-  ids: string[];
+export type ParsedToneSelection = {
+  /** The selected preset id, or null when the tone is custom / absent. */
+  id: string | null;
+  /** The selected custom phrase, or null when a preset is selected / absent. */
   custom: string | null;
-} {
+};
+
+/**
+ * Recover the single-select state from stored instructions. The old
+ * multi-select suffixes (`语气：傲娇、可爱`) carry bare preset words — they
+ * map back through `word`, the first preset wins and the rest are dropped
+ * (one personality at a time from now on), and any non-preset phrase is the
+ * custom tone.
+ */
+export function parseToneSelection(instructions: string): ParsedToneSelection {
   const match = instructions.match(TONE_SUFFIX_PATTERN);
   if (match === null) {
-    return { ids: [], custom: null };
+    return { id: null, custom: null };
   }
-  const ids: string[] = [];
+  const phrase = match[1]!.trim();
+  if (phrase.length === 0) {
+    return { id: null, custom: null };
+  }
+  // Rich single-tone directives contain 、 themselves — match the whole
+  // phrase first; the 、-split below is only for legacy bare-word lists.
+  const whole = TONE_PRESETS.find((tone) => tone.instruction === phrase);
+  if (whole !== undefined) {
+    return { id: whole.id, custom: null };
+  }
   let custom: string | null = null;
-  for (const part of match[1]!.split("、")) {
+  for (const part of phrase.split("、")) {
     if (part.length === 0) continue;
-    const preset = TONE_PRESETS.find((tone) => tone.instruction === part);
+    const preset =
+      TONE_PRESETS.find((tone) => tone.instruction === part) ??
+      TONE_PRESETS.find((tone) => tone.word === part);
     if (preset !== undefined) {
-      ids.push(preset.id);
-    } else if (custom === null) {
+      return { id: preset.id, custom: null };
+    }
+    if (custom === null) {
       custom = part;
     }
   }
-  return { ids, custom };
+  return { id: null, custom };
 }
 
 export function validateBotDraft(draft: BotDraft): FieldErrors {
@@ -188,8 +293,10 @@ export function BotForm(
     },
   );
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
-  const [selectedTones, setSelectedTones] = useState<string[]>(() =>
-    props.minimal ? [NORMAL_TONE_ID] : [],
+  // 性格单选：一次只有一个性格——preset id 或 custom；再点已选中的即取消。
+  // 创建弹窗预选「正常」。
+  const [selectedTone, setSelectedTone] = useState<string | null>(() =>
+    props.minimal ? NORMAL_TONE_ID : null,
   );
   const [customDraft, setCustomDraft] = useState("");
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -197,25 +304,22 @@ export function BotForm(
 
   // Template pre-fill (D17): when the parent hands a new initial object,
   // adopt it wholesale (the parent owns when this happens) and echo the
-  // stored tone suffix back onto the chips (custom text re-fills the box).
+  // stored tone suffix back onto the chip (custom text re-fills the box).
+  // A legacy multi-tone suffix collapses to its first preset.
   useEffect(() => {
     if (props.initial) {
       setDraft(props.initial);
       const parsed = parseToneSelection(props.initial.instructions);
-      const ids = [...parsed.ids];
-      if (parsed.custom !== null) {
-        ids.push(CUSTOM_TONE_ID);
+      if (parsed.id !== null) {
+        setSelectedTone(parsed.id);
+      } else if (parsed.custom !== null) {
+        setSelectedTone(CUSTOM_TONE_ID);
         setCustomDraft(parsed.custom);
+      } else {
+        setSelectedTone(props.minimal ? NORMAL_TONE_ID : null);
       }
-      setSelectedTones(
-        ids.length > 0 || parsed.custom !== null
-          ? ids
-          : props.minimal
-            ? [NORMAL_TONE_ID]
-            : [],
-      );
     }
-  }, [props.initial]);
+  }, [props.initial, props.minimal]);
 
   const set = (field: keyof BotDraft, value: string): void => {
     setDraft((prev) => ({ ...prev, [field]: value }));
@@ -228,23 +332,25 @@ export function BotForm(
   // group row left with it (众生平等): new bots are ungrouped.
 
 
-  const toggleTone = (id: string): void => {
-    setSelectedTones((prev) =>
-      prev.includes(id) ? prev.filter((toneId) => toneId !== id) : [...prev, id],
-    );
+  const selectTone = (id: string): void => {
+    // Single-select: picking one clears the others; picking it again clears
+    // the personality entirely (the instructions stand bare).
+    setSelectedTone((prev) => (prev === id ? null : id));
   };
 
 
   const instructionsWithTones = (instructions: string): string => {
-    const phrases = selectedTones
-      .filter((id) => id !== CUSTOM_TONE_ID || customDraft.trim().length > 0)
-      .map((id) =>
-        id === CUSTOM_TONE_ID ? customDraft.trim() : (TONE_PRESETS.find((tone) => tone.id === id)?.instruction ?? ""),
-      )
-      .filter((value) => value.length > 0);
-    // Deterministic: the stored suffix always mirrors the current chips, so
+    const phrase =
+      selectedTone === null
+        ? ""
+        : selectedTone === CUSTOM_TONE_ID
+          ? // The suffix marker closes at the first full-width ）: free text
+            // may not carry one, or the stored suffix would truncate.
+            customDraft.replace(/[（）]/g, "").trim()
+          : (TONE_PRESETS.find((tone) => tone.id === selectedTone)?.instruction ?? "");
+    // Deterministic: the stored suffix always mirrors the current chip, so
     // editing can accumulate neither duplicates nor leftovers.
-    return mergeToneInstructions(instructions, phrases);
+    return mergeToneInstructions(instructions, phrase.length > 0 ? [phrase] : []);
   };
 
   const submit = async (): Promise<void> => {
@@ -322,23 +428,23 @@ export function BotForm(
           <button
             key={tone.id}
             type="button"
-            className={"tone-chip" + (selectedTones.includes(tone.id) ? " selected" : "")}
-            aria-pressed={selectedTones.includes(tone.id)}
-            onClick={() => toggleTone(tone.id)}
+            className={"tone-chip" + (selectedTone === tone.id ? " selected" : "")}
+            aria-pressed={selectedTone === tone.id}
+            onClick={() => selectTone(tone.id)}
           >
             {t(tone.labelKey)}
           </button>
         ))}
         <button
           type="button"
-          className={"tone-chip" + (selectedTones.includes(CUSTOM_TONE_ID) ? " selected" : "")}
-          aria-pressed={selectedTones.includes(CUSTOM_TONE_ID)}
-          onClick={() => toggleTone(CUSTOM_TONE_ID)}
+          className={"tone-chip" + (selectedTone === CUSTOM_TONE_ID ? " selected" : "")}
+          aria-pressed={selectedTone === CUSTOM_TONE_ID}
+          onClick={() => selectTone(CUSTOM_TONE_ID)}
         >
           {t("bots.custom")}
         </button>
       </div>
-      {selectedTones.includes(CUSTOM_TONE_ID) && (
+      {selectedTone === CUSTOM_TONE_ID && (
         <div className="tone-custom">
           <input
             value={customDraft}
@@ -349,6 +455,7 @@ export function BotForm(
           />
         </div>
       )}
+      <span className="form-hint">{t("bots.toneSingleHint")}</span>
 
       {props.skillsSlot}
 

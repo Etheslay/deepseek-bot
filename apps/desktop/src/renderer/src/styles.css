@@ -742,6 +742,12 @@ body {
   color: var(--bots);
 }
 
+/* 回答方式菜单项：勾选推到行尾（与 .menu-arrow 的对齐一致）。作用域限定
+   在这个修饰类上，bot 分组子菜单与 custom-select 的行中勾选不受影响。 */
+.menu-check-end {
+  margin-left: auto;
+}
+
 .menu-sep {
   height: 1px;
   margin: 0.35rem 0.5rem;
@@ -7628,42 +7634,6 @@ select:focus-visible {
   cursor: default;
 }
 
-
-/* ---------- 原始人模式 + 深度思考：composer 双开关 ---------- */
-.composer-modes {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  flex: none;
-}
-
-.composer-mode {
-  font: inherit;
-  font-size: 0.72rem;
-  color: var(--muted);
-  background: transparent;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 0.18rem 0.55rem;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.composer-mode:hover {
-  color: var(--text);
-  background: var(--item-hover);
-}
-
-.composer-mode.active {
-  color: var(--text);
-  background: var(--item-active);
-  border-color: var(--accent, #3b82f6);
-}
-
-.composer-mode:focus-visible {
-  outline: 2px solid #8ab4ff;
-  outline-offset: 2px;
-}
 
 /* ---------- 上下文圆圈（TASK_CONTEXT_METER.md） ----------
    用量展示专用：不承载任何开关，悬停读百分比。 */
