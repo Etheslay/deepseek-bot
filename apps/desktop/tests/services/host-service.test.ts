@@ -766,3 +766,47 @@ describe("host-backed uiState (G1')", () => {
     await expect(service.uiState.get()).resolves.toEqual(snapshot);
   });
 });
+
+describe("host-backed groups (G1' 分组实体化)", () => {
+  it("forwards group.list/create/archive payloads unchanged", async () => {
+    const group = {
+      id: "77777777-7777-4777-8777-777777777777",
+      revision: "88888888-8888-4888-8888-888888888888",
+      name: "设计组",
+      archivedAt: null,
+    };
+    const { bridge, calls } = makeBridge({
+      "group.list": () => ({ groups: [group] }),
+      "group.create": (payload) => ({
+        ...group,
+        name: (payload as { name: string }).name,
+      }),
+      "group.archive": (payload) => {
+        const request = payload as { id: string; expectedRevision: string };
+        return {
+          ...group,
+          id: request.id,
+          revision:
+            request.expectedRevision === group.revision
+              ? "99999999-9999-4999-8999-999999999999"
+              : group.revision,
+          archivedAt: "2026-10-31T00:00:00Z",
+        };
+      },
+    });
+    const service = createHostService(bridge);
+    await expect(service.groups.list()).resolves.toEqual([group]);
+    await expect(service.groups.create("设计组")).resolves.toMatchObject({
+      name: "设计组",
+    });
+    await expect(
+      service.groups.archive(group.id, group.revision),
+    ).resolves.toMatchObject({ archivedAt: "2026-10-31T00:00:00Z" });
+    expect(calls.map((call) => call.method)).toEqual([
+      "group.list",
+      "group.create",
+      "group.archive",
+    ]);
+    expect(calls[2]?.payload).toEqual({ id: group.id, expectedRevision: group.revision });
+  });
+});

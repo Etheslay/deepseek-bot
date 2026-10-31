@@ -11,6 +11,7 @@ import {
   MAX_ATTACHMENT_CHUNK_BYTES,
   METHOD_CONTRACTS,
   type Bot,
+  type BotGroup,
   type ErrorCode,
   type Task,
   type UiState,
@@ -107,11 +108,22 @@ export function createHostService(bridge: HostBridge): DesktopService {
       ((await bridge.host.call("ui.state.set", { state })) as { state: UiState }).state,
   };
 
+  // G1' 分组实体化 (v0.14): the sidebar's persisted groups.
+  const groups = {
+    list: async (): Promise<BotGroup[]> =>
+      ((await bridge.host.call("group.list", {})) as { groups: BotGroup[] }).groups,
+    create: async (name: string): Promise<BotGroup> =>
+      (await bridge.host.call("group.create", { name })) as BotGroup,
+    archive: async (id: string, expectedRevision: string): Promise<BotGroup> =>
+      (await bridge.host.call("group.archive", { id, expectedRevision })) as BotGroup,
+  };
+
   return {
     ...base,
     workflows,
     runs,
     uiState,
+    groups,
     bots: {
       list: listBots,
       create: async (draft: BotDraft): Promise<Bot> =>
