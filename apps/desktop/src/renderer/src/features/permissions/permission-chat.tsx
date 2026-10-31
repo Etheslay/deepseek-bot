@@ -1,10 +1,14 @@
 /**
- * Chat authorization for the open bot: pending tool-call approvals only.
- * Each card goes through permission.approval.decide with choices of
- * once-only, this session (five uses and two hours) or permanent, plus
- * deny. Per-action capabilities stay on the once-only card. There is no
- * always-visible grant card in the chat any more — proactive grants,
- * policy edits and revocation live in Settings → Permissions.
+ * Chat authorization for the open bot, Grok-style (参考图二/图三):
+ * each pending request is one card — capability header, bot name, scope
+ * note, the exact parameter preview and three actions 从不 / 始终允许 /
+ * 允许一次. Per-action capabilities (exec.shell, screen.capture, …) only
+ * ever offer 从不 / 允许一次: the contract forbids lasting grants for
+ * them. Once decided, the card disappears and only a centred status line
+ * remains ({bot} 本次可以… / 已始终允许… / 已拒绝…); the session scope
+ * remains a contract value (approvalDecision) but is no longer a card
+ * button. Proactive grants, policy edits and revocation live in
+ * Settings → Permissions.
  */
 import { useCallback, useEffect, useRef, useState, type JSX } from "react";
 import {
@@ -15,7 +19,7 @@ import {
   type PermissionDecisionRequest,
 } from "@deepseek-bot/contracts";
 import { t, useLanguage, type MessageKey } from "../../i18n.js";
-import { capabilityLabel } from "./capability-labels.js";
+import { capabilityGlyph, capabilityLabel } from "./capability-labels.js";
 
 const SESSION_USES = 5;
 const SESSION_MINUTES = 120;
@@ -24,13 +28,12 @@ type GrantChoice = "once" | "session" | "permanent";
 type CardChoice = GrantChoice | "deny";
 
 export function approvalChoices(
-  approval: Pick<AppApproval, "capabilities" | "sessionId">,
+  approval: Pick<AppApproval, "capabilities">,
 ): GrantChoice[] {
   if (approval.capabilities.some((capability) => requiresPerActionApproval(capability))) {
     return ["once"];
   }
-  if (approval.sessionId === null) return ["once", "permanent"];
-  return ["once", "session", "permanent"];
+  return ["once", "permanent"];
 }
 
 export function approvalDecision(
@@ -63,24 +66,14 @@ export function approvalDecision(
   };
 }
 
-/** Grant scopes are contract values; only their labels are localized (D22). */
-const CHOICE_LABEL_KEYS: Record<CardChoice, MessageKey> = {
-  once: "shell.scopeOnce",
-  session: "shell.scopeSession",
-  permanent: "shell.scopeAlwaysAllow",
-  deny: "permissions.deny",
-};
-
-function choiceLabel(choice: CardChoice): string {
-  return t(CHOICE_LABEL_KEYS[choice]);
-}
-
 function capabilityLine(capabilities: readonly CapabilityId[]): string {
   return capabilities.map(capabilityLabel).join(t("d22.listSeparator"));
 }
 
 export function PermissionChatCards(props: {
   botId: string;
+  /** Grok-style card copy names the bot (图二/图三). */
+  botName: string;
   /**
    * D22: pending approvals drive the tray status dot and raise a system
    * notification, so the owner of the bot view needs this count.
@@ -95,14 +88,97 @@ export function PermissionChatCards(props: {
 /** Notices are stored as a message key, never as rendered text (D22). */
 type Notice = { key: MessageKey; params?: readonly (string | number)[] };
 
+type ResolvedCard = { approval: AppApproval; choice: CardChoice };
+
+function ApprovalCard(props: {
+  approval: AppApproval;
+  botName: string;
+  busy?: boolean;
+  onDecide?: (approval: AppApproval, choice: CardChoice) => void;
+  onDismiss?: (approvalId: string) => void;
+}): JSX.Element {
+  const { approval, botName, busy, onDecide, onDismiss } = props;
+  const capabilities = capabilityLine(approval.capabilities);
+  const preview =
+    approval.tool === "mcp_call"
+      ? {
+          connectorName: approval.params.connectorName,
+          endpoint: approval.params.endpoint,
+          toolName: approval.params.toolName,
+          arguments: approval.params.arguments,
+        }
+      : approval.params;
+  return (
+    <div className="approval-card" aria-label={t("permissions.approvalFor", [approval.tool])}>
+      <div className="approval-head">
+        <span className="approval-glyph" aria-hidden="true">
+          {capabilityGlyph(approval.capabilities)}
+        </span>
+        <span className="approval-cap">{capabilities}</span>
+        {onDismiss !== undefined && (
+          <button
+            type="button"
+            className="approval-close"
+            aria-label={t("permissions.dismissApproval")}
+            onClick={() => onDismiss(approval.id)}
+          >
+            ×
+          </button>
+        )}
+      </div>
+      <p className="approval-title">
+        {t("permissions.allowTitle", [botName, capabilities])}
+      </p>
+      <p className="approval-bot">{botName}</p>
+      <p className="approval-note">{t("permissions.scopeNote", [botName])}</p>
+      <pre className="permission-params" aria-label={t("permissions.pendingParamsAria")}>
+        {JSON.stringify(preview, null, 2)}
+      </pre>
+      {onDecide !== undefined && (
+        <div className="approval-actions" role="group" aria-label={t("permissions.approvalFor", [approval.tool])}>
+          <button
+            type="button"
+            className="approval-btn ghost"
+            disabled={busy === true}
+            onClick={() => onDecide(approval, "deny")}
+          >
+            {t("permissions.never")}
+          </button>
+          {approvalChoices(approval).includes("permanent") && (
+            <button
+              type="button"
+              className="approval-btn dark"
+              disabled={busy === true}
+              onClick={() => onDecide(approval, "permanent")}
+            >
+              {t("permissions.alwaysAllow")}
+            </button>
+          )}
+          <button
+            type="button"
+            className="approval-btn light"
+            disabled={busy === true}
+            onClick={() => onDecide(approval, "once")}
+          >
+            {t("permissions.allowOnce")}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function BotPermissionChatCards(props: {
   botId: string;
+  botName: string;
   onPendingCount?: (count: number) => void;
 }): JSX.Element | null {
-  const { botId, onPendingCount } = props;
+  const { botId, botName, onPendingCount } = props;
   // Re-renders on a language switch: the stored notice is a message key.
   useLanguage();
   const [approvals, setApprovals] = useState<AppApproval[] | null>(null);
+  const [resolved, setResolved] = useState<ResolvedCard[]>([]);
+  const [hidden, setHidden] = useState<readonly string[]>([]);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const active = useRef(true);
@@ -145,9 +221,13 @@ function BotPermissionChatCards(props: {
     };
   }, [load]);
 
+  const pendingVisible = (approvals ?? []).filter(
+    (approval) => approval.status === "pending" && !hidden.includes(approval.id),
+  );
+
   useEffect(() => {
-    onPendingCount?.(approvals?.length ?? 0);
-  }, [approvals, onPendingCount]);
+    onPendingCount?.(pendingVisible.length);
+  }, [pendingVisible, onPendingCount]);
 
   const choose = (approval: AppApproval, choice: CardChoice): void => {
     setBusyId(approval.id);
@@ -156,11 +236,9 @@ function BotPermissionChatCards(props: {
       .then((response) => {
         PERMISSION_METHODS["permission.approval.decide"].response.parse(response);
         if (!active.current) return;
-        setNotice(
-          choice === "deny"
-            ? { key: "permissions.denied" }
-            : { key: "permissions.approvedLine", params: [choiceLabel(choice)] },
-        );
+        // 图三：the card settles in place under a centred status line.
+        setResolved((prev) => [...prev, { approval, choice }]);
+        setHidden((prev) => [...prev, approval.id]);
         return load();
       })
       .catch(() => {
@@ -171,72 +249,46 @@ function BotPermissionChatCards(props: {
       });
   };
 
-  if ((approvals === null || approvals.length === 0) && notice === null) {
+  const dismiss = (approvalId: string): void => {
+    setHidden((prev) => [...prev, approvalId]);
+    setResolved((prev) => prev.filter((card) => card.approval.id !== approvalId));
+  };
+
+  if (
+    (approvals === null || pendingVisible.length === 0) &&
+    resolved.length === 0 &&
+    notice === null
+  ) {
     return null;
   }
 
   return (
     <div className="permission-chat-cards">
-      {approvals?.map((approval) => {
-        const choices = approvalChoices(approval);
-        const preview =
-          approval.tool === "mcp_call"
-            ? {
-                connectorName: approval.params.connectorName,
-                endpoint: approval.params.endpoint,
-                toolName: approval.params.toolName,
-                arguments: approval.params.arguments,
-              }
-            : approval.params;
-        return (
-          <div
-            key={approval.id}
-            className="choice-card"
-            role="group"
-            aria-label={t("permissions.approvalFor", [approval.tool])}
-          >
-            <div className="choice-question">{t("permissions.allowQuestion")}</div>
-            <p className="choice-answered">{t("permissions.requestLine", [approval.tool])}</p>
-            <p className="choice-answered">
-              {t("permissions.capabilitiesLine", [capabilityLine(approval.capabilities)])}
-            </p>
-            <p className="choice-answered">{t("permissions.pendingParamsLabel")}</p>
-            <pre className="permission-params" aria-label={t("permissions.pendingParamsAria")}>
-              {JSON.stringify(preview, null, 2)}
-            </pre>
-            <p className="choice-answered">{t("permissions.onceGrant", [approval.expiresAt])}</p>
-            {choices.includes("session") ? (
-              <p className="choice-answered">
-                {t("permissions.sessionGrant", [SESSION_USES, SESSION_MINUTES / 60])}
-              </p>
-            ) : null}
-            {choices.includes("permanent") ? (
-              <p className="choice-answered">{t("permissions.permanentGrant")}</p>
-            ) : null}
-            <div className="choice-options">
-              {choices.map((choice) => (
-                <button
-                  key={choice}
-                  type="button"
-                  className="choice-option"
-                  disabled={busyId === approval.id}
-                  onClick={() => choose(approval, choice)}
-                >
-                  {choiceLabel(choice)}
-                </button>
-              ))}
-              <button
-                type="button"
-                className="choice-option"
-                disabled={busyId === approval.id}
-                onClick={() => choose(approval, "deny")}
-              >
-                {choiceLabel("deny")}
-              </button>
-            </div>
-          </div>
-        );
-      })}
+      {pendingVisible.map((approval) => (
+        <ApprovalCard
+          key={approval.id}
+          approval={approval}
+          botName={botName}
+          busy={busyId === approval.id}
+          onDecide={choose}
+          onDismiss={dismiss}
+        />
+      ))}
+      {resolved.map(({ approval, choice }) => (
+        <p key={approval.id} className="sys-line">
+          {choice === "deny"
+            ? t("permissions.grantedDeniedLine", [botName, capabilityLine(approval.capabilities)])
+            : choice === "permanent"
+              ? t("permissions.grantedPermanentLine", [
+                  botName,
+                  capabilityLine(approval.capabilities),
+                ])
+              : t("permissions.grantedOnceLine", [
+                  botName,
+                  capabilityLine(approval.capabilities),
+                ])}
+        </p>
+      ))}
       {notice !== null ? <p className="sys-line">{t(notice.key, notice.params ?? [])}</p> : null}
     </div>
   );

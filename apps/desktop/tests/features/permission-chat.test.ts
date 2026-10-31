@@ -3,9 +3,13 @@ import { createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { act } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { PermissionChatCards } from "../../src/renderer/src/features/permissions/permission-chat.js";
+import {
+  approvalDecision,
+  PermissionChatCards,
+} from "../../src/renderer/src/features/permissions/permission-chat.js";
 
 const BOT = "22222222-2222-4222-8222-222222222222";
+const BOT_NAME = "小助手";
 
 const APPROVAL = {
   id: "11111111-1111-4111-8111-111111111111",
@@ -54,12 +58,16 @@ afterEach(() => {
 
 function installHost(approvals: unknown[]): Call[] {
   const calls: Call[] = [];
+  let decided = false;
   window.deepseekBot = {
     host: {
       call: async (method: string, payload: unknown) => {
         calls.push({ method, payload });
-        if (method === "permission.approval.list") return { approvals };
+        if (method === "permission.approval.list") {
+          return { approvals: decided ? [] : approvals };
+        }
         if (method === "permission.approval.decide") {
+          decided = true;
           return {
             approval: { ...APPROVAL, status: "consumed", decidedAt: "2026-10-26T06:01:00.000Z" },
             grants: [],
@@ -72,13 +80,13 @@ function installHost(approvals: unknown[]): Call[] {
   return calls;
 }
 
-async function renderCards(botId = BOT): Promise<HTMLDivElement> {
+async function renderCards(botId = BOT, botName = BOT_NAME): Promise<HTMLDivElement> {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
   roots.push(root);
   await act(async () => {
-    root.render(createElement(PermissionChatCards, { botId }));
+    root.render(createElement(PermissionChatCards, { botId, botName }));
   });
   return container;
 }
@@ -122,7 +130,7 @@ describe("chat permission cards", () => {
       toolName: params.toolName,
       arguments: params.arguments,
     });
-    expect(labels(container)).toEqual(["仅本次", "拒绝"]);
+    expect(labels(container)).toEqual(["从不", "允许一次"]);
     expect(container.querySelector("private")).toBeNull();
   });
   it("shows the exact validated parameters as escaped text before a decision", async () => {
@@ -164,17 +172,17 @@ describe("chat permission cards", () => {
     } as unknown as Window["deepseekBot"];
     const container = await renderCards();
     await act(async () => {
-      roots.at(-1)!.render(createElement(PermissionChatCards, { botId: otherBot }));
+      roots.at(-1)!.render(createElement(PermissionChatCards, { botId: otherBot, botName: BOT_NAME }));
     });
-    expect(container.textContent).toContain("create_group");
+    expect(container.textContent).toContain("other");
     await act(async () => {
       resolvePrevious({ approvals: [APPROVAL] });
     });
-    expect(container.textContent).not.toContain("create_bots_batch");
-    expect(container.textContent).toContain("create_group");
+    expect(container.textContent).not.toContain("research");
+    expect(container.textContent).toContain("other");
   });
 
-  it("lists pending approvals for the open bot and offers once, session, and permanent", async () => {
+  it("renders the Grok-style card with 从不 / 始终允许 / 允许一次", async () => {
     const calls = installHost([APPROVAL]);
     const container = await renderCards();
     await vi.waitFor(() => {
@@ -182,39 +190,49 @@ describe("chat permission cards", () => {
     });
     expect(calls[0]).toEqual({ method: "permission.approval.list", payload: { botId: BOT } });
     expect(container.textContent).toContain("创建 bot");
-    expect(container.textContent).toContain("create_bots_batch");
-    expect(container.textContent).toContain("5 次");
-    expect(container.textContent).toContain("2 小时");
-    expect(labels(container)).toEqual(["仅本次", "本会话", "永久允许", "拒绝"]);
+    expect(container.textContent).toContain("小助手");
+    expect(container.textContent).toContain("此授权仅作用于 小助手");
+    expect(labels(container)).toEqual(["从不", "始终允许", "允许一次"]);
     expect(
       calls.some((call) => call.method === "grant.create" || call.method === "policy.set"),
     ).toBe(false);
   });
 
-  it("hides session and permanent when a capability can only be approved once", async () => {
+  it("keeps lasting grants off the card when a capability can only be approved once", async () => {
     installHost([SHELL]);
     const container = await renderCards();
     await vi.waitFor(() => {
-      expect(labels(container)).toEqual(["仅本次", "拒绝"]);
+      expect(labels(container)).toEqual(["从不", "允许一次"]);
     });
   });
 
-  it("hides session when the approval has no session", async () => {
+  it("keeps 始终允许 available without a session (session is no longer a card button)", async () => {
     installHost([{ ...APPROVAL, sessionId: null }]);
     const container = await renderCards();
     await vi.waitFor(() => {
-      expect(labels(container)).toEqual(["仅本次", "永久允许", "拒绝"]);
+      expect(labels(container)).toEqual(["从不", "始终允许", "允许一次"]);
     });
   });
 
-  it("sends a session decision with the default use count and two-hour TTL", async () => {
+  it("still builds a session decision payload from the decision helper", () => {
+    expect(approvalDecision(APPROVAL, "session")).toEqual({
+      approvalId: APPROVAL.id,
+      expectedActionDigest: APPROVAL.actionDigest,
+      decision: "approved",
+      scope: "session",
+      maxUses: 5,
+      ttlMinutes: 120,
+    });
+  });
+
+  it("sends a permanent decision and settles the card like 图三", async () => {
     const calls = installHost([APPROVAL]);
     const container = await renderCards();
     await vi.waitFor(() => {
-      expect(labels(container)).toContain("本会话");
+      expect(labels(container)).toContain("始终允许");
     });
     const button = [...container.querySelectorAll("button")].find(
-      (item) => item.textContent === "本会话",
+      (item) => item.textContent === "始终允许",
     );
     await act(async () => {
       button?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -226,36 +244,41 @@ describe("chat permission cards", () => {
           approvalId: APPROVAL.id,
           expectedActionDigest: APPROVAL.actionDigest,
           decision: "approved",
-          scope: "session",
-          maxUses: 5,
-          ttlMinutes: 120,
+          scope: "permanent",
         },
       });
     });
+    await vi.waitFor(() => {
+      // 图三：the card disappears; only the centred status line remains.
+      expect(container.textContent).toContain("已始终允许 小助手");
+      expect(container.querySelectorAll(".approval-card")).toHaveLength(0);
+    });
+    expect(labels(container)).toEqual([]);
   });
 
-  it("denies without a use count or TTL", async () => {
+  it("denies without a use count or TTL and settles the card", async () => {
     const calls = installHost([APPROVAL]);
     const container = await renderCards();
     await vi.waitFor(() => {
-      expect(labels(container)).toContain("拒绝");
+      expect(labels(container)).toContain("从不");
     });
     const button = [...container.querySelectorAll("button")].find(
-      (item) => item.textContent === "拒绝",
+      (item) => item.textContent === "从不",
     );
     await act(async () => {
       button?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     await vi.waitFor(() => {
-    expect(calls).toContainEqual({
-      method: "permission.approval.decide",
-      payload: {
-        approvalId: APPROVAL.id,
-        expectedActionDigest: APPROVAL.actionDigest,
-        decision: "denied",
-        scope: "once",
-      },
-    });
+      expect(calls).toContainEqual({
+        method: "permission.approval.decide",
+        payload: {
+          approvalId: APPROVAL.id,
+          expectedActionDigest: APPROVAL.actionDigest,
+          decision: "denied",
+          scope: "once",
+        },
+      });
+      expect(container.textContent).toContain("已拒绝 小助手");
     });
   });
 });

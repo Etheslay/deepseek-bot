@@ -9200,3 +9200,118 @@ button.automation-notice-jump .automation-notice-main {
   color: var(--muted);
   font-size: 12px;
 }
+
+/* ---------- Grok-style in-chat approval card (图二/图三) ---------- */
+
+.approval-card {
+  width: 100%;
+  max-width: 560px;
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 14px 16px;
+  box-shadow: var(--shadow-1);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.approval-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.approval-glyph {
+  font-size: 15px;
+}
+
+.approval-cap {
+  font-weight: 600;
+  font-size: 0.92rem;
+}
+
+.approval-close {
+  margin-left: auto;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 8px;
+}
+
+.approval-close:hover {
+  color: var(--text);
+  background: var(--item-hover);
+}
+
+.approval-title {
+  font-weight: 700;
+  font-size: 0.98rem;
+}
+
+.approval-bot {
+  color: var(--text);
+  font-size: 0.9rem;
+}
+
+.approval-note {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.approval-card .permission-params {
+  margin: 2px 0 0;
+  border-radius: 12px;
+}
+
+.approval-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.approval-btn {
+  border-radius: 999px;
+  padding: 8px 18px;
+  font: inherit;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.approval-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.approval-btn.ghost {
+  background: transparent;
+  border: none;
+  color: var(--muted);
+}
+
+.approval-btn.ghost:hover:not(:disabled) {
+  color: var(--text);
+}
+
+.approval-btn.dark {
+  background: var(--item-hover);
+  border: 1px solid var(--line);
+  color: var(--text);
+}
+
+.approval-btn.dark:hover:not(:disabled) {
+  border-color: var(--muted);
+}
+
+.approval-btn.light {
+  background: var(--text);
+  border: 1px solid var(--text);
+  color: var(--bg);
+  font-weight: 600;
+}

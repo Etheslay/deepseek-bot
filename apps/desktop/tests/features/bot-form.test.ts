@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { validateBotDraft } from "../../src/renderer/src/features/bots/bot-form.js";
+import {
+  mergeToneInstructions,
+  parseToneSelection,
+  TONE_PRESETS,
+  MINIMAL_TONE_IDS,
+  NORMAL_TONE_ID,
+  stripToneSuffix,
+  toneSuffix,
+  validateBotDraft,
+} from "../../src/renderer/src/features/bots/bot-form.js";
 
 const VALID = {
   name: "review-bot",
@@ -44,5 +53,39 @@ describe("validateBotDraft (BotSchema field positioning)", () => {
       "toolPolicyId",
       "workspaceId",
     ]);
+  });
+});
+
+describe("tone presets and the instruction suffix", () => {
+  it("ships a normal default that every create dialog shows", () => {
+    const normal = TONE_PRESETS.find((tone) => tone.id === NORMAL_TONE_ID);
+    expect(normal).toBeDefined();
+    expect(normal!.instruction.length).toBeGreaterThan(4);
+    expect(MINIMAL_TONE_IDS.has(NORMAL_TONE_ID)).toBe(true);
+  });
+
+  it("appends one suffix from the resolved phrases", () => {
+    expect(mergeToneInstructions("You review deliverables.", ["傲娇", "幽默"])).toBe(
+      "You review deliverables.（语气：傲娇、幽默）",
+    );
+    expect(toneSuffix([])).toBe("");
+    expect(mergeToneInstructions("You review deliverables.", [])).toBe(
+      "You review deliverables.",
+    );
+  });
+
+  it("replaces the stored suffix instead of accumulating (edit safety)", () => {
+    const stored = "整理资料（语气：可爱、温柔）";
+    expect(mergeToneInstructions(stored, ["傲娇"])).toBe("整理资料（语气：傲娇）");
+    // Unchecking every chip removes the suffix entirely.
+    expect(mergeToneInstructions(stored, [])).toBe("整理资料");
+    expect(stripToneSuffix("（语气：可爱）")).toBe("");
+  });
+
+  it("parses the stored suffix back onto chips, custom text included", () => {
+    const parsed = parseToneSelection("整理资料（语气：傲娇、神秘、幽默）");
+    expect(parsed.ids).toEqual(["tsundere", "humorous"]);
+    expect(parsed.custom).toBe("神秘");
+    expect(parseToneSelection("no suffix here")).toEqual({ ids: [], custom: null });
   });
 });

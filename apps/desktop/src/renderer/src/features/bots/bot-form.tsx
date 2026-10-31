@@ -45,8 +45,16 @@ export type TonePreset = {
 };
 
 export const CUSTOM_TONE_ID = "custom";
+/** 众生平等默认性格：创建弹窗预选「正常」，保存时写入自然的日常口语提示。 */
+export const NORMAL_TONE_ID = "normal";
 
 export const TONE_PRESETS: readonly TonePreset[] = [
+  {
+    id: "normal",
+    labelKey: "bots.toneNormal",
+    // i18n-ignore: model-facing
+    instruction: "自然平和的日常口语，不刻意卖萌也不过分正式",
+  },
   { id: "tsundere", labelKey: "bots.toneTsundere", instruction: "傲娇" }, // i18n-ignore: model-facing
   { id: "coquettish", labelKey: "bots.toneCoquettish", instruction: "撒娇" }, // i18n-ignore: model-facing
   { id: "cute", labelKey: "bots.toneCute", instruction: "可爱" }, // i18n-ignore: model-facing
@@ -60,8 +68,9 @@ export const TONE_PRESETS: readonly TonePreset[] = [
   { id: "hot-blooded", labelKey: "bots.toneHotBlooded", instruction: "热血" }, // i18n-ignore: model-facing
 ];
 
-/** Create dialog keeps only the lighter, positive presets. */
-const MINIMAL_TONE_IDS = new Set([
+/** Create dialog keeps the default plus the lighter, positive presets. */
+export const MINIMAL_TONE_IDS = new Set([
+  "normal",
   "coquettish",
   "cute",
   "adorkable",
@@ -70,6 +79,54 @@ const MINIMAL_TONE_IDS = new Set([
   "calm",
   "hot-blooded",
 ]);
+
+/** The literal tone marker the form appends to instructions (model-facing). */
+const TONE_SUFFIX_PATTERN = /（语气：([^）]*)）/;
+
+/** Remove any existing 语气 suffix so a save reflects exactly the current chips. */
+export function stripToneSuffix(instructions: string): string {
+  return instructions.replace(new RegExp(TONE_SUFFIX_PATTERN.source, "g"), "").trimEnd();
+}
+
+/** Build the suffix from resolved tone phrases (custom text included by the caller). */
+export function toneSuffix(phrases: readonly string[]): string {
+  const parts = phrases.map((phrase) => phrase.trim()).filter((phrase) => phrase.length > 0);
+  // i18n-ignore: model-facing prompt text
+  return parts.length === 0 ? "" : `（语气：${parts.join("、")}）`;
+}
+
+/** The instructions as they will be stored: old suffix replaced, new one appended. */
+export function mergeToneInstructions(instructions: string, phrases: readonly string[]): string {
+  const base = stripToneSuffix(instructions);
+  const suffix = toneSuffix(phrases);
+  return suffix === "" ? base : `${base}${suffix}`;
+}
+
+/**
+ * Recover the chip state from stored instructions: preset phrases map back to
+ * their ids, anything else becomes the custom tone (first non-preset part).
+ */
+export function parseToneSelection(instructions: string): {
+  ids: string[];
+  custom: string | null;
+} {
+  const match = instructions.match(TONE_SUFFIX_PATTERN);
+  if (match === null) {
+    return { ids: [], custom: null };
+  }
+  const ids: string[] = [];
+  let custom: string | null = null;
+  for (const part of match[1]!.split("、")) {
+    if (part.length === 0) continue;
+    const preset = TONE_PRESETS.find((tone) => tone.instruction === part);
+    if (preset !== undefined) {
+      ids.push(preset.id);
+    } else if (custom === null) {
+      custom = part;
+    }
+  }
+  return { ids, custom };
+}
 
 export function validateBotDraft(draft: BotDraft): FieldErrors {
   const entity = {
@@ -107,11 +164,9 @@ export function BotForm(
     onCancel: () => void;
     /** Rendered above the name field (avatar preview). */
     previewSlot?: ReactNode;
-    /** Rendered between name and role (avatar picker slot). */
+    /** Rendered after the name field (avatar picker slot). */
     avatarSlot?: ReactNode;
-    /** Rendered after role (group select row). */
-    groupSlot?: ReactNode;
-    /** Rendered after the group row (skill bindings, D17). */
+    /** Rendered after the avatar (skill bindings, D17). */
     skillsSlot?: ReactNode;
     /** Create mode: keep the dialog focused on name + avatar. */
     minimal?: boolean;
@@ -133,16 +188,32 @@ export function BotForm(
     },
   );
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
-  const [selectedTones, setSelectedTones] = useState<string[]>([]);
+  const [selectedTones, setSelectedTones] = useState<string[]>(() =>
+    props.minimal ? [NORMAL_TONE_ID] : [],
+  );
   const [customDraft, setCustomDraft] = useState("");
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   // Template pre-fill (D17): when the parent hands a new initial object,
-  // adopt it wholesale (the parent owns when this happens).
+  // adopt it wholesale (the parent owns when this happens) and echo the
+  // stored tone suffix back onto the chips (custom text re-fills the box).
   useEffect(() => {
     if (props.initial) {
       setDraft(props.initial);
+      const parsed = parseToneSelection(props.initial.instructions);
+      const ids = [...parsed.ids];
+      if (parsed.custom !== null) {
+        ids.push(CUSTOM_TONE_ID);
+        setCustomDraft(parsed.custom);
+      }
+      setSelectedTones(
+        ids.length > 0 || parsed.custom !== null
+          ? ids
+          : props.minimal
+            ? [NORMAL_TONE_ID]
+            : [],
+      );
     }
   }, [props.initial]);
 
@@ -153,7 +224,8 @@ export function BotForm(
 
   // Interop (TASK_BOT_INTEROP.md): the coordinator role picker is gone — any
   // bot may dispatch now, so the role confers nothing. An existing role label
-  // rides along in `draft`/`initial` untouched and is never edited here.
+  // rides along in `draft`/`initial` untouched and is never edited here. The
+  // group row left with it (众生平等): new bots are ungrouped.
 
 
   const toggleTone = (id: string): void => {
@@ -164,19 +236,15 @@ export function BotForm(
 
 
   const instructionsWithTones = (instructions: string): string => {
-    const custom = customDraft.trim();
-    const tones = selectedTones
-      .filter((id) => id !== CUSTOM_TONE_ID || custom.length > 0)
+    const phrases = selectedTones
+      .filter((id) => id !== CUSTOM_TONE_ID || customDraft.trim().length > 0)
       .map((id) =>
-        id === CUSTOM_TONE_ID ? custom : (TONE_PRESETS.find((tone) => tone.id === id)?.instruction ?? ""),
+        id === CUSTOM_TONE_ID ? customDraft.trim() : (TONE_PRESETS.find((tone) => tone.id === id)?.instruction ?? ""),
       )
       .filter((value) => value.length > 0);
-    if (tones.length === 0) {
-      return instructions;
-    }
-    // Model-facing suffix: the phrasing is part of the prompt, not interface copy.
-    const suffix = `（语气：${tones.join("、")}）`; // i18n-ignore: model-facing prompt text
-    return instructions.includes(suffix) ? instructions : instructions + suffix;
+    // Deterministic: the stored suffix always mirrors the current chips, so
+    // editing can accumulate neither duplicates nor leftovers.
+    return mergeToneInstructions(instructions, phrases);
   };
 
   const submit = async (): Promise<void> => {
@@ -281,8 +349,6 @@ export function BotForm(
           />
         </div>
       )}
-
-      {props.groupSlot}
 
       {props.skillsSlot}
 

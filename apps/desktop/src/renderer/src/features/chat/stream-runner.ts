@@ -95,12 +95,23 @@ export function runChatStream(deps: {
     // component (BotsPlaceholder)" — and drop the update, so a finished reply
     // reached storage and the Host log but never the thread: the bubble stayed
     // on the spinner forever. Decide first, commit outside the updater.
+    // A superseded turn (the same bot started a newer one that took the handle
+    // over) must not fold its cancelled/failure state into the newer turn's
+    // pending bubble, so those branches check isCurrent as well.
     if (result.cancelled) {
+      if (!isCurrent()) {
+        onSettled?.(result);
+        return;
+      }
       update((prev) => (prev && prev.forKey === forKey ? { ...applyCancelled(prev), forKey } : prev));
       onSettled?.(result);
       return;
     }
     if (result.failure) {
+      if (!isCurrent()) {
+        onSettled?.(result);
+        return;
+      }
       const failure = result.failure;
       update((prev) =>
         prev && prev.forKey === forKey ? { ...applyFailure(prev, failure), forKey } : prev,

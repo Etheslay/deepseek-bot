@@ -36,3 +36,32 @@ const CAPABILITY_LABEL_KEYS = {
 export function capabilityLabel(capability: CapabilityId): string {
   return t(CAPABILITY_LABEL_KEYS[capability]);
 }
+
+/** One glyph per capability family for the Grok-style card header (图二). */
+const CAPABILITY_GLYPHS: Partial<Record<CapabilityId, string>> = {
+  "app.read": "🤖",
+  "app.create_group": "🤖",
+  "app.create_bot": "🤖",
+  "app.update_bot": "🤖",
+  "app.create_workflow": "🧩",
+  "app.start_run": "▶️",
+  "app.cancel_run": "⏹️",
+  "app.revoke_creation": "🤖",
+  "app.dispatch_task": "📨",
+  "interaction.ask_user": "❓",
+  "network.search": "🔍",
+  "memory.read": "🧠",
+  "memory.write": "🧠",
+  "fs.read": "📁",
+  "fs.write": "📁",
+  "exec.shell": "💻",
+  "screen.capture": "🖥️",
+  "device.action": "🖱️",
+  "connector.invoke": "🔌",
+  "mcp.call": "🔌",
+};
+
+/** The header glyph of the first capability on the card. */
+export function capabilityGlyph(capabilities: readonly CapabilityId[]): string {
+  return CAPABILITY_GLYPHS[capabilities[0] ?? "app.read"] ?? "🤖";
+}
