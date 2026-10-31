@@ -355,7 +355,23 @@
 - `21c03fe` 性格改为单选，每条预设写成模型能执行的指令；旧的多选裸词后缀按第一个预设收回。边界清扫里与当前契约仍对应的部分补了测试：另一个 bot 不能读写这条会话，归档后历史仍可读、写入仍拒绝。路径型 `images`、`ui.state.patch`、`chat.send.documents` 属于未采纳的 b3 / g1 线，当前契约分别是 base64 `images`、`ui.state.set`、附件解析缓存，不回灌。
 - `c59cc78` 原始人 / 深度思考从输入行收进 ＋ 菜单，勾选后面板保持打开。
 
-远程分支 `feature/g1-ui-state`、`feature/b3-vision`、`feature/b4-binary-parsing`、`feature/persona-and-boundary-sweep`、`feature/composer-modes-menu` 仍留在远端作档案，本 PR 不删除它们。GitHub Actions `quality` 自账单/支出上限起未真正启动（例如 develop 上 run `41178324878` 的注解），红叉不代表本分支的测试结果；本机检查记在 PR 验证表。
+远程分支 `feature/g1-ui-state`、`feature/b3-vision`、`feature/b4-binary-parsing`、`feature/persona-and-boundary-sweep`、`feature/composer-modes-menu` 在 #195 合入时留在远端作档案。收口见下一节。GitHub Actions `quality` 自账单/支出上限起未真正启动（例如 develop 上 run `41178324878` 的注解），红叉不代表本分支的测试结果；本机检查记在 PR 验证表。
+
+**10-31 远端分支收口（develop = `206a8af`，#195 合入后）**：
+
+#195 合入后远端还挂着 7 条 feature 分支。两条的尖端已经在 develop 历史上，五条是另一套实现，对应能力已经由别的 PR 入库。`main` 仍只有初始化提交 `6240da3`，这次不动。
+
+| 分支 | 尖端 | 处置 |
+| --- | --- | --- |
+| `feat/image-vision-input` | `1353de305d712f163cf1d1b10de6044dd9d89d5b` | 已是 develop 祖先（#192）。删除远端分支，提交仍在 develop 上。 |
+| `feature/g12-multi-session` | `6112e6a567f9051268fcdb51b66dea31b2645d37` | 已是 develop 祖先（#194）。删除远端分支，提交仍在 develop 上。 |
+| `feature/g1-ui-state` | `aef253f9539147c067c15c4663dfb8f830d8803a` | 另一套 `ui.state.get/patch`。现行是 #181–#184 的 `ui.state.get/set`。不回灌，删除远端分支。 |
+| `feature/b3-vision` | `5c26650a3b2261b805cbad12669e91fd8b536026` | 路径型 `images`。现行是 #192 的 base64 `images`，上游核实写在 [TASK_B3P_VISION_INPUT.md](TASK_B3P_VISION_INPUT.md)。删除远端分支。 |
+| `feature/b4-binary-parsing` | `3074f8b910b6ee76338abc58e414b5df20b73f1b` | `chat.send.documents`。现行是 #191 的附件解析，依赖预算写在 [TASK_B4P_ATTACHMENT_PARSE.md](TASK_B4P_ATTACHMENT_PARSE.md)。删除远端分支。 |
+| `feature/persona-and-boundary-sweep` | `21c03fe8bd37317f860c5db57a851aa2ca05fd13` | 性格单选已由 #195 摘入。其余提交是上面三条的堆叠。删除远端分支。 |
+| `feature/composer-modes-menu` | `c59cc784c3d2bf63a989222f48c8bc64c5013052` | ＋ 菜单开关已由 #195 摘入。删除远端分支。 |
+
+收口之后 `origin` 上的长期分支只剩 `develop` 和 `main`。上表里后五条的对象不在 develop 历史上；需要找回时用尖端 SHA 再建分支。GitHub 对已经删掉的分支还能取回多久，这里不保证。
 
 **10-31 八次刷新清点（develop = `081580e`，PR #179–#184 合入后）**：
 
