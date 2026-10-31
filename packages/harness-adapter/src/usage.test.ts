@@ -63,10 +63,47 @@ describe("extractUsageFromEvent", () => {
 });
 
 describe("estimateTokens", () => {
-  it("counts about four characters per token and never zero for text", () => {
+  it("counts nothing for empty text", () => {
     expect(estimateTokens("")).toBe(0);
+  });
+
+  it("never returns zero for non-empty text", () => {
     expect(estimateTokens("a")).toBe(1);
+  });
+
+  it("keeps the ASCII rule of thumb at about four characters per token", () => {
     expect(estimateTokens("12345678")).toBe(2);
+  });
+
+  it("counts one CJK character as about one token", () => {
+    expect(estimateTokens("你好")).toBe(2);
+    expect(estimateTokens("かなカナ한글")).toBe(6);
+  });
+
+  it("weights a mixed-script line by script", () => {
+    // 5 ASCII letters + 1 space at 0.25 and 2 han at 1.0 → 3.5 → 4.
+    expect(estimateTokens("Hello 世界")).toBe(4);
+  });
+
+  it("counts fullwidth punctuation and emoji between ASCII and CJK", () => {
+    expect(estimateTokens("，")).toBe(1); // 0.5 → ceil 1
+    expect(estimateTokens("😀")).toBe(1); // surrogate pair = 2 units × 0.5
+  });
+
+  it("never under-counts a long CJK paragraph", () => {
+    const paragraph = "汉".repeat(1_000);
+    expect(estimateTokens(paragraph)).toBeGreaterThanOrEqual(1_000);
+  });
+
+  it("keeps a mixed 200-character text inside the conservative band", () => {
+    let mixed = "";
+    for (let index = 0; index < 10; index += 1) {
+      mixed += "中".repeat(10) + "a".repeat(10);
+    }
+    expect(mixed.length).toBe(200);
+    const estimate = estimateTokens(mixed);
+    expect(estimate).toBeGreaterThanOrEqual(200 * 0.4);
+    expect(estimate).toBeLessThanOrEqual(200 * 1.2);
   });
 });
 
