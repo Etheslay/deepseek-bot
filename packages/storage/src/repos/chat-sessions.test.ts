@@ -98,7 +98,7 @@ describe("chat session repository (G12)", () => {
     try {
       const a = seedBot(db);
       const b = seedBot(db);
-      const aDefault = ensureDefaultChatSession(db, a, "a");
+      const aDefault = ensureDefaultChatSession(db, a);
       const extra = createChatSession(db, { botId: a, title: "extra" });
       expect(extra.id.startsWith("cs:")).toBe(true);
       expect(newChatSessionId()).not.toBe(extra.id);
