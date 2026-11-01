@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState, type JSX } from "react";
 import { METHOD_CONTRACTS } from "@deepseek-bot/contracts";
 import { type Notice, noticeText, t, useLanguage } from "../../i18n.js";
 import { CustomSelect } from "../../components/custom-select.js";
+import { clearHostDown, noteHostFailure } from "../settings/host-down.js";
 
 type ConnectorKind = "sd-webui" | "mcp-http" | "mcp-stdio";
 
@@ -46,13 +47,14 @@ export function ConnectorSettings(): JSX.Element {
     const response = await window.deepseekBot.host.call("connector.list", {});
     const parsed = METHOD_CONTRACTS["connector.list"].response.parse(response);
     setConnectors(parsed.connectors);
+    clearHostDown();
     setNotice((current) => (current?.key === "connectors.readFailed" ? null : current));
   }, []);
 
   useEffect(() => {
     let active = true;
-    void load().catch(() => {
-      if (active) setNotice({ key: "connectors.readFailed" });
+    void load().catch((error: unknown) => {
+      if (active && !noteHostFailure(error)) setNotice({ key: "connectors.readFailed" });
     });
     return () => {
       active = false;
@@ -184,7 +186,7 @@ export function ConnectorSettings(): JSX.Element {
       <div className="settings-section-title">{t("connectors.sectionTitle")}</div>
       <div className="settings-card">
         <div className="settings-row connector-register">
-          <span className="connector-register-label">{t("connectors.registerLabel")}</span>
+          <span className="connector-register-label">{t("connectors.kindLabel")}</span>
           <span className="connector-fields">
             <CustomSelect
               ariaLabel={t("connectors.kindLabel")}
@@ -196,6 +198,11 @@ export function ConnectorSettings(): JSX.Element {
               ]}
               onChange={(next) => selectKind(next as ConnectorKind)}
             />
+          </span>
+        </div>
+        <div className="settings-row">
+          <span className="connector-register-label">{t("connectors.registerLabel")}</span>
+          <span className="connector-fields">
             <input
               aria-label={t("connectors.name")}
               className="settings-select key-input"

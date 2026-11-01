@@ -110,6 +110,17 @@ function makeExecutor(scenario: string, botOverrides: Partial<Bot> = {}): Execut
 }
 
 describe("DshSdkExecutor", () => {
+  it("does not resolve the pinned runtime while constructing", () => {
+    const root = makeRoot();
+    expect(
+      () =>
+        new DshSdkExecutor({
+          dshHome: join(root, "dsh-home"),
+          resolveBotInputs: async () => ({ profile, workspacePath: root, apiKey: "k" }),
+        }),
+    ).not.toThrow();
+  });
+
   it("resolves the pinned runtime spec when no dshBin override is given", () => {
     const root = makeRoot();
     const executor = new DshSdkExecutor({

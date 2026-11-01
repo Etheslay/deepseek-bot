@@ -191,7 +191,12 @@ const api: DesktopBridge = {
       if (outcome.ok) {
         return outcome.result;
       }
-      throw Object.assign(new Error(outcome.error.message), {
+      // contextBridge clones thrown errors down to name/message/stack, so a
+      // custom `.code` never reaches the renderer and every failure was
+      // labeled INVALID_INPUT. `name` is part of the clone.
+      const failure = new Error(outcome.error.message);
+      failure.name = outcome.error.code;
+      throw Object.assign(failure, {
         code: outcome.error.code,
         retryable: outcome.error.retryable,
       });

@@ -124,6 +124,15 @@ export function spawnHostProcess(options: HostProcessClientOptions): HostProcess
     }
   };
 
+  child.on("error", (error: Error) => {
+    // A missing `node` binary emits `error` and does not always emit `exit`.
+    // Without this listener the event throws in the Electron main process,
+    // and the renderer is left talking to a client that never comes up.
+    exited = true;
+    setStatus("exited");
+    failPending(error.message);
+  });
+
   child.stderr.setEncoding("utf8");
   child.stderr.on("data", (chunk: string) => {
     // Diagnostics stay local; the host's error frames carry the wire facts.

@@ -4,6 +4,7 @@
 import { useCallback, useEffect, useState, type JSX } from "react";
 import { METHOD_CONTRACTS } from "@deepseek-bot/contracts";
 import { type Notice, noticeText, t, useLanguage } from "../../i18n.js";
+import { clearHostDown, noteHostFailure } from "../settings/host-down.js";
 
 export function SearchSettings(): JSX.Element {
   const [endpoint, setEndpoint] = useState("");
@@ -17,13 +18,14 @@ export function SearchSettings(): JSX.Element {
     const parsed = METHOD_CONTRACTS["search.config.get"].response.parse(response);
     setSaved(parsed.endpoint);
     setEndpoint(parsed.endpoint ?? "");
+    clearHostDown();
     setNotice((current) => (current?.key === "search.configReadFailed" ? null : current));
   }, []);
 
   useEffect(() => {
     let active = true;
-    void load().catch(() => {
-      if (active) setNotice({ key: "search.configReadFailed" });
+    void load().catch((error: unknown) => {
+      if (active && !noteHostFailure(error)) setNotice({ key: "search.configReadFailed" });
     });
     return () => {
       active = false;
