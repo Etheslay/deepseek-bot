@@ -150,7 +150,7 @@ export function CustomSelect({
         data-value={value}
         onClick={toggle}
       >
-        {current ? current.label : ""}
+        <span className="custom-select-value">{current ? current.label : ""}</span>
         <span className="select-arrow">▾</span>
       </button>
       {open &&
