@@ -171,7 +171,8 @@
 | G12 多会话 | **已合入（PR #194）**：`chat.session.*`（v0.14）+ `chat.send/history/contextUsage` 可选 `sessionId`（缺省=默认会话）+ 侧栏会话子列表；迁移 0025→0026 集成改号；语义决定先行（B1）见任务书 | `integration/g12-multi-session` → PR #194 `3359fa6` | —（语义决定见 [TASK_G12_MULTI_SESSION](TASK_G12_MULTI_SESSION.md)） |
 | 链条 B 摘链收尾 | **已合入（PR #195）**：性格单选（预设写成模型可执行指令）+ 边界清扫中对应当前契约的会话越权测试；primitive/深度思考移入 ＋ 菜单 | `cursor/integrate-chain-tail-417d` → PR #195 `206a8af` | —（无报告，GAP_AUDIT §7 第 11 条） |
 | 远端分支收口 | **已合入（PR #196）**：7 条残余远程分支处置删除，`origin` 只剩 `develop`/`main` | `cursor/close-zombie-branches-417d` → PR #196 `3110004` | —（台账文档） |
-| 第九次刷新 | **本 PR**：GAP_AUDIT 第九次刷新（G12 关闭、D19 视觉接线入档、§7 第 11 条治理债）+ CONTRACTS.md G12 段落版本勘误（v0.12→v0.14）+ MANUAL_ACCEPTANCE E4 | `feature/gap-audit-refresh9` → 待建 PR | —（审计文档） |
+| 第九次刷新 | **已合入（PR #197）**：GAP_AUDIT 第九次刷新（G12 关闭、D19 视觉接线入档、§7 第 11 条治理债）+ CONTRACTS.md G12 段落版本勘误（v0.12→v0.14）+ MANUAL_ACCEPTANCE E4 | `feature/gap-audit-refresh9` → PR #197 `e16c5db` | —（审计文档） |
+| 打包 CI 发布缺陷修复 | **本 PR**：package.yml 构建步骤显式传 `--publish never`（D24 publish 配置使 CI 构建尝试上传、缺 GH_TOKEN 即失败，2026-11-01 develop 实跑暴露）；electron-builder.yml 注释改为如实记录；latest.yml 仍随 artifact 生成（RELEASE.md §4.1） | `feature/package-publish-never` → 本 PR | —（CI 配置修复） |
 
 补记说明：B 线四项与 D17 模板库切片在合入时**未写交付报告、PR 自审记录未填**（两份 PR 清单各仅勾选 2/5）；相应报告于 2026-10-25 事后补记，**不追认事前完成自审**，自审结论仍留空待负责人签署。B 线四项挤在一条串行分支经单个 PR 合入，偏离"一任务一分支"，lockfile 与 CI 配置改动亦未拆独立小 PR；D17 技能库部分已改从最新 develop 单独切分支。后续任务（含 D24、D26 的剩余部分）同样单独切分支，不再堆叠。各任务的手测截图（`reports/assets/d14|d17|d24|d25|d26/`）仍缺，列为待补。
 
