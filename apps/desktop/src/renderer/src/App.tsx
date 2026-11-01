@@ -40,6 +40,7 @@ import {
   failureMessage,
 } from "./features/chat/chat-reducer.js";
 import { statusLabel } from "./features/chat/task-feed.js";
+import { planSessionSublistRefresh } from "./features/chat/session-sublist.js";
 import {
   runChatStream,
   type StreamStateForBot,
@@ -446,6 +447,8 @@ export function App(): JSX.Element {
    * prop (a turn's commit target is decided at settle time, not render time).
    */
   const [historySessions, setHistorySessions] = useState<ChatSessionView[] | null>(null);
+  /** G12: the bot key the current sub-list was loaded for (open-defects §2.3). */
+  const loadedSessionsForBot = useRef<number | null>(null);
   const [sessionByBot, setSessionByBot] = useState<Record<number, string>>({});
   const activeSessionRef = useRef<Record<number, string>>({});
   const sessionThreadCache = useRef(new Map<string, Msg[]>());
@@ -940,10 +943,18 @@ export function App(): JSX.Element {
     }
   }, [modalOpen, editingBot]);
   useEffect(() => {
-    // G12: the selected bot's sessions load once per selection and feed both
-    // the sidebar sub-list and the recent-sessions popover; a switch clears
-    // the previous bot's list instead of flashing it under the new bot.
-    setHistorySessions(null);
+    // G12: the selected bot's sessions feed both the sidebar sub-list and the
+    // recent-sessions popover. Switching bots clears the previous bot's list
+    // instead of flashing it under the new bot; an unrelated visible-bots
+    // update (create/hide/reorder — a new array identity) keeps the current
+    // list and refreshes it in place, so the sub-list neither flashes nor
+    // swallows clicks (open-defects §2.3). A failed in-place refresh keeps
+    // the old list instead of overwriting it with an empty array.
+    const refresh = planSessionSublistRefresh(loadedSessionsForBot.current, selectedBot);
+    loadedSessionsForBot.current = selectedBot;
+    if (refresh === "clear-then-load") {
+      setHistorySessions(null);
+    }
     if (selectedBot === null) {
       return;
     }
@@ -959,7 +970,7 @@ export function App(): JSX.Element {
         }
       },
       () => {
-        if (!cancelled) {
+        if (!cancelled && refresh === "clear-then-load") {
           setHistorySessions([]);
         }
       },
