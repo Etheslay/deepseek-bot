@@ -3,6 +3,8 @@
 > 本文件是 PR 描述的语义依据（B1 硬性要求：先写清 4 个语义决定再动代码）。
 > 分支 `feature/g12-multi-session`；本文件是分支第一个提交。
 
+> **勘误（2026-11-01，集成时）**：本文件起草时把契约版本写作 v0.12、迁移写作 0024。集成时 chat.session.* 与视觉输入（B3''）、分组实体（G1'）合并为同一个 v0.14 纯增量批次（见 `docs/CONTRACTS.md` 的 v0.14 段），协议版本停在 **v0.14**；迁移编号因 0025 已被附件解析（attachment-parses，#191）占用，顺延为 **`0026-chat-sessions`**。下文「契约」「迁移」两节标题与编号已按集成后的真实版本更正；「四个语义决定」等历史说明保持原样，不假装当初就是 0.14。
+
 ## 背景
 
 - Host 契约只有 `chat.send` / `chat.history` / `chat.cancel` / `chat.status` / `chat.contextUsage`，没有会话列表；渲染层自行拼出 `chat:<botId>`（`stored-session.ts`），一个 bot 只有一条线程。
@@ -26,7 +28,7 @@
 
 `chat_messages.session_id` 是 NOT NULL 且历史值恒为 `chat:<botId>`——即默认会话 id 本身。迁移 0024 **只新增 `chat_sessions` 元数据表与索引，不改写任何数据行、不修改任何历史迁移**；旧行天然属于默认会话。默认会话的元数据行由 Host 在 `chat.session.list` 与缺省 `chat.send` 时惰性物化（get-or-create）。会话显示标题在读取时派生：用户重命名的存储标题优先，否则取首条用户消息一行，无线索时按 Host 语言取「新的会话 / New session」；新建会话可带标题，不带则以派生标题展示。
 
-## 契约（v0.12，纯增量）
+## 契约（v0.14，纯增量；集成勘误见文首）
 
 - 新增方法组（`METHODS` + `METHOD_CONTRACTS`）：
   - `chat.session.list` `{ botId }` → `{ sessions: ChatSession[] }`（`last_message_at` 倒序）。
@@ -35,9 +37,9 @@
   - `chat.session.archive` `{ botId, sessionId }` → `{ session }`（默认会话不可归档；归档即只读，无取消归档）。
   - `ChatSession = { sessionId, botId, title, archived, messageCount, createdAt, lastMessageAt }`。
 - `chat.send` / `chat.history` / `chat.contextUsage` 请求新增可选 `sessionId`（≤128 字符），缺省语义见决定 3。
-- 协议版本 0.11 → 0.12：纯增量，0.1–0.11 发送方保持接受。
+- 协议版本 0.13 → 0.14：纯增量，0.1–0.13 发送方保持接受。
 
-## 迁移 0024（只加表和索引）
+## 迁移 0026（只加表和索引；0025 已被附件解析占用）
 
 ```sql
 CREATE TABLE chat_sessions (
@@ -75,7 +77,7 @@ CREATE INDEX chat_messages_bot_session ON chat_messages(bot_id, session_id, crea
 
 ## 测试
 
-- storage：`chat-sessions` 仓库用例 + 迁移 0024 应用。
+- storage：`chat-sessions` 仓库用例 + 迁移 0026 应用。
 - host：缺省发送落默认会话并物化元数据；显式会话隔离（回放/历史互不可见）；未知/他人/归档会话拒绝；rename/archive 语义；`chat.session.list` 排序。
 - renderer：host-service 会话方法映射、stream/history 携带 sessionId、会话切换纯函数。
 - 回归：既有 chat/context-meter/task-dispatcher/automation 用例全部通过。
