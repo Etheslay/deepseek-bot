@@ -19,9 +19,9 @@ import {
   touchChatSession,
 } from "./chat-sessions.js";
 
-function tempDb(): { db: OpenedDatabase; cleanup: () => void } {
+function tempDb(now?: () => Date): { db: OpenedDatabase; cleanup: () => void } {
   const root = mkdtempSync(join(tmpdir(), "dsb-chat-sessions-"));
-  const db = openDatabase(join(root, "app.sqlite"));
+  const db = openDatabase(join(root, "app.sqlite"), now ? { now } : undefined);
   return {
     db,
     cleanup: () => {
@@ -94,7 +94,14 @@ describe("chat session repository (G12)", () => {
   });
 
   it("lists extra sessions newest-activity-first and keeps them per bot", () => {
-    const { db, cleanup } = tempDb();
+    // Stamps are ISO at millisecond precision; a fast host runs this whole
+    // scenario inside one millisecond, so the closing touch tied with the
+    // extra session's creation stamp and the rowid tiebreak reordered the
+    // list (first seen on CI 2026-11-01). A stepped clock gives every write
+    // its own second, so the assertion below tests the ORDER BY rather than
+    // the host's timer resolution.
+    let step = 0;
+    const { db, cleanup } = tempDb(() => new Date(Date.UTC(2026, 0, 1, 0, 0, step++)));
     try {
       const a = seedBot(db);
       const b = seedBot(db);
@@ -106,6 +113,13 @@ describe("chat session repository (G12)", () => {
       touchChatSession(db, a, aDefault.id);
       const aSessions = listChatSessions(db, a);
       expect(aSessions.map((row) => row.id)).toEqual([aDefault.id, extra.id]);
+      // The tiebreak is load-bearing when two stamps do collide: equal
+      // last_message_at falls back to the rowid order (newer row first)
+      // deterministically, never to scan luck.
+      db.raw
+        .prepare("UPDATE chat_sessions SET last_message_at = ? WHERE bot_id = ?;")
+        .run("2026-01-01T00:09:00.000Z", a);
+      expect(listChatSessions(db, a).map((row) => row.id)).toEqual([extra.id, aDefault.id]);
       // The other bot's session never leaks in.
       expect(listChatSessions(db, b)).toHaveLength(1);
       expect(getChatSession(db, b, extra.id)).toBeUndefined();

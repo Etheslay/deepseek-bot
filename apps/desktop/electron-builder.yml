@@ -35,9 +35,15 @@ nsis:
   createStartMenuShortcut: true
   deleteAppDataOnUninstall: false
   artifactName: "${productName}-${version}-${arch}.${ext}"
-# D24: electron-updater metadata source. CI/packaging never auto-publishes
-# (`--publish never` default); the first GitHub Release goes out with the
-# finale task per RELEASE.md.
+# D24: electron-updater metadata source. The publish config exists so
+# electron-builder emits latest.yml next to the installer (RELEASE.md §4.1
+# expects it inside the packaging CI artifact). It does NOT mean "publish by
+# default": on a CI runner an explicit publish provider makes electron-builder
+# schedule an upload, and there is no token-free fallback — the build fails on
+# the missing GH_TOKEN (observed 2026-11-01). CI therefore passes
+# `--publish never` explicitly (.github/workflows/package.yml, Build step);
+# local builds without a CI environment already default to never. The first
+# GitHub Release goes out with the finale task per RELEASE.md.
 publish:
   provider: github
   owner: Etheslay

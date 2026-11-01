@@ -37,8 +37,17 @@ jobs:
           pnpm --version
           pnpm --filter @deepseek-bot/desktop exec electron-builder --version
 
+      # --publish never is explicit here, not a default: electron-builder.yml
+      # carries the D24 publish config (it makes latest.yml emit next to the
+      # installer), and on a CI runner an explicit publish provider makes
+      # electron-builder schedule an upload — without GH_TOKEN that fails the
+      # whole build (observed 2026-11-01 on a develop workflow_dispatch run).
+      # With --publish never the upload is skipped while latest.yml is still
+      # written, so the artifact set below stays complete (RELEASE.md §4.1).
       - name: Build NSIS installer
-        run: pnpm --filter @deepseek-bot/desktop pack:win
+        run: |
+          pnpm --filter @deepseek-bot/desktop exec electron-vite build
+          pnpm --filter @deepseek-bot/desktop exec electron-builder --win nsis --x64 --config electron-builder.yml --publish never
 
       - name: Generate SHA-256 sums
         shell: pwsh
