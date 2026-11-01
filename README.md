@@ -31,6 +31,7 @@
 | [仓库设置清单](docs/REPOSITORY_SETUP.md) | GitHub 权限、保护规则和当前配置状态 |
 | [开发启动清单](docs/KICKOFF_CHECKLIST.md) | 阶段 0 清障、D01 接入验证与后续任务链的执行顺序 |
 | [开发环境基线](docs/DEVELOPMENT_SETUP.md) | 实测的 Node/pnpm 安装与 lint/typecheck/test/CI 命令 |
+| [开放缺陷收口](docs/TASK_OPEN_DEFECTS.md) | `develop` `030c54d` 上已坐实的行为缺口、已知取舍，以及不得当成缺陷的未验收项 |
 | [桌面壳](docs/DESKTOP_SHELL.md) | Electron 壳结构、启动/打包命令、IPC 白名单与安全设置 |
 | [贡献指南](CONTRIBUTING.md) | 每次开发开始和结束时的操作步骤 |
 
