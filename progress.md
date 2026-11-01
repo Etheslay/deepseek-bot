@@ -6,6 +6,7 @@
 - 修复：package.yml 构建步骤改为 `pnpm exec` 两段式并显式传 `--publish never`（CI 只产 artifact 不上传；`latest.yml` 仍随安装包生成，满足 artifact 清单与 RELEASE.md §4.1）；electron-builder.yml 注释改为如实记录成因与修法；`pack:win` 脚本本身不动（本机无 CI 环境变量，默认本就不上传）。
 - 台账：GAP_AUDIT §7 第 11 条补记「Actions 已恢复执行」证据（本次实跑即证明，`quality` 恢复情况待下次实跑核实）；SPRINTS §4 补本行、并把第九次刷新行「待建 PR」勘误为 #197 `e16c5db`；progress 本条。
 - 本地验证：electron-builder 24.13.3 `--help` 核对 `--publish never` 取值存在；未本地复跑 NSIS 全量构建（本机无 CI 环境变量，复现不了原故障路径）；CI 复跑验证由负责人触发。
+- **PR CI 随片修复**：本 PR 的 PR CI 首次真正执行全套测试（G12 代码合入时 CI 尚未恢复），暴露 `chat-sessions.test.ts`「newest-activity-first」用例依赖真实时钟——ISO 时间戳毫秒精度内 `createChatSession` 与 `touchChatSession` 打平后按 `rowid DESC` 决胜翻序（本机慢、CI 快，故只在 CI 挂）。修复：`tempDb` 增加可选 `now`（沿 agent-tests 的注入惯用法），该用例改步进时钟；并把打平决胜路径直接钉住（同戳断言 extra 在前）。storage typecheck exit 0、28 文件/231 用例全绿、根 eslint 通过。**教训**：凡断言「A 排在 B 前」的时间戳用例必须注入时钟，不能赌墙钟推进。
 
 ## 2026-10-31：台账第九次刷新（分支收口核对，#185–#196 入账）
 
