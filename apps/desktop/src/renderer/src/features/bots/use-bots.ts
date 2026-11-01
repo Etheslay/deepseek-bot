@@ -6,7 +6,7 @@
  * part of any contract. Group membership is UI-only because CONTRACTS v0.1
  * has no Bot.group field.
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Bot } from "@deepseek-bot/contracts";
 import type { BotDraft, BotUpdatePatch } from "../../services/desktop-service.js";
 import { ServiceError } from "../../services/desktop-service.js";
@@ -255,7 +255,11 @@ export function useBots(defaultGroupKey: number) {
     setBots((prev) => prev.filter((b) => b.key !== botKey));
   }, []);
 
-  const visible = bots.filter((b) => !b.hidden);
+  // Memoized identity: effects key on the `bots` reference (e.g. the G12
+  // session loader resets historySessions on every run), so a fresh array
+  // from this filter on each render would loop them forever and make the
+  // sidebar session sublist flash (first seen on a real machine 2026-11-01).
+  const visible = useMemo(() => bots.filter((b) => !b.hidden), [bots]);
 
   return {
     bots: visible,
