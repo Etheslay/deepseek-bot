@@ -1,6 +1,14 @@
 # 工作记录
 
-## 2026-11-01：打包 CI 发布缺陷修复（feature/package-publish-never）
+## 2026-11-01：侧栏会话子列表闪烁修复（fix/g12-session-sublist-flash）
+
+- 用户真机首跑（develop `e16c5db`，`pnpm dev`）报：侧栏「新建会话」子列表一直闪、无法点击。
+- 根因：`useBots` 返回 `visible = bots.filter((b) => !b.hidden)`——**每次渲染新数组引用**；G12 会话加载 effect（`[selectedBot, bots, desktop]` 依赖，每轮先 `setHistorySessions(null)`）于是无限循环：置 null → 重渲染 → 新 `bots` 引用 → effect 重跑 → ……子列表在隐藏/显示间高频翻转（闪 + 点击被吞），每轮还发一次 `chat.session.list` IPC。#194 合入时 CI 未恢复且无真机验证，故首跑才暴露。
+- 修复：`visible` 以 `useMemo(() => bots.filter(...), [bots])` 包住（一处根治所有以 `bots` 引用为依赖的 effect；state 变化时仍会重算，隐藏过滤语义不变）。
+- 回归测试 `tests/features/use-bots-stability.test.ts`（沿 manager-orchestration 的 jsdom + act 惯例）：①同一 root 重渲染两次 `bots` 引用不变；②`hide()` 后过滤重算（长度变化 + 引用更新）。插曲：vitest include 只收 `*.test.ts`（仓库惯例 createElement 而非 .tsx）；ServiceProvider 的 props 联合类型破坏 createElement 推断，按仓库 `as never` 惯用法绕过。
+- 检查：desktop 79 文件全过、typecheck exit 0、根 eslint 通过。真机复核由用户在修复分支上重跑 dev 确认。
+
+## 2026-11-01：打包 CI 发布缺陷修复（feature/package-publish-never，PR #198 已合入）
 
 - 用户在 develop 上 workflow_dispatch 实跑 `package.yml` 失败：electron-builder 在 CI 环境因 electron-builder.yml 的显式 `publish: provider: github`（D24 更新元数据源）构造 GitHubPublisher，缺 `GH_TOKEN` 即失败——yml 注释声称的「`--publish never` 默认」不成立，CI 上没有这个默认。
 - 修复：package.yml 构建步骤改为 `pnpm exec` 两段式并显式传 `--publish never`（CI 只产 artifact 不上传；`latest.yml` 仍随安装包生成，满足 artifact 清单与 RELEASE.md §4.1）；electron-builder.yml 注释改为如实记录成因与修法；`pack:win` 脚本本身不动（本机无 CI 环境变量，默认本就不上传）。
