@@ -53,12 +53,17 @@ spawn `lib/bin.js --profile sdk`（`initialize` 返回
   字符串或块数组（纯字符串线上字节不变）。
 - **`vision.status`**（voice.status 模式）：`{botId}` →
   `{model, visionAvailable, visionKnown}`，pinned 目录快照
-  （deepseek-flash 有视觉）；目录外模型 `visionKnown=false`，UI 中性，
-  发送时上游门控仍是权威。
+  （deepseek-flash 有视觉）。**勘误（open-defects §2.1 方案乙）：本地目录是
+  图像块准入，不是上游权威声明**——目录内视觉模型两标志为真、图像块随回合
+  发出；目录内纯文本模型（`deepseek-chat` / `deepseek-reasoner`）
+  `visionKnown=true, visionAvailable=false`，发送不附图像块（注明「无法看图」）；
+  目录外模型 `visionKnown=false, visionAvailable=false`，同样不附（注明
+  「未登记视觉能力，本次不附图像块」）；上游 per-model 门控只对目录内视觉
+  模型生效。
 - **渲染层**：能力已知可用时，图片附件经 `prepareVisionImage`（长边
   ≤1568px + JPEG 质量阶梯至 base64 ≤900K 字符，透明像素合成白底）编码后
-  随请求携带；不可用/未知时退回既有说明文案——**图片任何情况下都会存入
-  工作区并保留指针文本，绝不静默丢弃**。
+  随请求携带；text-only 模型退回「无法看图」文案、目录外模型退回「未登记」
+  文案——**图片任何情况下都会存入工作区并保留指针文本，绝不静默丢弃**。
 - **不变项**：`chat.send` 既有字段语义、覆盖率门槛、testTimeout、
   `read_workspace_file` 路径（工作区副本始终保留）。
 

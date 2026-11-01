@@ -292,15 +292,37 @@ describe("chat runtime", () => {
       { type: "text", text: expect.stringContaining("这张图片里是什么颜色？") },
       { type: "image", data: pngBase64, mimeType: "image/png" },
     ]);
-    // The capability flag is queryable per bot; the pinned catalog does not
-    // know `deepseek-chat`, so the UI stays neutral (visionKnown=false).
+    // Plan 乙 (open-defects §2.1): the pinned catalog now distinguishes the
+    // three rows — chat is cataloged text-only (known, not available), flash
+    // is the vision model (both true), and an unregistered id stays neutral.
     const vision = (await host.handleMethod("vision.status", { botId })) as {
       model: string;
       visionAvailable: boolean;
       visionKnown: boolean;
     };
     expect(vision.model).toBe("deepseek-chat");
-    expect(vision.visionKnown).toBe(false);
+    expect(vision.visionKnown).toBe(true);
+    expect(vision.visionAvailable).toBe(false);
+
+    host.db.raw.prepare("UPDATE model_profiles SET model = 'deepseek-flash';").run();
+    const flashVision = (await host.handleMethod("vision.status", { botId })) as {
+      model: string;
+      visionAvailable: boolean;
+      visionKnown: boolean;
+    };
+    expect(flashVision.model).toBe("deepseek-flash");
+    expect(flashVision.visionKnown).toBe(true);
+    expect(flashVision.visionAvailable).toBe(true);
+
+    host.db.raw.prepare("UPDATE model_profiles SET model = 'deepseek-vision-unknown';").run();
+    const unknownVision = (await host.handleMethod("vision.status", { botId })) as {
+      model: string;
+      visionAvailable: boolean;
+      visionKnown: boolean;
+    };
+    expect(unknownVision.model).toBe("deepseek-vision-unknown");
+    expect(unknownVision.visionKnown).toBe(false);
+    expect(unknownVision.visionAvailable).toBe(false);
   });
 
   it("replays history as context because each turn opens a fresh session", async () => {

@@ -94,6 +94,7 @@ import {
   formatAttachmentSize,
   MAX_ATTACHMENT_BYTES,
   type AttachmentDraft,
+  type VisionNoteMode,
 } from "./features/chat/attachments.js";
 import { prepareVisionImage } from "./features/chat/image-vision.js";
 import type { StreamOptions } from "./services/desktop-service.js";
@@ -4485,15 +4486,22 @@ function BotsPlaceholder({
     const meta = pendingMeta ?? undefined;
     const outgoing: NonNullable<Msg["attachments"]> = [];
     const pointers: string[] = [];
-    // B3'' 视觉输入: when the capability flag says the model is known to
-    // accept images, raster attachments also ride the request as real image
-    // content blocks (downscaled to the provider budget). The workspace copy
-    // and pointer text stay regardless — an image is never silently dropped.
-    let visionRideAlong = false;
+    // B3'' 视觉输入 + open-defects §2.1 (plan 乙): only a cataloged vision
+    // model rides the request as real image content blocks (downscaled to the
+    // provider budget). The capability flags decide the model-facing note —
+    // cataloged text-only says "cannot see", an unregistered id says "not
+    // registered, blocks not attached". The workspace copy and pointer text
+    // stay regardless — an image is never silently dropped.
+    let vision: VisionNoteMode = "unregistered";
     try {
-      visionRideAlong = (await service.vision.status(me.bot.id)).visionAvailable;
+      const status = await service.vision.status(me.bot.id);
+      vision = status.visionAvailable
+        ? "ride-along"
+        : status.visionKnown
+          ? "text-only"
+          : "unregistered";
     } catch {
-      visionRideAlong = false;
+      vision = "unregistered";
     }
     const imageBlocks: { data: string; mimeType: "image/png" | "image/jpeg" | "image/webp" | "image/gif" }[] = [];
     for (const file of files) {
@@ -4514,7 +4522,7 @@ function BotsPlaceholder({
           path: uploaded.path,
           relativePath: uploaded.path,
         });
-        if (visionRideAlong && kind === "image") {
+        if (vision === "ride-along" && kind === "image") {
           const prepared = await prepareVisionImage(
             { bytes: file.bytes, mime: file.mime },
             async (bytes, longEdge, quality) => {
@@ -4553,7 +4561,7 @@ function BotsPlaceholder({
                 path: uploaded.path,
               },
             ],
-            visionRideAlong && kind === "image",
+            vision,
           ),
           buildAttachmentContext({
             name: file.name,

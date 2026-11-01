@@ -146,15 +146,21 @@ export type AttachmentCard = AttachmentDraft & {
  * Model-facing per-attachment lines (i18n-ignore: model context, not UI copy).
  * Small text files keep the inline fenced block; everything else is announced
  * by its workspace path so the bot can read it with `read_workspace_file`.
- * `visionRideAlong` marks image cards that are ALSO riding the request as
- * real image content blocks (B3''): the note then says so instead of the
- * pre-vision "cannot see" line. An image never disappears from the request
- * unnoticed — when vision is off the workspace pointer stays, exactly as
- * before.
+ * `vision` selects the image-card note (open-defects §2.1, plan 乙):
+ * - "ride-along": the image ALSO rides the request as a real image content
+ *   block (cataloged vision model) — the note says so;
+ * - "text-only": the model is cataloged as unable to see — the note says
+ *   "无法看图";
+ * - "unregistered": the model is not in the pinned catalog — the note says
+ *   the vision capability is not registered and points at deepseek-flash.
+ * An image never disappears from the request unnoticed — in every mode the
+ * workspace pointer stays, exactly as before.
  */
+export type VisionNoteMode = "ride-along" | "text-only" | "unregistered";
+
 export function composeAttachmentBlocks(
   cards: readonly AttachmentCard[],
-  visionRideAlong = false,
+  vision: VisionNoteMode = "unregistered",
 ): string[] {
   const blocks: string[] = [];
   for (const card of cards) {
@@ -173,14 +179,21 @@ export function composeAttachmentBlocks(
         // i18n-ignore: model-facing pointer to the read tool
         `${header}\n（文本超过 ${MAX_TEXT_INLINE_BYTES} 字节注入上限，未随消息附带；可用 read_workspace_file 工具读取以上路径。）`,
       );
-    } else if (card.kind === "image" && visionRideAlong) {
+    } else if (card.kind === "image" && vision === "ride-along") {
       blocks.push(
         // i18n-ignore: model-facing attachment note (B3'' 视觉输入)
         `${header}\n（图片已随本条消息作为图像内容交给模型；能否实际看图取决于模型视觉能力，不支持时上游以占位文本降级。工作区副本：${card.path}。）`,
       );
+    } else if (card.kind === "image" && vision === "text-only") {
+      blocks.push(
+        // i18n-ignore: model-facing attachment note (cataloged text-only model)
+        `${header}\n（图片已保存到工作区；当前模型不支持视觉理解，无法看图。）`,
+      );
     } else if (card.kind === "image") {
-      // i18n-ignore: model-facing attachment note (pre-vision fallback)
-      blocks.push(`${header}\n（图片已保存到工作区；当前模型暂不支持视觉理解，无法看图。）`);
+      // i18n-ignore: model-facing attachment note (unregistered model id)
+      blocks.push(
+        `${header}\n（图片已保存到工作区；本 bot 的模型未登记视觉能力，本次不附图像块。需要看图可将模型切换为 deepseek-flash。工作区副本：${card.path}。）`,
+      );
     } else {
       // i18n-ignore: model-facing attachment note
       blocks.push(`${header}\n（二进制附件已保存到工作区，仅有元数据，不可作为文本读取。）`);
