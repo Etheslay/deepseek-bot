@@ -189,9 +189,9 @@ export function composeAttachmentBlocks(
         // i18n-ignore: model-facing attachment note (cataloged text-only model)
         `${header}\n（图片已保存到工作区；当前模型不支持视觉理解，无法看图。）`,
       );
-    } else if (card.kind === "image") {
-      // i18n-ignore: model-facing attachment note (unregistered model id)
+    } else if (card.kind === "image" && vision === "unregistered") {
       blocks.push(
+        // i18n-ignore: model-facing attachment note (unregistered model id)
         `${header}\n（图片已保存到工作区；本 bot 的模型未登记视觉能力，本次不附图像块。需要看图可将模型切换为 deepseek-flash。工作区副本：${card.path}。）`,
       );
     } else {

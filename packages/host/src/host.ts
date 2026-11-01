@@ -269,6 +269,14 @@ export const DEFAULT_MODEL_PROFILE_ID = "44444444-4444-4444-8444-444444444444";
  * does not import the host package; the host seeding test pins both rows.
  */
 export const REASONER_MODEL_PROFILE_ID = "8d5a5e30-0000-4000-8000-000000000005";
+/**
+ * Built-in vision profile (open-defects §2.1, plan 乙 + owner request): the
+ * pinned catalog's only image-input model, seeded so image recognition is
+ * reachable from the UI. Same UUID is mirrored in the desktop bot form's
+ * MODEL_OPTIONS — the desktop does not import the host package; the host
+ * seeding test pins all three rows.
+ */
+export const FLASH_MODEL_PROFILE_ID = "8d5a5e30-0000-4000-8000-000000000006";
 export const SEARXNG_ENDPOINT_SETTING = "searxng.endpoint";
 /** Settings KV keys for the D27 local whisper configuration (desktop-settable, live-applied). */
 export const VOICE_WHISPER_BIN_SETTING = "voice.whisper.bin";
@@ -306,6 +314,15 @@ function seedDefaults(db: OpenedDatabase, layout: DataLayout): void {
       "INSERT OR IGNORE INTO model_profiles (id, provider, model, endpoint, credential_ref, limits_json, created_at, updated_at) VALUES (?, 'deepseek', 'deepseek-reasoner', 'https://api.deepseek.com', ?, '{}', ?, ?);",
     )
     .run(REASONER_MODEL_PROFILE_ID, DEFAULT_CREDENTIAL_REF, now, now);
+  // Open-defects §2.1 (plan 乙) + owner request: the built-in vision profile
+  // shares the default credential — selecting it is what makes image
+  // recognition reachable from the UI (the pinned catalog's only
+  // image-input model).
+  db.raw
+    .prepare(
+      "INSERT OR IGNORE INTO model_profiles (id, provider, model, endpoint, credential_ref, limits_json, created_at, updated_at) VALUES (?, 'deepseek', 'deepseek-flash', 'https://api.deepseek.com', ?, '{}', ?, ?);",
+    )
+    .run(FLASH_MODEL_PROFILE_ID, DEFAULT_CREDENTIAL_REF, now, now);
   db.raw
     .prepare(
       "INSERT OR IGNORE INTO workspaces (id, canonical_path, grants_json, created_at, updated_at) VALUES (?, ?, '[]', ?, ?);",

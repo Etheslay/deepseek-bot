@@ -7,6 +7,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { MISFIRE_POLICY, WORKFLOW_SCHEMA_VERSION } from "@deepseek-bot/contracts";
 import {
   DEFAULT_MODEL_PROFILE_ID,
+  FLASH_MODEL_PROFILE_ID,
   REASONER_MODEL_PROFILE_ID,
   createHost,
   type DeepSeekBotHost,
@@ -119,7 +120,7 @@ describe("createHost", () => {
     return created;
   }
 
-  it("seeds the built-in chat and reasoner model profiles idempotently (GAP_AUDIT G5)", async () => {
+  it("seeds the built-in chat, reasoner, and vision model profiles idempotently (GAP_AUDIT G5; open-defects §2.1 plan 乙)", async () => {
     // Deliberately NOT via started(): that helper seeds extra test profiles,
     // and this case pins the exact built-in set.
     const first = await createHost({
@@ -142,6 +143,10 @@ describe("createHost", () => {
       model: "deepseek-reasoner",
       endpoint: "https://api.deepseek.com",
     });
+    expect(byId.get(FLASH_MODEL_PROFILE_ID)).toMatchObject({
+      model: "deepseek-flash",
+      endpoint: "https://api.deepseek.com",
+    });
 
     // Re-open the same data root: the seed runs again and INSERT OR IGNORE
     // must keep exactly one row per built-in profile.
@@ -162,7 +167,7 @@ describe("createHost", () => {
     const total = reopened.db.raw
       .prepare("SELECT COUNT(*) AS total FROM model_profiles;")
       .get() as { total: number };
-    expect(total.total).toBe(2);
+    expect(total.total).toBe(3);
   });
 
   it("runs a workflow end to end through the method surface (fake harness)", async () => {
