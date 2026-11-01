@@ -59,6 +59,17 @@ describe("resolveContextWindowTokens", () => {
     expect(MODEL_CONTEXT_WINDOWS["deepseek-reasoner"]).toBe(128_000);
   });
 
+  it("registers deepseek-flash at the documented 1M window instead of the fallback", () => {
+    // api-docs.deepseek.com/quick_start/pricing states "CONTEXT LENGTH 1M"
+    // (max output 384K) for deepseek-flash — verified 2026-11-01. The flash
+    // entry is registered, so the gauge no longer divides by the 65,536
+    // fallback that made compression fire early.
+    expect(MODEL_CONTEXT_WINDOWS["deepseek-flash"]).toBe(1_000_000);
+    expect(
+      resolveContextWindowTokens({ model: "deepseek-flash", fallbackTokens: fallback, envTokens: null }),
+    ).toBe(1_000_000);
+  });
+
   it("falls back for an unknown model or an invalid env value", () => {
     expect(
       resolveContextWindowTokens({ model: "deepseek-foo", fallbackTokens: fallback, envTokens: null }),
