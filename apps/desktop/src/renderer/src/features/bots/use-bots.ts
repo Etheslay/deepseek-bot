@@ -251,10 +251,9 @@ export function useBots(defaultGroupKey: number) {
     setBots((prev) => prev.filter((b) => b.key !== botKey));
   }, []);
 
-  // Memoized identity: effects key on the `bots` reference (e.g. the G12
-  // session loader resets historySessions on every run), so a fresh array
-  // from this filter on each render would loop them forever and make the
-  // sidebar session sublist flash (first seen on a real machine 2026-11-01).
+  // Memoized identity: effects key on the `bots` reference. A fresh array
+  // from this filter on each render used to restart those effects forever
+  // (the old session sublist flashed on a real machine 2026-11-01).
   const visible = useMemo(() => bots.filter((b) => !b.hidden), [bots]);
 
   return {
