@@ -3,6 +3,7 @@
  * Titles, URLs and snippets are untrusted text. This view does not fetch them.
  */
 import { useCallback, useEffect, useRef, useState, type JSX } from "react";
+import { pinSlotOrder, useTimelineTimes } from "../chat/timeline.js";
 import { METHOD_CONTRACTS } from "@deepseek-bot/contracts";
 import { type Notice, noticeText, t, useLanguage } from "../../i18n.js";
 
@@ -41,6 +42,8 @@ function BotSearchCards({ botId }: { botId: string }): JSX.Element | null {
   const [notice, setNotice] = useState<Notice | null>(null);
   const active = useRef(true);
   const loadSequence = useRef(0);
+  const times = useTimelineTimes();
+  const noticeAt = useRef<number | null>(null);
 
   const load = useCallback(async (): Promise<void> => {
     const sequence = ++loadSequence.current;
@@ -72,9 +75,25 @@ function BotSearchCards({ botId }: { botId: string }): JSX.Element | null {
 
   return (
     <div className="search-result-cards">
-      {notice !== null ? <div role="status">{noticeText(notice)}</div> : null}
+      {notice !== null ? (
+        <div
+          role="status"
+          style={{
+            order: pinSlotOrder(
+              times,
+              noticeAt.current ?? (noticeAt.current = Date.now()),
+            ),
+          }}
+        >
+          {noticeText(notice)}
+        </div>
+      ) : null}
       {(searches ?? []).map((search) => (
-        <section key={`${search.at}:${search.query}`} aria-label={t("search.queryLabel", [search.query])}>
+        <section
+          key={`${search.at}:${search.query}`}
+          style={{ order: pinSlotOrder(times, Date.parse(search.at)) }}
+          aria-label={t("search.queryLabel", [search.query])}
+        >
           <div>{search.query}</div>
           {search.results.map((item) => {
             const href = linkable(item.url);

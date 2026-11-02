@@ -88,6 +88,11 @@ import { CanvasSidecar } from "./features/canvas/canvas-sidecar.js";
 import { ChatMarkdown } from "./features/chat/chat-markdown.js";
 import { setMermaidTheme } from "./features/chat/mermaid.js";
 import { ThinkingLine } from "./features/chat/thinking-line.js";
+import {
+  messageSlotOrder,
+  streamSlotOrder,
+  TimelineOrderProvider,
+} from "./features/chat/timeline.js";
 import { exportConversation } from "./features/chat/export-conversation.js";
 import type { MentionTable } from "./features/chat/mentions.js";
 import {
@@ -3110,6 +3115,7 @@ function MessageBubble({
   onSpeak,
   speaking,
   voiceStatus,
+  slotOrder,
 }: {
   msg: Msg;
   accent: string;
@@ -3134,6 +3140,8 @@ function MessageBubble({
   speaking?: boolean;
   /** Gates the speak button; disabled with a reason when the engine is absent. */
   voiceStatus?: VoiceStatus | null;
+  /** Keeps this bubble on the timeline slot of its turn. */
+  slotOrder?: number;
 }): JSX.Element {
   const isUser = msg.from === "user";
   const speak = speakButton(voiceStatus ?? null, speaking === true);
@@ -3178,6 +3186,7 @@ function MessageBubble({
   return (
     <div
       className={"msg-row" + (isUser ? " user" : " bot") + (msg.history === true ? " replay" : "")}
+      style={slotOrder === undefined ? undefined : { order: slotOrder }}
       {...(msg.history === true ? { "data-history": "true" } : {})}
     >
       <div className="hover-wrap">
@@ -3695,9 +3704,16 @@ function BotsPlaceholder({
   /* The old local-only handleChoice from the skills branch is deliberately not
      taken: this branch answers choice cards through the shared chat stream
      (see the handleChoice below), so keeping both would shadow it. */
+  const stickToBottom = useRef(true);
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
   }, [msgs.length]);
+  useLayoutEffect(() => {
+    const list = listRef.current;
+    if (!list || !stickToBottom.current) return;
+    const max = list.scrollHeight - list.clientHeight;
+    if (Math.abs(list.scrollTop - max) > 1) list.scrollTop = max;
+  });
 
   /** Ask the Host whether the shipped whisper build and Windows SAPI are usable.
    * Kept with the other hooks: the pair view returns early, and a hook below
@@ -4181,9 +4197,19 @@ function BotsPlaceholder({
       }
     >
       <ChatAutomationNotice botId={me.bot.id} onOpenAutomation={onOpenAutomation} />
-      <div className="chat" ref={listRef}>
+      <div
+        className="chat"
+        ref={listRef}
+        onScroll={() => {
+          const list = listRef.current;
+          if (!list) return;
+          stickToBottom.current = list.scrollHeight - list.scrollTop - list.clientHeight < 80;
+        }}
+      >
+        <TimelineOrderProvider times={msgs.map((message) => message.time)}>
         {msgs.map((m, index) => {
           const prev = msgs[index - 1];
+          const slot = messageSlotOrder(index);
           const showTime =
             !m.system &&
             !m.notice &&
@@ -4191,13 +4217,13 @@ function BotsPlaceholder({
           return (
             <Fragment key={m.id}>
               {showTime && (
-                <div className={"chat-time" + (m.history === true ? " replay" : "")}>
+                <div className={"chat-time" + (m.history === true ? " replay" : "")} style={{ order: slot }}>
                   {formatChatTime(m.time)}
                 </div>
               )}
               {m.notice ? (
                 m.deliverTo ? (
-                  <div className="deliver-notice" role="status">
+                  <div className="deliver-notice" role="status" style={{ order: slot }}>
                     <span className="deliver-label">{m.notice.label}</span>
                     <span className="avatar-stack">
                       {m.deliverTo.map((key) => {
@@ -4225,7 +4251,7 @@ function BotsPlaceholder({
                     )}
                   </div>
                 ) : m.id === firstNoticeId ? (
-                  <div className="chat-summary">
+                  <div className="chat-summary" style={{ order: slot }}>
                     <span className="chat-summary-label">{t("shell.exchangeCount", [pairTotal])}</span>
                     {pairPeers.map((peerKey, peerIndex) => {
                       const peer = bots.find((bot) => bot.key === peerKey);
@@ -4247,9 +4273,10 @@ function BotsPlaceholder({
                   </div>
                 ) : null
               ) : m.system ? (
-                <div className="sys-line">{m.text}</div>
+                <div className="sys-line" style={{ order: slot }}>{m.text}</div>
               ) : (
                 <MessageBubble
+                  slotOrder={slot}
                   msg={{
                     ...m,
                     choices: m.choices,
@@ -4281,7 +4308,7 @@ function BotsPlaceholder({
         {stream && stream.forKey === me.key && (
           <>
             {stream.tools.map((tool) => (
-              <div className="tool-card" key={tool.toolName}>
+              <div className="tool-card" key={tool.toolName} style={{ order: streamSlotOrder(msgs.length) }}>
                 <span className={"tool-state tool-" + tool.state}>
                   {tool.state === "requested"
                     ? t("shell.toolRequested")
@@ -4296,7 +4323,7 @@ function BotsPlaceholder({
               </div>
             ))}
             {(stream.text || (!stream.failure && !stream.cancelled)) && (
-              <div className="msg-row bot streaming">
+              <div className="msg-row bot streaming" style={{ order: streamSlotOrder(msgs.length) }}>
                 {stream.text ? (
                   <div className="hover-wrap">
                     <div className="msg-bubble">
@@ -4329,7 +4356,7 @@ function BotsPlaceholder({
               </div>
             )}
             {stream.failure && (
-              <div className="chat-failure" role="alert">
+              <div className="chat-failure" role="alert" style={{ order: streamSlotOrder(msgs.length) }}>
                 <div className="failure-head">
                   <span className="failure-chip">{stream.failure.code}</span>
                   {stream.failure.retryable && (
@@ -4373,6 +4400,7 @@ function BotsPlaceholder({
           bots={bots}
           onOpenExchange={(botKey) => setDetailOther(botKey)}
         />
+        </TimelineOrderProvider>
       </div>
       {pendingFiles.length > 0 && (
         <div className="attach-chips" aria-label={t("shell.pendingAttachments")}>

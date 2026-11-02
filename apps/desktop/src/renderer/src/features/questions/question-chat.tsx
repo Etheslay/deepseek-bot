@@ -11,6 +11,7 @@
  * through the same question.answer path.
  */
 import { useCallback, useEffect, useRef, useState, type JSX } from "react";
+import { pinSlotOrder, useTimelineTimes } from "../chat/timeline.js";
 import { type Notice, noticeText, t, useLanguage } from "../../i18n.js";
 import { METHOD_CONTRACTS } from "@deepseek-bot/contracts";
 import { ChoiceCard, type ChoiceOption } from "./choice-card.js";
@@ -61,8 +62,10 @@ function BotQuestionCards({
   const [busyId, setBusyId] = useState<string | null>(null);
   /** Last known payload per requestId; vanished questions render from it. */
   const known = useRef<Map<string, Question>>(new Map());
+  const anchors = useRef<Map<string, number>>(new Map());
   const active = useRef(true);
   const loadSequence = useRef(0);
+  const times = useTimelineTimes();
 
   const load = useCallback(async (): Promise<void> => {
     const sequence = ++loadSequence.current;
@@ -132,6 +135,14 @@ function BotQuestionCards({
   const isClosed = (question: Question): boolean =>
     closed[question.requestId] === true || Date.parse(question.expiresAt) <= Date.now();
 
+  const slot = (id: string): number => {
+    const knownAt = anchors.current.get(id);
+    if (knownAt !== undefined) return pinSlotOrder(times, knownAt);
+    const now = Date.now();
+    anchors.current.set(id, now);
+    return pinSlotOrder(times, now);
+  };
+
   const pending = (questions ?? []).filter(
     (question) => answered[question.requestId] === undefined,
   );
@@ -163,6 +174,7 @@ function BotQuestionCards({
         return (
           <ChoiceCard
             key={question.requestId}
+            order={slot(question.requestId)}
             question={question.question}
             options={rows}
             fallback={hasFallback ? { id: OTHER_OPTION_ID, label: OTHER_OPTION_LABEL } : null}
@@ -192,6 +204,7 @@ function BotQuestionCards({
         return (
           <ChoiceCard
             key={id}
+            order={slot(id)}
             question={knownQuestion?.question ?? id}
             options={(knownQuestion?.options ?? []).map((option) => ({
               id: option.id,
@@ -202,14 +215,19 @@ function BotQuestionCards({
         );
       })}
       {answeredEntries.map(([requestId, entry]) => (
-        <ChoiceCard
-          key={requestId}
-          question={entry.question}
+          <ChoiceCard
+            key={requestId}
+            order={slot(requestId)}
+            question={entry.question}
           options={[]}
           answered={entry.text}
         />
       ))}
-      {notice !== null ? <p className="sys-line">{noticeText(notice)}</p> : null}
+      {notice !== null ? (
+        <p className="sys-line" style={{ order: slot("notice") }}>
+          {noticeText(notice)}
+        </p>
+      ) : null}
     </div>
   );
 }
