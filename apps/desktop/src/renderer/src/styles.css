@@ -6582,6 +6582,19 @@ select option {
   width: 100%;
 }
 
+.task-feed .exchange-bubble {
+  align-self: flex-start;
+  max-width: min(72%, 560px);
+  background: var(--bubble);
+  color: var(--text);
+  border-radius: 20px;
+  padding: 11px 15px;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .task-feed .chat-summary {
   align-self: center;
   display: inline-flex;
@@ -8509,6 +8522,20 @@ select:focus-visible {
 
 .chat > :first-child {
   margin-top: auto;
+}
+
+/* Bot lines hug the words. A full-width bar under the header reads as clutter. */
+.chat > .msg-row.bot .hover-wrap {
+  width: auto;
+  max-width: 72%;
+}
+
+.chat > .msg-row.bot .msg-bubble {
+  width: auto;
+  max-width: 100%;
+  background: var(--bubble);
+  border-radius: 20px;
+  padding: 11px 15px;
 }
 
 .chat-page {

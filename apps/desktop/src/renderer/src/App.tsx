@@ -4197,9 +4197,6 @@ function BotsPlaceholder({
         } as CSSProperties
       }
     >
-      <p className="sys-line" aria-live="polite">
-        {t("shell.staticPlaceholderNotice")}
-      </p>
       <ChatAutomationNotice botId={me.bot.id} onOpenAutomation={onOpenAutomation} />
       <div className="chat" ref={listRef}>
         {msgs.map((m, index) => {
