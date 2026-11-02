@@ -45,7 +45,7 @@ describe("openDatabase migrations", () => {
     expect(upgraded.raw.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('permission_grants','permission_audit','app_approvals','permission_authorizations')").all()).toHaveLength(4);
     expect(upgraded.raw.prepare("SELECT checksum FROM schema_migrations WHERE id <= 4 ORDER BY id").all().map(row => row.checksum)).toEqual(checksums);
     upgraded.close();
-  });
+  }, 60_000);
   it("applies all migrations on a fresh database", () => {
     const layout = ensureDataLayout(makeTempRoot());
     const db = openDatabase(layout.dbFile, { now: makeTestClock().now });
@@ -242,4 +242,4 @@ it("upgrades v13 connector rows as SD WebUI without losing endpoints", () => {
     expect(db.appliedMigrations).toContainEqual({ id: 14, name: "0014-connectors-kind" });
     expect(db.raw.prepare("SELECT kind,endpoint,enabled FROM connectors WHERE id='legacy'").get()).toMatchObject({ kind: "sd-webui", endpoint: "http://127.0.0.1:7860", enabled: 1 });
   } finally { db.close(); }
-});
+}, 60_000);

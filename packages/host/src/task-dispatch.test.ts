@@ -270,6 +270,7 @@ describe("dispatch idempotency (TASK_BOT_INTEROP.md)", () => {
     const markers = history.filter((row) => row.meta?.kind === "dispatch");
     expect(markers).toHaveLength(1);
     expect(markers[0]!.text.includes("只做一次")).toBe(true);
+    expect(history.filter((row) => row.meta?.kind === "dispatch_reply")).toHaveLength(1);
     const all = listTasks(fx.host.db, { limit: 100 });
     expect(all.filter((row) => row.fromBotId === fx.coordinator)).toHaveLength(1);
   });

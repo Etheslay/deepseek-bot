@@ -205,6 +205,13 @@ describe("chat message meta (v0.5)", () => {
     ).toBe(true);
     expect(
       ChatMessageMetaSchema.safeParse({
+        kind: "dispatch_reply",
+        taskId: TASK,
+        fromBotId: COORDINATOR,
+      }).success,
+    ).toBe(true);
+    expect(
+      ChatMessageMetaSchema.safeParse({
         kind: "task_notice",
         taskId: TASK,
         status: "done",

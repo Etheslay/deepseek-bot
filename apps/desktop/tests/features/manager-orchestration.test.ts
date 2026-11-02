@@ -216,8 +216,9 @@ describe("chat task feed (FR-4/FR-7)", () => {
     );
     const feed = container.querySelector(".task-feed");
     expect(feed).not.toBeNull();
-    // The task text is a bubble. The summary chip opens the pair transcript.
-    expect(feed!.querySelector(".exchange-bubble")?.textContent).toContain("选题清单");
+    // The task text stays in the pair record. The summary opens it.
+    expect(feed!.querySelector(".exchange-bubble")).toBeNull();
+    expect(feed!.textContent).not.toContain("选题清单");
     expect(feed!.textContent).not.toContain("消息来自");
     const senderChip = feed!.querySelector<HTMLButtonElement>(".chat-summary .summary-bot");
     expect(senderChip).not.toBeNull();
@@ -263,20 +264,58 @@ describe("chat task feed (FR-4/FR-7)", () => {
     const feed = container.querySelector(".task-feed");
     expect(feed).not.toBeNull();
     const notices = feed!.querySelectorAll(".deliver-notice");
-    const bubbles = [...feed!.querySelectorAll(".exchange-bubble")].map((node) => node.textContent ?? "");
-    // Words sit in bubbles. Each send is one centered line with no body on it.
-    expect(bubbles).toEqual(expect.arrayContaining(["出本周选题清单", "清单完成", "整理纪要"]));
+    expect(feed!.querySelector(".exchange-bubble")).toBeNull();
+    expect(feed!.textContent).not.toContain("出本周选题清单");
+    expect(feed!.textContent).not.toContain("清单完成");
+    expect(feed!.textContent).not.toContain("整理纪要");
     expect(notices.length).toBe(2);
     expect(notices[0]?.textContent).toContain("已发消息给");
-    expect(notices[0]?.textContent).not.toContain("出本周选题清单");
     expect(notices[1]?.textContent).toContain("已发消息给");
-    expect(notices[1]?.textContent).not.toContain("整理纪要");
     expect(feed!.textContent).not.toContain("消息来自");
     const summary = feed!.querySelector(".chat-summary");
     expect(summary?.textContent).toContain("3 条消息往来：");
     expect(summary?.textContent).toContain("和");
     expect(summary?.textContent).toContain("manager");
     expect(summary?.textContent).toContain("writer");
+  });
+
+  it("opens the pair record from the whole status line", async () => {
+    const done = task({
+      status: "done",
+      instruction: "请 writer 开渲",
+      resultSummary: "你好",
+      finishedAt: "2026-10-26T09:01:00.000Z",
+    });
+    installHost([], [done]);
+    const opened: number[] = [];
+    const container = await render(
+      createElement(
+        ServiceProvider,
+        null,
+        createElement(TaskFeedCards, {
+          botId: COORDINATOR,
+          bots: [
+            { key: 1, bot: { id: COORDINATOR, name: "manager", role: "coordinator" } },
+            { key: 2, bot: { id: WRITER, name: "writer", role: "standard" } },
+          ] as never,
+          onOpenExchange: (botKey: number) => opened.push(botKey),
+        }),
+      ),
+    );
+    const feed = container.querySelector(".task-feed");
+    expect(feed).not.toBeNull();
+    expect(feed!.textContent).not.toContain("请 writer 开渲");
+    expect(feed!.textContent).not.toContain("你好");
+    const notice = feed!.querySelector<HTMLButtonElement>("button.deliver-notice");
+    expect(notice).not.toBeNull();
+    await act(async () => {
+      notice!.click();
+    });
+    const summary = feed!.querySelector<HTMLButtonElement>("button.chat-summary");
+    await act(async () => {
+      summary!.click();
+    });
+    expect(opened).toEqual([2, 2]);
   });
 
   it("renders nothing when the host has no marked rows", async () => {

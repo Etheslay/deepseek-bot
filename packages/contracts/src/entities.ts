@@ -481,8 +481,10 @@ const CHOICE_OPTION_IDS = ["A", "B", "C", "D"] as const;
 /**
  * Additive marker on a persisted chat message row (v0.5). `dispatch` marks
  * the user-side message a coordinator's dispatch injected into the executor
- * session; `task_notice` is the delivery receipt the Host writes into the
- * coordinator session when a dispatched task leaves the running state.
+ * session; `dispatch_reply` is that executor's answer (same session, hidden
+ * from the human thread and from later model replay); `task_notice` is the
+ * delivery receipt the Host writes into the coordinator session when a
+ * dispatched task leaves the running state.
  * `choice` (G1' replay, no protocol bump) is the answered ask_user card:
  * the question row already stored for the model, plus the answer so a
  * reload can render the card collapsed and refuse another answer.
@@ -491,6 +493,13 @@ export const ChatMessageMetaSchema = z.discriminatedUnion("kind", [
   z
     .object({
       kind: z.literal("dispatch"),
+      taskId: UuidSchema,
+      fromBotId: UuidSchema,
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("dispatch_reply"),
       taskId: UuidSchema,
       fromBotId: UuidSchema,
     })

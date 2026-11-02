@@ -1,17 +1,17 @@
 /**
  * Bot-exchange feed (the D05 消息往来 notices, now on real dispatch data):
  *
- * - Each instruction and reply is its own compact bubble.
- * - A sent turn adds one centered 「已发消息给 <executor>」 line, with no
- *   message text on that line. There is no second 「消息来自」 line.
- * - Clicking a bot on that line or on the summary opens the pair transcript.
- * - Each peer ends with one centered 「N 条消息往来：A 和 B」 row,
- *   counted from the same real tasks (never demo data).
+ * - The task text stays out of this timeline. A sent turn is only the
+ *   centered 「已发消息给 <executor>」 line. There is no 「消息来自」 line
+ *   and no instruction or reply body here.
+ * - That line, and each peer's 「N 条消息往来：A 和 B」 row, opens the
+ *   pair transcript where the two bots talk.
+ * - Counts come from the same real tasks (never demo data).
  *
  * The feed polls chat.history + task.list on a light interval; the host owns
  * what lands in each session (dispatch markers, task notices).
  */
-import { Fragment, useEffect, useState, type JSX } from "react";
+import { useEffect, useState, type JSX } from "react";
 import type { ChatHistoryRow, DesktopService } from "../../services/desktop-service.js";
 import { useService } from "../../services/service-context.js";
 import type { UiBot } from "../bots/use-bots.js";
@@ -151,45 +151,37 @@ export function TaskFeedCards(props: {
   const botNameById = new Map(props.bots.map((bot) => [bot.bot.id, bot.bot.name]));
   const nameOf = (botId: string): string => botNameById.get(botId) ?? t("tasks.feedOtherBots");
 
-  const chip = (botId: string, size: number, exchangeKey: number | undefined): JSX.Element => {
+  const chip = (botId: string, size: number): JSX.Element => {
     const other = props.bots.find((bot) => bot.bot.id === botId);
-    const exchangeBot = props.bots.find((bot) => bot.key === exchangeKey);
-    const exchangeName = exchangeBot?.bot.name ?? nameOf(botId);
     return (
-      <button
-        type="button"
-        className="summary-bot"
-        title={t("shell.viewExchangesWith", [exchangeName])}
-        onClick={() => {
-          if (exchangeKey !== undefined) props.onOpenExchange(exchangeKey);
-        }}
-      >
+      <span className="summary-bot">
         <Avatar avatar={other?.avatar ?? { kind: "mono" }} variant="inline" size={size} />
         <span>{nameOf(botId)}</span>
-      </button>
+      </span>
     );
+  };
+
+  const openExchange = (botKey: number | undefined): void => {
+    if (botKey !== undefined) props.onOpenExchange(botKey);
   };
 
   return (
     <div className="task-feed" aria-label={t("tasks.feedAria")}>
       {items.map((item, index) => {
-        const bubble =
-          item.kind !== "receipt" && item.text !== "" ? (
-            <div className="exchange-bubble" key={`text-${index}`}>
-              {item.text}
-            </div>
-          ) : null;
         if (item.kind === "incoming" || item.kind === "received") {
-          return bubble;
+          return null;
         }
         if (item.kind === "sent") {
           const exchangeKey = botKeyById.get(item.toBotId);
           const quiet =
             ACTIVE_STATUSES.has(item.status) || item.status === "done";
           return (
-            <Fragment key={`sent-${index}`}>
-              {bubble}
-              <div className="deliver-notice" role="status">
+            <button
+              key={`sent-${index}`}
+              type="button"
+              className="deliver-notice"
+              onClick={() => openExchange(exchangeKey)}
+            >
                 {quiet ? (
                   <span className="deliver-label">{t("shell.sentTo")}</span>
                 ) : (
@@ -197,9 +189,8 @@ export function TaskFeedCards(props: {
                     {statusLabel(item.status)}
                   </span>
                 )}
-                {chip(item.toBotId, 18, exchangeKey)}
-              </div>
-            </Fragment>
+                {chip(item.toBotId, 18)}
+            </button>
           );
         }
         return (
@@ -211,12 +202,17 @@ export function TaskFeedCards(props: {
       {countExchanges(props.botId, items).map(({ otherBotId, count }) => {
         const exchangeKey = botKeyById.get(otherBotId);
         return (
-          <div className="chat-summary" key={`count-${otherBotId}`}>
+          <button
+            type="button"
+            className="chat-summary"
+            key={`count-${otherBotId}`}
+            onClick={() => openExchange(exchangeKey)}
+          >
             <span className="chat-summary-label">{t("shell.exchangeCount", [count])}</span>
-            {chip(props.botId, 16, exchangeKey)}
+            {chip(props.botId, 16)}
             <span className="summary-and">{t("shell.and")}</span>
-            {chip(otherBotId, 16, exchangeKey)}
-          </div>
+            {chip(otherBotId, 16)}
+          </button>
         );
       })}
     </div>

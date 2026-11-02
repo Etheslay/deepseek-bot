@@ -96,6 +96,7 @@ export function ChatMarkdown(props: {
         if (target instanceof HTMLElement) {
           const key = Number(target.dataset.botKey);
           if (Number.isFinite(key)) {
+            event.stopPropagation();
             props.onMentionClick?.(key);
           }
         }
