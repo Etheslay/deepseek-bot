@@ -211,6 +211,7 @@ describe("chat task feed (FR-4/FR-7)", () => {
             { key: 3, bot: { id: CODER, name: "coder", role: "standard" } },
           ] as never,
           onOpenExchange: (botKey: number) => opened.push(botKey),
+          onOpenBot: () => undefined,
         }),
       ),
     );
@@ -257,13 +258,16 @@ describe("chat task feed (FR-4/FR-7)", () => {
             { key: 2, bot: { id: WRITER, name: "writer", role: "standard" } },
           ] as never,
           onOpenExchange: () => undefined,
+          onOpenBot: () => undefined,
         }),
       ),
     );
     const feed = container.querySelector(".task-feed");
     expect(feed).not.toBeNull();
     const notices = feed!.querySelectorAll(".deliver-notice");
-    const bubbles = [...feed!.querySelectorAll(".exchange-bubble")].map((node) => node.textContent ?? "");
+    const bubbles = [...feed!.querySelectorAll(".exchange-bubble")].map((node) =>
+      (node.textContent ?? "").trim(),
+    );
     // Words sit in bubbles. Each send is one centered line with no body on it.
     expect(bubbles).toEqual(expect.arrayContaining(["出本周选题清单", "清单完成", "整理纪要"]));
     expect(notices.length).toBe(2);
@@ -279,6 +283,58 @@ describe("chat task feed (FR-4/FR-7)", () => {
     expect(summary?.textContent).toContain("writer");
   });
 
+  it("jumps to a cited bot and opens the record from the status line", async () => {
+    const done = task({
+      status: "done",
+      instruction: "请 writer 开渲",
+      resultSummary: "交给 create 之前先对齐",
+      finishedAt: "2026-10-26T09:01:00.000Z",
+    });
+    installHost([], [done]);
+    const opened: number[] = [];
+    const jumped: number[] = [];
+    const container = await render(
+      createElement(
+        ServiceProvider,
+        null,
+        createElement(TaskFeedCards, {
+          botId: COORDINATOR,
+          bots: [
+            { key: 1, bot: { id: COORDINATOR, name: "manager", role: "coordinator" } },
+            { key: 2, bot: { id: WRITER, name: "writer", role: "standard" } },
+            {
+              key: 4,
+              bot: { id: "20000000-0000-4000-8000-000000000004", name: "create", role: "standard" },
+            },
+          ] as never,
+          onOpenExchange: (botKey: number) => opened.push(botKey),
+          onOpenBot: (botKey: number) => jumped.push(botKey),
+        }),
+      ),
+    );
+    const feed = container.querySelector(".task-feed");
+    expect(feed).not.toBeNull();
+    const chip = feed!.querySelector<HTMLButtonElement>(
+      '.exchange-bubble .mention-chip[data-mention="writer"]',
+    );
+    expect(chip).not.toBeNull();
+    await act(async () => {
+      chip!.click();
+    });
+    expect(jumped).toEqual([2]);
+    expect(opened).toEqual([]);
+    const notice = feed!.querySelector<HTMLButtonElement>("button.deliver-notice");
+    expect(notice).not.toBeNull();
+    await act(async () => {
+      notice!.click();
+    });
+    const summary = feed!.querySelector<HTMLButtonElement>("button.chat-summary");
+    await act(async () => {
+      summary!.click();
+    });
+    expect(opened).toEqual([2, 2]);
+  });
+
   it("renders nothing when the host has no marked rows", async () => {
     installHost([], []);
     const container = await render(
@@ -291,6 +347,7 @@ describe("chat task feed (FR-4/FR-7)", () => {
             { key: 2, bot: { id: WRITER, name: "writer", role: "standard" } },
           ] as never,
           onOpenExchange: () => undefined,
+          onOpenBot: () => undefined,
         }),
       ),
     );

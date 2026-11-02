@@ -31,7 +31,6 @@ import { nextBotName } from "./features/bots/bot-names.js";
 import { CustomSelect } from "./components/custom-select.js";
 import type {
   BotDraft,
-  ChatHistoryRow,
   ContextUsageView,
 } from "./services/desktop-service.js";
 import { useService } from "./services/service-context.jsx";
@@ -41,6 +40,10 @@ import {
   failureMessage,
 } from "./features/chat/chat-reducer.js";
 import { statusLabel } from "./features/chat/task-feed.js";
+import {
+  assemblePairRecords,
+  type PairRecord,
+} from "./features/chat/pair-transcript.js";
 import {
   BotSessionSublist,
   scopeToBotConversation,
@@ -258,11 +261,6 @@ type AnsweredQuestionMap = Record<string, AnsweredQuestion>;
 
 type MenuState = { x: number; y: number; botKey: number };
 type DialogState = { type: "newGroup"; moveBot: number | null };
-
-/** 配对视图（两个 bot 之间的真实往来记录）：消息行或状态行。 */
-type PairRecord =
-  | { kind: "turn"; speakerKey: number; text: string; at: string }
-  | { kind: "notice"; text: string; at: string };
 
 function pairKeyOf(a: number, b: number): string {
   return a < b ? `${a}|${b}` : `${b}|${a}`;
@@ -3565,80 +3563,14 @@ function BotsPlaceholder({
           service.chat.history(peer.bot.id, 200),
         ]);
         if (cancelled) return;
-        const who = (botId: string): { key: number; name: string } | null => {
-          if (botId === me.bot.id) return { key: me.key, name: me.bot.name };
-          if (botId === peer.bot.id) return { key: peer.key, name: peer.bot.name };
-          return null;
-        };
-        // 按 dispatch/task_notice 元数据把一侧聊天切成任务段：段内 =
-        // 派发指令（fromBot 说了什么）+ 工作者的回复；段外不计入。
-        const segment = (rows: ChatHistoryRow[]): Map<string, ChatHistoryRow[]> => {
-          const map = new Map<string, ChatHistoryRow[]>();
-          let current: string | null = null;
-          for (const row of rows) {
-            if (row.meta?.kind === "dispatch") current = row.meta.taskId;
-            if (row.meta?.kind === "task_notice") {
-              const list = map.get(row.meta.taskId) ?? [];
-              list.push(row);
-              map.set(row.meta.taskId, list);
-              continue;
-            }
-            if (current === null) continue;
-            const list = map.get(current) ?? [];
-            list.push(row);
-            map.set(current, list);
-          }
-          return map;
-        };
-        const rows: PairRecord[] = [];
-        const pairTasks = tasks.tasks
-          .filter(
-            (task) =>
-              (task.fromBotId === me.bot.id && task.toBotId === peer.bot.id) ||
-              (task.fromBotId === peer.bot.id && task.toBotId === me.bot.id),
-          )
-          .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-        for (const task of pairTasks) {
-          const manager = who(task.fromBotId);
-          const worker = who(task.toBotId);
-          if (manager === null || worker === null) continue;
-          const history = task.toBotId === peer.bot.id ? peerRows : myRows;
-          const segmentRows = segment(history).get(task.id) ?? [];
-          const turnRows = segmentRows.filter((row) => row.meta?.kind !== "task_notice");
-          if (turnRows.length === 0) {
-            rows.push({
-              kind: "turn",
-              speakerKey: manager.key,
-              text: task.instruction,
-              at: task.createdAt,
-            });
-            if (task.resultSummary !== null && task.resultSummary !== "") {
-              rows.push({
-                kind: "turn",
-                speakerKey: worker.key,
-                text: task.resultSummary,
-                at: task.finishedAt ?? task.createdAt,
-              });
-            }
-          }
-          for (const row of segmentRows) {
-            if (row.meta?.kind === "task_notice") {
-              const summary =
-                row.meta.resultSummary !== undefined && row.meta.resultSummary.length > 0
-                  ? `：${row.meta.resultSummary}`
-                  : "";
-              rows.push({
-                kind: "notice",
-                text: `${statusLabel(row.meta.status)}${summary}`,
-                at: row.at,
-              });
-              continue;
-            }
-            const speaker = row.role === "assistant" ? worker : manager;
-            rows.push({ kind: "turn", speakerKey: speaker.key, text: row.text, at: row.at });
-          }
-        }
-        rows.sort((a, b) => a.at.localeCompare(b.at));
+        const rows = assemblePairRecords(
+          { id: me.bot.id, key: me.key },
+          { id: peer.bot.id, key: peer.key },
+          tasks.tasks,
+          myRows,
+          peerRows,
+          statusLabel,
+        );
         if (!cancelled) setPairRecords(rows);
       } catch {
         if (!cancelled) setPairRecords([]);
@@ -3752,9 +3684,17 @@ function BotsPlaceholder({
         <header className="pair-head">
           <span className="pair-title">
             <AvatarView avatar={me.avatar} variant="inline" size={26} />
+            <span className="pair-name" style={{ color: avatarColor(me.avatar) }}>
+              {me.bot.name}
+            </span>
             <span className="pair-arrow">⇄</span>
             <AvatarView avatar={peer?.avatar ?? me.avatar} variant="inline" size={26} />
-            <span>{peer?.bot.name ?? "?"}</span>
+            <span
+              className="pair-name"
+              style={{ color: avatarColor(peer?.avatar ?? me.avatar) }}
+            >
+              {peer?.bot.name ?? "?"}
+            </span>
           </span>
         </header>
         <div className="pair-body">
@@ -3776,7 +3716,16 @@ function BotsPlaceholder({
                       {speaker?.bot.name ?? "?"}
                     </span>
                     <div className="pair-bubble-row">
-                      <div className="msg-bubble">{row.text}</div>
+                      <div className="msg-bubble">
+                        <ChatMarkdown
+                          text={row.text}
+                          mentions={mentionTable}
+                          onMentionClick={(botKey) => {
+                            setDetailOther(null);
+                            onOpenBot(botKey);
+                          }}
+                        />
+                      </div>
                       <div className="pair-actions">
                         <button
                           type="button"
@@ -4214,26 +4163,50 @@ function BotsPlaceholder({
               )}
               {m.notice ? (
                 m.deliverTo ? (
-                  <div className="deliver-notice" role="status">
+                  <div
+                    className="deliver-notice"
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => {
+                      const key = m.deliverTo?.[0];
+                      if (key !== undefined) setDetailOther(key);
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key !== "Enter" && event.key !== " ") return;
+                      event.preventDefault();
+                      const key = m.deliverTo?.[0];
+                      if (key !== undefined) setDetailOther(key);
+                    }}
+                  >
                     <span className="deliver-label">{m.notice.label}</span>
                     <span className="avatar-stack">
                       {m.deliverTo.map((key) => {
                         const target = bots.find((bot) => bot.key === key);
                         return (
-                          <button
+                          <span
                             key={key}
-                            type="button"
                             className="stack-avatar"
+                            role="button"
+                            tabIndex={0}
                             title={t("shell.viewExchangesWith", [target?.bot.name ?? "?"])}
                             aria-label={t("shell.viewExchangesWith", [target?.bot.name ?? "?"])}
-                            onClick={() => setDetailOther(key)}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setDetailOther(key);
+                            }}
+                            onKeyDown={(event) => {
+                              if (event.key !== "Enter" && event.key !== " ") return;
+                              event.preventDefault();
+                              event.stopPropagation();
+                              setDetailOther(key);
+                            }}
                           >
                             <AvatarView
                               avatar={target?.avatar ?? me.avatar}
                               variant="inline"
                               size={20}
                             />
-                          </button>
+                          </span>
                         );
                       })}
                     </span>
@@ -4242,22 +4215,46 @@ function BotsPlaceholder({
                     )}
                   </div>
                 ) : m.id === firstNoticeId ? (
-                  <div className="chat-summary">
+                  <div
+                    className="chat-summary"
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => {
+                      const key = pairPeers[0];
+                      if (key !== undefined) setDetailOther(key);
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key !== "Enter" && event.key !== " ") return;
+                      event.preventDefault();
+                      const key = pairPeers[0];
+                      if (key !== undefined) setDetailOther(key);
+                    }}
+                  >
                     <span className="chat-summary-label">{t("shell.exchangeCount", [pairTotal])}</span>
                     {pairPeers.map((peerKey, peerIndex) => {
                       const peer = bots.find((bot) => bot.key === peerKey);
                       return (
                         <Fragment key={peerKey}>
                           {peerIndex > 0 && <span className="summary-and">{t("shell.and")}</span>}
-                          <button
-                            type="button"
+                          <span
                             className="summary-bot"
+                            role="button"
+                            tabIndex={0}
                             title={t("shell.viewExchangesWith", [peer?.bot.name ?? "?"])}
-                            onClick={() => setDetailOther(peerKey)}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setDetailOther(peerKey);
+                            }}
+                            onKeyDown={(event) => {
+                              if (event.key !== "Enter" && event.key !== " ") return;
+                              event.preventDefault();
+                              event.stopPropagation();
+                              setDetailOther(peerKey);
+                            }}
                           >
                             <AvatarView avatar={peer?.avatar ?? me.avatar} variant="inline" size={16} />
                             <span>{peer?.bot.name ?? "?"}</span>
-                          </button>
+                          </span>
                         </Fragment>
                       );
                     })}
@@ -4389,6 +4386,7 @@ function BotsPlaceholder({
           botId={me.bot.id}
           bots={bots}
           onOpenExchange={(botKey) => setDetailOther(botKey)}
+          onOpenBot={onOpenBot}
         />
       </div>
       {pendingFiles.length > 0 && (
