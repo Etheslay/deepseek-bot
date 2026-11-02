@@ -1,9 +1,9 @@
 /**
  * Pair transcript for two bots (the record behind 「已发消息给」 and
- * 「N 条消息往来」). History segments supply the words each side actually
- * sent. The sender's line is the instruction, not the task prompt. When a
- * handoff has only one of those turns, the instruction or the worker's
- * result fills the missing side.
+ * 「N 条消息往来」). A record is only that handoff: the sender's
+ * instruction and the worker's reply. The human conversation that shares
+ * the same session is not part of it. When one of the two turns was not
+ * stored, the instruction or the worker's result fills the gap.
  */
 import type { ChatHistoryRow } from "../../services/desktop-service.js";
 
@@ -23,23 +23,30 @@ export type PairTask = {
 
 type PairBot = { id: string; key: number };
 
-function segment(rows: ChatHistoryRow[]): Map<string, ChatHistoryRow[]> {
-  const map = new Map<string, ChatHistoryRow[]>();
-  let current: string | null = null;
-  for (const row of rows) {
-    if (row.meta?.kind === "dispatch") current = row.meta.taskId;
-    if (row.meta?.kind === "task_notice") {
-      const list = map.get(row.meta.taskId) ?? [];
-      list.push(row);
-      map.set(row.meta.taskId, list);
-      continue;
-    }
-    if (current === null) continue;
-    const list = map.get(current) ?? [];
-    list.push(row);
-    map.set(current, list);
+/**
+ * The two handoff rows for one task. A tagged reply wins. Otherwise the
+ * dispatch marker and the single assistant row right after it — never the
+ * rest of the session.
+ */
+function handoffRows(rows: ChatHistoryRow[], taskId: string): ChatHistoryRow[] {
+  const tagged = rows.filter((row) => {
+    const meta = row.meta;
+    if (meta === undefined) return false;
+    if (meta.kind !== "dispatch" && meta.kind !== "dispatch_reply") return false;
+    return meta.taskId === taskId;
+  });
+  if (tagged.some((row) => row.meta?.kind === "dispatch_reply")) {
+    return tagged;
   }
-  return map;
+  const start = rows.findIndex(
+    (row) => row.meta?.kind === "dispatch" && row.meta.taskId === taskId,
+  );
+  if (start < 0) return tagged;
+  const reply = rows
+    .slice(start + 1)
+    .find((row) => row.role === "assistant" && row.meta?.kind !== "task_notice");
+  const marker = rows[start];
+  return marker === undefined ? [] : reply === undefined ? [marker] : [marker, reply];
 }
 
 export function assemblePairRecords(
@@ -67,7 +74,7 @@ export function assemblePairRecords(
     const worker = who(task.toBotId);
     if (manager === null || worker === null) continue;
     const history = task.toBotId === peer.id ? peerRows : myRows;
-    const segmentRows = segment(history).get(task.id) ?? [];
+    const segmentRows = handoffRows(history, task.id);
     const hasManagerTurn = segmentRows.some(
       (row) => row.meta?.kind !== "task_notice" && row.role !== "assistant",
     );
