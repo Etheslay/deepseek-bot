@@ -1,19 +1,17 @@
 /**
  * Bot-exchange feed (the D05 消息往来 notices, now on real dispatch data):
  *
- * - Executor panel: a dispatch marker renders as 「消息来自 <sender>」.
- * - Coordinator panel: task.list synthesizes the mirror side — 「已发消息给
- *   <executor>」 while the turn runs, 「消息来自 <executor>」 once it settles,
- *   status notices when it fails or is cancelled.
- * - The instruction and the reply stay out of these one-line notices. Clicking
- *   either bot opens the pair transcript (current bot and that bot).
- * - Both panels end with a centered 「N 条消息往来：A 和 B」 row per peer,
+ * - Each instruction and reply is its own compact bubble.
+ * - A sent turn adds one centered 「已发消息给 <executor>」 line, with no
+ *   message text on that line. There is no second 「消息来自」 line.
+ * - Clicking a bot on that line or on the summary opens the pair transcript.
+ * - Each peer ends with one centered 「N 条消息往来：A 和 B」 row,
  *   counted from the same real tasks (never demo data).
  *
  * The feed polls chat.history + task.list on a light interval; the host owns
  * what lands in each session (dispatch markers, task notices).
  */
-import { useEffect, useState, type JSX } from "react";
+import { Fragment, useEffect, useState, type JSX } from "react";
 import type { ChatHistoryRow, DesktopService } from "../../services/desktop-service.js";
 import { useService } from "../../services/service-context.js";
 import type { UiBot } from "../bots/use-bots.js";
@@ -175,36 +173,37 @@ export function TaskFeedCards(props: {
   return (
     <div className="task-feed" aria-label={t("tasks.feedAria")}>
       {items.map((item, index) => {
-        if (item.kind === "incoming" || item.kind === "received") {
-          const exchangeKey = botKeyById.get(item.fromBotId);
-          return (
-            <div className="deliver-notice" key={`${item.kind}-${index}`} role="status">
-              <span className="deliver-label">{t("shell.messageFrom")}</span>
-              {chip(item.fromBotId, 18, exchangeKey)}
+        const bubble =
+          item.kind !== "receipt" && item.text !== "" ? (
+            <div className="exchange-bubble" key={`text-${index}`}>
+              {item.text}
             </div>
-          );
+          ) : null;
+        if (item.kind === "incoming" || item.kind === "received") {
+          return bubble;
         }
         if (item.kind === "sent") {
           const exchangeKey = botKeyById.get(item.toBotId);
-          if (ACTIVE_STATUSES.has(item.status) || item.status === "done") {
-            // The message left this bot. The notice stays a single line whether
-            // the reply has landed; the text itself opens with the peer chip.
-            return (
-              <div className="deliver-notice" key={`sent-${index}`} role="status">
-                <span className="deliver-label">{t("shell.sentTo")}</span>
+          const quiet =
+            ACTIVE_STATUSES.has(item.status) || item.status === "done";
+          return (
+            <Fragment key={`sent-${index}`}>
+              {bubble}
+              <div className="deliver-notice" role="status">
+                {quiet ? (
+                  <span className="deliver-label">{t("shell.sentTo")}</span>
+                ) : (
+                  <span className={`task-status task-status--${item.status}`}>
+                    {statusLabel(item.status)}
+                  </span>
+                )}
                 {chip(item.toBotId, 18, exchangeKey)}
               </div>
-            );
-          }
-          return (
-            <div className="task-notice" key={`sent-${index}`} role="status">
-              <span className={`task-status task-status--${item.status}`}>{statusLabel(item.status)}</span>
-              {chip(item.toBotId, 18, exchangeKey)}
-            </div>
+            </Fragment>
           );
         }
         return (
-          <div className="task-notice" key={`note-${index}`} role="status">
+          <div className="deliver-notice" key={`note-${index}`} role="status">
             <span className={`task-status task-status--${item.status}`}>{statusLabel(item.status)}</span>
           </div>
         );

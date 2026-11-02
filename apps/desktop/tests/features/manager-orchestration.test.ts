@@ -216,12 +216,11 @@ describe("chat task feed (FR-4/FR-7)", () => {
     );
     const feed = container.querySelector(".task-feed");
     expect(feed).not.toBeNull();
-    // The incoming dispatch is a one-line notice. The task text stays in the
-    // pair transcript opened by the sender chip.
-    expect(feed!.querySelector(".deliver-label")?.textContent).toBe("消息来自");
-    expect(feed!.textContent).not.toContain("选题清单");
-    const senderChip = feed!.querySelector<HTMLButtonElement>(".deliver-notice .summary-bot");
-    expect(senderChip?.textContent).toContain("manager");
+    // The task text is a bubble. The summary chip opens the pair transcript.
+    expect(feed!.querySelector(".exchange-bubble")?.textContent).toContain("选题清单");
+    expect(feed!.textContent).not.toContain("消息来自");
+    const senderChip = feed!.querySelector<HTMLButtonElement>(".chat-summary .summary-bot");
+    expect(senderChip).not.toBeNull();
     await act(async () => {
       senderChip!.click();
     });
@@ -264,18 +263,15 @@ describe("chat task feed (FR-4/FR-7)", () => {
     const feed = container.querySelector(".task-feed");
     expect(feed).not.toBeNull();
     const notices = feed!.querySelectorAll(".deliver-notice");
-    // done task first (09:01): 已发消息给 writer, then the reply arrives as
-    // 消息来自 writer; the queued task (09:02) trails as its own sent notice.
-    // Neither line carries the message body.
-    expect(notices.length).toBe(3);
+    const bubbles = [...feed!.querySelectorAll(".exchange-bubble")].map((node) => node.textContent ?? "");
+    // Words sit in bubbles. Each send is one centered line with no body on it.
+    expect(bubbles).toEqual(expect.arrayContaining(["出本周选题清单", "清单完成", "整理纪要"]));
+    expect(notices.length).toBe(2);
     expect(notices[0]?.textContent).toContain("已发消息给");
     expect(notices[0]?.textContent).not.toContain("出本周选题清单");
-    expect(notices[1]?.textContent).toContain("消息来自");
-    expect(notices[1]?.textContent).not.toContain("清单完成");
-    expect(notices[2]?.textContent).toContain("已发消息给");
-    expect(notices[2]?.textContent).not.toContain("整理纪要");
-    expect(feed!.querySelector(".dispatch-text")).toBeNull();
-    expect(feed!.querySelector(".exchange-preview")).toBeNull();
+    expect(notices[1]?.textContent).toContain("已发消息给");
+    expect(notices[1]?.textContent).not.toContain("整理纪要");
+    expect(feed!.textContent).not.toContain("消息来自");
     const summary = feed!.querySelector(".chat-summary");
     expect(summary?.textContent).toContain("3 条消息往来：");
     expect(summary?.textContent).toContain("和");
