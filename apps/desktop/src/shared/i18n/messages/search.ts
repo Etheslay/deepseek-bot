@@ -23,5 +23,5 @@ export const searchMessages = {
   "search.queryLabel": { zh: "搜索 {0}", en: "Search: {0}" },
   "search.results": { zh: "搜索结果", en: "Search results" },
   "search.resultsReadFailed": { zh: "搜索结果读取失败", en: "Failed to read search results" },
-  "search.sectionTitle": { zh: "网络搜索（SearXNG，只保存地址）", en: "Web search (SearXNG, only the address is stored)" },
+  "search.sectionTitle": { zh: "网络搜索", en: "Web search" },
 } satisfies Record<string, Message>;
