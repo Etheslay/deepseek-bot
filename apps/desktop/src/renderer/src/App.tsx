@@ -41,6 +41,7 @@ import {
   failureMessage,
 } from "./features/chat/chat-reducer.js";
 import { statusLabel } from "./features/chat/task-feed.js";
+import { planSessionSublistRefresh } from "./features/chat/session-sublist.js";
 import {
   runChatStream,
   type StreamStateForBot,
@@ -94,6 +95,7 @@ import {
   formatAttachmentSize,
   MAX_ATTACHMENT_BYTES,
   type AttachmentDraft,
+  type VisionNoteMode,
 } from "./features/chat/attachments.js";
 import { prepareVisionImage } from "./features/chat/image-vision.js";
 import type { StreamOptions } from "./services/desktop-service.js";
@@ -447,6 +449,8 @@ export function App(): JSX.Element {
    * prop (a turn's commit target is decided at settle time, not render time).
    */
   const [historySessions, setHistorySessions] = useState<ChatSessionView[] | null>(null);
+  /** G12: the bot key the current sub-list was loaded for (open-defects §2.3). */
+  const loadedSessionsForBot = useRef<number | null>(null);
   const [sessionByBot, setSessionByBot] = useState<Record<number, string>>({});
   const activeSessionRef = useRef<Record<number, string>>({});
   const sessionThreadCache = useRef(new Map<string, Msg[]>());
@@ -938,10 +942,18 @@ export function App(): JSX.Element {
     }
   }, [modalOpen, editingBot]);
   useEffect(() => {
-    // G12: the selected bot's sessions load once per selection and feed both
-    // the sidebar sub-list and the recent-sessions popover; a switch clears
-    // the previous bot's list instead of flashing it under the new bot.
-    setHistorySessions(null);
+    // G12: the selected bot's sessions feed both the sidebar sub-list and the
+    // recent-sessions popover. Switching bots clears the previous bot's list
+    // instead of flashing it under the new bot; an unrelated visible-bots
+    // update (create/hide/reorder — a new array identity) keeps the current
+    // list and refreshes it in place, so the sub-list neither flashes nor
+    // swallows clicks (open-defects §2.3). A failed in-place refresh keeps
+    // the old list instead of overwriting it with an empty array.
+    const refresh = planSessionSublistRefresh(loadedSessionsForBot.current, selectedBot);
+    loadedSessionsForBot.current = selectedBot;
+    if (refresh === "clear-then-load") {
+      setHistorySessions(null);
+    }
     if (selectedBot === null) {
       return;
     }
@@ -957,7 +969,7 @@ export function App(): JSX.Element {
         }
       },
       () => {
-        if (!cancelled) {
+        if (!cancelled && refresh === "clear-then-load") {
           setHistorySessions([]);
         }
       },
@@ -4426,15 +4438,22 @@ function BotsPlaceholder({
     const meta = pendingMeta ?? undefined;
     const outgoing: NonNullable<Msg["attachments"]> = [];
     const pointers: string[] = [];
-    // B3'' 视觉输入: when the capability flag says the model is known to
-    // accept images, raster attachments also ride the request as real image
-    // content blocks (downscaled to the provider budget). The workspace copy
-    // and pointer text stay regardless — an image is never silently dropped.
-    let visionRideAlong = false;
+    // B3'' 视觉输入 + open-defects §2.1 (plan 乙): only a cataloged vision
+    // model rides the request as real image content blocks (downscaled to the
+    // provider budget). The capability flags decide the model-facing note —
+    // cataloged text-only says "cannot see", an unregistered id says "not
+    // registered, blocks not attached". The workspace copy and pointer text
+    // stay regardless — an image is never silently dropped.
+    let vision: VisionNoteMode = "unregistered";
     try {
-      visionRideAlong = (await service.vision.status(me.bot.id)).visionAvailable;
+      const status = await service.vision.status(me.bot.id);
+      vision = status.visionAvailable
+        ? "ride-along"
+        : status.visionKnown
+          ? "text-only"
+          : "unregistered";
     } catch {
-      visionRideAlong = false;
+      vision = "unregistered";
     }
     const imageBlocks: { data: string; mimeType: "image/png" | "image/jpeg" | "image/webp" | "image/gif" }[] = [];
     for (const file of files) {
@@ -4455,7 +4474,7 @@ function BotsPlaceholder({
           path: uploaded.path,
           relativePath: uploaded.path,
         });
-        if (visionRideAlong && kind === "image") {
+        if (vision === "ride-along" && kind === "image") {
           const prepared = await prepareVisionImage(
             { bytes: file.bytes, mime: file.mime },
             async (bytes, longEdge, quality) => {
@@ -4494,7 +4513,7 @@ function BotsPlaceholder({
                 path: uploaded.path,
               },
             ],
-            visionRideAlong && kind === "image",
+            vision,
           ),
           buildAttachmentContext({
             name: file.name,

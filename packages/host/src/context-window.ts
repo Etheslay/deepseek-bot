@@ -19,18 +19,21 @@ export const DEFAULT_CONTEXT_WINDOW_TOKENS = 65_536;
 /**
  * Per-model context window in tokens. Values must match the provider's
  * documented window: claiming more than the model accepts makes the meter
- * under-report and lets a request overflow at the API layer. Keys are the
- * model names that actually occur in this repository — the Host seeds exactly
- * these two profiles (host.ts) and the desktop reasoner switch uses the same
- * pair. Source: api-docs.deepseek.com — DeepSeek-V3.1 release note states a
- * 128K context for both `deepseek-chat` (non-thinking) and
- * `deepseek-reasoner` (thinking) on the API; verified 2026-10-30. New models:
- * only add a key once the provider doc states its window — unknown names fall
- * back instead of guessing.
+ * under-report and lets a request overflow at the API layer. Keys are model
+ * names that actually occur in this repository. Sources: api-docs.deepseek.com
+ * — the DeepSeek-V3.1 release note states a 128K context for `deepseek-chat`
+ * (non-thinking) and `deepseek-reasoner` (thinking) on the API; verified
+ * 2026-10-30. The Models & Pricing page states "CONTEXT LENGTH 1M" (max
+ * output 384K) for `deepseek-flash` on a row shared with deepseek-v4-pro;
+ * verified 2026-11-01 — that page no longer lists chat/reasoner, whose
+ * entries keep the V3.1 citation. New models: only add a key once the
+ * provider doc states its window — unknown names fall back instead of
+ * guessing.
  */
 export const MODEL_CONTEXT_WINDOWS: Record<string, number> = {
   "deepseek-chat": 128_000,
   "deepseek-reasoner": 128_000,
+  "deepseek-flash": 1_000_000,
 };
 
 /**

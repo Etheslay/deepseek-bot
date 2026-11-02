@@ -13,8 +13,17 @@ import type { BotDraft } from "../../services/desktop-service.js";
 import { CustomSelect } from "../../components/custom-select.js";
 import { t, type MessageKey } from "../../i18n.js";
 
+/**
+ * Built-in model profiles seeded by the Host (host.ts): the UUIDs mirror the
+ * well-known ids across the process boundary (the renderer never imports the
+ * host package). deepseek-flash is the pinned catalog's only image-input
+ * model (open-defects §2.1, plan 乙) — selecting it is what makes image
+ * recognition work.
+ */
 const MODEL_OPTIONS = [
   { id: "44444444-4444-4444-8444-444444444444", label: "DeepSeek · deepseek-chat" },
+  { id: "8d5a5e30-0000-4000-8000-000000000005", label: "DeepSeek · deepseek-reasoner" },
+  { id: "8d5a5e30-0000-4000-8000-000000000006", label: "DeepSeek · deepseek-flash (vision)" },
 ];
 
 /**

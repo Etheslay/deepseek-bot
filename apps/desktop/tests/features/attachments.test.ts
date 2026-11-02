@@ -114,16 +114,38 @@ describe("chat attachments", () => {
   });
 
   it("describes images and binaries by path without inline content", () => {
-    const blocks = composeAttachmentBlocks([
-      { name: "shot.png", size: 4096, mime: "image/png", kind: "image", path: "attachments/shot.png" },
-      { name: "data.bin", size: 99, mime: "application/octet-stream", kind: "binary", path: "attachments/data.bin" },
-    ]);
+    const blocks = composeAttachmentBlocks(
+      [
+        { name: "shot.png", size: 4096, mime: "image/png", kind: "image", path: "attachments/shot.png" },
+        { name: "data.bin", size: 99, mime: "application/octet-stream", kind: "binary", path: "attachments/data.bin" },
+      ],
+      "unregistered",
+    );
     expect(blocks).toHaveLength(2);
-    expect(blocks[0]).toContain("视觉理解");
+    expect(blocks[0]).toContain("未登记视觉能力");
+    expect(blocks[0]).toContain("deepseek-flash");
     expect(blocks[1]).toContain("二进制");
     for (const block of blocks) {
       expect(block).not.toContain("```");
     }
+  });
+
+  it("tells a cataloged text-only model the image cannot be seen", () => {
+    const [block] = composeAttachmentBlocks(
+      [{ name: "shot.png", size: 4096, mime: "image/png", kind: "image", path: "attachments/shot.png" }],
+      "text-only",
+    );
+    expect(block).toContain("无法看图");
+    expect(block).toContain("attachments/shot.png");
+  });
+
+  it("announces ride-along images as delivered content blocks", () => {
+    const [block] = composeAttachmentBlocks(
+      [{ name: "shot.png", size: 4096, mime: "image/png", kind: "image", path: "attachments/shot.png" }],
+      "ride-along",
+    );
+    expect(block).toContain("图像内容交给模型");
+    expect(block).toContain("attachments/shot.png");
   });
 
   it("skips cards without an uploaded workspace path", () => {

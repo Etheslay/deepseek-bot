@@ -2,7 +2,7 @@
 
 基于 DeepSeek Harness 的本地桌面机器人与工作流应用。目标是提供接近 Grok Bot 的机器人协作体验，让用户在自己的电脑上创建机器人、交办任务并组织可重复执行的工作流。
 
-**当前阶段：运行时、存储、桌面与工作流基础已落地；D15 工具后端、D16 权限后端与界面、D17 渲染层技能库已集成。本功能分支打通真实聊天应用工具的授权闭环，证据见 [D16 Harness 工具报告](docs/reports/D16-harness-tools-report.md)。发布与完整产品验收尚未完成。**
+**当前阶段：运行时与桌面已集成到协议 v0.14；发布验收尚未完成。现状与缺口以 [docs/GAP_AUDIT.md](docs/GAP_AUDIT.md) 与 [docs/SPRINTS.md](docs/SPRINTS.md) §4 为准。**
 
 ## 已确定的产品边界
 
