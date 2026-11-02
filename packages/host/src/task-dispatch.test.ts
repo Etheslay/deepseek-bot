@@ -9,7 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
-import { afterAll, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import type { AppApproval, Task } from "@deepseek-bot/contracts";
 import { createBot, getBot, insertTask, listChatMessages, listTasks, listWorkflows } from "@deepseek-bot/storage";
 import { createHost, type DeepSeekBotHost } from "./host.js";
@@ -20,10 +20,18 @@ const fakeHarness = fileURLToPath(
 const roots: string[] = [];
 const hosts: DeepSeekBotHost[] = [];
 
-afterAll(async () => {
-  for (const host of hosts.splice(0)) {
-    await host.shutdown().catch(() => undefined);
-  }
+// Shutdown used to run once in afterAll, one host after another. This file
+// keeps a host per test (about twenty, including restart boots). On the
+// Windows CI runner that sequence did not finish inside Vitest's 10s hook
+// budget, so the hook timed out inside host.shutdown() after every test had
+// already passed. Close the hosts as each test ends — one or two, and the
+// ones a test already closed return immediately — then delete the temp
+// roots after the processes have released them.
+afterEach(async () => {
+  await Promise.all(hosts.splice(0).map((host) => host.shutdown().catch(() => undefined)));
+}, 20_000);
+
+afterAll(() => {
   for (const root of roots.splice(0)) {
     rmSync(root, { recursive: true, force: true });
   }

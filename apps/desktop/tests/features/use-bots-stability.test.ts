@@ -1,9 +1,8 @@
 /**
  * useBots returns a filtered copy of its state (`bots.filter(...)`). Effects
- * key on the `bots` reference — the G12 session loader resets historySessions
- * on every run — so a fresh array per render looped those effects forever and
- * made the sidebar session sublist flash (first seen on a real machine
- * 2026-11-01). The filter is memoized now; these tests pin the identity.
+ * key on the `bots` reference, so a fresh array per render used to loop those
+ * effects forever (the old session sublist flashed on a real machine
+ * 2026-11-01). The filter is memoized; these tests pin the identity.
  */
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it } from "vitest";

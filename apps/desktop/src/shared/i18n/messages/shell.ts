@@ -139,6 +139,10 @@ export const shellMessages = {
   "shell.noSessionsYet": { zh: "还没有历史会话", en: "No past sessions yet" },
   "shell.notConfigured": { zh: "未配置", en: "Not set" },
   "shell.noUpdatesReleased": { zh: "暂无可用更新（尚未发布 Release）", en: "No updates available (no Release published yet)" },
+  "shell.oneConversation": {
+    zh: "这个机器人只有一段对话，就在当前窗口。",
+    en: "This bot has one conversation, open in this window.",
+  },
   "shell.openAttachmentPreview": { zh: "预览附件 {0}", en: "Preview attachment {0}" },
   "shell.openInCanvas": { zh: "在画布中打开", en: "Open in canvas" },
   "shell.openRunMonitor": { zh: "打开运行监控与审批", en: "Open Run Monitor & Approvals" },
