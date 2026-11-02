@@ -210,23 +210,25 @@ describe("chat task feed (FR-4/FR-7)", () => {
             { key: 2, bot: { id: WRITER, name: "writer", role: "standard" } },
             { key: 3, bot: { id: CODER, name: "coder", role: "standard" } },
           ] as never,
-          onOpenExchange: (botKey: number) => opened.push(botKey),
+          onOpenBot: (botKey: number) => opened.push(botKey),
         }),
       ),
     );
     const feed = container.querySelector(".task-feed");
     expect(feed).not.toBeNull();
-    // The task text stays in the pair record. The summary opens it.
     expect(feed!.querySelector(".exchange-bubble")).toBeNull();
     expect(feed!.textContent).not.toContain("选题清单");
     expect(feed!.textContent).not.toContain("消息来自");
-    const senderChip = feed!.querySelector<HTMLButtonElement>(".chat-summary .summary-bot");
-    expect(senderChip).not.toBeNull();
+    const summary = feed!.querySelector(".chat-summary");
+    expect(summary?.tagName).not.toBe("BUTTON");
+    const managerChip = [...(summary?.querySelectorAll<HTMLButtonElement>("button.summary-bot") ?? [])].find(
+      (node) => node.textContent?.includes("manager"),
+    );
+    expect(managerChip).toBeDefined();
     await act(async () => {
-      senderChip!.click();
+      managerChip!.click();
     });
     expect(opened).toEqual([1]);
-    const summary = feed!.querySelector(".chat-summary");
     expect(summary?.textContent).toContain("1 条消息往来：");
     expect(summary?.textContent).toContain("和");
     expect(summary?.textContent).toContain("writer");
@@ -257,7 +259,7 @@ describe("chat task feed (FR-4/FR-7)", () => {
             { key: 1, bot: { id: COORDINATOR, name: "manager", role: "coordinator" } },
             { key: 2, bot: { id: WRITER, name: "writer", role: "standard" } },
           ] as never,
-          onOpenExchange: () => undefined,
+          onOpenBot: () => undefined,
         }),
       ),
     );
@@ -279,7 +281,7 @@ describe("chat task feed (FR-4/FR-7)", () => {
     expect(summary?.textContent).toContain("writer");
   });
 
-  it("opens the pair record from the whole status line", async () => {
+  it("opens a bot from its name and ignores the status words", async () => {
     const done = task({
       status: "done",
       instruction: "请 writer 开渲",
@@ -298,24 +300,25 @@ describe("chat task feed (FR-4/FR-7)", () => {
             { key: 1, bot: { id: COORDINATOR, name: "manager", role: "coordinator" } },
             { key: 2, bot: { id: WRITER, name: "writer", role: "standard" } },
           ] as never,
-          onOpenExchange: (botKey: number) => opened.push(botKey),
+          onOpenBot: (botKey: number) => opened.push(botKey),
         }),
       ),
     );
     const feed = container.querySelector(".task-feed");
     expect(feed).not.toBeNull();
-    expect(feed!.textContent).not.toContain("请 writer 开渲");
-    expect(feed!.textContent).not.toContain("你好");
-    const notice = feed!.querySelector<HTMLButtonElement>("button.deliver-notice");
+    const notice = feed!.querySelector(".deliver-notice");
     expect(notice).not.toBeNull();
+    expect(notice!.tagName).not.toBe("BUTTON");
     await act(async () => {
-      notice!.click();
+      notice!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
-    const summary = feed!.querySelector<HTMLButtonElement>("button.chat-summary");
+    expect(opened).toEqual([]);
+    const writer = notice!.querySelector<HTMLButtonElement>("button.summary-bot");
+    expect(writer).not.toBeNull();
     await act(async () => {
-      summary!.click();
+      writer!.click();
     });
-    expect(opened).toEqual([2, 2]);
+    expect(opened).toEqual([2]);
   });
 
   it("renders nothing when the host has no marked rows", async () => {
@@ -329,7 +332,7 @@ describe("chat task feed (FR-4/FR-7)", () => {
           bots: [
             { key: 2, bot: { id: WRITER, name: "writer", role: "standard" } },
           ] as never,
-          onOpenExchange: () => undefined,
+          onOpenBot: () => undefined,
         }),
       ),
     );
