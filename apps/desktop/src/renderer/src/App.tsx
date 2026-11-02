@@ -3665,6 +3665,18 @@ function BotsPlaceholder({
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
   }, [msgs.length]);
 
+  /** Ask the Host whether the shipped whisper build and Windows SAPI are usable.
+   * Kept with the other hooks: the pair view returns early, and a hook below
+   * that return drops out and blanks the window. */
+  useEffect(() => {
+    void window.deepseekBot.host
+      .call("voice.status", {})
+      .then((response) =>
+        setVoiceStatus(METHOD_CONTRACTS["voice.status"].response.parse(response)),
+      )
+      .catch(() => setVoiceStatus(null));
+  }, []);
+
   if (!me) {
     return (
       <div className="bubble">
@@ -4103,16 +4115,6 @@ function BotsPlaceholder({
     startChatStream(option.label);
   };
 
-  /** Ask the Host whether the shipped whisper build and Windows SAPI are usable. */
-  useEffect(() => {
-    void window.deepseekBot.host
-      .call("voice.status", {})
-      .then((response) =>
-        setVoiceStatus(METHOD_CONTRACTS["voice.status"].response.parse(response)),
-      )
-      .catch(() => setVoiceStatus(null));
-  }, []);
-
   const speakMessage = (msgId: number, text: string): void => {
     if (speakingId !== null) {
       return;
@@ -4161,50 +4163,26 @@ function BotsPlaceholder({
               )}
               {m.notice ? (
                 m.deliverTo ? (
-                  <div
-                    className="deliver-notice"
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => {
-                      const key = m.deliverTo?.[0];
-                      if (key !== undefined) setDetailOther(key);
-                    }}
-                    onKeyDown={(event) => {
-                      if (event.key !== "Enter" && event.key !== " ") return;
-                      event.preventDefault();
-                      const key = m.deliverTo?.[0];
-                      if (key !== undefined) setDetailOther(key);
-                    }}
-                  >
+                  <div className="deliver-notice" role="status">
                     <span className="deliver-label">{m.notice.label}</span>
                     <span className="avatar-stack">
                       {m.deliverTo.map((key) => {
                         const target = bots.find((bot) => bot.key === key);
                         return (
-                          <span
+                          <button
                             key={key}
+                            type="button"
                             className="stack-avatar"
-                            role="button"
-                            tabIndex={0}
-                            title={t("shell.viewExchangesWith", [target?.bot.name ?? "?"])}
-                            aria-label={t("shell.viewExchangesWith", [target?.bot.name ?? "?"])}
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              setDetailOther(key);
-                            }}
-                            onKeyDown={(event) => {
-                              if (event.key !== "Enter" && event.key !== " ") return;
-                              event.preventDefault();
-                              event.stopPropagation();
-                              setDetailOther(key);
-                            }}
+                            title={t("shell.openSessionWith", [target?.bot.name ?? "?"])}
+                            aria-label={t("shell.openSessionWith", [target?.bot.name ?? "?"])}
+                            onClick={() => onOpenBot(key)}
                           >
                             <AvatarView
                               avatar={target?.avatar ?? me.avatar}
                               variant="inline"
                               size={20}
                             />
-                          </span>
+                          </button>
                         );
                       })}
                     </span>
@@ -4213,46 +4191,22 @@ function BotsPlaceholder({
                     )}
                   </div>
                 ) : m.id === firstNoticeId ? (
-                  <div
-                    className="chat-summary"
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => {
-                      const key = pairPeers[0];
-                      if (key !== undefined) setDetailOther(key);
-                    }}
-                    onKeyDown={(event) => {
-                      if (event.key !== "Enter" && event.key !== " ") return;
-                      event.preventDefault();
-                      const key = pairPeers[0];
-                      if (key !== undefined) setDetailOther(key);
-                    }}
-                  >
+                  <div className="chat-summary">
                     <span className="chat-summary-label">{t("shell.exchangeCount", [pairTotal])}</span>
                     {pairPeers.map((peerKey, peerIndex) => {
                       const peer = bots.find((bot) => bot.key === peerKey);
                       return (
                         <Fragment key={peerKey}>
                           {peerIndex > 0 && <span className="summary-and">{t("shell.and")}</span>}
-                          <span
+                          <button
+                            type="button"
                             className="summary-bot"
-                            role="button"
-                            tabIndex={0}
-                            title={t("shell.viewExchangesWith", [peer?.bot.name ?? "?"])}
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              setDetailOther(peerKey);
-                            }}
-                            onKeyDown={(event) => {
-                              if (event.key !== "Enter" && event.key !== " ") return;
-                              event.preventDefault();
-                              event.stopPropagation();
-                              setDetailOther(peerKey);
-                            }}
+                            title={t("shell.openSessionWith", [peer?.bot.name ?? "?"])}
+                            onClick={() => onOpenBot(peerKey)}
                           >
                             <AvatarView avatar={peer?.avatar ?? me.avatar} variant="inline" size={16} />
                             <span>{peer?.bot.name ?? "?"}</span>
-                          </span>
+                          </button>
                         </Fragment>
                       );
                     })}
@@ -4383,7 +4337,7 @@ function BotsPlaceholder({
         <TaskFeedCards
           botId={me.bot.id}
           bots={bots}
-          onOpenExchange={(botKey) => setDetailOther(botKey)}
+          onOpenBot={onOpenBot}
         />
       </div>
       {pendingFiles.length > 0 && (

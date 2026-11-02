@@ -1706,17 +1706,8 @@ body {
   border: none;
   border-radius: 999px;
   padding: 0.3rem 0.8rem;
-  cursor: pointer;
+  cursor: default;
   white-space: nowrap;
-}
-
-.chat > .chat-summary:hover {
-  background: var(--item-hover);
-  color: var(--text);
-}
-
-.chat > .chat-summary:focus-visible {
-  outline: 2px solid #8ab4ff;
 }
 
 .chat > .chat-summary .blob-face,
@@ -6621,29 +6612,9 @@ select option {
   white-space: nowrap;
 }
 
-.task-feed > button.deliver-notice,
-.task-feed > button.chat-summary {
-  font: inherit;
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  color: var(--muted);
-}
-
-.task-feed > button.deliver-notice:hover,
-.task-feed > button.chat-summary:hover {
-  background: var(--item-hover);
-  color: var(--text);
-}
-
-.task-feed > button.deliver-notice:focus-visible,
-.task-feed > button.chat-summary:focus-visible {
-  outline: 2px solid #8ab4ff;
-}
-
-.deliver-notice[role="button"],
-.chat-summary[role="button"] {
-  cursor: pointer;
+.deliver-notice,
+.chat-summary {
+  cursor: default;
 }
 
 /* G6: the weak 重新生成 / 编辑后重发 label on re-entered messages. */
