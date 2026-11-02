@@ -10,7 +10,7 @@ export const botsMessages = {
   "bots.customToneInputPlaceholder": { zh: "输入你的自定义语气", en: "Enter your custom tone" },
   "bots.defaultToolPolicyReadOnly": { zh: "默认工具策略（只读）", en: "Default tool policy (read-only)" },
   "bots.instructionsHint": { zh: "可选：说明它能做什么、不能做什么；最大 4000 字。", en: "Optional: describe what it can and cannot do; max 4000 characters." },
-  "bots.instructionsPlaceholder": { zh: "描述这个 Bot 的职责、语气和边界…", en: "Describe this Bot's duties, tone, and boundaries…" },
+  "bots.instructionsPlaceholder": { zh: "职责", en: "Duties" },
   "bots.modelProfile": { zh: "模型配置", en: "Model profile" },
   "bots.namePlaceholder": { zh: "给你的 Bot 起个名字", en: "Name your Bot" },
   "bots.personality": { zh: "性格", en: "Personality" },

@@ -29,7 +29,6 @@ export function VoiceLanguageSettings(props: {
           ariaLabel={t("voice.transcribeLanguage")}
         />
       </div>
-      <p className="session-meta">{t("voice.transcribeLanguageHint")}</p>
     </div>
   );
 }

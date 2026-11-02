@@ -253,8 +253,8 @@ export function UsagePanel(props: { botId: string | null }): JSX.Element {
           </div>
 
           {totals.estimated && (
-            <div className="usage-note" role="note" title={t("usage.estimatedHint")}>
-              {t("usage.estimated")} · {t("usage.estimatedHint")}
+            <div className="usage-note" role="note">
+              {t("usage.estimated")}
             </div>
           )}
 

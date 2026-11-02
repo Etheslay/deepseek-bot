@@ -95,7 +95,7 @@ export function RunDetail(props: {
       )}
       {view.status === "interrupted" && (
         <p className="rm-interrupted" role="alert">
-          {t("runs.runInterrupted")}{view.interruptedReason ?? t("runs.hostProcessExited")}{t("runs.resumeHint")}
+          {t("runs.runInterrupted")}{view.interruptedReason ?? t("runs.hostProcessExited")}
         </p>
       )}
       {view.illegalTransitions.length > 0 && (
@@ -185,11 +185,6 @@ export function RunDetail(props: {
             。
           </p>
         )}
-        {stream !== null && stream.rebuildCount > 0 && (
-          <p className="rm-sub">
-            {t("runs.rebuildCountNote", [stream.rebuildCount])}
-          </p>
-        )}
         <ol className="rm-timeline">
           {view.timeline.map((entry) => (
             <li key={`${entry.sequence}-${entry.type}`} className="rm-timeline-item">
@@ -205,7 +200,7 @@ export function RunDetail(props: {
         {transient.length > 0 && (
           <div className="rm-transient" aria-label={t("runs.transientStream")}>
             <span className="rm-transient-label">
-              {t("runs.transientStreamNote")}
+              {t("runs.transientStream")}
             </span>
             <p className="rm-transient-text">
               {transient.map((delta) => delta.textDelta ?? "").join("")}
@@ -225,9 +220,6 @@ export function RunDetail(props: {
               {t("runs.simulateReconnect")}
             </button>
           </div>
-          <p className="rm-sub">
-            {t("runs.fixtureSourceNote")}
-          </p>
         </section>
       )}
     </div>

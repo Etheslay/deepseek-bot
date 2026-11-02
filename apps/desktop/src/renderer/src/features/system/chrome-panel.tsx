@@ -85,7 +85,6 @@ export function ChromeImportPanel(props: { onToast: (message: string) => void })
 
   return (
     <div className="chrome-import" data-testid="chrome-import">
-      <p className="settings-hint">{t("d22.chromePrivacy")}</p>
       <div className="settings-row">
         <span>{t("d22.chromeSource")}</span>
         <span className="settings-soon">

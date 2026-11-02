@@ -140,7 +140,6 @@ export function WorkflowEditor(props: { onClose: () => void }): JSX.Element {
             <span className="wf-palette-badge approval">{t("runs.approval")}</span>
             <span>{t("workflow.manualApprovalNode")}</span>
           </button>
-          <p className="wf-palette-hint">{t("workflow.paletteHint")}</p>
         </aside>
 
         <WorkflowCanvas

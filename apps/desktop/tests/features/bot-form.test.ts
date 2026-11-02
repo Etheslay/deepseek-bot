@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  botFormInitialKey,
   mergeToneInstructions,
   parseToneSelection,
   TONE_PRESETS,
@@ -127,5 +128,12 @@ describe("tone presets and the instruction suffix", () => {
       id: "tsundere",
       custom: null,
     });
+  });
+
+  it("treats a new object with the same fields as the same pre-fill", () => {
+    const first = botFormInitialKey(VALID);
+    const again = botFormInitialKey({ ...VALID });
+    expect(again).toBe(first);
+    expect(botFormInitialKey({ ...VALID, name: "other" })).not.toBe(first);
   });
 });

@@ -73,7 +73,6 @@ export function NotificationSettingsPanel(props: {
         checked={props.prefs.enabled}
         onChange={(enabled) => props.onChange({ ...props.prefs, enabled })}
         label={t("d22.notifyEnabled")}
-        hint={t("d22.notifyEnabledHint")}
       />
       <SettingsSwitch
         checked={props.prefs.onlyWhenUnfocused}
@@ -83,15 +82,15 @@ export function NotificationSettingsPanel(props: {
       <div className="settings-row">
         <span>{t("d22.notifyTest")}</span>
         <span className="key-input-wrap">
-          <span className="settings-soon">
-            {testState === null
-              ? t("d22.notifyTestHint")
-              : testState.shown
+          {testState !== null && (
+            <span className="settings-soon">
+              {testState.shown
                 ? t("d22.notifyTestSent")
                 : testState.reason === "unsupported"
                   ? t("d22.notifyUnsupported")
                   : t("d22.notifyTestSkipped")}
-          </span>
+            </span>
+          )}
           <button
             type="button"
             className="pill-btn"
