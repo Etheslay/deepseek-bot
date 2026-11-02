@@ -3616,6 +3616,23 @@ function BotsPlaceholder({
           if (manager === null || worker === null) continue;
           const history = task.toBotId === peer.bot.id ? peerRows : myRows;
           const segmentRows = segment(history).get(task.id) ?? [];
+          const turnRows = segmentRows.filter((row) => row.meta?.kind !== "task_notice");
+          if (turnRows.length === 0) {
+            rows.push({
+              kind: "turn",
+              speakerKey: manager.key,
+              text: task.instruction,
+              at: task.createdAt,
+            });
+            if (task.resultSummary !== null && task.resultSummary !== "") {
+              rows.push({
+                kind: "turn",
+                speakerKey: worker.key,
+                text: task.resultSummary,
+                at: task.finishedAt ?? task.createdAt,
+              });
+            }
+          }
           for (const row of segmentRows) {
             if (row.meta?.kind === "task_notice") {
               const summary =
@@ -4387,7 +4404,11 @@ function BotsPlaceholder({
           botName={me.bot.name}
           onPendingCount={(count) => onApprovalPending(me.bot.id, me.bot.name, count)}
         />
-        <TaskFeedCards botId={me.bot.id} bots={bots} onOpenBot={onOpenBot} />
+        <TaskFeedCards
+          botId={me.bot.id}
+          bots={bots}
+          onOpenExchange={(botKey) => setDetailOther(botKey)}
+        />
       </div>
       {pendingFiles.length > 0 && (
         <div className="attach-chips" aria-label={t("shell.pendingAttachments")}>

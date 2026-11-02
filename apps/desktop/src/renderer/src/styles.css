@@ -6573,14 +6573,26 @@ select option {
   margin: 2px 0;
 }
 
-/* Exchange feed: the instruction preview rides inside the sent notice. */
-.exchange-preview {
-  min-width: 0;
-  max-width: 420px;
-  overflow: hidden;
-  text-overflow: ellipsis;
+/* Exchange feed: one-line notices, with the count row centered as a unit. */
+.task-feed {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  width: 100%;
+}
+
+.task-feed .chat-summary {
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-inline: auto;
+  padding: 0.3rem 0.8rem;
+  color: var(--muted);
+  font-size: 0.82rem;
   white-space: nowrap;
-  opacity: 0.8;
 }
 
 /* G6: the weak 重新生成 / 编辑后重发 label on re-entered messages. */

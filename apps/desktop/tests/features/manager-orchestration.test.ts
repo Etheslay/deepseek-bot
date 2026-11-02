@@ -210,26 +210,27 @@ describe("chat task feed (FR-4/FR-7)", () => {
             { key: 2, bot: { id: WRITER, name: "writer", role: "standard" } },
             { key: 3, bot: { id: CODER, name: "coder", role: "standard" } },
           ] as never,
-          onOpenBot: (botKey: number) => opened.push(botKey),
+          onOpenExchange: (botKey: number) => opened.push(botKey),
         }),
       ),
     );
     const feed = container.querySelector(".task-feed");
     expect(feed).not.toBeNull();
-    // The incoming dispatch reads as a message from the sender.
-    expect(feed!.querySelector(".dispatch-tag")?.textContent).toBe("消息来自");
-    expect(feed!.querySelector(".dispatch-text")?.textContent).toContain("选题清单");
-    // The sender chip jumps to the coordinator's session.
-    const senderChip = feed!.querySelector<HTMLButtonElement>(".dispatch-msg .summary-bot");
+    // The incoming dispatch is a one-line notice. The task text stays in the
+    // pair transcript opened by the sender chip.
+    expect(feed!.querySelector(".deliver-label")?.textContent).toBe("消息来自");
+    expect(feed!.textContent).not.toContain("选题清单");
+    const senderChip = feed!.querySelector<HTMLButtonElement>(".deliver-notice .summary-bot");
     expect(senderChip?.textContent).toContain("manager");
     await act(async () => {
       senderChip!.click();
     });
     expect(opened).toEqual([1]);
-    // The counter aggregates the real pair traffic.
     const summary = feed!.querySelector(".chat-summary");
     expect(summary?.textContent).toContain("1 条消息往来：");
-    expect(summary?.querySelector(".summary-bot")?.textContent).toContain("manager");
+    expect(summary?.textContent).toContain("和");
+    expect(summary?.textContent).toContain("writer");
+    expect(summary?.textContent).toContain("manager");
   });
 
   it("renders the coordinator side: the sent notice, the reply, and the counter", async () => {
@@ -256,7 +257,7 @@ describe("chat task feed (FR-4/FR-7)", () => {
             { key: 1, bot: { id: COORDINATOR, name: "manager", role: "coordinator" } },
             { key: 2, bot: { id: WRITER, name: "writer", role: "standard" } },
           ] as never,
-          onOpenBot: () => undefined,
+          onOpenExchange: () => undefined,
         }),
       ),
     );
@@ -265,18 +266,21 @@ describe("chat task feed (FR-4/FR-7)", () => {
     const notices = feed!.querySelectorAll(".deliver-notice");
     // done task first (09:01): 已发消息给 writer, then the reply arrives as
     // 消息来自 writer; the queued task (09:02) trails as its own sent notice.
+    // Neither line carries the message body.
     expect(notices.length).toBe(3);
     expect(notices[0]?.textContent).toContain("已发消息给");
-    expect(notices[0]?.querySelector(".exchange-preview")?.textContent).toContain("出本周选题清单");
+    expect(notices[0]?.textContent).not.toContain("出本周选题清单");
     expect(notices[1]?.textContent).toContain("消息来自");
+    expect(notices[1]?.textContent).not.toContain("清单完成");
     expect(notices[2]?.textContent).toContain("已发消息给");
-    expect(notices[2]?.querySelector(".exchange-preview")?.textContent).toContain("整理纪要");
-    const bubbles = feed!.querySelectorAll(".dispatch-text");
-    expect(bubbles).toHaveLength(1);
-    expect(bubbles[0]?.textContent).toContain("清单完成");
+    expect(notices[2]?.textContent).not.toContain("整理纪要");
+    expect(feed!.querySelector(".dispatch-text")).toBeNull();
+    expect(feed!.querySelector(".exchange-preview")).toBeNull();
     const summary = feed!.querySelector(".chat-summary");
     expect(summary?.textContent).toContain("3 条消息往来：");
-    expect(summary?.querySelector(".summary-bot")?.textContent).toContain("writer");
+    expect(summary?.textContent).toContain("和");
+    expect(summary?.textContent).toContain("manager");
+    expect(summary?.textContent).toContain("writer");
   });
 
   it("renders nothing when the host has no marked rows", async () => {
@@ -290,7 +294,7 @@ describe("chat task feed (FR-4/FR-7)", () => {
           bots: [
             { key: 2, bot: { id: WRITER, name: "writer", role: "standard" } },
           ] as never,
-          onOpenBot: () => undefined,
+          onOpenExchange: () => undefined,
         }),
       ),
     );
