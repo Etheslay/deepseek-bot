@@ -56,7 +56,7 @@ pnpm --filter @deepseek-bot/desktop pack:win   # 构建 + electron-builder NSIS 
 
 - preload 以 CJS（`.cjs`）输出并在沙箱中运行，仅通过 `contextBridge` 暴露 `window.deepseekBot`。
 - renderer 无 `require` / `process` / `ipcRenderer` 等 Node 能力（D2-7 探测验证）。
-- 权限请求与权限检查默认全部拒绝；唯一例外是用户主动触发的剪贴板写入（`clipboard-sanitized-write`，供消息复制；不开放剪贴板读取）。
+- 权限请求与权限检查默认全部拒绝。例外只有两项：用户主动触发的剪贴板写入（`clipboard-sanitized-write`，供消息复制；不开放剪贴板读取），以及按住说话的麦克风（`media` 且检查为 `audio`、请求的 `mediaTypes` 仅为 `audio`）。摄像头、通知及其余权限仍拒绝。
 - `will-navigate` 与 `setWindowOpenHandler` 仅放行本应用页面（`file:` 与本地 dev server），其余拒绝。
 - 标题栏使用 `titleBarStyle: hidden` + 深色 `titleBarOverlay`，无白色系统标题条。
 

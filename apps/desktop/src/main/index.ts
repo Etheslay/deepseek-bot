@@ -26,6 +26,7 @@ import {
 } from "./chrome-bookmarks.js";
 import { DATA_ROOT_DIR_NAME, HOST_EVENT_CHAT_STREAM, HOST_EVENT_MISSED, SYSTEM_EVENT_WINDOW_FOCUS } from "../shared/ipc-channels.js";
 import { pickKnowledgeFile } from "./knowledge-import.js";
+import { rendererPermissionAllowed } from "./session-permissions.js";
 import { whisperEnvFromBundles } from "./whisper-bundle.js";
 import { listBackups, type RestoreOutcome } from "./backups.js";
 import {
@@ -367,16 +368,17 @@ function attachFocusEvents(win: BrowserWindow): void {
 }
 
 function denyAllPermissions(): void {
-  // Only renderer-initiated clipboard WRITES are allowed (user copies message text);
-  // everything else (media, notifications, clipboard read, ...) stays denied.
-  const allowedPermissions = new Set(["clipboard-sanitized-write"]);
+  // Clipboard writes copy message text. Microphone audio (`media` + `audio`)
+  // is allowed so hold-to-talk can record. Camera, notifications, clipboard
+  // read, and every other permission stay denied.
   session.defaultSession.setPermissionRequestHandler(
-    (_webContents, permission, callback) => {
-      callback(allowedPermissions.has(permission));
+    (_webContents, permission, callback, details) => {
+      callback(rendererPermissionAllowed(permission, details));
     },
   );
   session.defaultSession.setPermissionCheckHandler(
-    (_webContents, permission) => allowedPermissions.has(permission),
+    (_webContents, permission, _requestingOrigin, details) =>
+      rendererPermissionAllowed(permission, details),
   );
 }
 

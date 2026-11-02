@@ -16,6 +16,7 @@
     "src/shared/**/*.ts",
     "scripts/fetch-whisper.mts",
     "tests/ipc-registry.test.ts",
+    "tests/session-permissions.test.ts",
     "tests/whisper-bundle.test.ts"
   ]
 }
