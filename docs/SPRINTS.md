@@ -174,6 +174,8 @@
 | 第九次刷新 | **已合入（PR #197）**：GAP_AUDIT 第九次刷新（G12 关闭、D19 视觉接线入档、§7 第 11 条治理债）+ CONTRACTS.md G12 段落版本勘误（v0.12→v0.14）+ MANUAL_ACCEPTANCE E4 | `feature/gap-audit-refresh9` → PR #197 `e16c5db` | —（审计文档） |
 | 打包 CI 发布缺陷修复 | **已合入（PR #198）**：package.yml 构建步骤显式传 `--publish never`（D24 publish 配置使 CI 构建尝试上传、缺 GH_TOKEN 即失败，2026-11-01 develop 实跑暴露）；electron-builder.yml 注释改为如实记录；latest.yml 仍随 artifact 生成（RELEASE.md §4.1）。**随片修复**：PR CI 首次真正跑到 G12 测试，暴露 `chat-sessions.test.ts` 排序用例依赖真实时钟推进（毫秒精度内 touch 与创建打平即翻序）——改为步进注入时钟并钉住 rowid 决胜路径，storage 28 文件/231 用例全绿 | `feature/package-publish-never` → PR #198 `08325b6` | —（CI 配置 + 测试稳定化） |
 | 侧栏会话子列表闪烁修复 | **已合入（PR #199，SHA `030c54d`）**：`useBots` 返回的 `visible = bots.filter(...)` 每次渲染新引用，G12 会话加载 effect（依赖 `[selectedBot, bots, desktop]`，每轮先 `setHistorySessions(null)`）陷入无限循环——子列表在隐藏/显示间高频翻转、不可点击，每轮还打一次 `chat.session.list` IPC（2026-11-01 真机首跑暴露；#194 合入时 CI 未恢复、无真机验证）。修复：`visible` 以 `useMemo` 包住；新增 `use-bots-stability.test.ts` 钉住引用稳定与隐藏过滤两条路径。desktop 79 文件全绿、typecheck exit 0、根 eslint 通过 | `fix/g12-session-sublist-flash` → 已合入 PR #199 | —（真机缺陷修复） |
+| 开放缺陷收口 | **任务书，未开工**。对照 `030c54d`：视觉标志被收成一个布尔（动工前选方案）、`deepseek-flash` 无上下文窗口、同一 bot 下会话子列表被列表引用更新清空。侧栏死循环不重开。真机手册仍是未执行，不当成缺陷改代码 | 本文件 | [TASK_OPEN_DEFECTS](TASK_OPEN_DEFECTS.md) |
+
 
 补记说明：B 线四项与 D17 模板库切片在合入时**未写交付报告、PR 自审记录未填**（两份 PR 清单各仅勾选 2/5）；相应报告于 2026-10-25 事后补记，**不追认事前完成自审**，自审结论仍留空待负责人签署。B 线四项挤在一条串行分支经单个 PR 合入，偏离"一任务一分支"，lockfile 与 CI 配置改动亦未拆独立小 PR；D17 技能库部分已改从最新 develop 单独切分支。后续任务（含 D24、D26 的剩余部分）同样单独切分支，不再堆叠。各任务的手测截图（`reports/assets/d14|d17|d24|d25|d26/`）仍缺，列为待补。
 

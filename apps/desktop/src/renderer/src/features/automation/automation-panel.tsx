@@ -8,6 +8,7 @@ import { useCallback, useEffect, useState, type JSX } from "react";
 import { METHOD_CONTRACTS } from "@deepseek-bot/contracts";
 import { type MessageKey, type Notice, noticeText, t, useLanguage } from "../../i18n.js";
 import { CustomSelect } from "../../components/custom-select.js";
+import { clearHostDown, noteHostFailure } from "../settings/host-down.js";
 
 type TriggerRule = {
   id: string;
@@ -71,13 +72,14 @@ function TriggerRules(): JSX.Element {
     const parsedWorkflows = METHOD_CONTRACTS["workflow.list"].response.parse(workflowResponse);
     setRules(parsedRules.rules);
     setWorkflows(parsedWorkflows.workflows);
+    clearHostDown();
     setNotice((current) => (current?.key === "automation.ruleLoadFailed" ? null : current));
   }, []);
 
   useEffect(() => {
     let active = true;
-    void load().catch(() => {
-      if (active) setNotice({ key: "automation.ruleLoadFailed" });
+    void load().catch((error: unknown) => {
+      if (active && !noteHostFailure(error)) setNotice({ key: "automation.ruleLoadFailed" });
     });
     return () => {
       active = false;
@@ -203,13 +205,14 @@ function ReviewQueue(): JSX.Element {
     });
     const parsed = METHOD_CONTRACTS["trigger.firing.list"].response.parse(response);
     setFirings(parsed.firings);
+    clearHostDown();
     setNotice((current) => (current?.key === "automation.reviewQueueLoadFailed" ? null : current));
   }, []);
 
   useEffect(() => {
     let active = true;
-    void load().catch(() => {
-      if (active) setNotice({ key: "automation.reviewQueueLoadFailed" });
+    void load().catch((error: unknown) => {
+      if (active && !noteHostFailure(error)) setNotice({ key: "automation.reviewQueueLoadFailed" });
     });
     return () => {
       active = false;

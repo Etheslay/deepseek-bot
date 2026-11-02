@@ -1,5 +1,11 @@
 # 工作记录
 
+## 2026-11-01：开放缺陷任务书（对照 develop `030c54d`）
+
+- 静态对照该提交上的视觉标志、上下文窗口表、会话加载 effect 与 CONTRACTS / TASK_B3P / MANUAL_ACCEPTANCE。没有改产品代码，没有复跑桌面，没有调用 API。
+- 已坐实且仍开放的是三项：视觉 `visionKnown` 与 `visionAvailable` 被收成同一个布尔（动工前要选方案）、`deepseek-flash` 不在 `MODEL_CONTEXT_WINDOWS`、同一 bot 下会话子列表会因 bot 列表换引用而被清空。侧栏死循环已由 #199 关闭，不重开。真机手册整本未执行，任务书明确不把它们当成缺陷修。
+- 任务书：[TASK_OPEN_DEFECTS](docs/TASK_OPEN_DEFECTS.md)。
+
 ## 2026-11-01：侧栏会话子列表闪烁修复（fix/g12-session-sublist-flash）
 
 - 用户真机首跑（develop `e16c5db`，`pnpm dev`）报：侧栏「新建会话」子列表一直闪、无法点击。

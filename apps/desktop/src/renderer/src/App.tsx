@@ -24,6 +24,7 @@ import { PermissionsPanel } from "./features/permissions/permissions-panel.js";
 import { ScreenSettings } from "./features/screen/screen-settings.js";
 import { UsagePanel } from "./features/usage/usage-panel.js";
 import { SettingsNav, type SettingsSectionKey } from "./features/settings/settings-nav.js";
+import { useHostDown } from "./features/settings/host-down.js";
 import { BotForm } from "./features/bots/bot-form.js";
 import { nextBotName } from "./features/bots/bot-names.js";
 import { CustomSelect } from "./components/custom-select.js";
@@ -536,6 +537,7 @@ export function App(): JSX.Element {
   const [settingsOpen, setSettingsOpen] = useState(false);
   /** Which settings nav section is active (D24; grouping in features/settings). */
   const [settingsSection, setSettingsSection] = useState<SettingsSectionKey>("general");
+  const hostDown = useHostDown();
   /**
    * D27: bumped after the voice settings panel saved a configuration, so the
    * chat pane re-asks `voice.status` and the composer mic unlocks live.
@@ -545,10 +547,6 @@ export function App(): JSX.Element {
     import("../../shared/ipc-channels.js").BackupSummary[] | null
   >(null);
   const [backupBusy, setBackupBusy] = useState(false);
-  const [describe, setDescribe] = useState<{
-    schemaVersion: string;
-    counts: Record<string, number>;
-  } | null>(null);
   const [hwAccel, setHwAccel] = useState<{
     enabled: boolean;
     restartRequired: boolean;
@@ -1013,7 +1011,7 @@ export function App(): JSX.Element {
     };
   }, [artifactsOpen, selectedBot, bots, desktop, canvas]);
 
-  // D24 leftover: vault/usage/computer sections load their data lazily on open.
+  // D24 leftover: vault and computer sections load their data lazily on open.
   useEffect(() => {
     if (!settingsOpen || settingsSection !== "vault") {
       return;
@@ -1029,28 +1027,6 @@ export function App(): JSX.Element {
       .catch(() => {
         if (!cancelled) {
           setBackups([]);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [settingsOpen, settingsSection, desktop]);
-
-  useEffect(() => {
-    if (!settingsOpen || settingsSection !== "usage") {
-      return;
-    }
-    let cancelled = false;
-    void desktop.vault
-      .describe()
-      .then((result) => {
-        if (!cancelled) {
-          setDescribe(result);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setDescribe(null);
         }
       });
     return () => {
@@ -3072,7 +3048,7 @@ const logout = (): void => {
               </header>
               <div className="settings-body">
                 {settingsSection === "general" && (
-                  <>
+                  <div className="settings-general">
                     <div className="settings-section-title">{t("shell.account")}</div>
                 <div className="account-card">
                   <span className="account-avatar" aria-hidden="true">
@@ -3186,6 +3162,11 @@ const logout = (): void => {
                     </span>
                   </div>
                 </div>
+                {hostDown ? (
+                  <p className="form-error settings-host-down" role="alert">
+                    {t("shell.hostDown")}
+                  </p>
+                ) : null}
                 <SearchSettings />
                 <ConnectorSettings />
                 <AutomationPanel />
@@ -3248,7 +3229,7 @@ const logout = (): void => {
                     />
                   </div>
                 </div>
-                  </>
+                  </div>
                 )}
                 {/* Authorisation is its own section: it is the part owners read
                     most carefully, and burying it under 通用 made the policy
@@ -3302,36 +3283,7 @@ const logout = (): void => {
                   </div>
                 )}
                 {settingsSection === "usage" && (
-                  <>
-                  <div className="settings-card">
-                    <div className="settings-row">
-                      <span>{t("d24.dbVersion")}</span>
-                      <span className="settings-soon">{describe?.schemaVersion ?? "…"}</span>
-                    </div>
-                    {(
-                      [
-                        ["bots", "Bot"],
-                        ["workflows", t("workflow.title")],
-                        ["runs", t("d24.runsTitle")],
-                        ["schedules", t("d24.schedulesTitle")],
-                      ] as const
-                    ).map(([key, label]) => (
-                      <div className="settings-row" key={key}>
-                        <span>{label}</span>
-                        <span className="settings-soon">{describe?.counts[key] ?? "…"}</span>
-                      </div>
-                    ))}
-                    <div className="settings-row">
-                      <span>{t("d24.sessionCountThisLaunch")}</span>
-                      <span className="settings-soon">
-                        {Object.keys(chats).length} {t("d24.sessionsUnit")} ·{" "}
-                        {Object.values(chats).reduce((sum, list) => sum + list.length, 0)}{" "}
-                        {t("d24.messagesUnit")}
-                      </span>
-                    </div>
-                  </div>
                   <UsagePanel botId={bots.find((b) => b.key === selectedBot)?.bot.id ?? null} />
-                  </>
                 )}
                 {settingsSection === "vault" && (
                   <>
