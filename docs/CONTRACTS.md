@@ -67,7 +67,7 @@ v0.14 新增聊天视觉输入（B3''，TASK_B3P_VISION_INPUT.md，上游验证�
 | AppApproval | id, invocationId, callerId, botId, sessionId, tool, capabilities, params, actionDigest, generation, status, createdAt, expiresAt, decidedAt | v0.3；精确参数预览与 10 分钟期限，独立于 D08 Approval；重启失效 |
 | PermissionAudit | id, sequence, at, actor, callerId, botId, tool, capabilities, actionDigest, grantIds, approvalId, decision | v0.3；只追加，保存摘要与决策元数据，不保存参数原文 |
 | Task | id, fromBotId, toBotId, instruction, status, resultSummary, rootTaskId, chainIndex, chainTotal, createdAt, startedAt?, finishedAt?, workerMessageIds | v0.5：协调者派发的一次指令任务；rootTaskId/chainIndex/chainTotal 标记 T7 交接链坐标（首跳 rootTaskId 即自身）；instruction ≤ 8000 字 |
-| ChatMessageMeta | kind=dispatch{taskId, fromBotId} \| kind=task_notice{taskId, status, resultSummary?} \| kind=choice{question, options, other?, answered} | v0.5：聊天消息行的附加标记（存储列 meta_json），渲染层据此显示"派发"样式与交付通知；普通消息无此字段。G1' 追加 `kind=choice`（不升 protocolVersion）：已答 ask_user 卡的问题、展示用选项与 `answered`；重载后卡片保持已答，不能再答 |
+| ChatMessageMeta | kind=dispatch{taskId, fromBotId} \| kind=dispatch_reply{taskId, fromBotId} \| kind=task_notice{taskId, status, resultSummary?} \| kind=choice{question, options, other?, answered} | v0.5：聊天消息行的附加标记（存储列 meta_json）。`dispatch` / `dispatch_reply` 是 bot 之间的私下交接，不进人类时间线，也不回放进之后的人类回合。`task_notice` 是交付回执。普通消息无此字段。G1' 追加 `kind=choice`（不升 protocolVersion）：已答 ask_user 卡的问题、展示用选项与 `answered`；重载后卡片保持已答，不能再答。`dispatch_reply` 同样不升 protocolVersion |
 
 ## 3. 方法边界
 

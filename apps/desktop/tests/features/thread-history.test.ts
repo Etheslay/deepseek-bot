@@ -108,6 +108,17 @@ describe("historyThreadMessages", () => {
           },
         }),
         row({
+          id: "12121212-1212-4121-8121-121212121213",
+          role: "assistant",
+          text: "你好",
+          at: "2026-10-28T00:00:02.500Z",
+          meta: {
+            kind: "dispatch_reply",
+            taskId: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+            fromBotId: "ffffffff-ffff-4fff-8fff-ffffffffffff",
+          },
+        }),
+        row({
           id: "abababab-abab-4aba-8aba-abababababab",
           role: "assistant",
           text: "done",

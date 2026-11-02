@@ -35,7 +35,6 @@ import {
   getTask,
   getTaskByIdempotencyKey,
   insertTask,
-  listChatMessages,
   listPermissionGrants,
   listPermissionPolicies,
   listQueuedHopsOfRoot,
@@ -117,6 +116,7 @@ type DispatchStrings = {
   readonly handoffGoal: (instruction: string) => string;
   readonly handoffSummary: (summary: string) => string;
   readonly handoffNoSummary: string;
+  readonly replyBriefly: string;
   readonly taskMarker: (instruction: string) => string;
   readonly unknownBot: string;
   readonly hopLabel: (hop: number, total: number) => string;
@@ -159,6 +159,8 @@ const DISPATCH_STRINGS: Readonly<Record<DispatchLocale, DispatchStrings>> = {
     handoffGoal: (instruction) => `【上游交接 · 目标】${instruction}`,
     handoffSummary: (summary) => `【上游交接 · 完成摘要】${summary}`,
     handoffNoSummary: "（上游未产出摘要）",
+    replyBriefly:
+      "这是你和另一个 bot 的私下交接。只完成下面这件事，像当面回一句那样短。不要复述任务，不要解释过程，不要引用之前的长对话，不要追问。",
     taskMarker: (instruction) => `【任务】${instruction}`,
     unknownBot: "未知 bot",
     hopLabel: (hop, total) => `（第 ${hop}/${total} 跳）`,
@@ -195,6 +197,8 @@ const DISPATCH_STRINGS: Readonly<Record<DispatchLocale, DispatchStrings>> = {
     handoffGoal: (instruction) => `[Upstream handoff · Goal] ${instruction}`,
     handoffSummary: (summary) => `[Upstream handoff · Completion summary] ${summary}`,
     handoffNoSummary: "(no summary produced upstream)",
+    replyBriefly:
+      "This is a private handoff with another bot. Do only the request below, in one short reply. Do not restate the task, explain the process, quote earlier conversation, or ask a follow-up.",
     taskMarker: (instruction) => `[Task] ${instruction}`,
     unknownBot: "unknown bot",
     hopLabel: (hop, total) => ` (hop ${hop}/${total})`,
@@ -456,13 +460,9 @@ export class TaskDispatcher {
     const running = markTaskRunning(this.db, task.id);
     this.emitStatus(running, "queued", "running");
     const sessionId = chatSessionIdFor(executor.id);
-    // History BEFORE the dispatch marker, scoped to the default session: the
-    // marker (and the reply) land there, so extra chat sessions (G12) never
-    // leak into a dispatched task's replay.
-    const history = listChatMessages(this.db, executor.id, 20, sessionId).map((row) => ({
-      role: row.role,
-      text: row.text,
-    }));
+    // The handoff is a private exchange. The human thread stays out of the
+    // worker's prompt so a task cannot continue that conversation or dump it
+    // back as the reply.
     const upstream = this.upstreamResultOf(task);
     const marker = this.composePrompt(task, upstream);
     const markerRow = appendChatMessage(this.db, {
@@ -475,12 +475,13 @@ export class TaskDispatcher {
     appendWorkerMessageId(this.db, task.id, markerRow.id);
 
     try {
-      const outcome = await this.chat.send(executor, marker, history);
+      const outcome = await this.chat.send(executor, marker, []);
       const assistant = appendChatMessage(this.db, {
         botId: executor.id,
         sessionId,
         role: "assistant",
         text: outcome.finalResponse,
+        meta: { kind: "dispatch_reply", taskId: task.id, fromBotId: task.fromBotId },
       });
       appendWorkerMessageId(this.db, task.id, assistant.id);
       const done = finishTask(this.db, task.id, {
@@ -578,7 +579,7 @@ export class TaskDispatcher {
 
   private composePrompt(task: Task, upstream: { instruction: string; resultSummary: string | null } | undefined): string {
     const s = this.strings();
-    const parts: string[] = [];
+    const parts: string[] = [s.replyBriefly];
     if (upstream !== undefined) {
       // T7 R-13.7: fixed structured handoff header for relay hops.
       parts.push(

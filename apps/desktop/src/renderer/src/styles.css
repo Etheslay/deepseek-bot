@@ -8563,9 +8563,15 @@ select:focus-visible {
 }
 
 /* Bot lines hug the words. A full-width bar under the header reads as clutter. */
+.chat > .msg-row.bot {
+  justify-content: flex-start;
+}
+
 .chat > .msg-row.bot .hover-wrap {
   width: auto;
   max-width: 72%;
+  margin-left: 0;
+  margin-right: auto;
 }
 
 .chat > .msg-row.bot .msg-bubble {

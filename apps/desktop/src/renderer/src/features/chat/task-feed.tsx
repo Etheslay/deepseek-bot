@@ -1,25 +1,21 @@
 /**
  * Bot-exchange feed (the D05 消息往来 notices, now on real dispatch data):
  *
- * - Each instruction and reply is its own compact bubble. A bot name inside
- *   that bubble jumps to that bot's conversation.
- * - A sent turn adds one centered 「已发消息给 <executor>」 line, with no
- *   message text on that line. There is no second 「消息来自」 line.
- *   The whole line opens the pair transcript, and so does the summary.
- * - Each peer ends with one centered 「N 条消息往来：A 和 B」 row,
- *   counted from the same real tasks (never demo data).
+ * - The task text stays out of this timeline. A sent turn is only the
+ *   centered 「已发消息给 <executor>」 line. There is no 「消息来自」 line
+ *   and no instruction or reply body here.
+ * - That line, and each peer's 「N 条消息往来：A 和 B」 row, opens the
+ *   pair transcript where the two bots talk.
+ * - Counts come from the same real tasks (never demo data).
  *
  * The feed polls chat.history + task.list on a light interval; the host owns
  * what lands in each session (dispatch markers, task notices).
  */
-import { Fragment, useEffect, useState, type JSX } from "react";
+import { useEffect, useState, type JSX } from "react";
 import type { ChatHistoryRow, DesktopService } from "../../services/desktop-service.js";
 import { useService } from "../../services/service-context.js";
 import type { UiBot } from "../bots/use-bots.js";
 import { Avatar } from "../avatars/avatar.js";
-import { avatarColor } from "../avatars/avatar-meta.js";
-import { ChatMarkdown } from "./chat-markdown.js";
-import type { MentionTable } from "./mentions.js";
 import { t, useLanguage } from "../../i18n.js";
 
 const FEED_REFRESH_MS = 4_000;
@@ -119,8 +115,6 @@ export function TaskFeedCards(props: {
   bots: UiBot[];
   /** Open the pair transcript between this panel's bot and `botKey`. */
   onOpenExchange: (botKey: number) => void;
-  /** A cited bot inside a card jumps to that bot's own conversation. */
-  onOpenBot: (botKey: number) => void;
 }): JSX.Element | null {
   useLanguage();
   const desktop: DesktopService = useService();
@@ -156,19 +150,6 @@ export function TaskFeedCards(props: {
   const botKeyById = new Map(props.bots.map((bot) => [bot.bot.id, bot.key]));
   const botNameById = new Map(props.bots.map((bot) => [bot.bot.id, bot.bot.name]));
   const nameOf = (botId: string): string => botNameById.get(botId) ?? t("tasks.feedOtherBots");
-  const mentions: MentionTable = new Map(
-    props.bots.map((bot) => {
-      const avatar = bot.avatar ?? { kind: "mono" as const };
-      return [
-        bot.bot.name,
-        {
-          botKey: bot.key,
-          color: avatarColor(avatar),
-          shape: avatar.kind === "grok" ? avatar.shape : "circle",
-        },
-      ];
-    }),
-  );
 
   const chip = (botId: string, size: number): JSX.Element => {
     const other = props.bots.find((bot) => bot.bot.id === botId);
@@ -187,31 +168,20 @@ export function TaskFeedCards(props: {
   return (
     <div className="task-feed" aria-label={t("tasks.feedAria")}>
       {items.map((item, index) => {
-        const bubble =
-          item.kind !== "receipt" && item.text !== "" ? (
-            <div className="exchange-bubble" key={`text-${index}`}>
-              <ChatMarkdown
-                text={item.text}
-                mentions={mentions}
-                onMentionClick={props.onOpenBot}
-              />
-            </div>
-          ) : null;
         if (item.kind === "incoming" || item.kind === "received") {
-          return bubble;
+          return null;
         }
         if (item.kind === "sent") {
           const exchangeKey = botKeyById.get(item.toBotId);
           const quiet =
             ACTIVE_STATUSES.has(item.status) || item.status === "done";
           return (
-            <Fragment key={`sent-${index}`}>
-              {bubble}
-              <button
-                type="button"
-                className="deliver-notice"
-                onClick={() => openExchange(exchangeKey)}
-              >
+            <button
+              key={`sent-${index}`}
+              type="button"
+              className="deliver-notice"
+              onClick={() => openExchange(exchangeKey)}
+            >
                 {quiet ? (
                   <span className="deliver-label">{t("shell.sentTo")}</span>
                 ) : (
@@ -220,8 +190,7 @@ export function TaskFeedCards(props: {
                   </span>
                 )}
                 {chip(item.toBotId, 18)}
-              </button>
-            </Fragment>
+            </button>
           );
         }
         return (

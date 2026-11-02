@@ -297,6 +297,17 @@ function buildCompressionPrompt(
  * summary, and never touches `chat_messages` (deleting the summary restores
  * the full replay). Failures degrade silently to the status-quo replay.
  */
+/** Bot-to-bot handoff rows stay out of the human replay and out of compression. */
+function isPrivateHandoff(meta: ChatMessageMeta | undefined): boolean {
+  const kind = meta?.kind;
+  return (
+    kind === "dispatch" ||
+    kind === "dispatch_reply" ||
+    kind === "task_notice" ||
+    kind === "automation"
+  );
+}
+
 async function maybeCompressChat(
   context: HostContext,
   botId: string,
@@ -312,7 +323,9 @@ async function maybeCompressChat(
     return;
   }
   const summary = getChatSummary(db, botId, sessionId);
-  const rows = listChatMessages(db, botId, 10_000, sessionId);
+  const rows = listChatMessages(db, botId, 10_000, sessionId).filter(
+    (row) => !isPrivateHandoff(row.meta),
+  );
   let lastAssistant = -1;
   for (let index = rows.length - 1; index >= 0; index -= 1) {
     if (rows[index]!.role === "assistant") {
@@ -1165,10 +1178,12 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
         summaryRow === undefined
           ? allRows
           : allRows.slice(allRows.findIndex((row) => row.id === summaryRow.coversMessageId) + 1);
-      const history = replayRows.map((row) => ({
-        role: row.role,
-        text: row.text,
-      }));
+      const history = replayRows
+        .filter((row) => !isPrivateHandoff(row.meta))
+        .map((row) => ({
+          role: row.role,
+          text: row.text,
+        }));
       // B4' 附件正文: paths the renderer already named in the prompt
       // (`attachments/…`, deterministic block format) get their extracted
       // bodies appended as text attachment blocks — ≤16 KiB inline with a

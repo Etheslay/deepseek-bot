@@ -39,7 +39,6 @@ import {
   emptyStream,
   failureMessage,
 } from "./features/chat/chat-reducer.js";
-import { statusLabel } from "./features/chat/task-feed.js";
 import {
   assemblePairRecords,
   type PairRecord,
@@ -3569,7 +3568,6 @@ function BotsPlaceholder({
           tasks.tasks,
           myRows,
           peerRows,
-          statusLabel,
         );
         if (!cancelled) setPairRecords(rows);
       } catch {
@@ -4386,7 +4384,6 @@ function BotsPlaceholder({
           botId={me.bot.id}
           bots={bots}
           onOpenExchange={(botKey) => setDetailOther(botKey)}
-          onOpenBot={onOpenBot}
         />
       </div>
       {pendingFiles.length > 0 && (

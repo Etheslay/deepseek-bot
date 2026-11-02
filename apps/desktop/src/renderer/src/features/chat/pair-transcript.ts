@@ -1,9 +1,9 @@
 /**
  * Pair transcript for two bots (the record behind 「已发消息给」 and
  * 「N 条消息往来」). History segments supply the words each side actually
- * sent. When a handoff has only one of those turns, the task instruction
- * and the worker's result fill the missing side so the record is a
- * two-sided exchange.
+ * sent. The sender's line is the instruction, not the task prompt. When a
+ * handoff has only one of those turns, the instruction or the worker's
+ * result fills the missing side.
  */
 import type { ChatHistoryRow } from "../../services/desktop-service.js";
 
@@ -20,8 +20,6 @@ export type PairTask = {
   createdAt: string;
   finishedAt: string | null;
 };
-
-type NoticeStatus = Extract<NonNullable<ChatHistoryRow["meta"]>, { kind: "task_notice" }>["status"];
 
 type PairBot = { id: string; key: number };
 
@@ -50,7 +48,6 @@ export function assemblePairRecords(
   tasks: PairTask[],
   myRows: ChatHistoryRow[],
   peerRows: ChatHistoryRow[],
-  labelStatus: (status: NoticeStatus) => string,
 ): PairRecord[] {
   const who = (botId: string): PairBot | null => {
     if (botId === me.id) return me;
@@ -86,20 +83,13 @@ export function assemblePairRecords(
       });
     }
     for (const row of segmentRows) {
-      if (row.meta?.kind === "task_notice") {
-        const summary =
-          row.meta.resultSummary !== undefined && row.meta.resultSummary.length > 0
-            ? `：${row.meta.resultSummary}`
-            : "";
-        rows.push({
-          kind: "notice",
-          text: `${labelStatus(row.meta.status)}${summary}`,
-          at: row.at,
-        });
-        continue;
-      }
+      if (row.meta?.kind === "task_notice") continue;
       const speaker = row.role === "assistant" ? worker : manager;
-      rows.push({ kind: "turn", speakerKey: speaker.key, text: row.text, at: row.at });
+      const text =
+        row.meta?.kind === "dispatch" && row.role !== "assistant" && task.instruction !== ""
+          ? task.instruction
+          : row.text;
+      rows.push({ kind: "turn", speakerKey: speaker.key, text, at: row.at });
     }
     if (!hasWorkerTurn && task.resultSummary !== null && task.resultSummary !== "") {
       rows.push({

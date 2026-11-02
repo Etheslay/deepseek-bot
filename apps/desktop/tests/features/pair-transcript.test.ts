@@ -36,11 +36,10 @@ describe("pair transcript", () => {
       [handoff],
       [],
       [marker("【任务】出简笔画分镜")],
-      (status) => status,
     );
     const turns = records.filter((row) => row.kind === "turn");
     expect(turns.map((row) => [row.speakerKey, row.text])).toEqual([
-      [1, "【任务】出简笔画分镜"],
+      [1, "出简笔画分镜"],
       [2, "分镜已交"],
     ]);
   });
@@ -60,7 +59,6 @@ describe("pair transcript", () => {
       [handoff],
       [],
       [marker("【任务】出简笔画分镜"), reply],
-      (status) => status,
     );
     const turns = records.filter((row) => row.kind === "turn");
     expect(turns).toHaveLength(2);
