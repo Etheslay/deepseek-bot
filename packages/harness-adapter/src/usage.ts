@@ -78,6 +78,22 @@ function usageRecord(event: SessionEventEnvelope): Record<string, unknown> | nul
   return null;
 }
 
+/**
+ * The model this turn should be billed to. A name the harness reported wins.
+ * When the frame omitted it (or said "unknown"), the model the turn was
+ * started with — the bot's profile, the same one a connection test uses —
+ * is the name. Null only when neither side named one.
+ */
+export function resolveTurnModel(
+  reported: string | null,
+  requested: string | null | undefined,
+): string | null {
+  const named = reported?.trim() ?? "";
+  if (named.length > 0 && named.toLowerCase() !== "unknown") return named;
+  const fallback = requested?.trim() ?? "";
+  return fallback.length > 0 ? fallback : null;
+}
+
 /** Usage carried by one event, or null when the event has none. */
 export function extractUsageFromEvent(event: SessionEventEnvelope): TurnUsage | null {
   const record = usageRecord(event);

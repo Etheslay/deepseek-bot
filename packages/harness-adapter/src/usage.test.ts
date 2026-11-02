@@ -12,6 +12,7 @@ import {
   TurnUsageAccumulator,
   estimateTokens,
   extractUsageFromEvent,
+  resolveTurnModel,
 } from "./usage.js";
 
 function event(type: string, data: unknown): SessionEventEnvelope {
@@ -104,6 +105,23 @@ describe("estimateTokens", () => {
     const estimate = estimateTokens(mixed);
     expect(estimate).toBeGreaterThanOrEqual(200 * 0.4);
     expect(estimate).toBeLessThanOrEqual(200 * 1.2);
+  });
+});
+
+describe("resolveTurnModel", () => {
+  it("keeps a model the harness named", () => {
+    expect(resolveTurnModel("deepseek-reasoner", "deepseek-chat")).toBe("deepseek-reasoner");
+  });
+
+  it("uses the model the turn was started with when the harness omitted it", () => {
+    expect(resolveTurnModel(null, "deepseek-chat")).toBe("deepseek-chat");
+    expect(resolveTurnModel("unknown", "deepseek-chat")).toBe("deepseek-chat");
+    expect(resolveTurnModel("  ", "deepseek-chat")).toBe("deepseek-chat");
+  });
+
+  it("stays empty when neither side named a model", () => {
+    expect(resolveTurnModel(null, null)).toBeNull();
+    expect(resolveTurnModel("unknown", "  ")).toBeNull();
   });
 });
 

@@ -43,7 +43,7 @@ import type { ToolCaller } from "@deepseek-bot/agent-tools";
 import type { ApplicationToolTurn } from "./app-tool-channel.js";
 import type { UiLocale } from "./host.js";
 import { composeSkillBlock, skillCapabilityAllowlist } from "./skill-injection.js";
-import { TurnUsageAccumulator, type TurnUsage } from "./usage-capture.js";
+import { resolveTurnModel, TurnUsageAccumulator, type TurnUsage } from "./usage-capture.js";
 
 export function chatSessionIdFor(botId: string): string {
   return `chat:${botId}`;
@@ -376,8 +376,10 @@ export class ChatManager {
        * the reply the user is waiting for still reaches them.
        */
       try {
+        const counted = turnUsage.finish(prompt, outcome.finalResponse);
         this.onTurnUsage?.({
-          ...turnUsage.finish(prompt, outcome.finalResponse),
+          ...counted,
+          model: resolveTurnModel(counted.model, inputs.profile.model),
           botId: bot.id,
           sessionId,
         });
@@ -461,8 +463,10 @@ export class ChatManager {
         },
       );
       try {
+        const counted = turnUsage.finish(prompt, outcome.finalResponse);
         this.onTurnUsage?.({
-          ...turnUsage.finish(prompt, outcome.finalResponse),
+          ...counted,
+          model: resolveTurnModel(counted.model, inputs.profile.model),
           botId: bot.id,
           sessionId,
         });

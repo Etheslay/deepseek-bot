@@ -23,7 +23,10 @@ export const UsageTotalsSchema = z.object({
 });
 
 export const UsageModelRowSchema = z.object({
-  /** The model id reported by the harness, or "unknown" when it reported none. */
+  /**
+   * The model id the turn ran as. The harness name wins; otherwise the bot's
+   * model profile. "unknown" only when neither side named one.
+   */
   model: z.string(),
   inputTokens: TokenCount,
   outputTokens: TokenCount,

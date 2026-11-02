@@ -159,17 +159,25 @@ export function summarizeUsage(
   const params: string[] = [options.sinceIso];
   if (options.botId !== undefined) params.push(options.botId);
 
+  // A turn the harness did not name still belongs to the bot's model profile
+  // (the same model a connection test and the chat turn were started with).
+  // An explicit name on the row wins, so a later profile change does not
+  // relabel turns that already recorded one.
+  const modelKey =
+    "COALESCE(NULLIF(NULLIF(u.model, ''), 'unknown'), mp.model, 'unknown')";
   const modelRows = db.raw
     .prepare(
-      `SELECT COALESCE(model, 'unknown') AS key, NULL AS name,
-              SUM(input_tokens) AS input_tokens,
-              SUM(output_tokens) AS output_tokens,
-              SUM(cached_input_tokens) AS cached_input_tokens,
+      `SELECT ${modelKey} AS key, NULL AS name,
+              SUM(u.input_tokens) AS input_tokens,
+              SUM(u.output_tokens) AS output_tokens,
+              SUM(u.cached_input_tokens) AS cached_input_tokens,
               COUNT(*) AS turns
-         FROM usage_events
-        WHERE ${where}
-        GROUP BY COALESCE(model, 'unknown')
-        ORDER BY (SUM(input_tokens) + SUM(output_tokens)) DESC;`,
+         FROM usage_events u
+         LEFT JOIN bots b ON b.id = u.bot_id
+         LEFT JOIN model_profiles mp ON mp.id = b.model_profile_id
+        WHERE ${whereQualified}
+        GROUP BY ${modelKey}
+        ORDER BY (SUM(u.input_tokens) + SUM(u.output_tokens)) DESC;`,
     )
     .all(...params) as unknown as SqlAggregateRow[];
 

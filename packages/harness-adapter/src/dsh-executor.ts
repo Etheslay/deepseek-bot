@@ -36,7 +36,7 @@ import {
   type DshLaunchSpec,
 } from "./launch.js";
 import { composeNodePrompt } from "./prompt.js";
-import { TurnUsageAccumulator } from "./usage.js";
+import { resolveTurnModel, TurnUsageAccumulator } from "./usage.js";
 
 /** Everything the host resolves from storage for one attempt. */
 export interface BotRuntimeInputs {
@@ -181,13 +181,17 @@ export class DshSdkExecutor implements NodeExecutor {
          session events into counts (an estimate when no frame carried usage). */
       const turnUsage = new TurnUsageAccumulator();
       for (const event of outcome.events) turnUsage.observe(event);
+      const counted = turnUsage.finish(prompt, outcome.finalResponse);
       return {
         outputs: {
           response: outcome.finalResponse,
           turnEndKind: outcome.turnEndKind ?? null,
         },
         sessionId,
-        usage: turnUsage.finish(prompt, outcome.finalResponse),
+        usage: {
+          ...counted,
+          model: resolveTurnModel(counted.model, inputs.profile.model),
+        },
       };
     } finally {
       this.sessionRegistry.unregister(sessionId);
