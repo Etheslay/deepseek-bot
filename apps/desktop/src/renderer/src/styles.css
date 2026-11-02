@@ -8540,15 +8540,25 @@ select:focus-visible {
 }
 
 /* The appearance row label stays outside the pill. The closed theme trigger
-   fills its box so 深色 / 浅色 are not packed against the arrow. */
+   fills its box, and the word sits in the middle of that box. The chevron
+   stays on the trailing edge so it does not pull the word off center. */
 .appearance-theme-label {
   flex: 0 0 auto;
   white-space: nowrap;
 }
 
 .settings-row .custom-select.theme-select .custom-select-trigger {
+  position: relative;
   width: 100%;
-  padding-inline: 0.85rem;
+  justify-content: center;
+  padding-inline: 1.6rem;
+  text-align: center;
+}
+
+.settings-row .custom-select.theme-select .select-arrow {
+  position: absolute;
+  inset-inline-end: 0.7rem;
+  margin-inline-start: 0;
 }
 
 .settings-row .custom-select-menu {

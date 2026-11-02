@@ -7,8 +7,8 @@ import { shellMessages } from "../../src/shared/i18n/messages/shell.js";
 const css = readFileSync(join(process.cwd(), "src/renderer/src/styles.css"), "utf8");
 
 describe("appearance theme label", () => {
-  it("uses 深 色 for the row label and leaves the option words unspaced", () => {
-    expect(shellMessages["shell.theme"].zh).toBe("深 色");
+  it("uses 深色 for the row label and leaves the option words unspaced", () => {
+    expect(shellMessages["shell.theme"].zh).toBe("深色");
     expect(shellMessages["shell.themeDark"].zh).toBe("深色");
     expect(shellMessages["shell.themeLight"].zh).toBe("浅色");
   });
@@ -28,6 +28,12 @@ describe("appearance theme label", () => {
     expect(app).toContain('className="appearance-theme-label">{t("shell.theme")}');
     expect(app).toContain('className="theme-select"');
     expect(css).toMatch(/\.settings-row \.custom-select\.theme-select \.custom-select-trigger\s*\{[^}]*width:\s*100%;/);
+    expect(css).toMatch(
+      /\.settings-row \.custom-select\.theme-select \.custom-select-trigger\s*\{[^}]*justify-content:\s*center;/,
+    );
+    expect(css).toMatch(
+      /\.settings-row \.custom-select\.theme-select \.select-arrow\s*\{[^}]*position:\s*absolute;/,
+    );
   });
 });
 

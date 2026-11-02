@@ -204,7 +204,7 @@ export const shellMessages = {
   "shell.templateSaved": { zh: "已保存模板「{0}」", en: "Saved template “{0}”" },
   "shell.testConnection": { zh: "测试连接", en: "Test connection" },
   "shell.testing": { zh: "测试中…", en: "Testing…" },
-  "shell.theme": { zh: "深 色", en: "Theme" },
+  "shell.theme": { zh: "深色", en: "Theme" },
   "shell.themeDark": { zh: "深色", en: "Dark" },
   "shell.themeLight": { zh: "浅色", en: "Light" },
   "shell.today": { zh: "今天 {0}", en: "Today {0}" },
