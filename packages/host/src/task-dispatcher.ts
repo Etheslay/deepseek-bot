@@ -160,7 +160,7 @@ const DISPATCH_STRINGS: Readonly<Record<DispatchLocale, DispatchStrings>> = {
     handoffSummary: (summary) => `【上游交接 · 完成摘要】${summary}`,
     handoffNoSummary: "（上游未产出摘要）",
     replyBriefly:
-      "这是你和另一个 bot 的私下交接。只完成下面这件事，像当面回一句那样短。不要复述任务，不要解释过程，不要引用之前的长对话，不要追问。",
+      "这是你和另一个 bot 的私下交接。整条回复只能是要交出去的那一句，像当面把那句话递过去。不要复述任务，不要加解释、寒暄、状态或追问。别人让你说「你好」，你就只回：你好。",
     taskMarker: (instruction) => `【任务】${instruction}`,
     unknownBot: "未知 bot",
     hopLabel: (hop, total) => `（第 ${hop}/${total} 跳）`,
@@ -198,7 +198,7 @@ const DISPATCH_STRINGS: Readonly<Record<DispatchLocale, DispatchStrings>> = {
     handoffSummary: (summary) => `[Upstream handoff · Completion summary] ${summary}`,
     handoffNoSummary: "(no summary produced upstream)",
     replyBriefly:
-      "This is a private handoff with another bot. Do only the request below, in one short reply. Do not restate the task, explain the process, quote earlier conversation, or ask a follow-up.",
+      "This is a private handoff with another bot. Your whole reply is the one line being handed over, as if you said it to their face. Do not restate the task, add an explanation, a greeting, a status, or a follow-up. If asked to say hello, reply only: hello.",
     taskMarker: (instruction) => `[Task] ${instruction}`,
     unknownBot: "unknown bot",
     hopLabel: (hop, total) => ` (hop ${hop}/${total})`,
