@@ -80,9 +80,18 @@ export function createHostService(bridge: HostBridge): DesktopService {
     try {
       return await bridge.host.call(method, payload);
     } catch (error) {
-      const code = (error as { code?: ErrorCode }).code;
+      const shaped = error as { code?: unknown };
+      const named =
+        error instanceof Error && error.name !== "Error" && error.name !== "ServiceError"
+          ? error.name
+          : undefined;
+      const code = typeof shaped.code === "string" ? shaped.code : named;
       if (typeof code === "string") {
-        throw new ServiceError(code, error instanceof Error ? error.message : String(error), false);
+        throw new ServiceError(
+          code as ErrorCode,
+          error instanceof Error ? error.message : String(error),
+          false,
+        );
       }
       throw error;
     }

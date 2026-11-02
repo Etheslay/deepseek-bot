@@ -13,6 +13,7 @@
  * channels go through holders: no request can reach the host before the
  * stdio loop starts, and attempts only run after a caller-driven request.
  */
+import { createInterface } from "node:readline";
 import { resolveDataRoot } from "@deepseek-bot/storage";
 import type { ChatStreamNotice } from "./chat.js";
 import type { ScheduleMissNotice } from "@deepseek-bot/runtime";
@@ -29,35 +30,102 @@ const streamChannel: { notify: (notice: ChatStreamNotice) => void } = {
   notify: () => undefined,
 };
 
-const host = await createHost({
-  dataRoot: resolveDataRoot(),
-  resolveApiKey: (credentialRef) => credentialChannel.resolve(credentialRef),
-  onMissed: (notices) => missedChannel.notify(notices),
-  onTurnStream: (notice) => streamChannel.notify(notice),
-  ...(process.env.DEEPSEEK_BOT_SEARXNG_URL !== undefined
-    ? { webSearch: { endpoint: process.env.DEEPSEEK_BOT_SEARXNG_URL } }
-    : {}),
-  ...(process.env.DEEPSEEK_BOT_WHISPER_BIN !== undefined ||
-  process.env.DEEPSEEK_BOT_WHISPER_MODEL !== undefined
-    ? {
-        voice: {
-          ...(process.env.DEEPSEEK_BOT_WHISPER_BIN !== undefined
-            ? { whisperBin: process.env.DEEPSEEK_BOT_WHISPER_BIN }
-            : {}),
-          ...(process.env.DEEPSEEK_BOT_WHISPER_MODEL !== undefined
-            ? { whisperModel: process.env.DEEPSEEK_BOT_WHISPER_MODEL }
-            : {}),
+function logHostError(error: unknown): void {
+  const text = error instanceof Error ? (error.stack ?? error.message) : String(error);
+  process.stderr.write(`[host] ${text}\n`);
+}
+
+// A thrown scheduler tick or a stray rejection used to take the default Node
+// path and exit. The desktop then answered every later call with
+// "host process has exited". Log and keep the stdio loop up.
+process.on("uncaughtException", logHostError);
+process.on("unhandledRejection", logHostError);
+
+/**
+ * Startup failed before a Host existed. Stay on stdio and answer contract
+ * calls with that error instead of exiting — an exit is what the desktop
+ * surfaces as "host process has exited".
+ */
+async function serveStartupFailure(error: unknown): Promise<void> {
+  const message = error instanceof Error ? error.message : String(error);
+  logHostError(error);
+  const lines = createInterface({ input: process.stdin, terminal: false });
+  const write = (frame: Record<string, unknown>): void => {
+    process.stdout.write(`${JSON.stringify(frame)}\n`);
+  };
+  for await (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed.length === 0) continue;
+    let frame: Record<string, unknown> | null = null;
+    try {
+      const parsed = JSON.parse(trimmed) as unknown;
+      if (typeof parsed === "object" && parsed !== null) frame = parsed as Record<string, unknown>;
+    } catch {
+      continue;
+    }
+    if (frame === null) continue;
+    const method = frame.method;
+    const id = frame.id;
+    if (method === "host/shutdown") {
+      write({ jsonrpc: "2.0", id, result: { ok: true } });
+      return;
+    }
+    if (method === "contract/call") {
+      write({
+        jsonrpc: "2.0",
+        id,
+        error: {
+          code: "RUNTIME_UNAVAILABLE",
+          message,
+          retryable: false,
+          details: {},
         },
-      }
-    : {}),
-});
-const controller = startStdioHost({
-  host,
-  input: process.stdin,
-  output: process.stdout,
-});
-credentialChannel.resolve = controller.resolveCredential;
-missedChannel.notify = controller.notifyMissed;
-streamChannel.notify = controller.notifyChatStream;
-host.start();
-await controller.done;
+      });
+    }
+  }
+}
+
+let host: Awaited<ReturnType<typeof createHost>> | undefined = undefined;
+try {
+  host = await createHost({
+    dataRoot: resolveDataRoot(),
+    resolveApiKey: (credentialRef) => credentialChannel.resolve(credentialRef),
+    onMissed: (notices) => missedChannel.notify(notices),
+    onTurnStream: (notice) => streamChannel.notify(notice),
+    ...(process.env.DEEPSEEK_BOT_SEARXNG_URL !== undefined
+      ? { webSearch: { endpoint: process.env.DEEPSEEK_BOT_SEARXNG_URL } }
+      : {}),
+    ...(process.env.DEEPSEEK_BOT_WHISPER_BIN !== undefined ||
+    process.env.DEEPSEEK_BOT_WHISPER_MODEL !== undefined
+      ? {
+          voice: {
+            ...(process.env.DEEPSEEK_BOT_WHISPER_BIN !== undefined
+              ? { whisperBin: process.env.DEEPSEEK_BOT_WHISPER_BIN }
+              : {}),
+            ...(process.env.DEEPSEEK_BOT_WHISPER_MODEL !== undefined
+              ? { whisperModel: process.env.DEEPSEEK_BOT_WHISPER_MODEL }
+              : {}),
+          },
+        }
+      : {}),
+  });
+} catch (error) {
+  await serveStartupFailure(error);
+}
+
+if (host !== undefined) {
+  const controller = startStdioHost({
+    host,
+    input: process.stdin,
+    output: process.stdout,
+  });
+  credentialChannel.resolve = controller.resolveCredential;
+  missedChannel.notify = controller.notifyMissed;
+  streamChannel.notify = controller.notifyChatStream;
+  try {
+    host.start();
+  } catch (error) {
+    logHostError(error);
+  }
+  await controller.done;
+}

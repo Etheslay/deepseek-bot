@@ -12,6 +12,7 @@ import { useCallback, useEffect, useRef, useState, type JSX } from "react";
 import { METHOD_CONTRACTS } from "@deepseek-bot/contracts";
 import { CustomSelect } from "../../components/custom-select.js";
 import { eventLabel } from "../automation/automation-panel.js";
+import { clearHostDown, noteHostFailure } from "../settings/host-down.js";
 import { formatDateTime, noticeText, t, useLanguage, type Notice } from "../../i18n.js";
 
 type Banner = { notice: Notice; error: boolean };
@@ -79,9 +80,10 @@ export function EventRuleSettings(): JSX.Element {
           .bots.filter((bot) => bot.archivedAt === null);
         setBots(available.map((bot) => ({ id: bot.id, name: bot.name })));
         setBotId((current) => current || available[0]?.id || "");
+        clearHostDown();
       })
-      .catch(() => {
-        if (active) setFailed(true);
+      .catch((error: unknown) => {
+        if (active && !noteHostFailure(error)) setFailed(true);
       });
     return () => {
       active = false;

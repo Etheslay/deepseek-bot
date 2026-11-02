@@ -1348,6 +1348,27 @@ body {
   border-top: 1px solid var(--border);
 }
 
+/* 通用: one right edge for row controls, and one host-down line for the
+   whole page instead of a red failure tucked under every card. */
+.settings-general {
+  display: contents;
+}
+
+.settings-general .settings-row > :last-child {
+  margin-left: auto;
+}
+
+.settings-general .settings-card > [role="status"] {
+  margin: 0;
+  padding: 0 0.2rem 0.75rem;
+  text-align: right;
+  font-size: 0.85rem;
+}
+
+.settings-host-down {
+  margin: 0.15rem 0.2rem 0.2rem;
+}
+
 .settings-select {
   font: inherit;
   font-size: 0.9rem;

@@ -10,6 +10,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Bot } from "@deepseek-bot/contracts";
 import type { BotDraft, BotUpdatePatch } from "../../services/desktop-service.js";
 import { ServiceError } from "../../services/desktop-service.js";
+import { hostErrorCode, hostErrorMessage } from "../../services/host-error.js";
 import { useService } from "../../services/service-context.js";
 import { defaultAvatarFor, type Avatar } from "../avatars/avatar-meta.js";
 import { t } from "../../i18n.js";
@@ -37,11 +38,10 @@ export type BotsOperationResult = {
   /**
    * The failure text as it actually arrived.
    *
-   * `errorCode` on its own cannot be trusted across the IPC boundary: Electron
-   * serializes a rejection down to name/message/stack, so the host's structured
-   * `code` is gone by the time the renderer sees it and *every* failure — dead
-   * host, validation string, quota, timeout — used to be reported as
-   * INVALID_INPUT. Carrying the message is what lets a real cause reach the UI.
+   * Electron's contextBridge keeps an Error's name and message. The preload
+   * puts the stable host code in `name` (and `code` when the clone allows it)
+   * so a dead host stays RUNTIME_UNAVAILABLE instead of being relabeled
+   * INVALID_INPUT. The message is still shown beside the code.
    */
   errorMessage?: string;
 };
@@ -51,11 +51,7 @@ function describeFailure(error: unknown): { errorCode: string; errorMessage: str
   if (error instanceof ServiceError) {
     return { errorCode: error.code, errorMessage: error.message };
   }
-  const shaped = error as { code?: unknown } | null;
-  return {
-    errorCode: typeof shaped?.code === "string" ? shaped.code : "INVALID_INPUT",
-    errorMessage: error instanceof Error ? error.message : String(error),
-  };
+  return { errorCode: hostErrorCode(error), errorMessage: hostErrorMessage(error) };
 }
 
 export function useBots(defaultGroupKey: number) {

@@ -111,7 +111,9 @@ export interface DshExecutorWiring {
 }
 
 export class DshSdkExecutor implements NodeExecutor {
-  private readonly spec: DshLaunchSpec | undefined;
+  private spec: DshLaunchSpec | undefined;
+  private specFailure: Error | undefined;
+  private specAttempted = false;
   private readonly sessionRegistry: SessionRegistry;
 
   constructor(
@@ -119,9 +121,12 @@ export class DshSdkExecutor implements NodeExecutor {
     wiring?: DshExecutorWiring,
   ) {
     this.sessionRegistry = wiring?.sessionRegistry ?? new SessionRegistry();
-    if (options.dshBin === undefined) {
-      this.spec = resolveDshSpec(PINNED_DSH_VERSION);
-    }
+    // Resolve @deepseek-ai/dsh on first use, not here. createHost builds this
+    // executor while the desktop Host is still starting; a missing CLI used to
+    // throw out of that constructor, the child exited, and every later call
+    // (bot.create, search.config.get, connector.list) failed with
+    // "host process has exited". Chat and workflow attempts are the only
+    // callers that need the binary.
   }
 
   /** Registry handle for the approval bridge / diagnostics. */
@@ -129,8 +134,25 @@ export class DshSdkExecutor implements NodeExecutor {
     return this.sessionRegistry;
   }
 
-  /** The launch spec resolved at construction (undefined with a dshBin override). */
+  /**
+   * Pinned runtime spec. Undefined when a dshBin override is in use, or when
+   * the pinned package cannot be resolved yet. Resolution happens on read so
+   * constructing the executor never kills the host process.
+   */
   get launchSpec(): DshLaunchSpec | undefined {
+    return this.ensureSpec();
+  }
+
+  private ensureSpec(): DshLaunchSpec | undefined {
+    if (this.options.dshBin !== undefined) return undefined;
+    if (!this.specAttempted) {
+      this.specAttempted = true;
+      try {
+        this.spec = resolveDshSpec(PINNED_DSH_VERSION);
+      } catch (error) {
+        this.specFailure = error instanceof Error ? error : new Error(String(error));
+      }
+    }
     return this.spec;
   }
 
@@ -192,17 +214,18 @@ export class DshSdkExecutor implements NodeExecutor {
     inputs: BotRuntimeInputs,
   ): HarnessAttemptOptions {
     const patches = this.options.patches ?? [];
-    const dshBin = this.options.dshBin ?? this.spec?.dshBin;
+    const spec = this.ensureSpec();
+    const dshBin = this.options.dshBin ?? spec?.dshBin;
     if (dshBin === undefined) {
       throw new NodeExecutionError({
         code: "RUNTIME_UNAVAILABLE",
-        message: "harness runtime binary could not be resolved",
+        message: this.specFailure?.message ?? "harness runtime binary could not be resolved",
         retryable: false,
       });
     }
     const parent = this.options.childEnv?.(process.env) ?? process.env;
     return {
-      command: this.spec?.command ?? process.execPath,
+      command: spec?.command ?? process.execPath,
       args: [
         dshBin,
         "--profile",

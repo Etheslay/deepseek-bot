@@ -263,12 +263,18 @@ function registerShellIpc(win: BrowserWindow): void {
             error: { code: "INVALID_INPUT", message: "unknown host method", retryable: false },
           };
         }
-        if (hostClient === null) {
+        if (!isQuitting && (hostClient === null || hostClient.status === "exited")) {
+          // A child that already exited stays dead forever unless we replace
+          // it. bot.create and the settings reads then all fail with
+          // "host process has exited" even though a new process can serve them.
+          startHost();
+        }
+        if (hostClient === null || hostClient.status === "exited") {
           return {
             ok: false as const,
             error: {
               code: "RUNTIME_UNAVAILABLE",
-              message: "host process is not running",
+              message: hostClient === null ? "host process is not running" : "host process has exited",
               retryable: false,
             },
           };

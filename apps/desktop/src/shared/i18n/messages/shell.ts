@@ -101,6 +101,10 @@ export const shellMessages = {
   "shell.groupName": { zh: "分组名称", en: "Group name" },
   "shell.groupNotEmpty": { zh: "请先移出或删除组内 Bot", en: "Move or delete the Bots in this group first" },
   "shell.hardwareAcceleration": { zh: "硬件加速", en: "Hardware acceleration" },
+  "shell.hostDown": {
+    zh: "本机服务已退出，搜索、连接器和自动化暂时无法读取。",
+    en: "The local service has exited, so search, connectors, and automation cannot be read right now.",
+  },
   "shell.hiddenFromSidebar": { zh: "已从侧边栏隐藏", en: "Hidden from sidebar" },
   "shell.hideFromSidebar": { zh: "从侧边栏隐藏", en: "Hide from sidebar" },
   "shell.moveFailed": { zh: "移动失败，请重试", en: "Moving failed, try again" },
