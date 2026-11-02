@@ -17,12 +17,14 @@ const roots: Root[] = [];
 beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   document.body.textContent = "";
+  window.localStorage.clear();
 });
 afterEach(() => {
   for (const root of roots.splice(0)) {
     act(() => root.unmount());
   }
   document.body.innerHTML = "";
+  window.localStorage.clear();
   delete (window as { deepseekBot?: unknown }).deepseekBot;
 });
 
@@ -80,6 +82,30 @@ describe("useBots identity stability", () => {
       box.current?.hide(1);
     });
     expect(box.current?.bots).toHaveLength(1);
+    expect(box.current?.hiddenBots).toHaveLength(1);
     expect(box.current?.bots).not.toBe(before);
+    act(() => {
+      box.current?.unhide(box.current.hiddenBots[0]!.key);
+    });
+    expect(box.current?.bots).toHaveLength(2);
+    expect(box.current?.hiddenBots).toHaveLength(0);
+  });
+
+  it("keeps a hidden bot out of the sidebar after the list reloads", async () => {
+    const id = "44444444-4444-4444-8444-444444444444";
+    const other = "55555555-5555-4555-8555-555555555555";
+    const box: { current: ReturnType<typeof useBots> | null } = { current: null };
+    const first = probeRoot(box, stubService([bot(id), bot(other)]));
+    await first.render();
+    act(() => {
+      box.current?.hide(1);
+    });
+    expect(box.current?.hiddenBots.map((item) => item.bot.id)).toEqual([id]);
+
+    const again: { current: ReturnType<typeof useBots> | null } = { current: null };
+    const second = probeRoot(again, stubService([bot(id), bot(other)]));
+    await second.render();
+    expect(again.current?.bots.map((item) => item.bot.id)).toEqual([other]);
+    expect(again.current?.hiddenBots.map((item) => item.bot.id)).toEqual([id]);
   });
 });
