@@ -19,6 +19,12 @@ import type { ChatStreamNotice } from "./chat.js";
 import type { ScheduleMissNotice } from "@deepseek-bot/runtime";
 import { createHost } from "./host.js";
 import { startStdioHost } from "./stdio.js";
+import { bundledWhisper } from "./whisper-bundle.js";
+
+function configuredPath(value: string | undefined): string | undefined {
+  if (value === undefined || value.length === 0) return undefined;
+  return value;
+}
 
 const credentialChannel: { resolve: (ref: string) => Promise<string> } = {
   resolve: () => Promise.reject(new Error("credential channel not ready")),
@@ -85,6 +91,20 @@ async function serveStartupFailure(error: unknown): Promise<void> {
   }
 }
 
+/** Shipped bundle, unless an explicit environment path replaces one side. */
+function whisperBoot(): { voice: { whisperBin?: string; whisperModel?: string } } | Record<string, never> {
+  const bundled = bundledWhisper(import.meta.url);
+  const whisperBin = configuredPath(process.env.DEEPSEEK_BOT_WHISPER_BIN) ?? bundled.whisperBin;
+  const whisperModel = configuredPath(process.env.DEEPSEEK_BOT_WHISPER_MODEL) ?? bundled.whisperModel;
+  if (whisperBin === undefined && whisperModel === undefined) return {};
+  return {
+    voice: {
+      ...(whisperBin !== undefined ? { whisperBin } : {}),
+      ...(whisperModel !== undefined ? { whisperModel } : {}),
+    },
+  };
+}
+
 let host: Awaited<ReturnType<typeof createHost>> | undefined = undefined;
 try {
   host = await createHost({
@@ -95,19 +115,7 @@ try {
     ...(process.env.DEEPSEEK_BOT_SEARXNG_URL !== undefined
       ? { webSearch: { endpoint: process.env.DEEPSEEK_BOT_SEARXNG_URL } }
       : {}),
-    ...(process.env.DEEPSEEK_BOT_WHISPER_BIN !== undefined ||
-    process.env.DEEPSEEK_BOT_WHISPER_MODEL !== undefined
-      ? {
-          voice: {
-            ...(process.env.DEEPSEEK_BOT_WHISPER_BIN !== undefined
-              ? { whisperBin: process.env.DEEPSEEK_BOT_WHISPER_BIN }
-              : {}),
-            ...(process.env.DEEPSEEK_BOT_WHISPER_MODEL !== undefined
-              ? { whisperModel: process.env.DEEPSEEK_BOT_WHISPER_MODEL }
-              : {}),
-          },
-        }
-      : {}),
+    ...whisperBoot(),
   });
 } catch (error) {
   await serveStartupFailure(error);

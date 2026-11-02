@@ -15,12 +15,6 @@ export const IPC_CHANNELS = {
   HOST_CALL: "host:call",
   /** Desktop file dialog for one .txt/.md knowledge note. No path argument. */
   KNOWLEDGE_IMPORT: "knowledge:import",
-  /**
-   * Desktop file dialog for one local whisper path (binary or model). Like
-   * knowledge:import, the only argument is the file kind — the renderer can
-   * never hand a path in, it only receives the picked one.
-   */
-  VOICE_PICK_FILE: "voice:pickFile",
   /** D24: app-update checks via electron-updater against GitHub Releases. */
   UPDATES_CHECK: "updates:check",
   UPDATES_DOWNLOAD_INSTALL: "updates:downloadInstall",

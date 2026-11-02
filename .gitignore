@@ -33,6 +33,9 @@ Thumbs.db
 # Desktop local outputs
 apps/desktop/out/
 apps/desktop/release/
+# whisper.cpp CLI and ggml model fetched by apps/desktop/scripts/fetch-whisper.mts
+apps/desktop/resources/whisper/dist/
+apps/desktop/resources/whisper/cache/
 .dev-electron-profile/
 
 # Local tool profiles, temp build dirs and handoff material

@@ -313,6 +313,17 @@ describe("voice config", () => {
     });
   });
 
+  it("returns to the boot paths when an override is cleared", () => {
+    const boot = makeConfiguredFiles();
+    const custom = makeConfiguredFiles();
+    const service = createVoiceService({ whisperBin: boot.bin, whisperModel: boot.model });
+    service.setConfig({ whisperBin: custom.bin, whisperModel: custom.model });
+    expect(service.status().transcribe.available).toBe(true);
+    service.setConfig({ whisperBin: null, whisperModel: null });
+    expect(service.config()).toEqual({ whisperBin: boot.bin, whisperModel: boot.model });
+    expect(service.status().transcribe).toEqual({ available: true, reason: null });
+  });
+
   it("persists the config in the settings KV and restores it on reopen", async () => {
     const root = mkdtempSync(join(tmpdir(), "dsb-voice-config-host-"));
     roots.push(root);
@@ -354,7 +365,7 @@ describe("voice config", () => {
       whisperBin: userBin,
       whisperModel: userModel,
     });
-    // Clearing writes null and survives a reopen too.
+    // Clearing drops the override. A later boot keeps the shipped or environment paths.
     await second.handleMethod("voice.config.set", { whisperBin: null, whisperModel: null });
     await second.shutdown();
     hosts.pop();
@@ -364,14 +375,13 @@ describe("voice config", () => {
       voice: { whisperBin: seedBin, whisperModel: seedModel },
     });
     hosts.push(third);
-    // The stored null is authoritative over the environment seed.
     expect(await third.handleMethod("voice.config.get", {})).toEqual({
-      whisperBin: null,
-      whisperModel: null,
+      whisperBin: seedBin,
+      whisperModel: seedModel,
     });
     expect(
       (await third.handleMethod("voice.status", {})) as { transcribe: { available: boolean } },
-    ).toMatchObject({ transcribe: { available: false } });
+    ).toMatchObject({ transcribe: { available: true } });
   });
 });
 

@@ -138,7 +138,6 @@ import {
 } from "./features/system/notify.js";
 import { NotificationSettingsPanel } from "./features/system/notifications-panel.js";
 import { ChromeImportPanel } from "./features/system/chrome-panel.js";
-import { VoiceSettingsPanel } from "./features/settings/voice-settings.js";
 import type { TrayBotStatus } from "../../shared/system-integration.js";
 import type { LanguagePreference } from "../../shared/i18n/types.js";
 import {
@@ -538,11 +537,6 @@ export function App(): JSX.Element {
   /** Which settings nav section is active (D24; grouping in features/settings). */
   const [settingsSection, setSettingsSection] = useState<SettingsSectionKey>("general");
   const hostDown = useHostDown();
-  /**
-   * D27: bumped after the voice settings panel saved a configuration, so the
-   * chat pane re-asks `voice.status` and the composer mic unlocks live.
-   */
-  const [voiceConfigVersion, setVoiceConfigVersion] = useState(0);
   const [backups, setBackups] = useState<
     import("../../shared/ipc-channels.js").BackupSummary[] | null
   >(null);
@@ -2485,7 +2479,6 @@ const logout = (): void => {
               stream={streams[selectedBot] ?? null}
               streamHandles={streamHandles.current}
               onStreamUpdate={(update) => updateStreamState(selectedBot, update)}
-              voiceConfigVersion={voiceConfigVersion}
               msgs={chats[selectedBot] ?? []}
               pairTranscripts={pairTranscripts}
               quoteDraft={quoteDraft}
@@ -3030,7 +3023,6 @@ const logout = (): void => {
                       general: t("shell.general"),
                       permissions: t("d24.permissionsSection"),
                       computer: t("shell.computer"),
-                      voice: t("shell.voiceSection"),
                       vault: t("shell.vault"),
                       usage: t("shell.usageAndBilling"),
                       updates: t("shell.updates"),
@@ -3446,14 +3438,6 @@ const logout = (): void => {
                     <ChromeImportPanel onToast={setToast} />
                   </div>
                   </>
-                )}
-                {settingsSection === "voice" && (
-                  <div className="settings-card">
-                    <VoiceSettingsPanel
-                      onConfigSaved={() => setVoiceConfigVersion((v) => v + 1)}
-                      onToast={setToast}
-                    />
-                  </div>
                 )}
               </div>
             </div>
@@ -3881,7 +3865,6 @@ function BotsPlaceholder({
   skillContext,
   onAnswerSeedCard,
   onOpenAttachment,
-  voiceConfigVersion,
   primitiveMode,
   onTogglePrimitive,
   deepThinking,
@@ -3902,11 +3885,6 @@ function BotsPlaceholder({
   onStreamUpdate: (
     update: (prev: StreamStateForBot | null) => StreamStateForBot | null,
   ) => void;
-  /**
-   * D27: bumped by App after the voice settings saved a configuration; the
-   * pane re-asks `voice.status` so the mic unlocks without a remount.
-   */
-  voiceConfigVersion: number;
   msgs: Msg[];
   pairTranscripts: Record<
     string,
@@ -4580,11 +4558,7 @@ function BotsPlaceholder({
     startChatStream(option.label);
   };
 
-  /**
-   * Ask the Host whether the local whisper/TTS halves are usable — and ask
-   * again when the voice settings panel saved a new configuration, so the mic
-   * unlocks (or locks) live without switching bots.
-   */
+  /** Ask the Host whether the shipped whisper build and Windows SAPI are usable. */
   useEffect(() => {
     void window.deepseekBot.host
       .call("voice.status", {})
@@ -4592,7 +4566,7 @@ function BotsPlaceholder({
         setVoiceStatus(METHOD_CONTRACTS["voice.status"].response.parse(response)),
       )
       .catch(() => setVoiceStatus(null));
-  }, [voiceConfigVersion]);
+  }, []);
 
   const speakMessage = (msgId: number, text: string): void => {
     if (speakingId !== null) {

@@ -44,6 +44,9 @@ jobs:
       # whole build (observed 2026-11-01 on a develop workflow_dispatch run).
       # With --publish never the upload is skipped while latest.yml is still
       # written, so the artifact set below stays complete (RELEASE.md §4.1).
+      - name: Fetch bundled whisper.cpp
+        run: node apps/desktop/scripts/fetch-whisper.mts --platform win32
+
       - name: Build NSIS installer
         run: |
           pnpm --filter @deepseek-bot/desktop exec electron-vite build
