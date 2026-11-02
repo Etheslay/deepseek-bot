@@ -19,6 +19,7 @@ import { useService } from "../../services/service-context.js";
 import type { UiBot } from "../bots/use-bots.js";
 import { Avatar } from "../avatars/avatar.js";
 import { t, useLanguage } from "../../i18n.js";
+import { pinSlotOrder, useTimelineTimes } from "./timeline.js";
 
 const FEED_REFRESH_MS = 4_000;
 
@@ -73,7 +74,9 @@ export function buildFeedItems(
     if (task.fromBotId === myBotId) {
       items.push({
         kind: "sent",
-        at: taskMoment(task),
+        // The line appears when the task is created and stays there.
+        // Finishing the task must not move it down the thread.
+        at: task.createdAt,
         toBotId: task.toBotId,
         text: task.instruction,
         status: task.status,
@@ -89,6 +92,26 @@ export function buildFeedItems(
     }
   }
   return items.sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
+}
+
+function otherBotId(item: FeedItem): string | undefined {
+  if (item.kind === "incoming" || item.kind === "received") return item.fromBotId;
+  if (item.kind === "sent") return item.toBotId;
+  return undefined;
+}
+
+/** Earliest moment each peer showed up, so the count row stays on that slot. */
+export function exchangeFirstAt(myBotId: string, items: FeedItem[]): Map<string, number> {
+  const first = new Map<string, number>();
+  for (const item of items) {
+    const other = otherBotId(item);
+    if (other === undefined || other === myBotId) continue;
+    const at = Date.parse(item.at);
+    if (!Number.isFinite(at)) continue;
+    const prev = first.get(other);
+    if (prev === undefined || at < prev) first.set(other, at);
+  }
+  return first;
 }
 
 /** Per-peer exchange counts over the merged items (both directions). */
@@ -146,9 +169,11 @@ export function TaskFeedCards(props: {
     };
   }, [desktop, props.botId]);
 
+  const times = useTimelineTimes();
   if (items.length === 0) {
     return null;
   }
+  const firstAt = exchangeFirstAt(props.botId, items);
   const botKeyById = new Map(props.bots.map((bot) => [bot.bot.id, bot.key]));
   const botNameById = new Map(props.bots.map((bot) => [bot.bot.id, bot.bot.name]));
   const nameOf = (botId: string): string => botNameById.get(botId) ?? t("tasks.feedOtherBots");
@@ -183,7 +208,12 @@ export function TaskFeedCards(props: {
           const quiet =
             ACTIVE_STATUSES.has(item.status) || item.status === "done";
           return (
-            <div className="deliver-notice" key={`sent-${index}`} role="status">
+            <div
+              className="deliver-notice"
+              key={`sent-${index}`}
+              role="status"
+              style={{ order: pinSlotOrder(times, Date.parse(item.at)) }}
+            >
               {quiet ? (
                 <span className="deliver-label">{t("shell.sentTo")}</span>
               ) : (
@@ -196,13 +226,22 @@ export function TaskFeedCards(props: {
           );
         }
         return (
-          <div className="deliver-notice" key={`note-${index}`} role="status">
+          <div
+            className="deliver-notice"
+            key={`note-${index}`}
+            role="status"
+            style={{ order: pinSlotOrder(times, Date.parse(item.at)) }}
+          >
             <span className={`task-status task-status--${item.status}`}>{statusLabel(item.status)}</span>
           </div>
         );
       })}
       {countExchanges(props.botId, items).map(({ otherBotId, count }) => (
-        <div className="chat-summary" key={`count-${otherBotId}`}>
+        <div
+          className="chat-summary"
+          key={`count-${otherBotId}`}
+          style={{ order: pinSlotOrder(times, firstAt.get(otherBotId) ?? 0) }}
+        >
           <span className="chat-summary-label">{t("shell.exchangeCount", [count])}</span>
           {chip(otherBotId, 16)}
         </div>

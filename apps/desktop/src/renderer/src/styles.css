@@ -6568,13 +6568,14 @@ select option {
   margin: 2px 0;
 }
 
-/* Exchange feed: one-line notices, with the count row centered as a unit. */
-.task-feed {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 8px;
-  width: 100%;
+/* Exchange feed, permission, question and search rows are timeline entries.
+   The wrapper stays in the tree for the label; its rows join `.chat`'s flex
+   order so a later message cannot push them to the end. */
+.task-feed,
+.permission-chat-cards,
+.question-chat-cards,
+.search-result-cards {
+  display: contents;
 }
 
 .task-feed .exchange-bubble {
@@ -8529,7 +8530,14 @@ select:focus-visible {
    frosted fade where messages scroll under the floating header.
    ============================================================ */
 
-.chat > :first-child {
+/* Dock the whole timeline to the bottom. A pin on the first element would
+   open a gap in the middle once rows are reordered, so the spacer is its
+   own first flex item and every real row keeps its slot. */
+.chat::before {
+  content: "";
+  order: -2;
+  flex: 0 0 auto;
+  height: 0;
   margin-top: auto;
 }
 
@@ -9363,4 +9371,19 @@ button.automation-notice-jump .automation-notice-main {
   border: 1px solid var(--text);
   color: var(--bg);
   font-weight: 600;
+}
+
+/* Later rules set `.search-result-cards { display: grid }`. This has to win
+   so each card is its own row in the chat timeline. */
+.task-feed,
+.permission-chat-cards,
+.question-chat-cards,
+.search-result-cards {
+  display: contents;
+}
+
+.search-result-cards > section,
+.search-result-cards > [role="status"] {
+  width: min(440px, 100%);
+  margin-inline: auto;
 }

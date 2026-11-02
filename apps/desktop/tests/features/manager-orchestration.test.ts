@@ -11,7 +11,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { TaskSchema, type Bot, type Task } from "@deepseek-bot/contracts";
 import { ServiceProvider } from "../../src/renderer/src/services/service-context.jsx";
 import { TaskList } from "../../src/renderer/src/features/run-monitor/tasks/task-list.js";
-import { TaskFeedCards } from "../../src/renderer/src/features/chat/task-feed.js";
+import { buildFeedItems, TaskFeedCards } from "../../src/renderer/src/features/chat/task-feed.js";
 import { createFixtureTaskService } from "../../src/renderer/src/features/run-monitor/tasks/task-service.js";
 import { capabilityLabel } from "../../src/renderer/src/features/permissions/capability-labels.js";
 import { setLanguagePreference } from "../../src/renderer/src/i18n.js";
@@ -319,6 +319,18 @@ describe("chat task feed (FR-4/FR-7)", () => {
       writer!.click();
     });
     expect(opened).toEqual([2]);
+  });
+
+  it("keeps a sent line on the task's created time after it finishes", () => {
+    const done = task({
+      status: "done",
+      resultSummary: "清单完成",
+      createdAt: "2026-10-26T09:00:00.000Z",
+      finishedAt: "2026-10-26T09:05:00.000Z",
+    });
+    const items = buildFeedItems(COORDINATOR, [], [done]);
+    const sent = items.find((item) => item.kind === "sent");
+    expect(sent?.at).toBe("2026-10-26T09:00:00.000Z");
   });
 
   it("renders nothing when the host has no marked rows", async () => {
