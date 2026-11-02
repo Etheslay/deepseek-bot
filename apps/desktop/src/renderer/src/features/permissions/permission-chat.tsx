@@ -11,6 +11,7 @@
  * Settings → Permissions.
  */
 import { useCallback, useEffect, useRef, useState, type JSX } from "react";
+import { pinSlotOrder, useTimelineTimes } from "../chat/timeline.js";
 import {
   PERMISSION_METHODS,
   requiresPerActionApproval,
@@ -93,11 +94,12 @@ type ResolvedCard = { approval: AppApproval; choice: CardChoice };
 function ApprovalCard(props: {
   approval: AppApproval;
   botName: string;
+  order: number;
   busy?: boolean;
   onDecide?: (approval: AppApproval, choice: CardChoice) => void;
   onDismiss?: (approvalId: string) => void;
 }): JSX.Element {
-  const { approval, botName, busy, onDecide, onDismiss } = props;
+  const { approval, botName, order, busy, onDecide, onDismiss } = props;
   const capabilities = capabilityLine(approval.capabilities);
   const preview =
     approval.tool === "mcp_call"
@@ -109,7 +111,7 @@ function ApprovalCard(props: {
         }
       : approval.params;
   return (
-    <div className="approval-card" aria-label={t("permissions.approvalFor", [approval.tool])}>
+    <div className="approval-card" style={{ order }} aria-label={t("permissions.approvalFor", [approval.tool])}>
       <div className="approval-head">
         <span className="approval-glyph" aria-hidden="true">
           {capabilityGlyph(approval.capabilities)}
@@ -183,6 +185,8 @@ function BotPermissionChatCards(props: {
   const [busyId, setBusyId] = useState<string | null>(null);
   const active = useRef(true);
   const loadSequence = useRef(0);
+  const noticeAt = useRef<number | null>(null);
+  const times = useTimelineTimes();
 
   const load = useCallback(async (): Promise<void> => {
     const sequence = ++loadSequence.current;
@@ -254,6 +258,11 @@ function BotPermissionChatCards(props: {
     setResolved((prev) => prev.filter((card) => card.approval.id !== approvalId));
   };
 
+  const noticeAnchor = (): number => {
+    if (noticeAt.current === null) noticeAt.current = Date.now();
+    return noticeAt.current;
+  };
+
   if (
     (approvals === null || pendingVisible.length === 0) &&
     resolved.length === 0 &&
@@ -269,13 +278,18 @@ function BotPermissionChatCards(props: {
           key={approval.id}
           approval={approval}
           botName={botName}
+          order={pinSlotOrder(times, Date.parse(approval.createdAt))}
           busy={busyId === approval.id}
           onDecide={choose}
           onDismiss={dismiss}
         />
       ))}
       {resolved.map(({ approval, choice }) => (
-        <p key={approval.id} className="sys-line">
+        <p
+          key={approval.id}
+          className="sys-line"
+          style={{ order: pinSlotOrder(times, Date.parse(approval.createdAt)) }}
+        >
           {choice === "deny"
             ? t("permissions.grantedDeniedLine", [botName, capabilityLine(approval.capabilities)])
             : choice === "permanent"
@@ -289,7 +303,11 @@ function BotPermissionChatCards(props: {
                 ])}
         </p>
       ))}
-      {notice !== null ? <p className="sys-line">{t(notice.key, notice.params ?? [])}</p> : null}
+      {notice !== null ? (
+        <p className="sys-line" style={{ order: pinSlotOrder(times, noticeAnchor()) }}>
+          {t(notice.key, notice.params ?? [])}
+        </p>
+      ) : null}
     </div>
   );
 }
