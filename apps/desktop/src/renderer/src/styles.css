@@ -25,7 +25,9 @@
   --shadow-3: 0 14px 44px rgba(0, 0, 0, 0.55);
   --shadow-4: 0 18px 60px rgba(0, 0, 0, 0.5);
   /* Dropdown option states. Dark-gray wash on the raised menu, light text.
-     A chosen row is not a white bar. */
+     A chosen row is not a white bar. The panel matches the dark shell. */
+  --dropdown-panel: #1d1d21;
+  --dropdown-panel-border: #2a2a30;
   --dropdown-hover-bg: rgba(127, 127, 127, 0.1);
   --dropdown-hover-fg: var(--text);
   --dropdown-hover-border: transparent;
@@ -54,8 +56,11 @@
   --shadow-2: 0 12px 34px rgba(30, 30, 45, 0.13);
   --shadow-3: 0 14px 44px rgba(30, 30, 45, 0.15);
   --shadow-4: 0 18px 60px rgba(30, 30, 45, 0.18);
-  /* The open menu stays the dark gray panel in both themes, so these
-     tokens do not flip to a white sheet or a black selected row. */
+  /* Light theme menus stay a dark panel, but a step lighter than the
+     near-black shell so they read as gray. Rows stay a gray wash, not a
+     white or black bar. */
+  --dropdown-panel: #3a3a40;
+  --dropdown-panel-border: #4a4a52;
   --dropdown-hover-bg: rgba(127, 127, 127, 0.1);
   --dropdown-hover-fg: #ececf1;
   --dropdown-hover-border: transparent;
@@ -2652,10 +2657,11 @@ select option {
 /* The menu is portaled to body and fixed-positioned by the component
    (viewport flip when the modal bottom would clip it). */
 .custom-select-menu {
-  /* Same dark raised panel in light theme. --raised flips to white there. */
-  background: #1d1d21;
+  /* --raised flips to white in light theme; the open list stays the
+     shared dropdown panel (near-black in dark, dark gray in light). */
+  background: var(--dropdown-panel);
   color: #ececf1;
-  border: 1px solid #2a2a30;
+  border: 1px solid var(--dropdown-panel-border);
   border-radius: 16px;
   padding: 0.25rem;
   box-shadow: var(--shadow-1);
