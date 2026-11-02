@@ -1,12 +1,13 @@
 /**
  * Bot-exchange feed (the D05 消息往来 notices, now on real dispatch data):
  *
- * - Executor panel: a dispatch marker renders as 「消息来自 <sender>」 with the
- *   task text — the message really arrived from that bot's turn.
+ * - Executor panel: a dispatch marker renders as 「消息来自 <sender>」.
  * - Coordinator panel: task.list synthesizes the mirror side — 「已发消息给
- *   <executor>」 while the turn runs, 「消息来自 <executor>」 with the reply
- *   once it settles, status notices when it fails or is cancelled.
- * - Both panels end with 「N 条消息往来：A 和 B」 aggregate rows per peer,
+ *   <executor>」 while the turn runs, 「消息来自 <executor>」 once it settles,
+ *   status notices when it fails or is cancelled.
+ * - The instruction and the reply stay out of these one-line notices. Clicking
+ *   either bot opens the pair transcript (current bot and that bot).
+ * - Both panels end with a centered 「N 条消息往来：A 和 B」 row per peer,
  *   counted from the same real tasks (never demo data).
  *
  * The feed polls chat.history + task.list on a light interval; the host owns
@@ -114,7 +115,8 @@ export function countExchanges(
 export function TaskFeedCards(props: {
   botId: string;
   bots: UiBot[];
-  onOpenBot: (botKey: number) => void;
+  /** Open the pair transcript between this panel's bot and `botKey`. */
+  onOpenExchange: (botKey: number) => void;
 }): JSX.Element | null {
   useLanguage();
   const desktop: DesktopService = useService();
@@ -151,16 +153,17 @@ export function TaskFeedCards(props: {
   const botNameById = new Map(props.bots.map((bot) => [bot.bot.id, bot.bot.name]));
   const nameOf = (botId: string): string => botNameById.get(botId) ?? t("tasks.feedOtherBots");
 
-  const chip = (botId: string, size = 20): JSX.Element => {
+  const chip = (botId: string, size: number, exchangeKey: number | undefined): JSX.Element => {
     const other = props.bots.find((bot) => bot.bot.id === botId);
+    const exchangeBot = props.bots.find((bot) => bot.key === exchangeKey);
+    const exchangeName = exchangeBot?.bot.name ?? nameOf(botId);
     return (
       <button
         type="button"
         className="summary-bot"
-        title={t("shell.openSessionWith", [nameOf(botId)])}
+        title={t("shell.viewExchangesWith", [exchangeName])}
         onClick={() => {
-          const key = botKeyById.get(botId);
-          if (key !== undefined) props.onOpenBot(key);
+          if (exchangeKey !== undefined) props.onOpenExchange(exchangeKey);
         }}
       >
         <Avatar avatar={other?.avatar ?? { kind: "mono" }} variant="inline" size={size} />
@@ -172,60 +175,51 @@ export function TaskFeedCards(props: {
   return (
     <div className="task-feed" aria-label={t("tasks.feedAria")}>
       {items.map((item, index) => {
-        if (item.kind === "incoming") {
+        if (item.kind === "incoming" || item.kind === "received") {
+          const exchangeKey = botKeyById.get(item.fromBotId);
           return (
-            <div className="dispatch-msg" key={`in-${index}`} role="note">
-              <span className="dispatch-tag">{t("shell.messageFrom")}</span>
-              {chip(item.fromBotId, 18)}
-              <span className="dispatch-text">{item.text}</span>
+            <div className="deliver-notice" key={`${item.kind}-${index}`} role="status">
+              <span className="deliver-label">{t("shell.messageFrom")}</span>
+              {chip(item.fromBotId, 18, exchangeKey)}
             </div>
           );
         }
         if (item.kind === "sent") {
+          const exchangeKey = botKeyById.get(item.toBotId);
           if (ACTIVE_STATUSES.has(item.status) || item.status === "done") {
-            // The message left this bot: the notice stays the same whether the
-            // reply has landed yet; the reply itself is the "received" item.
+            // The message left this bot. The notice stays a single line whether
+            // the reply has landed; the text itself opens with the peer chip.
             return (
               <div className="deliver-notice" key={`sent-${index}`} role="status">
                 <span className="deliver-label">{t("shell.sentTo")}</span>
-                {chip(item.toBotId, 18)}
-                <span className="exchange-preview">{item.text}</span>
+                {chip(item.toBotId, 18, exchangeKey)}
               </div>
             );
           }
           return (
             <div className="task-notice" key={`sent-${index}`} role="status">
               <span className={`task-status task-status--${item.status}`}>{statusLabel(item.status)}</span>
-              <span className="task-notice-text">{item.text}</span>
-            </div>
-          );
-        }
-        if (item.kind === "received") {
-          return (
-            <div key={`recv-${index}`}>
-              <div className="deliver-notice" role="status">
-                <span className="deliver-label">{t("shell.messageFrom")}</span>
-                {chip(item.fromBotId, 18)}
-              </div>
-              <div className="dispatch-msg">
-                <span className="dispatch-text">{item.text}</span>
-              </div>
+              {chip(item.toBotId, 18, exchangeKey)}
             </div>
           );
         }
         return (
           <div className="task-notice" key={`note-${index}`} role="status">
             <span className={`task-status task-status--${item.status}`}>{statusLabel(item.status)}</span>
-            <span className="task-notice-text">{item.text}</span>
           </div>
         );
       })}
-      {countExchanges(props.botId, items).map(({ otherBotId, count }) => (
-        <div className="chat-summary" key={`count-${otherBotId}`}>
-          <span className="chat-summary-label">{t("shell.exchangeCount", [count])}</span>
-          {chip(otherBotId, 16)}
-        </div>
-      ))}
+      {countExchanges(props.botId, items).map(({ otherBotId, count }) => {
+        const exchangeKey = botKeyById.get(otherBotId);
+        return (
+          <div className="chat-summary" key={`count-${otherBotId}`}>
+            <span className="chat-summary-label">{t("shell.exchangeCount", [count])}</span>
+            {chip(props.botId, 16, exchangeKey)}
+            <span className="summary-and">{t("shell.and")}</span>
+            {chip(otherBotId, 16, exchangeKey)}
+          </div>
+        );
+      })}
     </div>
   );
 }
