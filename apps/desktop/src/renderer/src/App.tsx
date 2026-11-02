@@ -376,6 +376,7 @@ export function App(): JSX.Element {
   const nextGroupKey = useRef(2);
   const {
     bots,
+    hiddenBots,
     create: createBotEntity,
     update: updateBotEntity,
     duplicate: duplicateBotEntity,
@@ -383,6 +384,8 @@ export function App(): JSX.Element {
     moveToTop,
     applyPersistedOrder,
     hide,
+    unhide,
+    forget,
   } = useBots(UNGROUPED);
 
   const [menu, setMenu] = useState<MenuState | null>(null);
@@ -1199,12 +1202,28 @@ export function App(): JSX.Element {
   };
 
   const removeBot = (botKey: number, why: string): void => {
-    hide(botKey);
+    forget(botKey);
     if (selectedBot === botKey) {
       setSelectedBot(null);
     }
     setToast(why);
     setMenu(null);
+  };
+
+  const hideFromSidebar = (botKey: number): void => {
+    hide(botKey);
+    if (selectedBot === botKey) {
+      setSelectedBot(null);
+    }
+    setToast(t("shell.hiddenFromSidebar"));
+    setMenu(null);
+  };
+
+  const restoreHiddenBot = (bot: UiBot): void => {
+    unhide(bot.key);
+    setSelectedBot(bot.key);
+    setQuoteDraft(null);
+    openThread(bot);
   };
 
     const sendUserMessage = (
@@ -2060,6 +2079,30 @@ const logout = (): void => {
             </div>
           );
         })}
+        {hiddenBots.length > 0 && (
+          <div className="group-section">
+            <div className="group-label static" id="hidden-bots-label">
+              {t("shell.hiddenBots")}
+              <span className="group-count">{hiddenBots.length}</span>
+            </div>
+            <div className="tabs" role="list" aria-labelledby="hidden-bots-label">
+              {hiddenBots.map((b) => (
+                <button
+                  key={b.key}
+                  type="button"
+                  className="tab"
+                  title={t("shell.showInSidebar")}
+                  onClick={() => restoreHiddenBot(b)}
+                >
+                  <GazeAvatar avatar={b.avatar} variant="sidebar" size={36} />
+                  <span className="tab-label">
+                    <span className="tab-title">{b.bot.name}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         </div>
         {updateStatus?.available && (
           <button
@@ -2367,7 +2410,7 @@ const logout = (): void => {
               {t("shell.copyChatId")}
             </button>
             <div className="menu-sep" />
-            <button type="button" role="menuitem" className="menu-item" onClick={() => removeBot(menuBot.key, t("shell.hiddenFromSidebar"))}>
+            <button type="button" role="menuitem" className="menu-item" onClick={() => hideFromSidebar(menuBot.key)}>
               <MenuIcon d="M3 3l18 18M10.6 10.6a2 2 0 0 0 2.8 2.8M7 11v-3a5 5 0 0 1 9.9-1M21 16v2a2 2 0 0 1-2 2H7" />
               {t("shell.hideFromSidebar")}
             </button>
@@ -3539,8 +3582,8 @@ function BotsPlaceholder({
   const me = bots.find((b) => b.key === selectedBot);
 
   /**
-   * 配对视图的真实往来记录（点击消息往来/交付通知进入）：用 task.list + 双方
-   * chat.history 按 dispatch/task_notice 元数据分段装配，替代旧演练对话。
+   * 配对视图的真实往来记录（点击消息往来上的对方 bot 进入）：只用这次交接的
+   * dispatch 与 dispatch_reply。同一会话里跟用户的对话不放进来。
    */
   const [pairRecords, setPairRecords] = useState<PairRecord[] | null>(null);
   useEffect(() => {

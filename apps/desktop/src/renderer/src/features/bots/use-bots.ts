@@ -24,9 +24,35 @@ export type UiBot = {
   color: number;
   group: number;
   unread: boolean;
-  /** UI-only hide (session state; the service has no delete). */
+  /** Sidebar hide. The bot stays on the host; the hidden list can show it again. */
   hidden: boolean;
 };
+
+const HIDDEN_BOTS_KEY = "deepseek-bot.sidebar-hidden.v1";
+
+function readHiddenBotIds(): Set<string> {
+  try {
+    const raw = window.localStorage.getItem(HIDDEN_BOTS_KEY);
+    if (raw === null) {
+      return new Set();
+    }
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      return new Set();
+    }
+    return new Set(parsed.filter((id): id is string => typeof id === "string" && id.length > 0));
+  } catch {
+    return new Set();
+  }
+}
+
+function writeHiddenBotIds(ids: ReadonlySet<string>): void {
+  try {
+    window.localStorage.setItem(HIDDEN_BOTS_KEY, JSON.stringify([...ids]));
+  } catch {
+    // The in-memory flag still applies for this session.
+  }
+}
 
 type UiFields = Pick<UiBot, "avatar" | "shape" | "color" | "group" | "unread">;
 
@@ -61,6 +87,7 @@ export function useBots(defaultGroupKey: number) {
   const [loadError, setLoadError] = useState<string | null>(null);
   const nextKey = useRef(1);
   const uiByBotId = useRef(new Map<string, UiFields>());
+  const hiddenIds = useRef(readHiddenBotIds());
 
   const toUi = useCallback((bot: Bot): UiBot => {
     const saved = uiByBotId.current.get(bot.id);
@@ -71,7 +98,7 @@ export function useBots(defaultGroupKey: number) {
       group: defaultGroupKey,
       unread: false,
     };
-    return { key: nextKey.current++, bot, ...fields, hidden: false };
+    return { key: nextKey.current++, bot, ...fields, hidden: hiddenIds.current.has(bot.id) };
   }, [defaultGroupKey]);
 
   const remember = (bot: Bot, patch: Partial<UiFields>): void => {
@@ -248,6 +275,33 @@ export function useBots(defaultGroupKey: number) {
   }, []);
 
   const hide = useCallback((botKey: number): void => {
+    setBots((prev) =>
+      prev.map((b) => {
+        if (b.key !== botKey) {
+          return b;
+        }
+        hiddenIds.current.add(b.bot.id);
+        writeHiddenBotIds(hiddenIds.current);
+        return { ...b, hidden: true };
+      }),
+    );
+  }, []);
+
+  const unhide = useCallback((botKey: number): void => {
+    setBots((prev) =>
+      prev.map((b) => {
+        if (b.key !== botKey) {
+          return b;
+        }
+        hiddenIds.current.delete(b.bot.id);
+        writeHiddenBotIds(hiddenIds.current);
+        return { ...b, hidden: false };
+      }),
+    );
+  }, []);
+
+  /** Drop a row from this session's list without marking it hidden. */
+  const forget = useCallback((botKey: number): void => {
     setBots((prev) => prev.filter((b) => b.key !== botKey));
   }, []);
 
@@ -255,9 +309,11 @@ export function useBots(defaultGroupKey: number) {
   // from this filter on each render used to restart those effects forever
   // (the old session sublist flashed on a real machine 2026-11-01).
   const visible = useMemo(() => bots.filter((b) => !b.hidden), [bots]);
+  const hiddenBots = useMemo(() => bots.filter((b) => b.hidden), [bots]);
 
   return {
     bots: visible,
+    hiddenBots,
     loaded,
     loadError,
     create,
@@ -268,5 +324,7 @@ export function useBots(defaultGroupKey: number) {
     moveToTop,
     applyPersistedOrder,
     hide,
+    unhide,
+    forget,
   };
 }
