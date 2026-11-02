@@ -129,7 +129,9 @@ export function bindTaskTools(deps: TaskToolDeps): ToolCapability[] {
       name: "dispatch_task",
       description:
         "Dispatch one task instruction to any other live bot — any group (the " +
-        "executor runs it as its own chat turn). You cannot dispatch to " +
+        "executor runs it as its own chat turn). `task` is the exact line or " +
+        "concrete work they should produce: if the human asked you to send " +
+        "「你好」, task is 你好, not a note about how to say it. You cannot dispatch to " +
         "yourself. Every dispatch still needs the human's app.dispatch_task " +
         "approval. Optionally pre-declare a relay chain: each hop {botId, " +
         "instruction} runs after the previous hop succeeds — the whole chain " +

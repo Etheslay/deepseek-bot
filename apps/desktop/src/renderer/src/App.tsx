@@ -3539,8 +3539,8 @@ function BotsPlaceholder({
   const me = bots.find((b) => b.key === selectedBot);
 
   /**
-   * 配对视图的真实往来记录（点击消息往来/交付通知进入）：用 task.list + 双方
-   * chat.history 按 dispatch/task_notice 元数据分段装配，替代旧演练对话。
+   * 配对视图的真实往来记录（点击消息往来上的对方 bot 进入）：只用这次交接的
+   * dispatch 与 dispatch_reply。同一会话里跟用户的对话不放进来。
    */
   const [pairRecords, setPairRecords] = useState<PairRecord[] | null>(null);
   useEffect(() => {

@@ -51,6 +51,7 @@ describe("pair transcript", () => {
       sessionId: `chat:${WRITER}`,
       role: "assistant",
       text: "人物层已拆开，背景层倒过来。",
+      meta: { kind: "dispatch_reply", taskId: TASK, fromBotId: MANAGER },
       at: "2026-10-26T09:00:40.000Z",
     };
     const records = assemblePairRecords(
@@ -66,5 +67,55 @@ describe("pair transcript", () => {
       speakerKey: 2,
       text: "人物层已拆开，背景层倒过来。",
     });
+  });
+
+  it("leaves the human conversation out of the handoff", () => {
+    const human = (id: string, role: "user" | "assistant", text: string, at: string): ChatHistoryRow => ({
+      id,
+      botId: WRITER,
+      sessionId: `chat:${WRITER}`,
+      role,
+      text,
+      at,
+    });
+    const records = assemblePairRecords(
+      { id: MANAGER, key: 1 },
+      { id: WRITER, key: 2 },
+      [handoff],
+      [],
+      [
+        human("60000000-0000-4000-8000-000000000010", "user", "你好", "2026-10-26T08:00:00.000Z"),
+        human(
+          "60000000-0000-4000-8000-000000000011",
+          "assistant",
+          "你好，我在。写作和润色这块我可以帮你。",
+          "2026-10-26T08:00:05.000Z",
+        ),
+        human(
+          "60000000-0000-4000-8000-000000000012",
+          "user",
+          "让 2 给我发个你好",
+          "2026-10-26T08:59:00.000Z",
+        ),
+        marker("【任务】给用户发一句“你好”，自然一点，简短即可。"),
+        {
+          id: "60000000-0000-4000-8000-000000000002",
+          botId: WRITER,
+          sessionId: `chat:${WRITER}`,
+          role: "assistant",
+          text: "你好",
+          meta: { kind: "dispatch_reply", taskId: TASK, fromBotId: MANAGER },
+          at: "2026-10-26T09:00:40.000Z",
+        },
+        human(
+          "60000000-0000-4000-8000-000000000013",
+          "assistant",
+          "已经跟 2 号说好了，让他给你发句“你好”，应该马上就到。",
+          "2026-10-26T09:01:10.000Z",
+        ),
+      ],
+    );
+    const turns = records.filter((row) => row.kind === "turn");
+    expect(turns.map((row) => row.text)).toEqual(["出简笔画分镜", "你好"]);
   });
 });
