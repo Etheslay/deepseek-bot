@@ -27,6 +27,8 @@ export type ChoiceCardProps = {
   expired?: boolean;
   /** Note shown under the rows while locked (e.g. "answer in the composer"). */
   hint?: string | null;
+  /** Timeline slot. The card stays there when later messages arrive. */
+  order?: number;
   onChoose?: (option: ChoiceOption) => void;
 };
 
@@ -40,11 +42,12 @@ export function ChoiceCard({
   disabled,
   expired,
   hint,
+  order,
   onChoose,
 }: ChoiceCardProps): JSX.Element {
   const rows = fallback ? [...options, fallback] : options;
   return (
-    <div className="choice-card" role="group" aria-label={question}>
+    <div className="choice-card" role="group" aria-label={question} style={order === undefined ? undefined : { order }}>
       <div className="choice-question">{question}</div>
       {answered !== undefined ? (
         <div className="choice-answered" role="status" title={answered}>
