@@ -3,8 +3,9 @@
  *
  * A flat list of the settings sections. An earlier pass put them under three
  * group labels; the labels were small uppercase text that added visual noise
- * without helping, so the list is flat. Voice paths are not a section: the
- * app ships its own whisper.cpp build.
+ * without helping, so the list is flat. Voice chooses the transcription
+ * language only. The app ships its own whisper.cpp build, so there is no
+ * path or model picker.
  */
 import type { JSX } from "react";
 import { t, useLanguage } from "../../i18n.js";
@@ -12,6 +13,7 @@ import { t, useLanguage } from "../../i18n.js";
 /** Settings sections, in reading order. */
 export const SETTINGS_SECTION_KEYS = [
   "general",
+  "voice",
   "computer",
   "permissions",
   "vault",
@@ -25,6 +27,7 @@ export type SettingsSectionKey = (typeof SETTINGS_SECTION_KEYS)[number];
 export function settingsNavItems(): ReadonlyArray<{ readonly key: SettingsSectionKey; readonly label: string }> {
   return [
     { key: "general", label: t("shell.general") },
+    { key: "voice", label: t("shell.voice") },
     { key: "computer", label: t("shell.computer") },
     { key: "permissions", label: t("d24.permissionsSection") },
     { key: "vault", label: t("shell.vault") },

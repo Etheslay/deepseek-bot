@@ -10,7 +10,7 @@ import { join } from "node:path";
 import { afterAll, describe, expect, it, vi } from "vitest";
 import type { DeepSeekBotHost } from "./host.js";
 import { createHost } from "./host.js";
-import { createVoiceService, parseWavClip, type VoiceService } from "./voice.js";
+import { createVoiceService, parseWavClip, whisperCliArgs, type VoiceService } from "./voice.js";
 
 const roots: string[] = [];
 const hosts: DeepSeekBotHost[] = [];
@@ -112,6 +112,31 @@ describe("voice status", () => {
   });
 });
 
+describe("whisperCliArgs", () => {
+  it("passes -l zh or -l en and no other language flag", () => {
+    expect(whisperCliArgs("model.bin", "clip.wav", "zh")).toEqual([
+      "-m",
+      "model.bin",
+      "-f",
+      "clip.wav",
+      "-l",
+      "zh",
+      "-nt",
+      "-np",
+    ]);
+    expect(whisperCliArgs("model.bin", "clip.wav", "en")).toEqual([
+      "-m",
+      "model.bin",
+      "-f",
+      "clip.wav",
+      "-l",
+      "en",
+      "-nt",
+      "-np",
+    ]);
+  });
+});
+
 describe("voice transcribe", () => {
   function serviceWith(runner: ReturnType<typeof vi.fn>): VoiceService {
     return createVoiceService({ runTranscribe: runner as never });
@@ -130,6 +155,18 @@ describe("voice transcribe", () => {
     expect(result).toEqual({ text: "hello world", seconds: 1 });
     expect(runner).toHaveBeenCalledTimes(1);
     expect(existsSync(seenPath)).toBe(false);
+  });
+
+  it("rejects a language other than Chinese or English before starting whisper", async () => {
+    const runner = vi.fn(async () => "text");
+    const service = serviceWith(runner);
+    try {
+      await service.transcribe(base64Of(0.1), "fr" as "zh");
+      expect.unreachable("expected the language to be rejected");
+    } catch (error) {
+      expectError(error, "INVALID_INPUT");
+    }
+    expect(runner).not.toHaveBeenCalled();
   });
 
   it("reports the clip length implied by the data chunk", async () => {

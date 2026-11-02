@@ -26,6 +26,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  DEFAULT_VOICE_TRANSCRIPTION_LANGUAGE,
   VOICE_MAX_CLIP_BYTES,
   VOICE_MAX_CLIP_SECONDS,
   VOICE_SAMPLE_RATE,
@@ -34,6 +35,7 @@ import {
   type VoiceSpeakResult,
   type VoiceStatus,
   type VoiceTranscription,
+  type VoiceTranscriptionLanguage,
 } from "@deepseek-bot/contracts";
 import { EngineError } from "@deepseek-bot/runtime";
 
@@ -49,7 +51,7 @@ export interface VoiceService {
   config(): { whisperBin: string | null; whisperModel: string | null };
   /** Apply a new configuration live; null clears. The KV persistence lives in the caller. */
   setConfig(next: { whisperBin: string | null; whisperModel: string | null }): void;
-  transcribe(audioBase64: string): Promise<VoiceTranscription>;
+  transcribe(audioBase64: string, language?: VoiceTranscriptionLanguage): Promise<VoiceTranscription>;
   speak(text: string): Promise<VoiceSpeakResult>;
   close(): void;
 }
@@ -79,6 +81,22 @@ function timeout(ms: number): EngineError {
     message: `voice run exceeded its ${ms} ms budget and was stopped`,
     retryable: true,
   });
+}
+
+function transcriptionLanguage(language: string): VoiceTranscriptionLanguage {
+  if (language === "zh" || language === "en") {
+    return language;
+  }
+  throw invalid("voice transcription language must be zh or en");
+}
+
+/** Fixed whisper-cli argv. Language is only `-l zh` or `-l en`. */
+export function whisperCliArgs(
+  model: string,
+  wavPath: string,
+  language: VoiceTranscriptionLanguage,
+): string[] {
+  return ["-m", model, "-f", wavPath, "-l", transcriptionLanguage(language), "-nt", "-np"];
 }
 
 /**
@@ -191,10 +209,14 @@ export function createVoiceService(options: VoiceServiceOptions = {}): VoiceServ
   }
 
   /** The real whisper.cpp run: fixed argument array, no shell, output captured. */
-  async function runWhisperProcess(wavPath: string, signal: AbortSignal): Promise<string> {
+  async function runWhisperProcess(
+    wavPath: string,
+    signal: AbortSignal,
+    language: VoiceTranscriptionLanguage,
+  ): Promise<string> {
     const child = spawn(
       whisperBin!,
-      ["-m", whisperModel!, "-f", wavPath, "-nt", "-np"],
+      whisperCliArgs(whisperModel!, wavPath, language),
       { stdio: ["ignore", "pipe", "pipe"], windowsHide: true },
     );
     const stop = (): void => {
@@ -255,8 +277,12 @@ export function createVoiceService(options: VoiceServiceOptions = {}): VoiceServ
     }
   }
 
-  async function transcribe(audioBase64: string): Promise<VoiceTranscription> {
+  async function transcribe(
+    audioBase64: string,
+    language: VoiceTranscriptionLanguage = DEFAULT_VOICE_TRANSCRIPTION_LANGUAGE,
+  ): Promise<VoiceTranscription> {
     requireOpen();
+    const spoken = transcriptionLanguage(language);
     const bytes = decodeClipAudio(audioBase64);
     const { seconds } = parseWavClip(bytes);
     const dir = await mkdtemp(join(tmpdir(), `deepseek-bot-voice-${randomUUID().slice(0, 8)}-`));
@@ -281,7 +307,8 @@ export function createVoiceService(options: VoiceServiceOptions = {}): VoiceServ
               once: true,
             });
           }),
-          (options.runTranscribe ?? runWhisperProcess)(wavPath, controller.signal),
+          (options.runTranscribe ??
+            ((path, abort) => runWhisperProcess(path, abort, spoken)))(wavPath, controller.signal),
         ]);
       });
       return { text: raw.trim(), seconds };

@@ -29,6 +29,11 @@ export const VOICE_MAX_AUDIO_BASE64_CHARS = 900_000;
 export const VOICE_TRANSCRIBE_TIMEOUT_MS = 120_000;
 /** One speak run must finish inside this budget or it is killed. */
 export const VOICE_SPEAK_TIMEOUT_MS = 120_000;
+/** Spoken languages hold-to-talk can ask whisper.cpp to transcribe. */
+export const VoiceTranscriptionLanguageSchema = z.enum(["zh", "en"]);
+export type VoiceTranscriptionLanguage = z.infer<typeof VoiceTranscriptionLanguageSchema>;
+/** Used when a transcribe request omits `language`. */
+export const DEFAULT_VOICE_TRANSCRIPTION_LANGUAGE = "zh" satisfies VoiceTranscriptionLanguage;
 
 export const VoiceTranscriptionSchema = z
   .object({
@@ -96,6 +101,11 @@ export const VOICE_METHODS = {
           .string()
           .min(1)
           .max(VOICE_MAX_AUDIO_BASE64_CHARS),
+        /**
+         * whisper.cpp `-l` value. `zh` and `en` only. Omitted requests
+         * transcribe as Chinese.
+         */
+        language: VoiceTranscriptionLanguageSchema.default(DEFAULT_VOICE_TRANSCRIPTION_LANGUAGE),
       })
       .strict(),
     response: VoiceTranscriptionSchema,

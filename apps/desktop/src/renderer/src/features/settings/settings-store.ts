@@ -9,6 +9,7 @@
  * read — the v1 default account name becomes the "not set" sentinel so an
  * English UI no longer shows a Chinese leftover.
  */
+import type { VoiceTranscriptionLanguage } from "@deepseek-bot/contracts";
 import { isLanguagePreference } from "../../../../shared/i18n/locale.js";
 import type { LanguagePreference } from "../../../../shared/i18n/types.js";
 
@@ -27,6 +28,8 @@ export type PersistedSettings = {
   accountName: string;
   accent: string;
   language: LanguagePreference;
+  /** Hold-to-talk transcription language. Chinese when unset or invalid. */
+  voiceLanguage: VoiceTranscriptionLanguage;
   notifications: NotificationPrefs;
 };
 
@@ -38,6 +41,7 @@ export const DEFAULT_SETTINGS: PersistedSettings = {
   accountName: UNSET_ACCOUNT_NAME,
   accent: "#6ea8ff",
   language: "system",
+  voiceLanguage: "zh",
   notifications: { enabled: true, onlyWhenUnfocused: true, mutedBotIds: [] },
 };
 
@@ -63,6 +67,7 @@ function withDefaults(parsed: Partial<PersistedSettings>): PersistedSettings {
     accountName,
     accent: isValidHex(parsed.accent) ? parsed.accent : DEFAULT_SETTINGS.accent,
     language: isLanguagePreference(parsed.language) ? parsed.language : DEFAULT_SETTINGS.language,
+    voiceLanguage: parsed.voiceLanguage === "en" ? "en" : "zh",
     notifications: normalizeNotifications(parsed.notifications),
   };
 }

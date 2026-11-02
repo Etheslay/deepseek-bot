@@ -24,6 +24,7 @@ import { PermissionsPanel } from "./features/permissions/permissions-panel.js";
 import { ScreenSettings } from "./features/screen/screen-settings.js";
 import { UsagePanel } from "./features/usage/usage-panel.js";
 import { SettingsNav, type SettingsSectionKey } from "./features/settings/settings-nav.js";
+import { VoiceLanguageSettings } from "./features/settings/voice-language-settings.js";
 import { useHostDown } from "./features/settings/host-down.js";
 import { BotForm } from "./features/bots/bot-form.js";
 import { nextBotName } from "./features/bots/bot-names.js";
@@ -35,7 +36,7 @@ import type {
   ContextUsageView,
 } from "./services/desktop-service.js";
 import { useService } from "./services/service-context.jsx";
-import { METHOD_CONTRACTS, type VoiceStatus } from "@deepseek-bot/contracts";
+import { METHOD_CONTRACTS, type VoiceStatus, type VoiceTranscriptionLanguage } from "@deepseek-bot/contracts";
 import {
   emptyStream,
   failureMessage,
@@ -557,6 +558,7 @@ export function App(): JSX.Element {
   const [accountName, setAccountName] = useState(initialSettings.accountName);
   const [accent, setAccent] = useState(initialSettings.accent);
   const [language, setLanguage] = useState<LanguagePreference>(initialSettings.language);
+  const [voiceLanguage, setVoiceLanguage] = useState<VoiceTranscriptionLanguage>(initialSettings.voiceLanguage);
   const [notifications, setNotifications] = useState<NotificationPrefs>(initialSettings.notifications);
   /** "" means the user never set a name — the UI shows the localized default (D22). */
   const displayName =
@@ -647,8 +649,8 @@ export function App(): JSX.Element {
   >(null);
 
   useEffect(() => {
-    saveSettings(window.localStorage, { theme, accountName, accent, language, notifications });
-  }, [theme, accountName, accent, language, notifications]);
+    saveSettings(window.localStorage, { theme, accountName, accent, language, voiceLanguage, notifications });
+  }, [theme, accountName, accent, language, voiceLanguage, notifications]);
 
   useEffect(() => {
     // Keeps the renderer store and the main process (tray, notifications) in sync.
@@ -2591,6 +2593,7 @@ const logout = (): void => {
                 }
               }}
               skillContext={(botId) => skillsForInjection(botId, skillLibrary)}
+              voiceLanguage={voiceLanguage}
               onOpenBot={(botKey) => {
                 const target = bots.find((b) => b.key === botKey);
                 if (target) {
@@ -3021,6 +3024,7 @@ const logout = (): void => {
                   {
                     {
                       general: t("shell.general"),
+                      voice: t("shell.voice"),
                       permissions: t("d24.permissionsSection"),
                       computer: t("shell.computer"),
                       vault: t("shell.vault"),
@@ -3226,6 +3230,9 @@ const logout = (): void => {
                 {/* Authorisation is its own section: it is the part owners read
                     most carefully, and burying it under 通用 made the policy
                     rows compete with the account and appearance controls. */}
+                {settingsSection === "voice" && (
+                  <VoiceLanguageSettings value={voiceLanguage} onChange={setVoiceLanguage} />
+                )}
                 {settingsSection === "permissions" && (
                   <>
                     <div className="settings-section-title">
@@ -3858,6 +3865,7 @@ function BotsPlaceholder({
   onCopy,
   onAssistant,
   onOpenBot,
+  voiceLanguage,
   onNotify,
   onBotStatus,
   onReplyCompleted,
@@ -3900,6 +3908,8 @@ function BotsPlaceholder({
   onCopy: (text: string) => void;
   onAssistant: (text: string) => void;
   onOpenBot: (botKey: number) => void;
+  /** Settings → Voice. Passed through to whisper-cli as `-l`. */
+  voiceLanguage: VoiceTranscriptionLanguage;
   onNotify: (message: string) => void;
   /** D22: live bot state for the tray (running / waiting-approval / idle). */
   onBotStatus: (botId: string, status: TrayBotStatus) => void;
@@ -5037,6 +5047,7 @@ function BotsPlaceholder({
         <ContextRing usage={contextUsage} />
         <ComposerMic
           status={voiceStatus}
+          language={voiceLanguage}
           onNotify={onNotify}
           onTranscript={(text) => setDraft((prev) => appendTranscript(prev, text))}
         />

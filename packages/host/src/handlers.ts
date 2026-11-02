@@ -1906,7 +1906,8 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
     "device.action.input.list": (payload) => context.deviceInput.list(payload.botId, payload.limit),
 
     "voice.status": () => context.voice.status(),
-    "voice.transcribe": (payload) => context.voice.transcribe(payload.audioBase64),
+    "voice.transcribe": (payload) =>
+      context.voice.transcribe(payload.audioBase64, payload.language),
     "voice.speak": (payload) => context.voice.speak(payload.text),
 
     "voice.config.get": () => context.voice.config(),
