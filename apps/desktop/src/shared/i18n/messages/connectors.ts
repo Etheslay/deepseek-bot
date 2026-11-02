@@ -52,7 +52,7 @@ export const connectorsMessages = {
   "connectors.saveAllowlist": { zh: "保存工具白名单", en: "Save tool allowlist" },
   "connectors.saveCommand": { zh: "存命令", en: "Save command" },
   "connectors.saveEndpoint": { zh: "存端点", en: "Save endpoint" },
-  "connectors.sectionTitle": { zh: "连接器（只登记，默认关闭）", en: "Connectors (registered only, off by default)" },
+  "connectors.sectionTitle": { zh: "连接器", en: "Connectors" },
   "connectors.serviceDisabled": { zh: "服务已停用，请先启用以发现工具", en: "Service is off. Enable it to discover tools." },
   "connectors.serviceNoCommand": { zh: "服务未配置本地命令", en: "No local command configured for this service" },
   "connectors.serviceNoEndpoint": { zh: "服务未配置端点", en: "No endpoint configured for this service" },

@@ -2,7 +2,7 @@
 import type { Message } from "../types.js";
 
 export const automationMessages = {
-  "automation.automationSectionTitle": { zh: "事件自动化（规则与评审队列）", en: "Event Automation (Rules and Review Queue)" },
+  "automation.automationSectionTitle": { zh: "事件自动化", en: "Event automation" },
   "automation.disable": { zh: "停用", en: "Disable" },
   "automation.dismiss": { zh: "忽略", en: "Dismiss" },
   "automation.enable": { zh: "启用", en: "Enable" },
@@ -13,7 +13,7 @@ export const automationMessages = {
   "automation.queueEmpty": { zh: "队列是空的", en: "Queue is empty" },
   "automation.reviewActionFailed": { zh: "评审操作失败", en: "Review action failed" },
   "automation.reviewQueueLoadFailed": { zh: "评审队列读取失败", en: "Failed to load review queue" },
-  "automation.reviewQueueTitle": { zh: "评审队列（触发不会自动运行，由你逐条决定）", en: "Review Queue (triggers do not run automatically; you decide each one)" },
+  "automation.reviewQueueTitle": { zh: "评审队列", en: "Review queue" },
   "automation.ruleDeleted": { zh: "已删除规则", en: "Rule deleted" },
   "automation.ruleDeleteFailed": { zh: "规则删除失败", en: "Failed to delete rule" },
   "automation.ruleDisabled": { zh: "已停用规则", en: "Rule disabled" },
