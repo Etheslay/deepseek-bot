@@ -3798,7 +3798,7 @@ function BotsPlaceholder({
     new Set(
       msgs.flatMap((message) => (message.notice ? [message.notice.otherKey] : [])),
     ),
-  );
+  ).filter((peerKey) => peerKey !== me.key);
   const pairTotal = pairPeers.reduce(
     (sum, peerKey) => sum + (pairTranscripts[pairKeyOf(me.key, peerKey)]?.length ?? 0),
     0,
@@ -4173,9 +4173,9 @@ function BotsPlaceholder({
                             key={key}
                             type="button"
                             className="stack-avatar"
-                            title={t("shell.openSessionWith", [target?.bot.name ?? "?"])}
-                            aria-label={t("shell.openSessionWith", [target?.bot.name ?? "?"])}
-                            onClick={() => onOpenBot(key)}
+                            title={t("shell.viewExchangesWith", [target?.bot.name ?? "?"])}
+                            aria-label={t("shell.viewExchangesWith", [target?.bot.name ?? "?"])}
+                            onClick={() => setDetailOther(key)}
                           >
                             <AvatarView
                               avatar={target?.avatar ?? me.avatar}
@@ -4201,8 +4201,8 @@ function BotsPlaceholder({
                           <button
                             type="button"
                             className="summary-bot"
-                            title={t("shell.openSessionWith", [peer?.bot.name ?? "?"])}
-                            onClick={() => onOpenBot(peerKey)}
+                            title={t("shell.viewExchangesWith", [peer?.bot.name ?? "?"])}
+                            onClick={() => setDetailOther(peerKey)}
                           >
                             <AvatarView avatar={peer?.avatar ?? me.avatar} variant="inline" size={16} />
                             <span>{peer?.bot.name ?? "?"}</span>
@@ -4337,7 +4337,7 @@ function BotsPlaceholder({
         <TaskFeedCards
           botId={me.bot.id}
           bots={bots}
-          onOpenBot={onOpenBot}
+          onOpenExchange={(botKey) => setDetailOther(botKey)}
         />
       </div>
       {pendingFiles.length > 0 && (

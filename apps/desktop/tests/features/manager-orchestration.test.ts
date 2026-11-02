@@ -210,7 +210,7 @@ describe("chat task feed (FR-4/FR-7)", () => {
             { key: 2, bot: { id: WRITER, name: "writer", role: "standard" } },
             { key: 3, bot: { id: CODER, name: "coder", role: "standard" } },
           ] as never,
-          onOpenBot: (botKey: number) => opened.push(botKey),
+          onOpenExchange: (botKey: number) => opened.push(botKey),
         }),
       ),
     );
@@ -221,18 +221,16 @@ describe("chat task feed (FR-4/FR-7)", () => {
     expect(feed!.textContent).not.toContain("消息来自");
     const summary = feed!.querySelector(".chat-summary");
     expect(summary?.tagName).not.toBe("BUTTON");
-    const managerChip = [...(summary?.querySelectorAll<HTMLButtonElement>("button.summary-bot") ?? [])].find(
-      (node) => node.textContent?.includes("manager"),
-    );
-    expect(managerChip).toBeDefined();
+    const chips = summary?.querySelectorAll("button.summary-bot") ?? [];
+    expect(chips).toHaveLength(1);
+    expect(chips[0]?.textContent).toContain("manager");
+    expect(summary?.textContent).not.toContain("writer");
+    expect(summary?.textContent).not.toContain("和");
     await act(async () => {
-      managerChip!.click();
+      (chips[0] as HTMLButtonElement).click();
     });
     expect(opened).toEqual([1]);
     expect(summary?.textContent).toContain("1 条消息往来：");
-    expect(summary?.textContent).toContain("和");
-    expect(summary?.textContent).toContain("writer");
-    expect(summary?.textContent).toContain("manager");
   });
 
   it("renders the coordinator side: the sent notice, the reply, and the counter", async () => {
@@ -259,7 +257,7 @@ describe("chat task feed (FR-4/FR-7)", () => {
             { key: 1, bot: { id: COORDINATOR, name: "manager", role: "coordinator" } },
             { key: 2, bot: { id: WRITER, name: "writer", role: "standard" } },
           ] as never,
-          onOpenBot: () => undefined,
+          onOpenExchange: () => undefined,
         }),
       ),
     );
@@ -275,13 +273,15 @@ describe("chat task feed (FR-4/FR-7)", () => {
     expect(notices[1]?.textContent).toContain("已发消息给");
     expect(feed!.textContent).not.toContain("消息来自");
     const summary = feed!.querySelector(".chat-summary");
+    const chips = summary?.querySelectorAll("button.summary-bot") ?? [];
+    expect(chips).toHaveLength(1);
+    expect(chips[0]?.textContent).toContain("writer");
     expect(summary?.textContent).toContain("3 条消息往来：");
-    expect(summary?.textContent).toContain("和");
-    expect(summary?.textContent).toContain("manager");
-    expect(summary?.textContent).toContain("writer");
+    expect(summary?.textContent).not.toContain("manager");
+    expect(summary?.textContent).not.toContain("和");
   });
 
-  it("opens a bot from its name and ignores the status words", async () => {
+  it("opens the pair record from the other bot and ignores the status words", async () => {
     const done = task({
       status: "done",
       instruction: "请 writer 开渲",
@@ -300,7 +300,7 @@ describe("chat task feed (FR-4/FR-7)", () => {
             { key: 1, bot: { id: COORDINATOR, name: "manager", role: "coordinator" } },
             { key: 2, bot: { id: WRITER, name: "writer", role: "standard" } },
           ] as never,
-          onOpenBot: (botKey: number) => opened.push(botKey),
+          onOpenExchange: (botKey: number) => opened.push(botKey),
         }),
       ),
     );
@@ -332,7 +332,7 @@ describe("chat task feed (FR-4/FR-7)", () => {
           bots: [
             { key: 2, bot: { id: WRITER, name: "writer", role: "standard" } },
           ] as never,
-          onOpenBot: () => undefined,
+          onOpenExchange: () => undefined,
         }),
       ),
     );

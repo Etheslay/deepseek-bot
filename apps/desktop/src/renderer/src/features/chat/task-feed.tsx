@@ -4,8 +4,10 @@
  * - The task text stays out of this timeline. A sent turn is only the
  *   centered 「已发消息给 <executor>」 line. There is no 「消息来自」 line
  *   and no instruction or reply body here.
- * - The words on those lines are not buttons. Only the bot name opens
- *   that bot's own conversation.
+ * - The words on those lines are not buttons. A line names only the
+ *   other bot; the bot whose chat is already open is not listed.
+ * - That other name opens the pair record (this bot ⇄ that bot).
+ *   It does not switch to the other bot's own chat.
  * - Counts come from the same real tasks (never demo data).
  *
  * The feed polls chat.history + task.list on a light interval; the host owns
@@ -113,8 +115,8 @@ export function countExchanges(
 export function TaskFeedCards(props: {
   botId: string;
   bots: UiBot[];
-  /** A bot named on a status line opens that bot's own conversation. */
-  onOpenBot: (botKey: number) => void;
+  /** A bot named on a status line opens the pair record with that bot. */
+  onOpenExchange: (botKey: number) => void;
 }): JSX.Element | null {
   useLanguage();
   const desktop: DesktopService = useService();
@@ -159,10 +161,10 @@ export function TaskFeedCards(props: {
       <button
         type="button"
         className="summary-bot"
-        title={t("shell.openSessionWith", [name])}
-        disabled={botKey === undefined}
+        title={t("shell.viewExchangesWith", [name])}
+        disabled={botKey === undefined || botId === props.botId}
         onClick={() => {
-          if (botKey !== undefined) props.onOpenBot(botKey);
+          if (botKey !== undefined && botId !== props.botId) props.onOpenExchange(botKey);
         }}
       >
         <Avatar avatar={other?.avatar ?? { kind: "mono" }} variant="inline" size={size} />
@@ -202,8 +204,6 @@ export function TaskFeedCards(props: {
       {countExchanges(props.botId, items).map(({ otherBotId, count }) => (
         <div className="chat-summary" key={`count-${otherBotId}`}>
           <span className="chat-summary-label">{t("shell.exchangeCount", [count])}</span>
-          {chip(props.botId, 16)}
-          <span className="summary-and">{t("shell.and")}</span>
           {chip(otherBotId, 16)}
         </div>
       ))}
