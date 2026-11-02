@@ -8,7 +8,13 @@
  * backend, permissions, or device input.
  */
 import { useEffect, useRef, useState, type JSX, type KeyboardEvent, type PointerEvent } from "react";
-import { METHOD_CONTRACTS, VOICE_MAX_CLIP_SECONDS, type VoiceStatus } from "@deepseek-bot/contracts";
+import {
+  DEFAULT_VOICE_TRANSCRIPTION_LANGUAGE,
+  METHOD_CONTRACTS,
+  VOICE_MAX_CLIP_SECONDS,
+  type VoiceStatus,
+  type VoiceTranscriptionLanguage,
+} from "@deepseek-bot/contracts";
 import { t } from "../../i18n.js";
 import { bytesToBase64 } from "../chat/attachments.js";
 import { startClipRecorder, type ClipRecorder } from "./clip-recorder.js";
@@ -25,6 +31,8 @@ import { clipProblem, encodeWavPcm16 } from "./wav.js";
 
 export type ComposerMicProps = {
   status: VoiceStatus | null;
+  /** whisper.cpp `-l` value from Settings → Voice. Chinese when omitted. */
+  language?: VoiceTranscriptionLanguage;
   /** One trimmed transcript. The caller appends it to the draft and does not send. */
   onTranscript: (text: string) => void;
   onNotify: (message: string) => void;
@@ -40,7 +48,12 @@ function shownPhase(phase: HoldPhase): VoicePhase {
   return "idle";
 }
 
-export function ComposerMic({ status, onTranscript, onNotify }: ComposerMicProps): JSX.Element {
+export function ComposerMic({
+  status,
+  language = DEFAULT_VOICE_TRANSCRIPTION_LANGUAGE,
+  onTranscript,
+  onNotify,
+}: ComposerMicProps): JSX.Element {
   const [hold, setHold] = useState<HoldState>(HOLD_IDLE);
   const [seconds, setSeconds] = useState(0);
   const holdRef = useRef<HoldState>(HOLD_IDLE);
@@ -52,8 +65,10 @@ export function ComposerMic({ status, onTranscript, onNotify }: ComposerMicProps
   const sourceRef = useRef<"pointer" | "key" | null>(null);
   const onTranscriptRef = useRef(onTranscript);
   const onNotifyRef = useRef(onNotify);
+  const languageRef = useRef(language);
   onTranscriptRef.current = onTranscript;
   onNotifyRef.current = onNotify;
+  languageRef.current = language;
 
   const clearTick = (): void => {
     if (tickRef.current !== null) {
@@ -105,6 +120,7 @@ export function ComposerMic({ status, onTranscript, onNotify }: ComposerMicProps
       const parsed = METHOD_CONTRACTS["voice.transcribe"].response.parse(
         await window.deepseekBot.host.call("voice.transcribe", {
           audioBase64: bytesToBase64(encodeWavPcm16(samples)),
+          language: languageRef.current,
         }),
       );
       const text = parsed.text.trim();

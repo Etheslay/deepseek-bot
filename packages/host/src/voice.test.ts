@@ -10,7 +10,7 @@ import { join } from "node:path";
 import { afterAll, describe, expect, it, vi } from "vitest";
 import type { DeepSeekBotHost } from "./host.js";
 import { createHost } from "./host.js";
-import { createVoiceService, parseWavClip, type VoiceService } from "./voice.js";
+import { createVoiceService, parseWavClip, whisperCliArgs, type VoiceService } from "./voice.js";
 
 const roots: string[] = [];
 const hosts: DeepSeekBotHost[] = [];
@@ -112,6 +112,31 @@ describe("voice status", () => {
   });
 });
 
+describe("whisperCliArgs", () => {
+  it("passes -l zh or -l en and no other language flag", () => {
+    expect(whisperCliArgs("model.bin", "clip.wav", "zh")).toEqual([
+      "-m",
+      "model.bin",
+      "-f",
+      "clip.wav",
+      "-l",
+      "zh",
+      "-nt",
+      "-np",
+    ]);
+    expect(whisperCliArgs("model.bin", "clip.wav", "en")).toEqual([
+      "-m",
+      "model.bin",
+      "-f",
+      "clip.wav",
+      "-l",
+      "en",
+      "-nt",
+      "-np",
+    ]);
+  });
+});
+
 describe("voice transcribe", () => {
   function serviceWith(runner: ReturnType<typeof vi.fn>): VoiceService {
     return createVoiceService({ runTranscribe: runner as never });
@@ -130,6 +155,18 @@ describe("voice transcribe", () => {
     expect(result).toEqual({ text: "hello world", seconds: 1 });
     expect(runner).toHaveBeenCalledTimes(1);
     expect(existsSync(seenPath)).toBe(false);
+  });
+
+  it("rejects a language other than Chinese or English before starting whisper", async () => {
+    const runner = vi.fn(async () => "text");
+    const service = serviceWith(runner);
+    try {
+      await service.transcribe(base64Of(0.1), "fr" as "zh");
+      expect.unreachable("expected the language to be rejected");
+    } catch (error) {
+      expectError(error, "INVALID_INPUT");
+    }
+    expect(runner).not.toHaveBeenCalled();
   });
 
   it("reports the clip length implied by the data chunk", async () => {
@@ -313,6 +350,17 @@ describe("voice config", () => {
     });
   });
 
+  it("returns to the boot paths when an override is cleared", () => {
+    const boot = makeConfiguredFiles();
+    const custom = makeConfiguredFiles();
+    const service = createVoiceService({ whisperBin: boot.bin, whisperModel: boot.model });
+    service.setConfig({ whisperBin: custom.bin, whisperModel: custom.model });
+    expect(service.status().transcribe.available).toBe(true);
+    service.setConfig({ whisperBin: null, whisperModel: null });
+    expect(service.config()).toEqual({ whisperBin: boot.bin, whisperModel: boot.model });
+    expect(service.status().transcribe).toEqual({ available: true, reason: null });
+  });
+
   it("persists the config in the settings KV and restores it on reopen", async () => {
     const root = mkdtempSync(join(tmpdir(), "dsb-voice-config-host-"));
     roots.push(root);
@@ -354,7 +402,7 @@ describe("voice config", () => {
       whisperBin: userBin,
       whisperModel: userModel,
     });
-    // Clearing writes null and survives a reopen too.
+    // Clearing drops the override. A later boot keeps the shipped or environment paths.
     await second.handleMethod("voice.config.set", { whisperBin: null, whisperModel: null });
     await second.shutdown();
     hosts.pop();
@@ -364,14 +412,13 @@ describe("voice config", () => {
       voice: { whisperBin: seedBin, whisperModel: seedModel },
     });
     hosts.push(third);
-    // The stored null is authoritative over the environment seed.
     expect(await third.handleMethod("voice.config.get", {})).toEqual({
-      whisperBin: null,
-      whisperModel: null,
+      whisperBin: seedBin,
+      whisperModel: seedModel,
     });
     expect(
       (await third.handleMethod("voice.status", {})) as { transcribe: { available: boolean } },
-    ).toMatchObject({ transcribe: { available: false } });
+    ).toMatchObject({ transcribe: { available: true } });
   });
 });
 

@@ -1,17 +1,17 @@
 /**
  * D27 local voice backend.
  *
- * `transcribe` runs the user's own whisper.cpp binary over one bounded WAV
+ * `transcribe` runs the shipped whisper.cpp binary over one bounded WAV
  * clip; `speak` reads one bounded text aloud with Windows SAPI through a
  * fixed PowerShell script. Both are trusted desktop paths: the user pressed
  * the button, so there is no capability, no grant, and no model tool. Nothing
  * leaves the machine, the temporary clip is deleted when the run ends, and
  * error messages never quote process output back to the caller.
  *
- * The whisper binary and model come from the Host configuration (environment
- * in production, injected runners in tests). They are local user choices, not
- * model-controlled input; a missing or unusable configuration keeps the
- * service honest in `status` instead of failing mid-call.
+ * The binary and model default to the bundle fetched at dev/pack time. An
+ * explicit boot path (environment or test) replaces that default. A later
+ * null config drops an override and returns to the boot paths; it does not
+ * turn a shipped engine off. A missing bundle keeps `status` honest.
  *
  * One local voice job runs at a time — whisper and SAPI are heavy, so calls
  * queue behind each other instead of stacking speech processes. Each job has
@@ -26,6 +26,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  DEFAULT_VOICE_TRANSCRIPTION_LANGUAGE,
   VOICE_MAX_CLIP_BYTES,
   VOICE_MAX_CLIP_SECONDS,
   VOICE_SAMPLE_RATE,
@@ -34,6 +35,7 @@ import {
   type VoiceSpeakResult,
   type VoiceStatus,
   type VoiceTranscription,
+  type VoiceTranscriptionLanguage,
 } from "@deepseek-bot/contracts";
 import { EngineError } from "@deepseek-bot/runtime";
 
@@ -49,7 +51,7 @@ export interface VoiceService {
   config(): { whisperBin: string | null; whisperModel: string | null };
   /** Apply a new configuration live; null clears. The KV persistence lives in the caller. */
   setConfig(next: { whisperBin: string | null; whisperModel: string | null }): void;
-  transcribe(audioBase64: string): Promise<VoiceTranscription>;
+  transcribe(audioBase64: string, language?: VoiceTranscriptionLanguage): Promise<VoiceTranscription>;
   speak(text: string): Promise<VoiceSpeakResult>;
   close(): void;
 }
@@ -79,6 +81,22 @@ function timeout(ms: number): EngineError {
     message: `voice run exceeded its ${ms} ms budget and was stopped`,
     retryable: true,
   });
+}
+
+function transcriptionLanguage(language: string): VoiceTranscriptionLanguage {
+  if (language === "zh" || language === "en") {
+    return language;
+  }
+  throw invalid("voice transcription language must be zh or en");
+}
+
+/** Fixed whisper-cli argv. Language is only `-l zh` or `-l en`. */
+export function whisperCliArgs(
+  model: string,
+  wavPath: string,
+  language: VoiceTranscriptionLanguage,
+): string[] {
+  return ["-m", model, "-f", wavPath, "-l", transcriptionLanguage(language), "-nt", "-np"];
 }
 
 /**
@@ -145,10 +163,12 @@ function decodeClipAudio(audioBase64: string): Buffer {
 export function createVoiceService(options: VoiceServiceOptions = {}): VoiceService {
   const transcribeTimeoutMs = options.transcribeTimeoutMs ?? VOICE_TRANSCRIBE_TIMEOUT_MS;
   const speakTimeoutMs = options.speakTimeoutMs ?? VOICE_SPEAK_TIMEOUT_MS;
-  // Mutable local configuration: the environment seeds the boot default and
-  // voice.config.set overrides it live (the caller persists the KV).
-  let whisperBin = options.whisperBin;
-  let whisperModel = options.whisperModel;
+  // Boot paths are the shipped bundle or an explicit environment/test path.
+  // voice.config.set may override them; null returns to this boot pair.
+  const bootBin = options.whisperBin;
+  const bootModel = options.whisperModel;
+  let whisperBin = bootBin;
+  let whisperModel = bootModel;
   let closed = false;
   const active = new Set<AbortController>();
   // One local voice at a time; the queue keeps the machine from stacking
@@ -189,10 +209,14 @@ export function createVoiceService(options: VoiceServiceOptions = {}): VoiceServ
   }
 
   /** The real whisper.cpp run: fixed argument array, no shell, output captured. */
-  async function runWhisperProcess(wavPath: string, signal: AbortSignal): Promise<string> {
+  async function runWhisperProcess(
+    wavPath: string,
+    signal: AbortSignal,
+    language: VoiceTranscriptionLanguage,
+  ): Promise<string> {
     const child = spawn(
       whisperBin!,
-      ["-m", whisperModel!, "-f", wavPath, "-nt", "-np"],
+      whisperCliArgs(whisperModel!, wavPath, language),
       { stdio: ["ignore", "pipe", "pipe"], windowsHide: true },
     );
     const stop = (): void => {
@@ -253,8 +277,12 @@ export function createVoiceService(options: VoiceServiceOptions = {}): VoiceServ
     }
   }
 
-  async function transcribe(audioBase64: string): Promise<VoiceTranscription> {
+  async function transcribe(
+    audioBase64: string,
+    language: VoiceTranscriptionLanguage = DEFAULT_VOICE_TRANSCRIPTION_LANGUAGE,
+  ): Promise<VoiceTranscription> {
     requireOpen();
+    const spoken = transcriptionLanguage(language);
     const bytes = decodeClipAudio(audioBase64);
     const { seconds } = parseWavClip(bytes);
     const dir = await mkdtemp(join(tmpdir(), `deepseek-bot-voice-${randomUUID().slice(0, 8)}-`));
@@ -279,7 +307,8 @@ export function createVoiceService(options: VoiceServiceOptions = {}): VoiceServ
               once: true,
             });
           }),
-          (options.runTranscribe ?? runWhisperProcess)(wavPath, controller.signal),
+          (options.runTranscribe ??
+            ((path, abort) => runWhisperProcess(path, abort, spoken)))(wavPath, controller.signal),
         ]);
       });
       return { text: raw.trim(), seconds };
@@ -343,8 +372,8 @@ export function createVoiceService(options: VoiceServiceOptions = {}): VoiceServ
       return { whisperBin: whisperBin ?? null, whisperModel: whisperModel ?? null };
     },
     setConfig(next) {
-      whisperBin = next.whisperBin ?? undefined;
-      whisperModel = next.whisperModel ?? undefined;
+      whisperBin = next.whisperBin === null ? bootBin : next.whisperBin;
+      whisperModel = next.whisperModel === null ? bootModel : next.whisperModel;
     },
     transcribe,
     speak,

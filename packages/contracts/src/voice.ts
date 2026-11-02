@@ -1,9 +1,9 @@
 /**
  * D27 local voice backend.
  *
- * `voice.transcribe` turns one bounded WAV clip into text with the user's own
- * whisper.cpp build, and `voice.speak` reads one bounded text aloud with
- * Windows SAPI. Both paths run on this machine: no model call, no cloud
+ * `voice.transcribe` turns one bounded WAV clip into text with the whisper.cpp
+ * CLI shipped beside the app, and `voice.speak` reads one bounded text aloud
+ * with Windows SAPI. Both paths run on this machine: no model call, no cloud
  * transcription, no network. The desktop records and plays audio; the Host
  * never persists the clip or the synthesized sound — a transcript is returned
  * once and the temporary clip file is deleted when the run ends.
@@ -29,6 +29,11 @@ export const VOICE_MAX_AUDIO_BASE64_CHARS = 900_000;
 export const VOICE_TRANSCRIBE_TIMEOUT_MS = 120_000;
 /** One speak run must finish inside this budget or it is killed. */
 export const VOICE_SPEAK_TIMEOUT_MS = 120_000;
+/** Spoken languages hold-to-talk can ask whisper.cpp to transcribe. */
+export const VoiceTranscriptionLanguageSchema = z.enum(["zh", "en"]);
+export type VoiceTranscriptionLanguage = z.infer<typeof VoiceTranscriptionLanguageSchema>;
+/** Used when a transcribe request omits `language`. */
+export const DEFAULT_VOICE_TRANSCRIPTION_LANGUAGE = "zh" satisfies VoiceTranscriptionLanguage;
 
 export const VoiceTranscriptionSchema = z
   .object({
@@ -66,9 +71,10 @@ export const VoiceSpeakResultSchema = z
 export type VoiceSpeakResult = z.infer<typeof VoiceSpeakResultSchema>;
 
 /**
- * Local whisper configuration as seen by the Host: null means "not set" and
- * keeps `voice.status` honest. Paths are local user choices; the model never
- * reads or writes them.
+ * Effective local whisper paths. Null means the Host has neither a shipped
+ * bundle nor an override. The desktop no longer asks the user to paste paths;
+ * `voice.config.set` remains for a stored override, and null clears that
+ * override back to the boot paths.
  */
 export const VoiceConfigSchema = z
   .object({
@@ -95,6 +101,11 @@ export const VOICE_METHODS = {
           .string()
           .min(1)
           .max(VOICE_MAX_AUDIO_BASE64_CHARS),
+        /**
+         * whisper.cpp `-l` value. `zh` and `en` only. Omitted requests
+         * transcribe as Chinese.
+         */
+        language: VoiceTranscriptionLanguageSchema.default(DEFAULT_VOICE_TRANSCRIPTION_LANGUAGE),
       })
       .strict(),
     response: VoiceTranscriptionSchema,
@@ -108,9 +119,9 @@ export const VOICE_METHODS = {
     response: VoiceSpeakResultSchema,
   },
   /**
-   * Trusted desktop configuration surface for the local whisper paths.
-   * Values persist in the Host settings KV and apply live; the environment
-   * seeds the boot default and the KV overrides it. Setting null clears.
+   * Effective whisper paths. A non-empty stored path overrides the shipped
+   * bundle; null clears that override and returns to the boot paths. The
+   * model never reads or writes these paths.
    */
   "voice.config.get": {
     request: z.object({}).strict(),

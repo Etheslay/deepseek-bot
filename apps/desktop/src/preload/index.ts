@@ -12,10 +12,6 @@ import {
 } from "../shared/ipc-channels.js";
 import type { LanguagePreference } from "../shared/i18n/types.js";
 import type {
-  VoicePickKind,
-  VoicePickResult,
-} from "../shared/voice-pick.js";
-import type {
   ChromeClearResult,
   ChromeExportResult,
   ChromeImportResult,
@@ -90,13 +86,6 @@ export type DesktopBridge = {
   knowledge: {
     importFile: () => Promise<import("../shared/knowledge-import.js").KnowledgeImportResult>;
   };
-  /**
-   * D27 voice settings: local file dialogs for the whisper paths. The only
-   * argument is which kind of file; the picked path comes back, never in.
-   */
-  voice: {
-    pickFile: (kind: VoicePickKind) => Promise<VoicePickResult>;
-  };
   /** D24 leftover: backup summaries and the hardware-acceleration shell pref. */
   backups: {
     list: () => Promise<import("../shared/ipc-channels.js").BackupSummary[]>;
@@ -164,9 +153,6 @@ const api: DesktopBridge = {
   },
   knowledge: {
     importFile: () => ipcRenderer.invoke(IPC_CHANNELS.KNOWLEDGE_IMPORT),
-  },
-  voice: {
-    pickFile: (kind) => ipcRenderer.invoke(IPC_CHANNELS.VOICE_PICK_FILE, kind),
   },
   backups: {
     list: () => ipcRenderer.invoke(IPC_CHANNELS.BACKUPS_LIST),

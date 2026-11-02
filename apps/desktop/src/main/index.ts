@@ -26,7 +26,8 @@ import {
 } from "./chrome-bookmarks.js";
 import { DATA_ROOT_DIR_NAME, HOST_EVENT_CHAT_STREAM, HOST_EVENT_MISSED, SYSTEM_EVENT_WINDOW_FOCUS } from "../shared/ipc-channels.js";
 import { pickKnowledgeFile } from "./knowledge-import.js";
-import { pickVoiceFile } from "./voice-pick.js";
+import { rendererPermissionAllowed } from "./session-permissions.js";
+import { whisperEnvFromBundles } from "./whisper-bundle.js";
 import { listBackups, type RestoreOutcome } from "./backups.js";
 import {
   applyHardwareAccelerationPreference,
@@ -248,7 +249,6 @@ function registerShellIpc(win: BrowserWindow): void {
       }),
       saveKey: (key) => saveApiKey(key),
       importKnowledge: () => pickKnowledgeFile(win),
-      voicePickFile: (kind) => pickVoiceFile(win, kind),
       checkUpdates: () => checkUpdates(),
       downloadAndInstallUpdate: () => downloadAndInstallUpdate(),
       setLanguage: (preference) => setMainLanguagePreference(preference),
@@ -368,16 +368,17 @@ function attachFocusEvents(win: BrowserWindow): void {
 }
 
 function denyAllPermissions(): void {
-  // Only renderer-initiated clipboard WRITES are allowed (user copies message text);
-  // everything else (media, notifications, clipboard read, ...) stays denied.
-  const allowedPermissions = new Set(["clipboard-sanitized-write"]);
+  // Clipboard writes copy message text. Microphone audio (`media` + `audio`)
+  // is allowed so hold-to-talk can record. Camera, notifications, clipboard
+  // read, and every other permission stay denied.
   session.defaultSession.setPermissionRequestHandler(
-    (_webContents, permission, callback) => {
-      callback(allowedPermissions.has(permission));
+    (_webContents, permission, callback, details) => {
+      callback(rendererPermissionAllowed(permission, details));
     },
   );
   session.defaultSession.setPermissionCheckHandler(
-    (_webContents, permission) => allowedPermissions.has(permission),
+    (_webContents, permission, _requestingOrigin, details) =>
+      rendererPermissionAllowed(permission, details),
   );
 }
 
@@ -411,12 +412,17 @@ function startHost(): void {
     entryPath: hostEntryCandidates.find((candidate) => existsSync(candidate)) ?? hostEntryCandidates[0]!,
     dataRoot: resolveDataRoot(),
     decryptCredential,
-    childEnv: (parent) =>
-      existsSync(devHarnessModules)
+    childEnv: (parent) => ({
+      ...(existsSync(devHarnessModules)
         ? {
             NODE_PATH: [devHarnessModules, parent["NODE_PATH"]].filter(Boolean).join(delimiter),
           }
-        : {},
+        : {}),
+      ...whisperEnvFromBundles(
+        [join(process.resourcesPath, "whisper"), join(app.getAppPath(), "resources", "whisper", "dist")],
+        parent,
+      ),
+    }),
   });
   hostClient.onMissed((notices) => {
     if (mainWindow !== null && !mainWindow.isDestroyed()) {

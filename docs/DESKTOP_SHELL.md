@@ -56,7 +56,7 @@ pnpm --filter @deepseek-bot/desktop pack:win   # 构建 + electron-builder NSIS 
 
 - preload 以 CJS（`.cjs`）输出并在沙箱中运行，仅通过 `contextBridge` 暴露 `window.deepseekBot`。
 - renderer 无 `require` / `process` / `ipcRenderer` 等 Node 能力（D2-7 探测验证）。
-- 权限请求与权限检查默认全部拒绝；唯一例外是用户主动触发的剪贴板写入（`clipboard-sanitized-write`，供消息复制；不开放剪贴板读取）。
+- 权限请求与权限检查默认全部拒绝。例外只有两项：用户主动触发的剪贴板写入（`clipboard-sanitized-write`，供消息复制；不开放剪贴板读取），以及按住说话的麦克风（`media` 且检查为 `audio`、请求的 `mediaTypes` 仅为 `audio`）。摄像头、通知及其余权限仍拒绝。
 - `will-navigate` 与 `setWindowOpenHandler` 仅放行本应用页面（`file:` 与本地 dev server），其余拒绝。
 - 标题栏使用 `titleBarStyle: hidden` + 深色 `titleBarOverlay`，无白色系统标题条。
 
@@ -130,7 +130,7 @@ preload 暴露面：`deepseekBot.{getAppInfo, window.*, settings.saveKey, update
 
 - 侧边栏没有固定页面：只包含用户自建的分组与 Bot（初始一个「未分组」，右键组名可删除——组内有 Bot 时需先移出），以及右上 ＋ 创建 Bot、左下角账户按钮进设置。点击窗口 × 即隐藏到托盘。
 - 主界面即选中 Bot 的会话：问候语为首条消息，消息流 + 贴底输入条（左 ＋ 菜单 / 右麦克风占位与发送钮）；无选中时显示创建引导空状态。头部胶囊显示当前 Bot 名。
-- 设置弹窗：点击左下角账户按钮进入。分区为 通用 / 电脑 / 权限 / 保险库 / 用量与账单 / 更新 六项（三组导航，`features/settings/settings-nav.tsx`），均已可用——含本地用量与检查更新（D24，更新通道见下文「应用内更新」）；账户改名字、退出登录（占位）、主题深色/浅色切换、强调色、**界面语言（D22）**、**通知设置（D22）**、**Chrome 数据导入（D22）**；其余项标「后续提供」。
+- 设置弹窗：点击左下角账户按钮进入。分区为 通用 / 语音 / 电脑 / 权限 / 保险库 / 用量与账单 / 更新（`features/settings/settings-nav.tsx`），均已可用——含本地用量与检查更新（D24，更新通道见下文「应用内更新」）；账户改名字、退出登录（占位）、主题深色/浅色切换、强调色、**界面语言（D22）**、**通知设置（D22）**、**Chrome 数据导入（D22）**。语音页只选择转写语言（中文或英文，默认中文），不收集 whisper 路径或模型。其余项标「后续提供」。
 - 会话内占位交互（全部仅存内存，重启即清空，不涉及后端）：
   - 创建 Bot 弹窗：名称、形状、颜色；新 Bot 默认归入「未分组」。
   - Bot 分组：创建分组（Bot 右键 → 移至 → 创建分组）、移至分组、**拖拽换组**（头像拖拽影像 + 目标分组虚线高亮 + 空组放置提示）、**分组折叠/展开**（点组名收起，箭头指示）。

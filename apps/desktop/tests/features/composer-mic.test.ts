@@ -68,6 +68,7 @@ function deferredRecorder(samples: Float32Array): {
 async function renderMic(
   props: Partial<{
     status: VoiceStatus | null;
+    language: "zh" | "en";
     onTranscript: (text: string) => void;
     onNotify: (message: string) => void;
   }> = {},
@@ -80,6 +81,7 @@ async function renderMic(
     root.render(
       createElement(ComposerMic, {
         status: props.status === undefined ? ready : props.status,
+        ...(props.language !== undefined ? { language: props.language } : {}),
         onTranscript: props.onTranscript ?? (() => undefined),
         onNotify: props.onNotify ?? (() => undefined),
       }),
@@ -115,11 +117,11 @@ describe("ComposerMic", () => {
   });
 
   it("records while held and transcribes into the callback on release without sending", async () => {
-    const calls: string[] = [];
+    const calls: Array<{ method: string; language: string | undefined }> = [];
     window.deepseekBot = {
       host: {
-        call: async (method: string) => {
-          calls.push(method);
+        call: async (method: string, payload: { language?: string }) => {
+          calls.push({ method, language: payload.language });
           if (method !== "voice.transcribe") {
             throw new Error(`unexpected ${method}`);
           }
@@ -152,7 +154,7 @@ describe("ComposerMic", () => {
     });
 
     expect(recorder.stop).toHaveBeenCalledOnce();
-    expect(calls).toEqual(["voice.transcribe"]);
+    expect(calls).toEqual([{ method: "voice.transcribe", language: "zh" }]);
     expect(transcripts).toEqual(["你好。再见。"]);
     expect(button.getAttribute("aria-pressed")).toBe("false");
   });
@@ -183,11 +185,11 @@ describe("ComposerMic", () => {
 
   it("stops and transcribes once when the hold reaches the clip cap", async () => {
     vi.useFakeTimers();
-    const calls: string[] = [];
+    const calls: Array<{ method: string; language: string | undefined }> = [];
     window.deepseekBot = {
       host: {
-        call: async (method: string) => {
-          calls.push(method);
+        call: async (method: string, payload: { language?: string }) => {
+          calls.push({ method, language: payload.language });
           return { text: "到上限", seconds: VOICE_MAX_CLIP_SECONDS };
         },
       },
@@ -195,7 +197,10 @@ describe("ComposerMic", () => {
     const recorder = deferredRecorder(new Float32Array(1600));
     startClipRecorder.mockImplementation(() => recorder.promise);
     const transcripts: string[] = [];
-    const { button } = await renderMic({ onTranscript: (text) => transcripts.push(text) });
+    const { button } = await renderMic({
+      language: "en",
+      onTranscript: (text) => transcripts.push(text),
+    });
 
     await act(async () => {
       pointer(button, "pointerdown");
@@ -211,7 +216,7 @@ describe("ComposerMic", () => {
       pointer(button, "pointerup");
     });
     expect(recorder.stop).toHaveBeenCalledOnce();
-    expect(calls).toEqual(["voice.transcribe"]);
+    expect(calls).toEqual([{ method: "voice.transcribe", language: "en" }]);
   });
 
   it("does not transcribe an empty clip", async () => {

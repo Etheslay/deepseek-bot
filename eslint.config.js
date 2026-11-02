@@ -19,7 +19,7 @@ export default tseslint.config(
   eslint.configs.recommended,
   ...tseslint.configs.recommended,
   {
-    files: ["**/*.{ts,tsx,js,mjs,cjs}"],
+    files: ["**/*.{ts,tsx,mts,js,mjs,cjs}"],
     languageOptions: {
       parserOptions: {
         ecmaVersion: "latest",
@@ -44,6 +44,19 @@ export default tseslint.config(
         process: "readonly",
         setTimeout: "readonly",
         clearTimeout: "readonly",
+      },
+    },
+  },
+  {
+    files: ["apps/desktop/scripts/**/*.mts"],
+    languageOptions: {
+      globals: {
+        AbortSignal: "readonly",
+        Buffer: "readonly",
+        console: "readonly",
+        fetch: "readonly",
+        process: "readonly",
+        URL: "readonly",
       },
     },
   },

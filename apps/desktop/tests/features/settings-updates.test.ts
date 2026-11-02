@@ -61,6 +61,7 @@ describe("settings persistence", () => {
     expect(loaded.accent).toBe("#2dd4a7");
     // D22 additions fall back rather than guessing.
     expect(loaded.language).toBe("system");
+    expect(loaded.voiceLanguage).toBe("zh");
     expect(loaded.notifications).toEqual({
       enabled: true,
       onlyWhenUnfocused: true,
@@ -86,11 +87,13 @@ describe("settings persistence", () => {
       "deepseek-bot.settings.v2",
       JSON.stringify({
         language: "fr",
+        voiceLanguage: "fr",
         notifications: { enabled: "yes", onlyWhenUnfocused: false, mutedBotIds: ["a", "", 7, "a", "b"] },
       }),
     );
     const loaded = loadSettings(storage);
     expect(loaded.language).toBe("system");
+    expect(loaded.voiceLanguage).toBe("zh");
     expect(loaded.notifications.enabled).toBe(true);
     expect(loaded.notifications.onlyWhenUnfocused).toBe(false);
     expect(loaded.notifications.mutedBotIds).toEqual(["a", "b"]);

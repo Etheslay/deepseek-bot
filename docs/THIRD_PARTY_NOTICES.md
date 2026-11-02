@@ -37,6 +37,12 @@
 - Host 把已检查的 PNG 收成预览 JPEG，使用 `jpeg-js@0.4.4`（BSD-3-Clause，Copyright Eugene Ware；`lib/encoder.js` 另含 Adobe Systems BSD 声明）和 `pngjs@7.0.0`（MIT，Copyright Luke Page、Kuba Niegowski 与贡献者）。
 - 预览只写在本机 `screen-outputs`，不进入模型结果、审计或遥测。完整许可证文本以依赖包内 LICENSE 和锁文件为准。
 
+## 本地转写（whisper.cpp）
+
+- 程序：whisper.cpp `v1.9.2`（MIT）。来源：[ggml-org/whisper.cpp](https://github.com/ggml-org/whisper.cpp/tree/v1.9.2)。钉扎在 `apps/desktop/resources/whisper/pins.json`。开发与 Windows 打包时由 `apps/desktop/scripts/fetch-whisper.mts` 下载 CPU 构建（Windows `whisper-bin-x64.zip`、Linux `whisper-bin-ubuntu-x64.tar.gz`），只解出 `whisper-cli` 及其 ggml/whisper 动态库，校验 sha256。上游 LICENSE 随资源目录复制。仓库不提交这些二进制。
+- 模型：`ggml-tiny-q5_1.bin`（约 31 MiB），whisper.cpp 发布的 OpenAI Whisper tiny 多语言 Q5_1 权重，MIT。来源：[ggerganov/whisper.cpp](https://huggingface.co/ggerganov/whisper.cpp)。同样按 sha256 拉取，不入库。
+- 运行：`voice.transcribe` 只启动已经落在本机的 CLI 和模型，转写时不下载、不上传音频。
+
 ## DeepSeek 蓝海豚
 
 - 文件：`apps/desktop/assets/avatars/dolphin.png`

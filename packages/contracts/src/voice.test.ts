@@ -46,6 +46,11 @@ describe("D27 voice contracts", () => {
   it("bounds the transcribe clip to one canonical-base64 string", () => {
     const contract = METHOD_CONTRACTS["voice.transcribe"];
     expect(contract.request.safeParse({ audioBase64: AUDIO }).success).toBe(true);
+    expect(contract.request.parse({ audioBase64: AUDIO }).language).toBe("zh");
+    expect(contract.request.parse({ audioBase64: AUDIO, language: "en" }).language).toBe("en");
+    expect(contract.request.safeParse({ audioBase64: AUDIO, language: "zh" }).success).toBe(true);
+    expect(contract.request.safeParse({ audioBase64: AUDIO, language: "fr" }).success).toBe(false);
+    expect(contract.request.safeParse({ audioBase64: AUDIO, language: "auto" }).success).toBe(false);
     expect(contract.request.safeParse({}).success).toBe(false);
     expect(contract.request.safeParse({ audioBase64: "" }).success).toBe(false);
     expect(
