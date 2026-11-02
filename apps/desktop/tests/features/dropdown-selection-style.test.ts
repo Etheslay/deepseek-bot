@@ -40,7 +40,10 @@ describe("dropdown option selection style", () => {
     expect(light).toMatch(/--dropdown-hover-bg:\s*rgba\(127,\s*127,\s*127,\s*0\.1\);/);
     expect(light).toMatch(/--dropdown-selected-fg:\s*#ececf1;/);
     expect(light).not.toMatch(/--dropdown-selected-bg:\s*#000;/);
-    expect(css).toMatch(/\.custom-select-menu\s*\{[^}]*background:\s*#1d1d21;/);
+    expect(dark).toMatch(/--dropdown-panel:\s*#1d1d21;/);
+    expect(light).toMatch(/--dropdown-panel:\s*#3a3a40;/);
+    expect(light).not.toMatch(/--dropdown-panel:\s*#(?:000|0f0f10|1d1d21);/);
+    expect(css).toMatch(/\.custom-select-menu\s*\{[^}]*background:\s*var\(--dropdown-panel\);/);
   });
 
   it("covers selected, hover, focus, aria-selected, and text selection from the shared tokens", () => {
