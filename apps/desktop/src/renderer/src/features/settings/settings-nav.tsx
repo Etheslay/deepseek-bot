@@ -3,9 +3,9 @@
  *
  * A flat list of the settings sections. An earlier pass put them under three
  * group labels; the labels were small uppercase text that added visual noise
- * without helping, so the list is flat. Voice chooses the transcription
- * language only. The app ships its own whisper.cpp build, so there is no
- * path or model picker.
+ * without helping, so the list is flat. Voice holds the transcription
+ * language plus the user-supplied whisper.cpp executable and model paths.
+ * The app does not ship or fetch a model.
  */
 import type { JSX } from "react";
 import { t, useLanguage } from "../../i18n.js";

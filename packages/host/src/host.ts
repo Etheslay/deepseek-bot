@@ -1088,17 +1088,19 @@ function resolveDeviceInputBackend(options: HostOptions): DeviceInputBackend {
 }
 
 /**
- * A stored non-empty path still overrides the boot default. Null, empty, or
- * garbage is "no override": the shipped bundle or environment path stays, so
- * a legacy cleared setting does not disable transcription.
+ * The settings KV is authoritative when the key exists: a string overrides
+ * the environment seed, null or garbage clears (voice.status stays honest).
+ * An absent key keeps the environment-seeded boot default.
  */
 function restoreVoiceConfig(voice: VoiceService, savedBin: unknown, savedModel: unknown): void {
-  const current = voice.config();
-  const bin = typeof savedBin === "string" && savedBin.length > 0 ? savedBin : current.whisperBin;
-  const model =
-    typeof savedModel === "string" && savedModel.length > 0 ? savedModel : current.whisperModel;
-  if (bin === current.whisperBin && model === current.whisperModel) return;
-  voice.setConfig({ whisperBin: bin, whisperModel: model });
+  if (savedBin !== undefined) {
+    const bin = typeof savedBin === "string" && savedBin.length > 0 ? savedBin : null;
+    voice.setConfig({ ...voice.config(), whisperBin: bin });
+  }
+  if (savedModel !== undefined) {
+    const model = typeof savedModel === "string" && savedModel.length > 0 ? savedModel : null;
+    voice.setConfig({ ...voice.config(), whisperModel: model });
+  }
 }
 
 function restoreSearchEndpoint(search: WebSearchService, saved: unknown): void {

@@ -11,6 +11,7 @@ import {
   assertValidLanguagePreference,
   assertValidTitleBarOverlayColors,
 } from "../src/shared/ipc-channels.js";
+import { assertValidVoicePickKind } from "../src/shared/voice-pick.js";
 import { assertAuthorizedSender } from "../src/main/ipc/guards.js";
 import type { IpcMainInvokeEvent } from "electron";
 
@@ -24,6 +25,22 @@ describe("IPC allowlist", () => {
   it("registers the knowledge import channel without a path argument", () => {
     expect(ALLOWED_CHANNELS.has(IPC_CHANNELS.KNOWLEDGE_IMPORT)).toBe(true);
     expect(() => assertAllowedChannel(IPC_CHANNELS.KNOWLEDGE_IMPORT)).not.toThrow();
+  });
+
+  it("registers the voice file-pick channel and only the two kinds", () => {
+    expect(ALLOWED_CHANNELS.has(IPC_CHANNELS.VOICE_PICK_FILE)).toBe(true);
+    expect(() => assertAllowedChannel(IPC_CHANNELS.VOICE_PICK_FILE)).not.toThrow();
+    expect(() => assertValidVoicePickKind("bin")).not.toThrow();
+    expect(() => assertValidVoicePickKind("model")).not.toThrow();
+    for (const value of ["path", "", "BIN", "../whisper-cli"]) {
+      try {
+        assertValidVoicePickKind(value);
+        expect.unreachable("expected throw");
+      } catch (error) {
+        expect(error).toBeInstanceOf(IpcDeniedError);
+        expect((error as IpcDeniedError).code).toBe("INVALID_PAYLOAD");
+      }
+    }
   });
 
   it("registers the D24 update channels", () => {

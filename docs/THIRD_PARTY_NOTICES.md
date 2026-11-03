@@ -39,9 +39,8 @@
 
 ## 本地转写（whisper.cpp）
 
-- 程序：whisper.cpp `v1.9.2`（MIT）。来源：[ggml-org/whisper.cpp](https://github.com/ggml-org/whisper.cpp/tree/v1.9.2)。钉扎在 `apps/desktop/resources/whisper/pins.json`。开发与 Windows 打包时由 `apps/desktop/scripts/fetch-whisper.mts` 下载 CPU 构建（Windows `whisper-bin-x64.zip`、Linux `whisper-bin-ubuntu-x64.tar.gz`），只解出 `whisper-cli` 及其 ggml/whisper 动态库，校验 sha256。上游 LICENSE 随资源目录复制。仓库不提交这些二进制。
-- 模型：`ggml-tiny-q5_1.bin`（约 31 MiB），whisper.cpp 发布的 OpenAI Whisper tiny 多语言 Q5_1 权重，MIT。来源：[ggerganov/whisper.cpp](https://huggingface.co/ggerganov/whisper.cpp)。同样按 sha256 拉取，不入库。
-- 运行：`voice.transcribe` 只启动已经落在本机的 CLI 和模型，转写时不下载、不上传音频。
+- 程序与模型由用户自行准备，不随本应用下载或分发。whisper.cpp 为 MIT，来源：[ggml-org/whisper.cpp](https://github.com/ggml-org/whisper.cpp)。用户在设置 → 语音中填写本机可执行文件和 ggml 模型路径。
+- 运行：`voice.transcribe` 只启动用户配置且已存在于本机的 CLI 和模型，转写时不下载、不上传音频。路径为空时转写不可用。
 
 ## DeepSeek 蓝海豚
 

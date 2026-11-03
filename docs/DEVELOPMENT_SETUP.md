@@ -52,13 +52,13 @@ pnpm test
 `apps/desktop`（Electron + React + TypeScript）已纳入 workspace，命令均在仓库根目录执行：
 
 ```powershell
-pnpm --filter @deepseek-bot/desktop dev        # 开发模式（先拉取本机 whisper）
+pnpm --filter @deepseek-bot/desktop dev        # 开发模式
 pnpm --filter @deepseek-bot/desktop build      # 构建到 apps/desktop/out/
 pnpm --filter @deepseek-bot/desktop test       # 桌面壳单元测试
-pnpm --filter @deepseek-bot/desktop pack:dir   # 拉取 Windows whisper + 构建 + electron-builder --dir
+pnpm --filter @deepseek-bot/desktop pack:dir   # 构建 + electron-builder --dir
 ```
 
-- `dev` / `preview` 会先运行 `apps/desktop/scripts/fetch-whisper.mts`，按当前平台把钉扎的 whisper.cpp CLI 和 `ggml-tiny-q5_1.bin` 下载到 `apps/desktop/resources/whisper/dist`（校验 sha256，命中则不再访问网络）。`pack:dir` / `pack:win` 固定拉取 Windows x64 构建。这两个目录已 gitignore，不提交二进制。转写只调用这份本地文件，转写时不再下载。
+- 开发与打包不下载 whisper.cpp，也不要求随包的 ggml 模型。用户在设置 → 语音里填写本机 whisper.cpp 程序路径和模型路径后，转写才可用；两条路径都为空时麦克风保持不可用。环境变量 `DEEPSEEK_BOT_WHISPER_BIN` / `DEEPSEEK_BOT_WHISPER_MODEL` 只在设置里还没有对应记录时作为启动种子。转写时不访问网络。
 - 根 `pnpm lint` / `pnpm typecheck` / `pnpm test` 已覆盖桌面包，无需额外步骤。单元测试不下载模型。
 - `electron-vite` 将 main / preload 构建为 CJS（`.cjs`，沙箱 preload 要求）；renderer 为普通 Vite 构建。
 - 打包输出 `apps/desktop/release/win-unpacked/`，中间产物 `out/`，均已 gitignore；不要提交。

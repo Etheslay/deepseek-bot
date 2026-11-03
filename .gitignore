@@ -33,7 +33,7 @@ Thumbs.db
 # Desktop local outputs
 apps/desktop/out/
 apps/desktop/release/
-# whisper.cpp CLI and ggml model fetched by apps/desktop/scripts/fetch-whisper.mts
+# Leftover local whisper.cpp downloads are not part of the app.
 apps/desktop/resources/whisper/dist/
 apps/desktop/resources/whisper/cache/
 .dev-electron-profile/

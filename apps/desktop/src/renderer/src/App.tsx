@@ -25,6 +25,7 @@ import { ScreenSettings } from "./features/screen/screen-settings.js";
 import { UsagePanel } from "./features/usage/usage-panel.js";
 import { SettingsNav, type SettingsSectionKey } from "./features/settings/settings-nav.js";
 import { VoiceLanguageSettings } from "./features/settings/voice-language-settings.js";
+import { VoiceSettingsPanel } from "./features/settings/voice-settings.js";
 import { useHostDown } from "./features/settings/host-down.js";
 import { BotForm } from "./features/bots/bot-form.js";
 import { nextBotName } from "./features/bots/bot-names.js";
@@ -542,6 +543,8 @@ export function App(): JSX.Element {
   const [accent, setAccent] = useState(initialSettings.accent);
   const [language, setLanguage] = useState<LanguagePreference>(initialSettings.language);
   const [voiceLanguage, setVoiceLanguage] = useState<VoiceTranscriptionLanguage>(initialSettings.voiceLanguage);
+  /** Bumps after Settings saves whisper paths so the open chat re-reads voice.status. */
+  const [voiceConfigVersion, setVoiceConfigVersion] = useState(0);
   const [notifications, setNotifications] = useState<NotificationPrefs>(initialSettings.notifications);
   /** "" means the user never set a name — the UI shows the localized default (D22). */
   const displayName =
@@ -2271,6 +2274,7 @@ const logout = (): void => {
               }}
               skillContext={(botId) => skillsForInjection(botId, skillLibrary)}
               voiceLanguage={voiceLanguage}
+              voiceConfigVersion={voiceConfigVersion}
               onOpenBot={(botKey) => {
                 const target = bots.find((b) => b.key === botKey);
                 if (target) {
@@ -2862,7 +2866,15 @@ const logout = (): void => {
                     most carefully, and burying it under 通用 made the policy
                     rows compete with the account and appearance controls. */}
                 {settingsSection === "voice" && (
-                  <VoiceLanguageSettings value={voiceLanguage} onChange={setVoiceLanguage} />
+                  <>
+                    <VoiceLanguageSettings value={voiceLanguage} onChange={setVoiceLanguage} />
+                    <div className="settings-card">
+                      <VoiceSettingsPanel
+                        onConfigSaved={() => setVoiceConfigVersion((version) => version + 1)}
+                        onToast={setToast}
+                      />
+                    </div>
+                  </>
                 )}
                 {settingsSection === "permissions" && (
                   <>
@@ -3490,6 +3502,7 @@ function BotsPlaceholder({
   onAssistant,
   onOpenBot,
   voiceLanguage,
+  voiceConfigVersion,
   onNotify,
   onBotStatus,
   onReplyCompleted,
@@ -3530,6 +3543,8 @@ function BotsPlaceholder({
   onOpenBot: (botKey: number) => void;
   /** Settings → Voice. Passed through to whisper-cli as `-l`. */
   voiceLanguage: VoiceTranscriptionLanguage;
+  /** Bumps when Settings saves whisper paths so this pane re-reads voice.status. */
+  voiceConfigVersion: number;
   onNotify: (message: string) => void;
   /** D22: live bot state for the tray (running / waiting-approval / idle). */
   onBotStatus: (botId: string, status: TrayBotStatus) => void;
@@ -3565,8 +3580,8 @@ function BotsPlaceholder({
   /**
    * Voice (D27 desktop slice): both halves are local and optional — the mic and
    * the speak button stay disabled with a reason until `voice.status` says the
-   * whisper build or the system speech engine is present. The mic is hold-to-talk:
-   * release transcribes into the draft and does not send.
+   * configured whisper paths or the system speech engine are usable. The mic is
+   * hold-to-talk: release transcribes into the draft and does not send.
    */
   const [voiceStatus, setVoiceStatus] = useState<VoiceStatus | null>(null);
   const [speakingId, setSpeakingId] = useState<number | null>(null);
@@ -3715,7 +3730,7 @@ function BotsPlaceholder({
     if (Math.abs(list.scrollTop - max) > 1) list.scrollTop = max;
   });
 
-  /** Ask the Host whether the shipped whisper build and Windows SAPI are usable.
+  /** Ask the Host whether the configured whisper paths and Windows SAPI are usable.
    * Kept with the other hooks: the pair view returns early, and a hook below
    * that return drops out and blanks the window. */
   useEffect(() => {
@@ -3725,7 +3740,7 @@ function BotsPlaceholder({
         setVoiceStatus(METHOD_CONTRACTS["voice.status"].response.parse(response)),
       )
       .catch(() => setVoiceStatus(null));
-  }, []);
+  }, [voiceConfigVersion]);
 
   if (!me) {
     return (

@@ -1,9 +1,8 @@
 /**
- * Voice settings: transcription language only.
+ * Voice settings: transcription language.
  *
  * Hold-to-talk passes this choice to whisper-cli as `-l zh` or `-l en`.
- * The shipped whisper.cpp build stays in place; this panel does not ask for
- * a binary path or a model path.
+ * The executable and model paths live in the same Settings → Voice section.
  */
 import type { JSX } from "react";
 import type { VoiceTranscriptionLanguage } from "@deepseek-bot/contracts";
