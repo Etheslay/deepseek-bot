@@ -191,7 +191,7 @@ describe("chat permission cards", () => {
     expect(calls[0]).toEqual({ method: "permission.approval.list", payload: { botId: BOT } });
     expect(container.textContent).toContain("创建 bot");
     expect(container.textContent).toContain("小助手");
-    expect(container.textContent).toContain("此授权仅作用于 小助手");
+    expect(container.textContent).not.toContain("此授权仅作用于");
     expect(labels(container)).toEqual(["从不", "始终允许", "允许一次"]);
     expect(
       calls.some((call) => call.method === "grant.create" || call.method === "policy.set"),

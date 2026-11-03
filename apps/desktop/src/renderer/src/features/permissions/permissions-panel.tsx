@@ -130,7 +130,6 @@ export function PermissionsPanel() {
     <div className="settings-card">
       <div className="settings-row">
         <span>{t("permissions.capabilityPolicies")}</span>
-        <span className="settings-soon">{t("permissions.policyHint")}</span>
       </div>
       {policies.map((policy) => {
         const choices = allowedModes(policy.capability);

@@ -260,6 +260,7 @@ export function createFixtureService(): DesktopService {
           toolPolicyId: draft.toolPolicyId,
           role: draft.role ?? "standard",
           archivedAt: null,
+          ...(draft.avatar != null ? { avatar: draft.avatar } : {}),
         };
         const checked = validateBot(bot);
         if (!checked.ok) {
@@ -284,6 +285,7 @@ export function createFixtureService(): DesktopService {
           modelProfileId: patch.modelProfileId ?? bot.modelProfileId,
           workspaceId: patch.workspaceId ?? bot.workspaceId,
           toolPolicyId: patch.toolPolicyId ?? bot.toolPolicyId,
+          ...(patch.avatar !== undefined ? { avatar: patch.avatar ?? undefined } : {}),
           revision: crypto.randomUUID(),
         };
         const checked = validateBot(next);

@@ -179,7 +179,7 @@ describe("MCP settings", () => {
       method: "connector.mcp.grants.set",
       payload: { botId: BOT2, id: ID, allowedTools: [] },
     });
-    expect(container.textContent).toContain("每次 MCP 调用都需要单次审批");
+    expect(container.textContent).not.toContain("每次 MCP 调用都需要单次审批");
   });
 
   it("keeps unavailable saved tools until explicitly removed", async () => {

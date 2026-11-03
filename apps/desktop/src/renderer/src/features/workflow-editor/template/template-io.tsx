@@ -44,9 +44,6 @@ export function ImportDialog(props: {
           </button>
         </header>
         <div className="modal-body wf-dialog-form">
-          <p className="wf-dialog-hint">
-            {t("workflow.importHint", ["{ schemaVersion, workflow }"])}
-          </p>
           <textarea
             className="wf-textarea wf-import-textarea"
             value={props.text}
@@ -177,9 +174,6 @@ export function ExportDialog(props: {
           </button>
         </header>
         <div className="modal-body wf-dialog-form">
-          <p className="wf-dialog-hint">
-            {t("workflow.exportHint", ["{ schemaVersion, workflow }"])}
-          </p>
           <textarea
             className="wf-textarea wf-export-textarea"
             value={props.json}

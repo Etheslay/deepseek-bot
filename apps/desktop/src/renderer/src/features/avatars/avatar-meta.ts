@@ -1,14 +1,27 @@
 /**
- * Avatar metadata (UI-only, never persisted).
+ * Avatar metadata.
  *
- * The Grok Ball shape set plus the theme-aware black/white bot.
+ * The Grok Ball shape set plus the theme-aware black/white bot. A coloured
+ * ball maps onto the contract avatar (shape + canonical colour) so an edit
+ * survives a restart. The mono ball has no contract value; the bot list
+ * keeps that choice locally.
  */
+import {
+  AVATAR_COLORS,
+  AVATAR_COLORS_RETIRED,
+  AVATAR_SHAPE_IDS_RETIRED,
+  AVATAR_SHAPES,
+  type Avatar as ContractAvatar,
+} from "@deepseek-bot/contracts";
 import {
   GROK_BALL_COLORS,
   GROK_BALL_SHAPE_IDS,
   type GrokBallShapeId,
   type GrokBallState,
 } from "./grok-ball-model.js";
+
+const CONTRACT_SHAPES = new Set<string>([...AVATAR_SHAPES, ...AVATAR_SHAPE_IDS_RETIRED]);
+const CONTRACT_COLORS = new Set<string>([...AVATAR_COLORS, ...AVATAR_COLORS_RETIRED]);
 
 /** UI accent color derived from the avatar itself. */
 export function avatarColor(avatar: Avatar): string {
@@ -20,7 +33,7 @@ export function avatarColor(avatar: Avatar): string {
   }
 }
 
-/** UI-only avatar value; NOT a contract field, never persisted. */
+/** Picker value. Coloured balls persist as a contract avatar; mono stays local. */
 export type Avatar =
   | { kind: "mono" }
   | {
@@ -41,6 +54,24 @@ export function defaultAvatarFor(seed: string): Avatar {
     shape: GROK_BALL_SHAPE_IDS[hash % GROK_BALL_SHAPE_IDS.length]!,
     color: GROK_BALL_COLORS[hash % GROK_BALL_COLORS.length]!,
   };
+}
+
+/** Contract avatar for a coloured ball, or null for mono / an unknown swatch. */
+export function toContractAvatar(avatar: Avatar): ContractAvatar | null {
+  if (avatar.kind !== "grok") return null;
+  if (!CONTRACT_SHAPES.has(avatar.shape) || !CONTRACT_COLORS.has(avatar.color)) return null;
+  return {
+    shape: avatar.shape as ContractAvatar["shape"],
+    color: avatar.color as ContractAvatar["color"],
+  };
+}
+
+/** UI ball for a stored contract avatar. Null means the bot has none. */
+export function fromContractAvatar(
+  avatar: ContractAvatar | null | undefined,
+): Avatar | null {
+  if (avatar === null || avatar === undefined) return null;
+  return { kind: "grok", shape: avatar.shape, color: avatar.color };
 }
 
 export function avatarKey(avatar: Avatar): string {

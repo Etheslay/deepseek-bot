@@ -81,7 +81,6 @@ function WorkflowInspector(props: {
   return (
     <div className="wf-insp">
       {sectionTitle(t("workflow.title"))}
-      <p className="wf-insp-hint">{t("workflow.workflowLevelHint")}</p>
       <label className="wf-field">
         {t("runs.name")}
         <input
@@ -102,7 +101,6 @@ function WorkflowInspector(props: {
           ariaLabel={t("workflow.concurrencyLimit")}
         />
       </label>
-      <p className="wf-insp-hint">{t("workflow.limitsHint")}</p>
     </div>
   );
 }
@@ -127,10 +125,6 @@ function NodeInspector(props: {
   const archived = archivedBotOption(bots, node.botId);
   const botOptions = archived ? [archived, ...activeBotOptions(bots)] : activeBotOptions(bots);
   const nodeIssues = props.issues.filter((issue) => issue.nodeId === node.id);
-  const variableHint =
-    node.inputBindings.length > 0
-      ? node.inputBindings.map((binding) => `{{${binding.inputKey}}}`).join("  ")
-      : t("workflow.noBindingsPlaceholder");
 
   return (
     <div className="wf-insp">
@@ -182,7 +176,6 @@ function NodeInspector(props: {
           }
         />
       </label>
-      <p className="wf-insp-hint">{t("workflow.availableVariablesHint", [variableHint])}</p>
       {sectionTitle(t("workflow.inputBindingsSection"))}
       {node.inputBindings.length === 0 && <p className="wf-insp-hint">{t("workflow.noBindings")}</p>}
       {node.inputBindings.map((binding, index) => (
@@ -318,7 +311,6 @@ function EdgeInspector(props: {
           }
         />
       </label>
-      <p className="wf-insp-hint">{t("workflow.inputKeyHint")}</p>
       <button
         type="button"
         className="danger-btn wf-edge-delete"

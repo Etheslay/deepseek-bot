@@ -12,7 +12,7 @@ import type { BotDraft, BotUpdatePatch } from "../../services/desktop-service.js
 import { ServiceError } from "../../services/desktop-service.js";
 import { hostErrorCode, hostErrorMessage } from "../../services/host-error.js";
 import { useService } from "../../services/service-context.js";
-import { defaultAvatarFor, type Avatar } from "../avatars/avatar-meta.js";
+import { defaultAvatarFor, fromContractAvatar, type Avatar } from "../avatars/avatar-meta.js";
 import { t } from "../../i18n.js";
 
 export type UiBot = {
@@ -56,6 +56,49 @@ function writeHiddenBotIds(ids: ReadonlySet<string>): void {
 
 type UiFields = Pick<UiBot, "avatar" | "shape" | "color" | "group" | "unread">;
 
+const LOOKS_KEY = "deepseek-bot.bot-looks.v1";
+
+type StoredLook = { avatar: Avatar; shape: number; color: number };
+
+function isStoredAvatar(value: unknown): value is Avatar {
+  if (typeof value !== "object" || value === null) return false;
+  const kind = (value as { kind?: unknown }).kind;
+  if (kind === "mono") return true;
+  if (kind !== "grok") return false;
+  const record = value as { shape?: unknown; color?: unknown };
+  return typeof record.shape === "string" && typeof record.color === "string";
+}
+
+function readLooks(): Map<string, StoredLook> {
+  const map = new Map<string, StoredLook>();
+  try {
+    const raw = window.localStorage.getItem(LOOKS_KEY);
+    if (raw === null) return map;
+    const parsed: unknown = JSON.parse(raw);
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return map;
+    for (const [id, value] of Object.entries(parsed)) {
+      if (typeof value !== "object" || value === null) continue;
+      const record = value as { avatar?: unknown; shape?: unknown; color?: unknown };
+      if (!isStoredAvatar(record.avatar)) continue;
+      if (typeof record.shape !== "number" || typeof record.color !== "number") continue;
+      map.set(id, { avatar: record.avatar, shape: record.shape, color: record.color });
+    }
+  } catch {
+    // A corrupt row falls back to the contract avatar or the default ball.
+  }
+  return map;
+}
+
+function writeLooks(map: Map<string, StoredLook>): void {
+  try {
+    const record: Record<string, StoredLook> = {};
+    for (const [id, look] of map) record[id] = look;
+    window.localStorage.setItem(LOOKS_KEY, JSON.stringify(record));
+  } catch {
+    // The in-memory look still applies for this session.
+  }
+}
+
 export type BotsOperationResult = {
   ok: boolean;
   /** Key of the affected UiBot on success (create/duplicate). */
@@ -87,14 +130,29 @@ export function useBots(defaultGroupKey: number) {
   const [loadError, setLoadError] = useState<string | null>(null);
   const nextKey = useRef(1);
   const uiByBotId = useRef(new Map<string, UiFields>());
+  const looks = useRef(readLooks());
   const hiddenIds = useRef(readHiddenBotIds());
+
+  const baseFields = (bot: Bot): UiFields => {
+    const stored = looks.current.get(bot.id);
+    const contract = fromContractAvatar(bot.avatar);
+    return {
+      avatar: stored?.avatar ?? contract ?? defaultAvatarFor(bot.id),
+      shape: stored?.shape ?? 0,
+      color: stored?.color ?? 2,
+      group: defaultGroupKey,
+      unread: false,
+    };
+  };
 
   const toUi = useCallback((bot: Bot): UiBot => {
     const saved = uiByBotId.current.get(bot.id);
+    const stored = looks.current.get(bot.id);
+    const contract = fromContractAvatar(bot.avatar);
     const fields: UiFields = saved ?? {
-      avatar: defaultAvatarFor(bot.id),
-      shape: 0,
-      color: 2,
+      avatar: stored?.avatar ?? contract ?? defaultAvatarFor(bot.id),
+      shape: stored?.shape ?? 0,
+      color: stored?.color ?? 2,
       group: defaultGroupKey,
       unread: false,
     };
@@ -102,14 +160,13 @@ export function useBots(defaultGroupKey: number) {
   }, [defaultGroupKey]);
 
   const remember = (bot: Bot, patch: Partial<UiFields>): void => {
-    const saved = uiByBotId.current.get(bot.id) ?? {
-      avatar: defaultAvatarFor(bot.id),
-      shape: 0,
-      color: 2,
-      group: defaultGroupKey,
-      unread: false,
-    };
-    uiByBotId.current.set(bot.id, { ...saved, ...patch });
+    const saved = uiByBotId.current.get(bot.id) ?? baseFields(bot);
+    const next = { ...saved, ...patch };
+    uiByBotId.current.set(bot.id, next);
+    if (patch.avatar !== undefined) {
+      looks.current.set(bot.id, { avatar: next.avatar, shape: next.shape, color: next.color });
+      writeLooks(looks.current);
+    }
   };
 
   useEffect(() => {

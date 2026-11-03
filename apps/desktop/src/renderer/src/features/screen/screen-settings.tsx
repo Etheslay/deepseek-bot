@@ -416,7 +416,6 @@ function ScreenBotPanel(props: { botId: string }): JSX.Element {
         checked={status?.enabled === true}
         onChange={setEnabled}
         label={t("permissions.screenAndWindowAwareness")}
-        hint={t("screen.enableHint")}
       />
       {status !== null && !status.supported ? (
         <p className="settings-soon" role="status">

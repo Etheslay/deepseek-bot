@@ -218,7 +218,7 @@ describe("screen settings panel", () => {
     });
     expect(container.textContent).toContain("Alpha");
     expect(container.textContent).not.toContain("Archived");
-    expect(container.textContent).toContain("不能始终允许");
+    expect(container.textContent).not.toContain("始终允许");
     expect(container.querySelector("[role='switch']")?.getAttribute("aria-checked")).toBe("false");
     expect(button(container, "截图").disabled).toBe(true);
     expect(button(container, "截图并识别").disabled).toBe(true);

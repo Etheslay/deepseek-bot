@@ -7,7 +7,7 @@
  * validation ownership. Validation still runs the real BotSchema from
  * contracts and maps issues onto fields.
  */
-import { useEffect, useState, type JSX, type ReactNode } from "react";
+import { useEffect, useRef, useState, type JSX, type ReactNode } from "react";
 import { validateBot } from "../../services/contract-validation.js";
 import type { BotDraft } from "../../services/desktop-service.js";
 import { CustomSelect } from "../../components/custom-select.js";
@@ -242,6 +242,39 @@ export function parseToneSelection(instructions: string): ParsedToneSelection {
   return { id: null, custom };
 }
 
+/**
+ * Identity of a pre-fill. The edit dialog's parent rebuilds `initial` on every
+ * render; comparing this key keeps a re-render from wiping the name and the
+ * personality the user just picked.
+ */
+export function botFormInitialKey(initial: {
+  name: string;
+  instructions: string;
+  modelProfileId: string;
+  workspaceId: string;
+  toolPolicyId: string;
+  role?: string;
+}): string {
+  return [
+    initial.name,
+    initial.instructions,
+    initial.modelProfileId,
+    initial.workspaceId,
+    initial.toolPolicyId,
+    initial.role ?? "",
+  ].join("\u0000");
+}
+
+function openedTone(
+  instructions: string,
+  minimal: boolean | undefined,
+): { id: string | null; custom: string } {
+  const parsed = parseToneSelection(instructions);
+  if (parsed.id !== null) return { id: parsed.id, custom: "" };
+  if (parsed.custom !== null) return { id: CUSTOM_TONE_ID, custom: parsed.custom };
+  return { id: minimal ? NORMAL_TONE_ID : null, custom: "" };
+}
+
 export function validateBotDraft(draft: BotDraft): FieldErrors {
   const entity = {
     id: crypto.randomUUID(),
@@ -292,43 +325,45 @@ export function BotForm(
     defaultName?: string;
   },
 ): JSX.Element {
-  const [draft, setDraft] = useState<BotDraft>(
-    props.initial ?? {
+  const [draft, setDraft] = useState<BotDraft>(() => {
+    const base = props.initial ?? {
       name: props.defaultName ?? "",
       instructions: "",
       modelProfileId: MODEL_OPTIONS[0]!.id,
       workspaceId: WORKSPACE_OPTIONS[0]!.id,
       toolPolicyId: TOOL_POLICY_OPTIONS[0]!.id,
-    },
-  );
+    };
+    // The tone suffix is the chip's job. The duties box stays the bare text.
+    return { ...base, instructions: stripToneSuffix(base.instructions) };
+  });
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   // 性格单选：一次只有一个性格——preset id 或 custom；再点已选中的即取消。
-  // 创建弹窗预选「正常」。
-  const [selectedTone, setSelectedTone] = useState<string | null>(() =>
-    props.minimal ? NORMAL_TONE_ID : null,
+  // 创建弹窗预选「正常」；编辑弹窗回显已保存的性格。
+  const [selectedTone, setSelectedTone] = useState<string | null>(
+    () => openedTone(props.initial?.instructions ?? "", props.minimal).id,
   );
-  const [customDraft, setCustomDraft] = useState("");
+  const [customDraft, setCustomDraft] = useState(
+    () => openedTone(props.initial?.instructions ?? "", props.minimal).custom,
+  );
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const initialKey = props.initial ? botFormInitialKey(props.initial) : "";
+  const seenInitialKey = useRef(initialKey);
+  const initialRef = useRef(props.initial);
+  initialRef.current = props.initial;
 
-  // Template pre-fill (D17): when the parent hands a new initial object,
-  // adopt it wholesale (the parent owns when this happens) and echo the
-  // stored tone suffix back onto the chip (custom text re-fills the box).
-  // A legacy multi-tone suffix collapses to its first preset.
+  // Template pre-fill (D17): adopt a new initial only when its content changes.
+  // A fresh object with the same fields must not reset an in-progress edit.
   useEffect(() => {
-    if (props.initial) {
-      setDraft(props.initial);
-      const parsed = parseToneSelection(props.initial.instructions);
-      if (parsed.id !== null) {
-        setSelectedTone(parsed.id);
-      } else if (parsed.custom !== null) {
-        setSelectedTone(CUSTOM_TONE_ID);
-        setCustomDraft(parsed.custom);
-      } else {
-        setSelectedTone(props.minimal ? NORMAL_TONE_ID : null);
-      }
-    }
-  }, [props.initial, props.minimal]);
+    if (seenInitialKey.current === initialKey) return;
+    seenInitialKey.current = initialKey;
+    const initial = initialRef.current;
+    if (!initial) return;
+    setDraft({ ...initial, instructions: stripToneSuffix(initial.instructions) });
+    const tone = openedTone(initial.instructions, props.minimal);
+    setSelectedTone(tone.id);
+    setCustomDraft(tone.custom);
+  }, [initialKey, props.minimal]);
 
   const set = (field: keyof BotDraft, value: string): void => {
     setDraft((prev) => ({ ...prev, [field]: value }));
@@ -415,19 +450,6 @@ export function BotForm(
 
       {props.avatarSlot}
 
-      <textarea
-        className="form-role"
-        value={draft.instructions}
-        maxLength={4000}
-        rows={4}
-        placeholder={t("bots.instructionsPlaceholder")}
-        aria-label={t("bots.roleDescription")}
-        aria-invalid={Boolean(fieldErrors.instructions)}
-        onChange={(e) => set("instructions", e.target.value)}
-      />
-      {fieldErrors.instructions && <em className="field-error">{fieldErrors.instructions}</em>}
-      <span className="form-hint">{t("bots.instructionsHint")}</span>
-
       <span className="tone-label">{t("bots.personality")}</span>
       <div className="tone-picker" role="group" aria-label={t("bots.toneSelection")}>
         {(props.minimal
@@ -464,7 +486,18 @@ export function BotForm(
           />
         </div>
       )}
-      <span className="form-hint">{t("bots.toneSingleHint")}</span>
+
+      <textarea
+        className="form-role"
+        value={draft.instructions}
+        maxLength={4000}
+        rows={3}
+        placeholder={t("bots.instructionsPlaceholder")}
+        aria-label={t("bots.roleDescription")}
+        aria-invalid={Boolean(fieldErrors.instructions)}
+        onChange={(e) => set("instructions", e.target.value)}
+      />
+      {fieldErrors.instructions && <em className="field-error">{fieldErrors.instructions}</em>}
 
       {props.skillsSlot}
 

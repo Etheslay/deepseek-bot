@@ -65,6 +65,7 @@ import { GazeAvatar } from "./features/avatars/gaze-avatar.js";
 import {
   avatarColor,
   bubbleInk,
+  toContractAvatar,
   type Avatar as AvatarKind,
 } from "./features/avatars/avatar-meta.js";
 import { ChoiceCard, type ChoiceOption } from "./features/questions/choice-card.js";
@@ -1095,15 +1096,17 @@ export function App(): JSX.Element {
   const submitBotDraft = async (
     draft: BotDraft,
   ): Promise<{ ok: boolean; errorCode?: string }> => {
+    const look = toContractAvatar(avatar);
     if (editingBot) {
-      const result = await updateBotEntity(editingBot.bot.id, draft);
+      const result = await updateBotEntity(editingBot.bot.id, { ...draft, avatar: look });
       if (result.ok) {
+        setUi(editingBot.key, { avatar });
         setModalOpen(false);
         setToast(t("shell.saved"));
       }
       return result;
     }
-    const result = await createBotEntity(draft);
+    const result = await createBotEntity(look === null ? draft : { ...draft, avatar: look });
     if (result.ok && result.key !== undefined) {
       // 众生平等：弹窗不再选分组，新建 bot 一律进未分组（侧栏拖拽仍可整理）。
       setUi(result.key, { avatar, shape, color, group: UNGROUPED });
@@ -1804,7 +1807,6 @@ const logout = (): void => {
             <div className="menu-overlay" onClick={() => setHistoryOpen(false)} />
             <div className="top-popover" role="dialog" aria-label={t("shell.recentSessions")}>
               <div className="popover-title">{t("shell.recentSessions")}</div>
-              <div className="sys-line">{t("shell.oneConversation")}</div>
             </div>
           </>
         )}
@@ -2932,9 +2934,6 @@ const logout = (): void => {
                     </div>
                     <div className="settings-section-title">{t("d24.vaultSection")}</div>
                     <div className="settings-card">
-                      <p className="session-meta vault-note" role="note">
-                        {t("d24.vaultNote")}
-                      </p>
                       <div className="settings-row">
                         <span>{t("d24.createBackup")}</span>
                         <span className="key-input-wrap">
@@ -3274,14 +3273,6 @@ function MessageBubble({
                   </span>
                 );
               })}
-              {/* A4: the image reaches the workspace but not the model — say so
-                  once on the message that carried it, without touching the
-                  model-facing attachment block. */}
-              {msg.attachments.some((file) => file.kind === "image") && (
-                <span className="msg-attachments-hint">
-                  {t("shell.attachmentImageNotVisible")}
-                </span>
-              )}
             </div>
           )}
           {replayCard ? null : isUser ? (

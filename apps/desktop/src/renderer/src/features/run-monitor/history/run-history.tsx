@@ -142,9 +142,6 @@ export function RunHistory(props: {
               )),
           )}
         </ul>
-        <p className="rm-sub">
-          {t("runs.sessionLocatorHint")}
-        </p>
       </section>
 
       {(resumedFrom !== undefined || view.status === "interrupted") && (
@@ -152,13 +149,12 @@ export function RunHistory(props: {
           <h4>{t("runs.interruptionRecovery")}</h4>
           {view.status === "interrupted" && (
             <p className="rm-sub">
-              {t("runs.interruptReason")}{view.interruptedReason ?? t("runs.hostProcessExited")}{t("runs.resumeNote")}
+              {t("runs.interruptReason")}{view.interruptedReason ?? t("runs.hostProcessExited")}
             </p>
           )}
           {view.status === "interrupted" && props.onResume !== undefined && (
             confirming ? (
               <div className="rm-resume-confirm">
-                <p className="rm-sub">{t("runs.resumeConfirmNote")}</p>
                 <button
                   type="button"
                   className="primary-btn"

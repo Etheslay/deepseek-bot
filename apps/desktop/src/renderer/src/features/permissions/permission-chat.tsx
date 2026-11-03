@@ -132,7 +132,6 @@ function ApprovalCard(props: {
         {t("permissions.allowTitle", [botName, capabilities])}
       </p>
       <p className="approval-bot">{botName}</p>
-      <p className="approval-note">{t("permissions.scopeNote", [botName])}</p>
       <pre className="permission-params" aria-label={t("permissions.pendingParamsAria")}>
         {JSON.stringify(preview, null, 2)}
       </pre>

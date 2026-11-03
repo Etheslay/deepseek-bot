@@ -94,7 +94,6 @@ export function EventRuleSettings(): JSX.Element {
     <>
       <div className="settings-section-title">{t("eventrule.sectionTitle")}</div>
       <div className="settings-card" data-testid="event-rule-settings">
-        <p className="settings-soon">{t("eventrule.hint")}</p>
         {bots === null ? (
           <p className={failed ? "form-error" : "settings-soon"} role={failed ? "alert" : "status"}>
             {failed ? t("eventrule.loadFailed") : t("eventrule.loading")}

@@ -375,7 +375,6 @@ function RetentionControls(): JSX.Element {
   return (
     <div className="memory-section">
       <div className="memory-section-title">{t("memory.retentionPolicy")}</div>
-      <div className="memory-policy-hint">{t("memory.retentionHint")}</div>
       <div className="memory-row">
         <input
           className="memory-input"

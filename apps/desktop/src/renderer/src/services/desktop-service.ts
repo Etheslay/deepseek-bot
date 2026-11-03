@@ -8,6 +8,7 @@
  */
 import type {
   ArtifactVersion,
+  Avatar as ContractAvatar,
   Bot,
   BotArtifact,
   BotGroup,
@@ -45,6 +46,11 @@ export type BotDraft = {
   toolPolicyId: string;
   /** v0.5 coordinator role (FR-1): human editor only, never the model. */
   role?: BotRoleDraft;
+  /**
+   * Coloured ball, when the picker maps onto the contract pool.
+   * `null` on update clears a stored ball (the mono bot has no contract value).
+   */
+  avatar?: ContractAvatar | null;
 };
 
 /**

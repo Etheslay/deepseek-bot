@@ -389,7 +389,6 @@ function McpSettings({ connectors }: { connectors: ConnectorRecord[] }): JSX.Ele
   const connector = connectors.find((item) => item.id === serverId) ?? connectors[0];
   return (
     <section aria-label={t("connectors.mcpToolGrants")}>
-      <p>{t("connectors.mcpGrantHint")}</p>
       <label>
         {t("shell.bot")}{" "}
         <CustomSelect

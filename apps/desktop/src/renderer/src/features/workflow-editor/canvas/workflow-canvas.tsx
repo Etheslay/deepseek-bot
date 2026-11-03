@@ -326,9 +326,6 @@ export function EdgeKeyDialog(props: {
               }}
             />
           </label>
-          <p className="wf-dialog-hint">
-            {t("workflow.edgeDialogHint")}
-          </p>
         </div>
         <footer className="modal-foot">
           <button type="button" className="ghost-btn" onClick={props.onCancel}>
