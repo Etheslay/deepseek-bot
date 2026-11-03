@@ -18,10 +18,6 @@ extraResources:
   # the Node >= 24 runtime itself is a D13 packaging item.
   - from: ../../packages/host/dist
     to: host
-  # Local whisper.cpp CLI + ggml model. fetch-whisper.mts fills this directory
-  # before packaging; voice.transcribe reads it and does not download.
-  - from: resources/whisper/dist
-    to: whisper
 # D11 (FR-10): per-user NSIS installer. No admin rights, no HKLM, no system
 # service. User data lives under %APPDATA%\DeepSeekBot (packages/storage
 # layout.ts) and is kept on uninstall by default — documented in RELEASE notes.

@@ -1,17 +1,15 @@
 /**
  * D27 local voice backend.
  *
- * `transcribe` runs the shipped whisper.cpp binary over one bounded WAV
+ * `transcribe` runs the user's whisper.cpp binary over one bounded WAV
  * clip; `speak` reads one bounded text aloud with Windows SAPI through a
  * fixed PowerShell script. Both are trusted desktop paths: the user pressed
  * the button, so there is no capability, no grant, and no model tool. Nothing
  * leaves the machine, the temporary clip is deleted when the run ends, and
  * error messages never quote process output back to the caller.
  *
- * The binary and model default to the bundle fetched at dev/pack time. An
- * explicit boot path (environment or test) replaces that default. A later
- * null config drops an override and returns to the boot paths; it does not
- * turn a shipped engine off. A missing bundle keeps `status` honest.
+ * Paths come from Settings (or an environment seed when no setting is stored).
+ * Null clears them. Empty paths leave transcription unavailable.
  *
  * One local voice job runs at a time — whisper and SAPI are heavy, so calls
  * queue behind each other instead of stacking speech processes. Each job has
@@ -163,12 +161,9 @@ function decodeClipAudio(audioBase64: string): Buffer {
 export function createVoiceService(options: VoiceServiceOptions = {}): VoiceService {
   const transcribeTimeoutMs = options.transcribeTimeoutMs ?? VOICE_TRANSCRIBE_TIMEOUT_MS;
   const speakTimeoutMs = options.speakTimeoutMs ?? VOICE_SPEAK_TIMEOUT_MS;
-  // Boot paths are the shipped bundle or an explicit environment/test path.
-  // voice.config.set may override them; null returns to this boot pair.
-  const bootBin = options.whisperBin;
-  const bootModel = options.whisperModel;
-  let whisperBin = bootBin;
-  let whisperModel = bootModel;
+  // An environment or test seed. voice.config.set replaces it; null clears it.
+  let whisperBin = options.whisperBin;
+  let whisperModel = options.whisperModel;
   let closed = false;
   const active = new Set<AbortController>();
   // One local voice at a time; the queue keeps the machine from stacking
@@ -372,8 +367,8 @@ export function createVoiceService(options: VoiceServiceOptions = {}): VoiceServ
       return { whisperBin: whisperBin ?? null, whisperModel: whisperModel ?? null };
     },
     setConfig(next) {
-      whisperBin = next.whisperBin === null ? bootBin : next.whisperBin;
-      whisperModel = next.whisperModel === null ? bootModel : next.whisperModel;
+      whisperBin = next.whisperBin ?? undefined;
+      whisperModel = next.whisperModel ?? undefined;
     },
     transcribe,
     speak,

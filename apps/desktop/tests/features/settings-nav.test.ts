@@ -4,7 +4,7 @@
  *
  * An earlier pass grouped them under three small uppercase labels; the labels
  * were visual noise, so this pins the flat list — no group text. Voice is
- * the transcription-language section, not a path picker.
+ * the transcription-language and whisper-path section.
  */
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";

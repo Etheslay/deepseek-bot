@@ -42,6 +42,11 @@ type DesktopBridge = {
       | { ok: false; code: "format" | "size" | "empty" | "encoding" | "cancelled" | "read" }
     >;
   };
+  voice: {
+    pickFile: (
+      kind: "bin" | "model",
+    ) => Promise<{ ok: true; path: string } | { ok: false; code: "cancelled" }>;
+  };
   host: {
     call: (method: string, payload: unknown) => Promise<unknown>;
     onMissed: (listener: (notices: unknown[]) => void) => () => void;

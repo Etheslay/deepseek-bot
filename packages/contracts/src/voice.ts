@@ -71,10 +71,9 @@ export const VoiceSpeakResultSchema = z
 export type VoiceSpeakResult = z.infer<typeof VoiceSpeakResultSchema>;
 
 /**
- * Effective local whisper paths. Null means the Host has neither a shipped
- * bundle nor an override. The desktop no longer asks the user to paste paths;
- * `voice.config.set` remains for a stored override, and null clears that
- * override back to the boot paths.
+ * Effective local whisper paths. Null means that side is not configured.
+ * The user sets both in Settings → Voice. An environment seed applies only
+ * when no stored value exists; a stored null stays empty.
  */
 export const VoiceConfigSchema = z
   .object({
@@ -119,9 +118,8 @@ export const VOICE_METHODS = {
     response: VoiceSpeakResultSchema,
   },
   /**
-   * Effective whisper paths. A non-empty stored path overrides the shipped
-   * bundle; null clears that override and returns to the boot paths. The
-   * model never reads or writes these paths.
+   * Effective whisper paths. A stored string is the path transcription uses.
+   * Null clears that side. The model never reads or writes these paths.
    */
   "voice.config.get": {
     request: z.object({}).strict(),

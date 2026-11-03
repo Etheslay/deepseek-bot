@@ -350,15 +350,16 @@ describe("voice config", () => {
     });
   });
 
-  it("returns to the boot paths when an override is cleared", () => {
+  it("clears a configured pair when the user sets both paths to null", () => {
     const boot = makeConfiguredFiles();
-    const custom = makeConfiguredFiles();
     const service = createVoiceService({ whisperBin: boot.bin, whisperModel: boot.model });
-    service.setConfig({ whisperBin: custom.bin, whisperModel: custom.model });
     expect(service.status().transcribe.available).toBe(true);
     service.setConfig({ whisperBin: null, whisperModel: null });
-    expect(service.config()).toEqual({ whisperBin: boot.bin, whisperModel: boot.model });
-    expect(service.status().transcribe).toEqual({ available: true, reason: null });
+    expect(service.config()).toEqual({ whisperBin: null, whisperModel: null });
+    expect(service.status().transcribe).toEqual({
+      available: false,
+      reason: "whisper.cpp binary is not configured",
+    });
   });
 
   it("persists the config in the settings KV and restores it on reopen", async () => {
@@ -402,7 +403,7 @@ describe("voice config", () => {
       whisperBin: userBin,
       whisperModel: userModel,
     });
-    // Clearing drops the override. A later boot keeps the shipped or environment paths.
+    // Clearing writes null. A later boot keeps that empty configuration.
     await second.handleMethod("voice.config.set", { whisperBin: null, whisperModel: null });
     await second.shutdown();
     hosts.pop();
@@ -413,12 +414,14 @@ describe("voice config", () => {
     });
     hosts.push(third);
     expect(await third.handleMethod("voice.config.get", {})).toEqual({
-      whisperBin: seedBin,
-      whisperModel: seedModel,
+      whisperBin: null,
+      whisperModel: null,
     });
     expect(
       (await third.handleMethod("voice.status", {})) as { transcribe: { available: boolean } },
-    ).toMatchObject({ transcribe: { available: true } });
+    ).toMatchObject({
+      transcribe: { available: false, reason: "whisper.cpp binary is not configured" },
+    });
   });
 });
 

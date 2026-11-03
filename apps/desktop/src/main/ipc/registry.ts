@@ -24,6 +24,7 @@ import {
   type TraySyncPayload,
 } from "../../shared/system-integration.js";
 import type { NotificationOutcome } from "../notifications.js";
+import { assertValidVoicePickKind, type VoicePickResult } from "../../shared/voice-pick.js";
 import {
   assertAuthorizedSender,
   type SenderGuard,
@@ -43,6 +44,8 @@ export type IpcHandlers = {
   saveKey: (key: unknown) => Promise<{ configured: boolean }>;
   /** Open the knowledge file dialog. The caller cannot pass a path. */
   importKnowledge: () => Promise<import("../../shared/knowledge-import.js").KnowledgeImportResult>;
+  /** Open the whisper file dialog. The caller names the kind, not a path. */
+  pickVoiceFile: (kind: unknown) => Promise<VoicePickResult>;
   /** D24: check GitHub Releases for a newer version. */
   checkUpdates: () => Promise<UpdateStatus>;
   /** D24: download the update and restart into the installer. */
@@ -146,6 +149,12 @@ export function registerIpcHandlers(
     IPC_CHANNELS.KNOWLEDGE_IMPORT,
     wrap(IPC_CHANNELS.KNOWLEDGE_IMPORT, () => handlers.importKnowledge()),
   );
+  ipcMain.handle(IPC_CHANNELS.VOICE_PICK_FILE, (event: IpcMainInvokeEvent, kind: unknown) => {
+    assertAllowedChannel(IPC_CHANNELS.VOICE_PICK_FILE);
+    assertAuthorizedSender(event, isAuthorized);
+    assertValidVoicePickKind(kind);
+    return handlers.pickVoiceFile(kind);
+  });
   ipcMain.handle(
     IPC_CHANNELS.UPDATES_CHECK,
     wrap(IPC_CHANNELS.UPDATES_CHECK, () => handlers.checkUpdates()),

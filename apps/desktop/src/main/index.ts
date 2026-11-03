@@ -27,7 +27,8 @@ import {
 import { DATA_ROOT_DIR_NAME, HOST_EVENT_CHAT_STREAM, HOST_EVENT_MISSED, SYSTEM_EVENT_WINDOW_FOCUS } from "../shared/ipc-channels.js";
 import { pickKnowledgeFile } from "./knowledge-import.js";
 import { rendererPermissionAllowed } from "./session-permissions.js";
-import { whisperEnvFromBundles } from "./whisper-bundle.js";
+import { pickVoiceFile } from "./voice-pick.js";
+import { assertValidVoicePickKind } from "../shared/voice-pick.js";
 import { listBackups, type RestoreOutcome } from "./backups.js";
 import {
   applyHardwareAccelerationPreference,
@@ -249,6 +250,10 @@ function registerShellIpc(win: BrowserWindow): void {
       }),
       saveKey: (key) => saveApiKey(key),
       importKnowledge: () => pickKnowledgeFile(win),
+      pickVoiceFile: (kind) => {
+        assertValidVoicePickKind(kind);
+        return pickVoiceFile(win, kind);
+      },
       checkUpdates: () => checkUpdates(),
       downloadAndInstallUpdate: () => downloadAndInstallUpdate(),
       setLanguage: (preference) => setMainLanguagePreference(preference),
@@ -412,17 +417,12 @@ function startHost(): void {
     entryPath: hostEntryCandidates.find((candidate) => existsSync(candidate)) ?? hostEntryCandidates[0]!,
     dataRoot: resolveDataRoot(),
     decryptCredential,
-    childEnv: (parent) => ({
-      ...(existsSync(devHarnessModules)
+    childEnv: (parent) =>
+      existsSync(devHarnessModules)
         ? {
             NODE_PATH: [devHarnessModules, parent["NODE_PATH"]].filter(Boolean).join(delimiter),
           }
-        : {}),
-      ...whisperEnvFromBundles(
-        [join(process.resourcesPath, "whisper"), join(app.getAppPath(), "resources", "whisper", "dist")],
-        parent,
-      ),
-    }),
+        : {},
   });
   hostClient.onMissed((notices) => {
     if (mainWindow !== null && !mainWindow.isDestroyed()) {

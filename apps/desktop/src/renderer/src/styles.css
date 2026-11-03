@@ -7715,6 +7715,16 @@ select:focus-visible {
   line-height: 1.35;
 }
 
+.voice-fields .key-input {
+  width: auto;
+  flex: 1 1 10rem;
+  min-width: 0;
+}
+
+.voice-fields .pill-btn {
+  flex: 0 0 auto;
+}
+
 .settings-row-stack {
   display: grid;
   gap: 8px;

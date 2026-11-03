@@ -3,6 +3,7 @@ import type { VoiceStatus } from "@deepseek-bot/contracts";
 import {
   speakButton,
   transcribeButton,
+  transcribeProblem,
   voiceFailureKey,
 } from "../../src/renderer/src/features/voice/voice-ui.js";
 
@@ -65,6 +66,23 @@ describe("speakButton", () => {
     const button = speakButton(neitherReady, false);
     expect(button.disabled).toBe(true);
     expect(button.reasonKey).toBe("voice.speakUnavailable");
+  });
+});
+
+describe("transcribeProblem", () => {
+  it("maps an empty configuration to the settings messages", () => {
+    expect(
+      transcribeProblem({
+        transcribe: { available: false, reason: "whisper.cpp binary is not configured" },
+        speak: { available: false, reason: null },
+      }),
+    ).toBe("binRequired");
+    expect(
+      transcribeProblem({
+        transcribe: { available: false, reason: "whisper.cpp model is not configured" },
+        speak: { available: false, reason: null },
+      }),
+    ).toBe("modelRequired");
   });
 });
 

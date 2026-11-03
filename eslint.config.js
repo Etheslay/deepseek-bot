@@ -48,19 +48,6 @@ export default tseslint.config(
     },
   },
   {
-    files: ["apps/desktop/scripts/**/*.mts"],
-    languageOptions: {
-      globals: {
-        AbortSignal: "readonly",
-        Buffer: "readonly",
-        console: "readonly",
-        fetch: "readonly",
-        process: "readonly",
-        URL: "readonly",
-      },
-    },
-  },
-  {
     files: ["packages/exec-daemon/assets/**/*.cjs", "packages/exec-daemon/scripts/**/*.mjs"],
     languageOptions: {
       globals: {

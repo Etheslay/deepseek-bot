@@ -19,7 +19,6 @@ import type { ChatStreamNotice } from "./chat.js";
 import type { ScheduleMissNotice } from "@deepseek-bot/runtime";
 import { createHost } from "./host.js";
 import { startStdioHost } from "./stdio.js";
-import { bundledWhisper } from "./whisper-bundle.js";
 
 function configuredPath(value: string | undefined): string | undefined {
   if (value === undefined || value.length === 0) return undefined;
@@ -91,11 +90,10 @@ async function serveStartupFailure(error: unknown): Promise<void> {
   }
 }
 
-/** Shipped bundle, unless an explicit environment path replaces one side. */
+/** Environment seed only. Empty or absent paths stay unconfigured. */
 function whisperBoot(): { voice: { whisperBin?: string; whisperModel?: string } } | Record<string, never> {
-  const bundled = bundledWhisper(import.meta.url);
-  const whisperBin = configuredPath(process.env.DEEPSEEK_BOT_WHISPER_BIN) ?? bundled.whisperBin;
-  const whisperModel = configuredPath(process.env.DEEPSEEK_BOT_WHISPER_MODEL) ?? bundled.whisperModel;
+  const whisperBin = configuredPath(process.env.DEEPSEEK_BOT_WHISPER_BIN);
+  const whisperModel = configuredPath(process.env.DEEPSEEK_BOT_WHISPER_MODEL);
   if (whisperBin === undefined && whisperModel === undefined) return {};
   return {
     voice: {

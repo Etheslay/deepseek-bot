@@ -22,6 +22,7 @@ import type {
   NotificationRequest,
   TraySyncPayload,
 } from "../shared/system-integration.js";
+import type { VoicePickKind, VoicePickResult } from "../shared/voice-pick.js";
 
 export type HostMissedNotice = {
   scheduleId: string;
@@ -85,6 +86,13 @@ export type DesktopBridge = {
   };
   knowledge: {
     importFile: () => Promise<import("../shared/knowledge-import.js").KnowledgeImportResult>;
+  };
+  /**
+   * Voice settings: local file dialogs for the whisper paths. The only
+   * argument is which kind of file; the picked path comes back, never in.
+   */
+  voice: {
+    pickFile: (kind: VoicePickKind) => Promise<VoicePickResult>;
   };
   /** D24 leftover: backup summaries and the hardware-acceleration shell pref. */
   backups: {
@@ -153,6 +161,9 @@ const api: DesktopBridge = {
   },
   knowledge: {
     importFile: () => ipcRenderer.invoke(IPC_CHANNELS.KNOWLEDGE_IMPORT),
+  },
+  voice: {
+    pickFile: (kind) => ipcRenderer.invoke(IPC_CHANNELS.VOICE_PICK_FILE, kind),
   },
   backups: {
     list: () => ipcRenderer.invoke(IPC_CHANNELS.BACKUPS_LIST),
