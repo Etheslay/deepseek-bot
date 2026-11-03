@@ -225,7 +225,7 @@ describe("createHost", () => {
     expect(finished.finishedAt).not.toBeNull();
     const usage = host.db.raw.prepare("SELECT bot_id, model, session_id, input_tokens, output_tokens, source FROM usage_events WHERE bot_id = ?").all(bot.id) as Array<{ bot_id: string; model: string | null; session_id: string; input_tokens: number; output_tokens: number; source: string }>;
     expect(usage).toHaveLength(1);
-    expect(usage[0]).toMatchObject({ bot_id: bot.id, model: null, source: "estimated" });
+    expect(usage[0]).toMatchObject({ bot_id: bot.id, model: "deepseek-chat", source: "estimated" });
     expect(usage[0]?.session_id).toBeTruthy();
     expect(usage[0]?.input_tokens).toBeGreaterThan(0);
     expect(usage[0]?.output_tokens).toBeGreaterThan(0);

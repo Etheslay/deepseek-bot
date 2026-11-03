@@ -98,11 +98,24 @@ describe("summarizeUsage", () => {
     expect(summary.byModel[0]).toMatchObject({ inputTokens: 500, outputTokens: 200, turns: 1 });
   });
 
-  it("names a model the harness did not report as unknown", () => {
+  it("names a model the harness did not report as unknown when no bot profile can", () => {
     const { db } = setup();
     recordUsage(db, row({ model: null }));
     const summary = summarizeUsage(db, { sinceIso: "2026-10-01T00:00:00.000Z", dayOf });
     expect(summary.byModel[0]?.model).toBe("unknown");
+  });
+
+  it("attributes an unnamed turn to the bot's model profile", () => {
+    const { db, profile, workspaceId } = setup();
+    const bot = makeBot(profile, workspaceId);
+    createBot(db, { bot });
+    recordUsage(db, row({ botId: bot.id, model: null, inputTokens: 80, outputTokens: 20 }));
+    recordUsage(db, row({ botId: bot.id, model: "unknown", inputTokens: 10, outputTokens: 5 }));
+    recordUsage(db, row({ botId: bot.id, model: "deepseek-reasoner", inputTokens: 4, outputTokens: 1 }));
+
+    const summary = summarizeUsage(db, { sinceIso: "2026-10-01T00:00:00.000Z", dayOf });
+    expect(summary.byModel.map((entry) => entry.model)).toEqual(["deepseek-chat", "deepseek-reasoner"]);
+    expect(summary.byModel[0]).toMatchObject({ inputTokens: 90, outputTokens: 25, turns: 2 });
   });
 
   it("buckets days with the caller's local-day function, ascending", () => {
