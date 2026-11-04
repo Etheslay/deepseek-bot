@@ -6257,7 +6257,8 @@ select option {
   margin: 0.5em 0;
   padding: 0.1em 0.8em;
   border-left: 3px solid var(--border);
-  color: var(--muted);
+  /* Quoted replies are message text. Muted gray made them look dim. */
+  color: inherit;
 }
 
 .chat-md a { color: var(--md-link, #6ea8ff); text-decoration: none; }
@@ -8575,6 +8576,13 @@ select:focus-visible {
   background: var(--bubble);
   border-radius: 20px;
   padding: 11px 15px;
+}
+
+/* Dark chat copy is full white. --text (#ececf1) read as gray on these bubbles. */
+:root:not([data-theme="light"]) .chat > .msg-row.bot .msg-bubble,
+:root:not([data-theme="light"]) .exchange-bubble,
+:root:not([data-theme="light"]) .pair-turn .msg-bubble {
+  color: #ffffff;
 }
 
 .chat-page {
