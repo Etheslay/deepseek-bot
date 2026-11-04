@@ -306,8 +306,11 @@ describe("app.dispatch_task capability (U5 contract half)", () => {
     expect(isPermissionModeAllowed("app.dispatch_task", "deny")).toBe(true);
   });
 
-  it("keeps app.start_run locked to ask (Q1 unchanged)", () => {
+  it("defaults app.start_run to allow and still refuses a lasting grant", () => {
+    expect(defaultPermissionMode("app.start_run")).toBe("allow");
     expect(requiresPerActionApproval("app.start_run")).toBe(true);
-    expect(isPermissionModeAllowed("app.start_run", "allow")).toBe(false);
+    expect(isPermissionModeAllowed("app.start_run", "allow")).toBe(true);
+    expect(isPermissionModeAllowed("app.start_run", "ask")).toBe(true);
+    expect(isPermissionModeAllowed("app.start_run", "deny")).toBe(true);
   });
 });

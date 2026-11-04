@@ -100,6 +100,7 @@ async function fixture(modelEndpoint?: string) {
       : {}),
   });
   hosts.push(host);
+  await host.handleMethod("permission.policy.set", { capability: "mcp.call", mode: "ask" });
   async function newBot(name: string) {
     return (await host.handleMethod("bot.create", {
       name,

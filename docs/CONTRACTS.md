@@ -73,7 +73,7 @@ v0.14 新增聊天视觉输入（B3''，TASK_B3P_VISION_INPUT.md，上游验证�
 
 v0.5 的 MCP 控制方法只供受信桌面调用，不能注册为模型工具。`mcp-http` 仅使用本机 HTTP 回环端点，允许 `/mcp` 等路径。`mcp-stdio` 只保存本机命令和参数数组，不保存 shell 字符串。凭据列仍是 `cred:<uuid>`；登记方法不解析密文。发现和调用时 Host 才通过既有凭据通道注入，HTTP 使用 Bearer，stdio 写入指定环境变量，不进入参数数组。端点、命令和重定向检查由 Host 实现承担。`connector.register`、`connector.setEndpoint` 和 `connector.setCommand` 不因配置而自动调用服务。
 
-MCP 实际调用使用独立能力 `mcp.call`，默认 `ask`，禁止全局 `allow` 与 session/permanent 授权；只允许绑定精确动作、代次与一次消费的 once 审批。`deny` 可全面禁用。既有 `connector.invoke` 策略或授权不能替代该审批；`ToolPolicy.mcp` 的服务器/工具白名单也是独立门槛，不能代替人类逐次批准。此规则本片落实为能力和授权 schema，Host 执行检查与错误路径将在后续实现片完成。
+MCP 实际调用使用独立能力 `mcp.call`，默认 `allow`。策略改回 `ask` 时禁止 session/permanent 授权，只允许绑定精确动作、代次与一次消费的 once 审批。`deny` 可全面禁用。既有 `connector.invoke` 策略或授权不能替代该审批；`ToolPolicy.mcp` 的服务器/工具白名单也是独立门槛，不能代替人类逐次批准。此规则本片落实为能力和授权 schema，Host 执行检查与错误路径将在后续实现片完成。
 
 | 方法组 | 语义 | 幂等/错误重点 |
 | --- | --- | --- |
@@ -95,7 +95,7 @@ MCP 实际调用使用独立能力 `mcp.call`，默认 `ask`，禁止全局 `all
 | settings.testConnection / update | 接入与设置 | Key 写入与测试位于后端；前端只得到是否已配置。`update` 的 patch 支持 `ui.locale`（`"zh" \| "en"`）：桌面把解析后的界面语言推给 Host（启动与切换时各一次），Host 存入 settings KV 并即时生效——任务派发通知、交接框架（`【上游交接 · …】`）、画布冲突与凭据错误、ask_user 兜底选项等 Host 侧文案随该语言输出；缺省与非法值回落 zh。语言切换只影响之后新写入的行，历史回放保持原样 |
 | ui.state.get / set | v0.13 界面态快照（受信桌面） | `get` 无参 → `{state}`（`UiStateSchema`：botOrder/groupOrder 去重 UUID 列表 ≤1000、selectedBotId/selectedGroupId 可空；v0.14 起可选 collapsedGroupIds，0.13 写方省略仍被接受）；`set` 请求 `{state}` 整体校验后整快照落 settings KV 行 `ui.state.v1` 并回显，末写胜出。缺失/损坏行降级空态。只存稳定实体 ID，不存任意载荷、不存密钥 |
 | data.backup / restore / describe | 数据管理 | restore 必须停止所有运行、校验备份、备份旧数据 |
-| permission.policy.list / set | v0.3 人类读取/修改全局能力策略 | start_run 仅 ask；shell/screen 不能 allow；deny 覆盖全部授权 |
+| permission.policy.list / set | v0.3 人类读取/修改全局能力策略 | 除 dispatch（ask）与 screen/device（deny，且不能 allow）外默认 allow；已保存的 deny 优先于新默认 |
 | permission.grant.list / revoke | v0.3 人类查询/撤销授权 | botId 可筛选；默认仅有效记录，最多 100；撤销已存在授权幂等 |
 | permission.grant.issue | 人类为当前 bot 授予一项能力 | 请求只有 botId、capability、scope（session 或 permanent）。会话由 Host 绑定 `chat:<botId>`、当前代次、默认 5 次 / 120 分钟；永久不带会话、次数或期限。逐次能力与非 ask 策略拒绝。仍有效的同一授权再次发放时返回原记录。协议仍为 0.7 |
 | permission.approval.list / decide | v0.3 人类读取精确动作/批准或拒绝 | 列表默认 pending；决定必须匹配 approvalId、expectedActionDigest、代次、期限；scope 默认 once，session 可指定 maxUses/ttlMinutes；一次消费 |

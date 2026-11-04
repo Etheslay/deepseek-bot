@@ -263,6 +263,8 @@ async function ingressSetup() {
   const root = mkdtemp();
   const host = await createHost({ dataRoot: root, resolveApiKey: async () => "unused" });
   ingressHosts.push(host);
+  await host.handleMethod("permission.policy.set", { capability: "fs.write", mode: "ask" });
+  await host.handleMethod("permission.policy.set", { capability: "fs.read", mode: "ask" });
   const bot = (await host.handleMethod("bot.create", {
     name: "attacher",
     instructions: "read attachments",

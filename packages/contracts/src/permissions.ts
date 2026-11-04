@@ -31,22 +31,39 @@ export type PermissionMode = z.infer<typeof PermissionModeSchema>;
 export const GrantScopeSchema = z.enum(["policy", "once", "session", "permanent"]);
 export type GrantScope = z.infer<typeof GrantScopeSchema>;
 
+/**
+ * Personal-agent defaults. Most capabilities are allow. The main settings
+ * page only edits the ones that stay ask or off:
+ * - `app.dispatch_task` messages another bot, so it stays ask
+ * - `device.action` and `screen.capture` stay off until a person sets ask
+ *
+ * A stored policy row still wins over these defaults, including an explicit deny.
+ */
+const DEFAULT_OFF = new Set<CapabilityId>(["device.action", "screen.capture"]);
+
 export function defaultPermissionMode(capability: CapabilityId): PermissionMode {
-  if (
-    capability === "app.read" ||
-    capability === "interaction.ask_user" ||
-    capability === "memory.read"
-  )
-    return "allow";
-  return capability === "screen.capture" || capability === "device.action" ? "deny" : "ask";
+  if (DEFAULT_OFF.has(capability)) return "deny";
+  if (capability === "app.dispatch_task") return "ask";
+  return "allow";
 }
 
 /**
- * Per-action approval locks. `app.start_run` stays locked to "ask" (v1
- * decision, TASK_MANAGER_ORCHESTRATION.md Q1); `app.dispatch_task` is
- * deliberately NOT on this list: one dispatch costs one chat turn — far
- * below one workflow run — the executor's own high-risk tools still carry
- * their own policy, so once/session/permanent grants stay meaningful.
+ * The only capabilities the main permissions page shows. Order is the
+ * settings surface, not the registry order. Every other capability defaults
+ * to allow and is not listed there; the policy engine still evaluates it.
+ */
+export const SETTINGS_SURFACE_CAPABILITIES = [
+  "app.dispatch_task",
+  "device.action",
+  "screen.capture",
+] as const satisfies readonly CapabilityId[];
+
+/**
+ * Per-action approval locks. These capabilities can still default to allow.
+ * When a stored policy is ask, a grant is once-only: no session or permanent
+ * grant. `app.dispatch_task` is deliberately NOT on this list: one dispatch
+ * costs one chat turn, so once/session/permanent grants stay meaningful.
+ * Screen capture and device input also cannot be set to allow.
  */
 export function requiresPerActionApproval(capability: CapabilityId): boolean {
   return (
@@ -59,8 +76,8 @@ export function requiresPerActionApproval(capability: CapabilityId): boolean {
 }
 
 export function isPermissionModeAllowed(capability: CapabilityId, mode: PermissionMode): boolean {
-  if (capability === "app.start_run") return mode === "ask";
-  return !requiresPerActionApproval(capability) || mode !== "allow";
+  if (capability === "screen.capture" || capability === "device.action") return mode !== "allow";
+  return true;
 }
 
 export const CapabilityPolicySchema = z

@@ -206,6 +206,7 @@ describe("chat web_search", () => {
   it("waits for the D16 search grant before contacting SearXNG", async () => {
     const { endpoint, requests } = await searchEndpoint();
     const { host, request, sessionId } = await setup(endpoint);
+    await host.handleMethod("permission.policy.set", { capability: "network.search", mode: "ask" });
     const pending = request("/web-search/call", {
       sessionId,
       callId: randomUUID(),

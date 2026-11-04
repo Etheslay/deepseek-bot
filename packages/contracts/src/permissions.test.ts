@@ -8,7 +8,9 @@ import {
   PermissionGrantIssueRequestSchema,
   PermissionGrantSchema,
   defaultPermissionMode,
+  isPermissionModeAllowed,
   requiresPerActionApproval,
+  SETTINGS_SURFACE_CAPABILITIES,
 } from "./index.js";
 
 describe("D16 human control methods", () => {
@@ -37,32 +39,45 @@ const sessionGrant = {
 };
 
 describe("permission schemas", () => {
-  it("gives safe defaults and cannot silently allow per-action capabilities", () => {
+  it("defaults a personal agent to allow except messaging, device input, and screen capture", () => {
     expect(new Set(CAPABILITY_IDS).size).toBe(CAPABILITY_IDS.length);
-    expect(defaultPermissionMode("app.read")).toBe("allow");
-    expect(defaultPermissionMode("interaction.ask_user")).toBe("allow");
-    expect(defaultPermissionMode("memory.read")).toBe("allow");
-    expect(defaultPermissionMode("memory.write")).toBe("ask");
-    expect(defaultPermissionMode("app.create_bot")).toBe("ask");
+    expect(defaultPermissionMode("app.dispatch_task")).toBe("ask");
     expect(defaultPermissionMode("screen.capture")).toBe("deny");
     expect(defaultPermissionMode("device.action")).toBe("deny");
-    expect(requiresPerActionApproval("app.start_run")).toBe(true);
-    expect(requiresPerActionApproval("device.action")).toBe(true);
-    for (const capability of ["app.start_run", "exec.shell", "screen.capture", "device.action"]) {
-      expect(CapabilityPolicySchema.safeParse({ capability, mode: "allow" }).success).toBe(false);
+    expect(SETTINGS_SURFACE_CAPABILITIES).toEqual([
+      "app.dispatch_task",
+      "device.action",
+      "screen.capture",
+    ]);
+    for (const capability of CAPABILITY_IDS) {
+      const mode = defaultPermissionMode(capability);
+      if (
+        capability === "app.dispatch_task" ||
+        capability === "device.action" ||
+        capability === "screen.capture"
+      ) {
+        expect(mode).not.toBe("allow");
+        expect(SETTINGS_SURFACE_CAPABILITIES).toContain(capability);
+      } else {
+        expect(mode).toBe("allow");
+        expect(isPermissionModeAllowed(capability, "allow")).toBe(true);
+        expect(isPermissionModeAllowed(capability, "deny")).toBe(true);
+      }
     }
-    expect(
-      CapabilityPolicySchema.safeParse({ capability: "app.start_run", mode: "deny" }).success,
-    ).toBe(false);
-    expect(
-      CapabilityPolicySchema.safeParse({ capability: "screen.capture", mode: "ask" }).success,
-    ).toBe(true);
-    expect(
-      CapabilityPolicySchema.safeParse({ capability: "device.action", mode: "ask" }).success,
-    ).toBe(true);
-    expect(
-      CapabilityPolicySchema.safeParse({ capability: "device.action", mode: "deny" }).success,
-    ).toBe(true);
+    expect(requiresPerActionApproval("app.start_run")).toBe(true);
+    expect(requiresPerActionApproval("exec.shell")).toBe(true);
+    expect(requiresPerActionApproval("mcp.call")).toBe(true);
+    expect(requiresPerActionApproval("device.action")).toBe(true);
+    expect(requiresPerActionApproval("app.dispatch_task")).toBe(false);
+    for (const capability of ["app.start_run", "exec.shell", "mcp.call", "app.create_bot"]) {
+      expect(CapabilityPolicySchema.safeParse({ capability, mode: "allow" }).success).toBe(true);
+      expect(CapabilityPolicySchema.safeParse({ capability, mode: "deny" }).success).toBe(true);
+    }
+    for (const capability of ["screen.capture", "device.action"] as const) {
+      expect(CapabilityPolicySchema.safeParse({ capability, mode: "allow" }).success).toBe(false);
+      expect(CapabilityPolicySchema.safeParse({ capability, mode: "ask" }).success).toBe(true);
+      expect(CapabilityPolicySchema.safeParse({ capability, mode: "deny" }).success).toBe(true);
+    }
     expect(CapabilityPolicySchema.safeParse({ capability: "unknown", mode: "allow" }).success).toBe(
       false,
     );

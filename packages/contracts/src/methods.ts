@@ -759,7 +759,8 @@ export const METHOD_CONTRACTS = {
   /**
    * Stage one chunk of a chat attachment, then import it through the tool
    * gateway once every chunk is present. The gateway call is `import_attachment`
-   * (`fs.write`): default ask, so a grant or an approval is required before
+   * (`fs.write`): default allow. A stored deny still blocks the write, and a
+   * stored ask still requires a grant or an approval before
    * any workspace write. `data` is the chunk only; the approval preview stores
    * the name, media type, size and checksum.
    */

@@ -116,6 +116,7 @@ describe("real Harness application tools", () => {
       childEnv: (parent) => ({ ...parent, DEEPSEEK_BASE_URL: provider.endpoint }),
     });
     cleanup.push(() => host.shutdown());
+    await host.handleMethod("permission.policy.set", { capability: "app.create_group", mode: "ask" });
     const bot = (await host.handleMethod("bot.create", {
       name: "local integration bot",
       instructions: "Use create_group to create the requested group, then report its result.",

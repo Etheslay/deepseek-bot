@@ -43,7 +43,7 @@ const CAPABILITIES: Readonly<Record<string, readonly CapabilityId[]>> = {
   knowledge_search: ["memory.read"],
   // v0.7 manager orchestration: workflow creation rides the existing
   // app.create_workflow capability; dispatching gets its own capability
-  // (default ask, permanent grants allowed — see PERMISSIONS.md §8);
+  // (default ask; other capabilities default to allow — see PERMISSIONS.md);
   // list_tasks is read-only (app.read, allow by default).
   save_workflow: ["app.create_workflow"],
   dispatch_task: ["app.dispatch_task"],
@@ -54,10 +54,10 @@ const CAPABILITIES: Readonly<Record<string, readonly CapabilityId[]>> = {
   device_action: ["device.action"],
   device_input: ["device.action"],
   // D26 closure: chat attachment reads ride the same D08/D16 checkpoint as
-  // native filesystem reads; policy defaults to ask, audit records the path.
+  // native filesystem reads; policy defaults to allow, audit records the path.
   read_workspace_file: ["fs.read"],
   // D26 gateway: importing a chat attachment writes the bot workspace;
-  // reading it back is the model `read` tool. Both default to ask.
+  // reading it back is the model `read` tool. Both default to allow.
   import_attachment: ["fs.write"],
   read: ["fs.read"],
   // G3: native harness tool calls inside a chat turn gate on the same
