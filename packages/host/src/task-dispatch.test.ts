@@ -118,6 +118,14 @@ async function hostWithGroup(
         archivedAt: null,
       },
     }).bot.id;
+  if (scenario === "app-tool") {
+    // The fake harness calls create_group. That capability defaults to allow;
+    // these tests still need the executor's own approval card.
+    await host.handleMethod("permission.policy.set", {
+      capability: "app.create_group",
+      mode: "ask",
+    });
+  }
   return {
     host,
     coordinator: seed("manager", groupA, "coordinator"),

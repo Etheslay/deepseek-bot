@@ -17,24 +17,24 @@
 | capability | 动作 | 风险 | 默认策略 |
 | --- | --- | --- | --- |
 | `app.read` | 读取 bot/分组/工作流/运行现状 | 低 | 始终允许 |
-| `app.create_group` | 创建分组 | 中 | 每次询问 |
-| `app.create_bot` | 创建 bot（含指令与工作目录） | 中 | 每次询问 |
-| `app.update_bot` | 修改 bot | 中 | 每次询问 |
-| `app.create_workflow` | 创建工作流与节点/连线 | 中 | 每次询问 |
-| `app.start_run` | 启动运行（消耗 API 预算） | 高 | 每次询问（不可改为始终允许） |
-| `app.cancel_run` | 取消运行 | 中 | 每次询问 |
-| `app.dispatch_task` | v0.5：协调者向同组另一 bot 派发一段指令（触发执行者的一个聊天回合） | 中 | 每次询问；允许 once/session/permanent 授权（一次派发 = 一个聊天回合的成本，上限远小于一次工作流运行；执行者自身的高危工具仍受其各自策略约束。与 `app.start_run` 的差异：start_run 是整图多节点预算消耗且不可收敛，故锁定 ask；dispatch 的消耗有单回合上界且审批卡展示任务原文。接力链单卡覆盖全部预声明跳，但每跳执行前重验授权，撤销/降档立即停链） |
-| `app.revoke_creation` | 撤销创建批次 | 中 | 每次询问 |
+| `app.create_group` | 创建分组 | 中 | 始终允许 |
+| `app.create_bot` | 创建 bot（含指令与工作目录） | 中 | 始终允许 |
+| `app.update_bot` | 修改 bot | 中 | 始终允许 |
+| `app.create_workflow` | 创建工作流与节点/连线 | 中 | 始终允许 |
+| `app.start_run` | 启动运行（消耗 API 预算） | 高 | 始终允许；策略改回询问时只接受单次审批 |
+| `app.cancel_run` | 取消运行 | 中 | 始终允许 |
+| `app.dispatch_task` | v0.5：协调者向同组另一 bot 派发一段指令（触发执行者的一个聊天回合） | 中 | 每次询问；允许 once/session/permanent 授权（一次派发 = 一个聊天回合的成本，上限远小于一次工作流运行；执行者自身的高危工具仍受其各自策略约束。审批卡展示任务原文。接力链单卡覆盖全部预声明跳，但每跳执行前重验授权，撤销/降档立即停链） |
+| `app.revoke_creation` | 撤销创建批次 | 中 | 始终允许 |
 | `interaction.ask_user` | 等待人类回答 | 低 | 始终允许；回答不授予权限 |
-| `fs.read` / `fs.write` | 工作目录文件读写 | 中 | D08 路径策略 + 审批 |
-| `exec.shell` | 执行本地命令 | 高 | 每次询问 |
+| `fs.read` / `fs.write` | 工作目录文件读写 | 中 | 始终允许，仍受 D08 路径策略约束；已保存的拒绝优先 |
+| `exec.shell` | 执行本地命令 | 高 | 始终允许；策略改回询问时只接受单次审批 |
 | `screen.capture` | 窗口截图 / OCR | 高 | 从不允许（需显式开启） |
 | `device.action` | 接受一次指针或按键动作；`device_input` 在另一次审批后执行一次有界输入 | 高 | 从不允许（需显式开启）；`device.action.request` 接受后只返回 id 与时间并留下一条本地记录；`device.action.input` 才调用 exec daemon |
-| `connector.invoke` | 调用 Stable Diffusion 连接器 | 中 | 每次询问 |
-| `mcp.call` | 调用已授权的本机 MCP 工具 | 中 | 每次询问；只接受单次审批 |
-| `network.search` / D08 `network.request` | web_search 向受信配置的 SearXNG 端点提交搜索 | 中 | D16 每次询问，另需 D08 网络策略放行；缺少受信权限句柄拒绝 |
+| `connector.invoke` | 调用 Stable Diffusion 连接器 | 中 | 始终允许 |
+| `mcp.call` | 调用已授权的本机 MCP 工具 | 中 | 始终允许；策略改回询问时只接受单次审批 |
+| `network.search` / D08 `network.request` | web_search 向受信配置的 SearXNG 端点提交搜索 | 中 | D16 始终允许，另需 D08 网络策略放行；缺少受信权限句柄拒绝 |
 | `memory.read` | 检索当前 bot 的记忆 | 低 | 始终允许，但仍必须绑定该 bot |
-| `memory.write` | 写入当前 bot 的记忆 | 中 | 每次询问；模型不能删除 |
+| `memory.write` | 写入当前 bot 的记忆 | 中 | 始终允许；模型不能删除 |
 
 能力注册表包含未来能力，不会自动产生对应工具；新增工具必须显式绑定能力并同步本文、契约与审计字段。`create_bots_batch` 有 newGroup 时同时需要 create_bot/create_group。草案生成仅回显、不落库，属于 app.read。
 
@@ -44,7 +44,7 @@ v0.5 manager-orchestration（TASK_MANAGER_ORCHESTRATION.md §3.4）：新增模�
 
 `memory_search` 绑定 `memory.read`，`memory_write` 绑定 `memory.write`。两者都只使用受信 `ToolCaller.botId`，模型参数不能指定 bot。默认不跨 bot 共享，也没有共享开关。用户经受信方法 `memory.list` / `memory.write` / `memory.delete` 查看、写入和删除当前 bot 的记忆；删除是物理删除，模型目录没有删除工具。网关 JSONL 仍只存摘要。知识导入是桌面文件对话框，不接收渲染进程传入的路径，也不是模型工具。通过后仍调用 `memory.write`，隔离规则不变。只接受 `.txt` / `.md`，文件不超过 16 KiB，正文仍须放进一条 1–4000 字的记忆。
 
-`import_attachment` 绑定 `fs.write`，模型工具 `read` 绑定 `fs.read`。两者默认每次询问。导入只接受 Host 已经暂存的字节，模型参数不能带文件正文或 bot id。`read` 的参数只有工作区相对路径 `file_path`。审批预览不含附件正文。
+`import_attachment` 绑定 `fs.write`，模型工具 `read` 绑定 `fs.read`。两者默认始终允许。导入只接受 Host 已经暂存的字节，模型参数不能带文件正文或 bot id。`read` 的参数只有工作区相对路径 `file_path`。审批预览不含附件正文。
 
 `connector.*` 管理方法只对受信桌面开放，新登记连接器默认关闭。Stable Diffusion 使用 `connector_invoke`；自定义 MCP 使用独立的 `mcp.call` 能力。MCP 首版只接受无凭据的本机 HTTP(S) Streamable HTTP 端点，可带路径；localhost 固定归一化为 127.0.0.1，拒绝远程主机、URL 用户信息、查询、片段及重定向。Host 不解析或注入 MCP 凭据。
 
@@ -62,7 +62,7 @@ v0.5 manager-orchestration（TASK_MANAGER_ORCHESTRATION.md §3.4）：新增模�
 | 每次询问 | 网关弹出审批卡，用户允许后执行 |
 | 从不允许 | 网关拒绝，向模型返回可解释原因 |
 
-默认值：app.read / interaction.ask_user 允许，screen.capture 与 device.action 拒绝，其余询问。app.start_run 固定 ask；exec.shell / screen.capture / mcp.call / device.action 只能 ask 或 deny，这几项不接受会话或永久授权。策略由受信 permission.policy.set 修改并持久化。设置页按同一约束展示：启动运行只读为每次询问，本地命令、屏幕感知、MCP 和设备动作不提供始终允许。
+默认值：除 `app.dispatch_task`（每次询问）与 `screen.capture` / `device.action`（从不允许）外，一律始终允许。已写入数据库的策略行优先于这些默认值，显式 deny 仍然拒绝。`screen.capture` 与 `device.action` 不能设为始终允许。`app.start_run` / `exec.shell` / `mcp.call` / `screen.capture` / `device.action` 在策略为每次询问时不接受会话或永久授权。策略由受信 permission.policy.set 修改并持久化。主设置页只列出上述三项需要确认的操作，不展示全部能力的矩阵。
 
 策略 deny 优先于已有授权。写操作和 network.search 即使策略 allow 也须绑定有效 bot；匿名只可使用策略 allow 的读/提问。网关没有检查器、未知能力或无效身份均拒绝。
 
@@ -81,7 +81,7 @@ sequenceDiagram
     U->>B: 建一个 3 人工作流，你当调度
     B->>G: 需要 app.create_group / app.create_bot / app.create_workflow
     G->>P: 查询 grant
-    P-->>G: 无授权（默认每次询问）
+    P-->>G: 策略为每次询问且无授权
     G-->>U: 授权卡片（仅本次 / 本会话 / 永久 / 拒绝）
     U->>P: 本会话允许（maxUses=5，2h）
     P-->>G: grant 生效
@@ -98,21 +98,18 @@ sequenceDiagram
 
 ```
 设置 → 电脑与权限
-  在这台电脑上执行        [ 始终允许 ▾ ]（默认每次询问）
-    创建分组              [ 每次询问 ▾ ]
-    创建 bot              [ 每次询问 ▾ ]
-    修改工作流            [ 每次询问 ▾ ]
-    启动运行              [ 每次询问 ]（只读）
+  需要确认的操作
+    派发任务给其他 bot    [ 每次询问 ▾ ]
+    设备动作              [ 从不允许 ▾ ]
     屏幕与窗口感知        [ 从不允许 ▾ ]
-  本地数据：位置 / 打开目录
   授权记录：查看与撤销
 ```
 
-设置页只改变默认策略；聊天内授权是临时叠加，过期回到默认。两者共用同一张 grant 表，差异在 `scope`。页面列出 `permission.policy.list` 返回的全部能力。授权记录来自 `permission.grant.list`，不把 `scope=policy` 的全局策略行当成可撤销授权；撤销调用 `permission.grant.revoke`。上面草图里的「本地数据：位置 / 打开目录」仍未接在这一页。
+设置页只改变这几项的默认策略；其余能力默认始终允许，不在这一页逐项列出。聊天内授权是临时叠加，过期回到默认。两者共用同一张 grant 表，差异在 `scope`。`permission.policy.list` 仍返回全部能力，页面只渲染询问或关闭的那几项。授权记录来自 `permission.grant.list`，不把 `scope=policy` 的全局策略行当成可撤销授权；撤销调用 `permission.grant.revoke`。
 
 同一节下面的「屏幕与窗口感知」使用同一条 `screen.capture` 策略。开关只写成每次询问或从不允许，不提供始终允许。用户先选 bot，再刷新窗口并选定一个；截图和截图并识别各自调用 `screen.request`。等待审批时，这张卡只有「仅本次」和「拒绝」。缩略图是 `screen.result.read` 返回的 JPEG data URL，识别文本按转义文本显示，两者都不写入聊天。删除要再确认一次。换 bot 或换目标窗口之后，上一次请求的响应不会写进新的面板。
 
-设备动作使用同一套策略表里的 `device.action`。默认拒绝。改为每次询问后，受信方法 `device.action.request` 或模型工具 `device_action` 才等待一张仅本次审批。批准后的结果只有 id 和时间，并在本机留下一条记录：id、bot id、动作名（`pointer` 或 `key`）、时间。`device.action.list` 按该 bot 从新到旧列出。拒绝、把策略改回拒绝、再次使用同一张审批，或动作名不在这两组里，都不写入。未知动作名在产生审批前拒绝。这条路径不移动鼠标、不发送按键、不调用 exec daemon，也没有单独的桌面页面。设置页会多出这一行，因为它列出全部能力。
+设备动作使用同一套策略表里的 `device.action`。默认拒绝。改为每次询问后，受信方法 `device.action.request` 或模型工具 `device_action` 才等待一张仅本次审批。批准后的结果只有 id 和时间，并在本机留下一条记录：id、bot id、动作名（`pointer` 或 `key`）、时间。`device.action.list` 按该 bot 从新到旧列出。拒绝、把策略改回拒绝、再次使用同一张审批，或动作名不在这两组里，都不写入。未知动作名在产生审批前拒绝。这条路径不移动鼠标、不发送按键、不调用 exec daemon，也没有单独的桌面页面。主权限页保留这一行，因为设备输入停留在询问或关闭。
 
 真实输入使用同一条策略和同一次精确审批规则，方法是 `device.action.input`，模型工具是 `device_input`。一次请求只包含一份有界输入：指针移动或点击，坐标 0–8192；或允许列表中的一个按键点按，可带 shift、ctrl、alt，不含 Windows 键。审批卡上的参数就是这份输入。通过后才调用 exec daemon。成功响应只有 id、时间和 pointer 或 key。本机 `device-outputs` 留下 JSON，可用 `device.action.input.list` 查看，列表不含路径。拒绝、停用、复用审批、未知按键，或这台系统没有输入辅助进程，都不执行。`device_input` 不进入聊天应用工具目录。没有单独的设备动作页面。
 
@@ -138,8 +135,8 @@ D08 已实现：路径规范化与包含校验、策略评估、一次性审批�
 
 - 模型不能调用授权接口给自己或其它 bot 授权；
 - “从不允许”必须在网关层拒绝，不能只靠 UI 隐藏；
-- `app.start_run` 不得配置为始终允许；
-- 屏幕截图/OCR 默认关闭，采集内容不出本机；
+- `app.start_run` 默认始终允许；策略改回每次询问时仍只接受单次审批；
+- 屏幕截图/OCR 默认关闭，不能设为始终允许，采集内容不出本机；
 - 设备动作默认关闭；未改为每次询问、没有一次精确的仅本次审批，或动作名不是 `pointer` / `key` 时，不接受，也不写本地记录。本片不执行输入；
 - 审计与撤销记录不能由模型修改；
 - 任何绕过路径（例如直接写数据库、直接调用 IPC）都视为缺陷。
@@ -153,7 +150,7 @@ D08 已实现：路径规范化与包含校验、策略评估、一次性审批�
 
 1. **默认能力**：每个 bot 的能力 = 设置页三档策略所授予的集合，无任何默认角色；
 2. **聊天给予**：用户在聊天里说"你当总监 / 这事交给你"时，网关把被点名 bot 需要的**应用类能力**（创建分组、创建 bot、修改工作流、派发任务）以正式 grant 形式授予——发起引用用户消息、可审计、可撤销；应用类授予默认免确认（用户打字即授权）；
-3. **红线不松动**：`exec.shell` / `screen.capture` / 设备动作 / `app.start_run` 等**操控电脑类能力不可通过聊天授予**——无论用户在聊天里如何"任命"，这些能力保持默认每次询问，逐次审批；
+3. **红线不松动**：`screen.capture` 与设备动作默认关闭，且不能设为始终允许。`exec.shell` / `app.start_run` 默认始终允许；策略改回每次询问时仍不可通过聊天拿到会话或永久授权，只能逐次审批。`app.dispatch_task` 默认每次询问；
 4. **模型不能自授**：授予必须由用户消息触发（网关记录发起消息引用）；bot 不得通过对话话术为其它 bot 或自己追加能力——模型只能提议（ask_user 卡片），由用户点击确认；
 5. **无 UI 身份标记**：侧栏/聊天不显示角色徽标；派发关系只体现在交付通知与审计里；
 6. **撤销**：用户可随时在授权记录里撤销某次聊天授予，撤销即时生效。

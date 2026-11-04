@@ -146,7 +146,7 @@ describe("D19 MCP connector contracts", () => {
   });
 
   it("requires single action approval for mcp.call independently of connector.invoke", () => {
-    expect(defaultPermissionMode("mcp.call")).toBe("ask");
+    expect(defaultPermissionMode("mcp.call")).toBe("allow");
     expect(requiresPerActionApproval("mcp.call")).toBe(true);
     expect(CapabilityPolicySchema.safeParse({ capability: "mcp.call", mode: "ask" }).success).toBe(
       true,
@@ -156,7 +156,7 @@ describe("D19 MCP connector contracts", () => {
     );
     expect(
       CapabilityPolicySchema.safeParse({ capability: "mcp.call", mode: "allow" }).success,
-    ).toBe(false);
+    ).toBe(true);
     const grant = {
       id,
       capability: "mcp.call",

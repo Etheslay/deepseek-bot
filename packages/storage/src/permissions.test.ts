@@ -1,16 +1,23 @@
 import { randomUUID } from "node:crypto";
 import { afterEach, describe, expect, it } from "vitest";
+import { CAPABILITY_IDS, defaultPermissionMode } from "@deepseek-bot/contracts";
 import * as storage from "./index.js";
 import { makeBot, makeTestClock, makeTempRoot, seedProfileAndWorkspace } from "./test-support.js";
 
 const opened: storage.OpenedDatabase[] = [];
-function fixture() {
+function fixture(options: { pinAsk?: boolean } = {}) {
   const clock = makeTestClock();
   const db = storage.openDatabase(":memory:", { now: clock.now });
   opened.push(db);
   const { profile, workspaceId } = seedProfileAndWorkspace(db);
   const bot = makeBot(profile, workspaceId);
   storage.createBot(db, { bot });
+  // Approval-path tests pin ask. The product default is allow; a fresh
+  // database without this pin is covered by the default-policy test.
+  if (options.pinAsk !== false) {
+    storage.setPermissionPolicy(db, { capability: "app.create_bot", mode: "ask" });
+    storage.setPermissionPolicy(db, { capability: "app.create_group", mode: "ask" });
+  }
   const call = {
     invocationId: randomUUID(),
     callerId: "caller",
@@ -47,19 +54,41 @@ afterEach(() => {
 });
 describe("D16 permissions persistence", () => {
   it("adds migration 0005 and global default policies", () => {
-    const { db } = fixture();
+    const { db, call } = fixture({ pinAsk: false });
     expect(db.schemaVersion).toBe(storage.MIGRATIONS.length);
-    expect(storage.listPermissionPolicies(db)).toContainEqual({
-      capability: "app.read",
-      mode: "allow",
+    expect(storage.listPermissionPolicies(db)).toEqual(
+      CAPABILITY_IDS.map((capability) => ({ capability, mode: defaultPermissionMode(capability) })),
+    );
+    expect(storage.authorizePermissionCall(db, call)).toMatchObject({
+      allowed: true,
+      grantIds: [],
     });
     storage.setPermissionPolicy(db, { capability: "app.create_bot", mode: "deny" });
     expect(storage.listPermissionPolicies(db)).toContainEqual({
       capability: "app.create_bot",
       mode: "deny",
     });
+    expect(
+      storage.authorizePermissionCall(db, { ...call, invocationId: randomUUID() }),
+    ).toMatchObject({
+      allowed: false,
+      code: "UNAUTHORIZED_PATH",
+    });
+    storage.setPermissionPolicy(db, { capability: "fs.write", mode: "deny" });
+    expect(
+      storage.authorizePermissionCall(db, {
+        ...call,
+        invocationId: randomUUID(),
+        tool: "import_attachment",
+        capabilities: ["fs.write"],
+      }).code,
+    ).toBe("UNAUTHORIZED_PATH");
+    storage.setPermissionPolicy(db, { capability: "app.start_run", mode: "allow" });
     expect(() =>
-      storage.setPermissionPolicy(db, { capability: "app.start_run", mode: "allow" }),
+      storage.setPermissionPolicy(db, { capability: "screen.capture", mode: "allow" }),
+    ).toThrow();
+    expect(() =>
+      storage.setPermissionPolicy(db, { capability: "device.action", mode: "allow" }),
     ).toThrow();
   });
   it("allows anonymous reads but requires identity for writes and approvals", () => {
@@ -305,6 +334,7 @@ it("enforces the final session use across separate SQLite connections", () => {
   const { profile, workspaceId } = seedProfileAndWorkspace(db);
   const bot = makeBot(profile, workspaceId);
   storage.createBot(db, { bot });
+  storage.setPermissionPolicy(db, { capability: "app.create_bot", mode: "ask" });
   const call: storage.PermissionCall = {
     invocationId: randomUUID(),
     callerId: "caller",

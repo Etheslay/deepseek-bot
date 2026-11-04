@@ -7,9 +7,10 @@ import { PermissionsPanel } from "../../src/renderer/src/features/permissions/pe
 import { setLanguagePreference } from "../../src/renderer/src/i18n.js";
 
 const POLICIES = [
-  { capability: "app.create_group", mode: "ask" },
-  { capability: "app.start_run", mode: "ask" },
-  { capability: "exec.shell", mode: "ask" },
+  { capability: "app.create_group", mode: "allow" },
+  { capability: "app.start_run", mode: "allow" },
+  { capability: "exec.shell", mode: "allow" },
+  { capability: "app.dispatch_task", mode: "ask" },
   { capability: "screen.capture", mode: "deny" },
   { capability: "device.action", mode: "deny" },
 ];
@@ -174,7 +175,7 @@ describe("permissions settings panel", () => {
     const calls = installHost();
     const container = await renderPanel();
     await vi.waitFor(() => {
-      expect(shownMode(controlByLabel(container, "app.create_group"))).toBe("ask");
+      expect(shownMode(controlByLabel(container, "app.dispatch_task"))).toBe("ask");
     });
     expect(calls.map((call) => call.method)).toEqual([
       "permission.policy.list",
@@ -182,6 +183,10 @@ describe("permissions settings panel", () => {
     ]);
     expect(calls[0]?.payload).toEqual({});
     expect(calls[1]?.payload).toEqual({});
+    expect(container.textContent).toContain("其余能力默认允许");
+    expect(() => controlByLabel(container, "app.create_group")).toThrow(/missing policy control/);
+    expect(() => controlByLabel(container, "app.start_run")).toThrow(/missing policy control/);
+    expect(() => controlByLabel(container, "exec.shell")).toThrow(/missing policy control/);
     expect(container.textContent).toContain("本会话");
     expect(container.textContent).toContain("1/5");
     expect(container.textContent).not.toContain("app.read");
@@ -192,22 +197,21 @@ describe("permissions settings panel", () => {
     ).toHaveLength(1);
   });
 
-  it("keeps fixed capabilities constrained and saves allow/ask/deny modes", async () => {
+  it("keeps the short surface on ask or off and saves that choice", async () => {
     const calls = installHost();
     const container = await renderPanel();
     await vi.waitFor(() => {
-      expect(controlByLabel(container, "app.start_run").disabled).toBe(true);
+      expect(shownMode(controlByLabel(container, "device.action"))).toBe("deny");
     });
+    expect(await optionIds(container, "app.dispatch_task")).toEqual(["ask", "deny"]);
     expect(await optionIds(container, "screen.capture")).toEqual(["ask", "deny"]);
     expect(await optionIds(container, "device.action")).toEqual(["ask", "deny"]);
-    expect(await optionIds(container, "exec.shell")).toEqual(["ask", "deny"]);
-    expect(await optionIds(container, "app.create_group")).toEqual(["allow", "ask", "deny"]);
 
-    await choose(container, "app.create_group", "allow");
+    await choose(container, "device.action", "ask");
     await vi.waitFor(() => {
       expect(calls).toContainEqual({
         method: "permission.policy.set",
-        payload: { capability: "app.create_group", mode: "allow" },
+        payload: { capability: "device.action", mode: "ask" },
       });
     });
     expect(calls.some((call) => call.method === "policy.set")).toBe(false);

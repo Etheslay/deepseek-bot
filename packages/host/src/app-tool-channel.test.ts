@@ -27,6 +27,8 @@ async function setup(now?: () => Date) {
     ...(now === undefined ? {} : { now }),
   });
   hosts.push(host);
+  await host.handleMethod("permission.policy.set", { capability: "app.create_group", mode: "ask" });
+  await host.handleMethod("permission.policy.set", { capability: "app.create_bot", mode: "ask" });
   const bot = (await host.handleMethod("bot.create", {
     name: "actor",
     instructions: "actor",

@@ -12,7 +12,11 @@ export const permissionsMessages = {
   "permissions.askUser": { zh: "向用户提问", en: "Ask the user a question" },
   "permissions.cancelRun": { zh: "取消运行", en: "Cancel run" },
   "permissions.capabilitiesLine": { zh: "能力：{0}", en: "Capabilities: {0}" },
-  "permissions.capabilityPolicies": { zh: "模型能力策略", en: "Model capability policies" },
+  "permissions.capabilityPolicies": { zh: "需要确认的操作", en: "Actions that stay gated" },
+  "permissions.sensitiveIntro": {
+    zh: "其余能力默认允许。这里只保留会给其他 bot 发消息、控制键鼠，或截取屏幕的操作。已经保存的「从不允许」仍然生效。",
+    en: "Everything else is allowed. Only messaging other bots, device input, and screen capture stay here. A saved Never allow still applies.",
+  },
   "permissions.capabilityPolicy": { zh: "{0} 策略", en: "{0} policy" },
   "permissions.createBot": { zh: "创建 bot", en: "Create Bot" },
   "permissions.decisionFailed": { zh: "审批决定失败", en: "Approval decision failed" },

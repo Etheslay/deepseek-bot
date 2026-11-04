@@ -23,6 +23,7 @@ async function setup() {
   roots.push(root);
   const host = await createHost({ dataRoot: root, resolveApiKey: async () => "unused" });
   hosts.push(host);
+  await host.handleMethod("permission.policy.set", { capability: "memory.write", mode: "ask" });
   const bot = (await host.handleMethod("bot.create", {
     name: "rememberer",
     instructions: "remember",

@@ -80,6 +80,10 @@ async function hostWithBot(
       now,
       now,
     );
+  await host.handleMethod("permission.policy.set", {
+    capability: "app.create_group",
+    mode: "ask",
+  });
   const bot = createBot(host.db, {
     bot: {
       id: randomUUID(),

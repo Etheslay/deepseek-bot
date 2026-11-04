@@ -1,11 +1,15 @@
 /**
- * Settings panel for the D16 permission model: per-capability policy
- * (始终允许 / 每次询问 / 从不允许) plus issued grant records with revoke.
- * Reads and writes go through `permission.policy.*` and `permission.grant.*`.
+ * Settings panel for the D16 permission model.
+ *
+ * The policy engine still stores a mode for every capability. This page only
+ * edits the short ask-or-off surface (message other bots, device input,
+ * screen capture). Everything else defaults to allow and is not listed.
+ * Issued grants stay here so a person can revoke them.
  */
 import { useCallback, useEffect, useState } from "react";
 import {
   PERMISSION_METHODS,
+  SETTINGS_SURFACE_CAPABILITIES,
   isPermissionModeAllowed,
   type CapabilityId,
   type PermissionGrant,
@@ -36,8 +40,19 @@ function isIssuedGrant(grant: PermissionGrant): grant is IssuedGrant {
   return grant.scope === "once" || grant.scope === "session" || grant.scope === "permanent";
 }
 
-function allowedModes(capability: CapabilityId): PermissionMode[] {
-  return MODES.filter((mode) => isPermissionModeAllowed(capability, mode));
+const SURFACE = new Set<CapabilityId>(SETTINGS_SURFACE_CAPABILITIES);
+
+/**
+ * The short surface is ask or off. A stored allow (legal for dispatch) stays
+ * visible so the control does not hide a row the database already has.
+ */
+function surfaceModes(capability: CapabilityId, current: PermissionMode): PermissionMode[] {
+  const gated = MODES.filter(
+    (mode) => mode !== "allow" && isPermissionModeAllowed(capability, mode),
+  );
+  if (gated.includes(current)) return gated;
+  if (isPermissionModeAllowed(capability, current)) return [current, ...gated];
+  return gated;
 }
 
 function isMode(value: string): value is PermissionMode {
@@ -116,7 +131,8 @@ export function PermissionsPanel() {
         PERMISSION_METHODS["permission.policy.set"].response.parse(response);
         setNoticeError(false);
         setNotice(
-          () => () => t("permissions.policySaved", [capabilityLabel(capability), t(MODE_LABEL_KEYS[mode])]),
+          () => () =>
+            t("permissions.policySaved", [capabilityLabel(capability), t(MODE_LABEL_KEYS[mode])]),
         );
         return reload();
       })
@@ -131,29 +147,34 @@ export function PermissionsPanel() {
       <div className="settings-row">
         <span>{t("permissions.capabilityPolicies")}</span>
       </div>
-      {policies.map((policy) => {
-        const choices = allowedModes(policy.capability);
-        return (
-          <div className="settings-row" key={policy.capability}>
-            <span>{capabilityLabel(policy.capability)}</span>
-            {/* A native select cannot drop the Windows blue selection wash, so
+      <p className="settings-soon">{t("permissions.sensitiveIntro")}</p>
+      {policies
+        .filter((policy) => SURFACE.has(policy.capability))
+        .map((policy) => {
+          const choices = surfaceModes(policy.capability, policy.mode);
+          return (
+            <div className="settings-row" key={policy.capability}>
+              <span>{capabilityLabel(policy.capability)}</span>
+              {/* A native select cannot drop the Windows blue selection wash, so
                 this uses the shared CustomSelect list. */}
-            <CustomSelect
-              value={policy.mode}
-              options={choices.map((mode) => ({ value: mode, label: t(MODE_LABEL_KEYS[mode]) }))}
-              ariaLabel={t("permissions.capabilityPolicy", [policy.capability])}
-              disabled={choices.length < 2}
-              onChange={(next) => {
-                if (isMode(next)) savePolicy(policy.capability, next);
-              }}
-            />
-          </div>
-        );
-      })}
+              <CustomSelect
+                value={policy.mode}
+                options={choices.map((mode) => ({ value: mode, label: t(MODE_LABEL_KEYS[mode]) }))}
+                ariaLabel={t("permissions.capabilityPolicy", [policy.capability])}
+                disabled={choices.length < 2}
+                onChange={(next) => {
+                  if (isMode(next)) savePolicy(policy.capability, next);
+                }}
+              />
+            </div>
+          );
+        })}
       <div className="settings-row">
         <span>{t("permissions.issuedGrants")}</span>
         <span className="settings-soon">
-          {grants.length === 0 ? t("permissions.none") : t("permissions.grantCount", [grants.length])}
+          {grants.length === 0
+            ? t("permissions.none")
+            : t("permissions.grantCount", [grants.length])}
         </span>
       </div>
       {grants.map((grant) => (

@@ -35,6 +35,9 @@ async function setup(scenario = "ok"): Promise<{ host: DeepSeekBotHost; botId: s
     childEnv: (parent) => ({ ...parent, FAKE_SCENARIO: scenario }),
   });
   hosts.push(host);
+  for (const capability of ["fs.read", "fs.write", "exec.shell", "mcp.call"] as const) {
+    await host.handleMethod("permission.policy.set", { capability, mode: "ask" });
+  }
   const bot = (await host.handleMethod("bot.create", {
     name: "gate-bot",
     instructions: "x",
@@ -107,16 +110,32 @@ describe("ChatNativeGate", () => {
     ).rejects.toMatchObject({ code: "UNAUTHORIZED_PATH" });
   });
 
-  it("keeps exec.shell locked to ask: allow is not a settable policy", async () => {
+  it("allows exec.shell by policy and still honors an explicit deny", async () => {
     const { host, botId } = await setup();
-    await expect(
-      host.handleMethod("permission.policy.set", { capability: "exec.shell", mode: "allow" }),
-    ).rejects.toSatisfy((error: unknown) => String((error as Error).message).length > 0);
-    const controller = new AbortController();
-    const gate = gateFor(host, botId, controller.signal);
-    const pending = gate.authorize({
+    await host.handleMethod("permission.policy.set", { capability: "exec.shell", mode: "allow" });
+    const allowed = await gateFor(host, botId, new AbortController().signal).authorize({
       kind: "shell.exec",
       callId: "call-3",
+      toolName: "pwsh",
+      command: "Get-ChildItem",
+      arguments: {},
+    });
+    expect(allowed.approvalId).toBeNull();
+    await host.handleMethod("permission.policy.set", { capability: "exec.shell", mode: "deny" });
+    await expect(
+      gateFor(host, botId, new AbortController().signal).authorize({
+        kind: "shell.exec",
+        callId: "call-3b",
+        toolName: "pwsh",
+        command: "Get-ChildItem",
+        arguments: {},
+      }),
+    ).rejects.toMatchObject({ code: "UNAUTHORIZED_PATH" });
+    await host.handleMethod("permission.policy.set", { capability: "exec.shell", mode: "ask" });
+    const controller = new AbortController();
+    const pending = gateFor(host, botId, controller.signal).authorize({
+      kind: "shell.exec",
+      callId: "call-3c",
       toolName: "pwsh",
       command: "Get-ChildItem",
       arguments: {},
@@ -237,9 +256,11 @@ describe("chat turn bridge registration", () => {
       },
       { timeout: 10_000 },
     );
-    expect((await host.handleMethod("chat.cancel", { sessionId: `chat:${botId}` })) as {
-      cancelled: boolean;
-    }).toMatchObject({ cancelled: true });
+    expect(
+      (await host.handleMethod("chat.cancel", { sessionId: `chat:${botId}` })) as {
+        cancelled: boolean;
+      },
+    ).toMatchObject({ cancelled: true });
     await expect(sent).rejects.toMatchObject({ code: "CANCELLED" });
     await vi.waitFor(() => {
       expect(host.sessions.size).toBe(0);
