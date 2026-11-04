@@ -6031,17 +6031,21 @@ select option {
 }
 
 /* 3. user bubble: painted with the bot's exact colour, no transparency
-   (owner request 2026-10-26). `--bot-color` / `--bot-ink` are written per
-   conversation by the chat pane; the ink is the auto-contrast text colour for
-   that exact fill. The earlier 22% mix washed every bot out to the same grey. */
+   (owner request 2026-10-26). The fill follows the bot. The type stays white
+   in the dark theme; auto-contrast ink turned bright fills into near-black.
+   `--bot-ink` remains the send button's arrow colour. */
 .msg-row.user .msg-bubble {
   background: var(--bot-color, var(--grok-user-bubble)) !important;
   border: 1px solid transparent;
-  color: var(--bot-ink, var(--text)) !important;
+  color: #ffffff !important;
   border-radius: 22px;
   padding: 10px 16px;
   font-size: 0.95rem;
   line-height: 1.6;
+}
+
+[data-theme="light"] .msg-row.user .msg-bubble {
+  color: var(--bot-ink, #1b1b1f) !important;
 }
 
 /* 4. composer: white send circle (dark) / black circle (light) */
