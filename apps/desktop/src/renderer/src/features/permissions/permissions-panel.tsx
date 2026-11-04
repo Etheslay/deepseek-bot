@@ -2,8 +2,9 @@
  * Settings panel for the D16 permission model.
  *
  * The policy engine still stores a mode for every capability. This page only
- * edits the short ask-or-off surface (message other bots, device input,
- * screen capture). Everything else defaults to allow and is not listed.
+ * lists messaging other bots, device input, and screen capture. Dispatch can
+ * be always-allow, ask, or off. Device input and screen capture stay ask or
+ * off. Everything else defaults to allow and is not listed.
  * Issued grants stay here so a person can revoke them.
  */
 import { useCallback, useEffect, useState } from "react";
@@ -43,16 +44,15 @@ function isIssuedGrant(grant: PermissionGrant): grant is IssuedGrant {
 const SURFACE = new Set<CapabilityId>(SETTINGS_SURFACE_CAPABILITIES);
 
 /**
- * The short surface is ask or off. A stored allow (legal for dispatch) stays
- * visible so the control does not hide a row the database already has.
+ * Dispatch offers always-allow, ask, and off. Device input and screen capture
+ * stay ask or off; the policy schema also rejects allow for those two.
  */
-function surfaceModes(capability: CapabilityId, current: PermissionMode): PermissionMode[] {
-  const gated = MODES.filter(
-    (mode) => mode !== "allow" && isPermissionModeAllowed(capability, mode),
-  );
-  if (gated.includes(current)) return gated;
-  if (isPermissionModeAllowed(capability, current)) return [current, ...gated];
-  return gated;
+function surfaceModes(capability: CapabilityId): PermissionMode[] {
+  return MODES.filter((mode) => {
+    if (!isPermissionModeAllowed(capability, mode)) return false;
+    if (mode === "allow") return capability === "app.dispatch_task";
+    return true;
+  });
 }
 
 function isMode(value: string): value is PermissionMode {
@@ -151,7 +151,7 @@ export function PermissionsPanel() {
       {policies
         .filter((policy) => SURFACE.has(policy.capability))
         .map((policy) => {
-          const choices = surfaceModes(policy.capability, policy.mode);
+          const choices = surfaceModes(policy.capability);
           return (
             <div className="settings-row" key={policy.capability}>
               <span>{capabilityLabel(policy.capability)}</span>

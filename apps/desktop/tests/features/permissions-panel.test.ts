@@ -197,18 +197,23 @@ describe("permissions settings panel", () => {
     ).toHaveLength(1);
   });
 
-  it("keeps the short surface on ask or off and saves that choice", async () => {
+  it("offers always-allow for dispatch and keeps device and screen on ask or off", async () => {
     const calls = installHost();
     const container = await renderPanel();
     await vi.waitFor(() => {
       expect(shownMode(controlByLabel(container, "device.action"))).toBe("deny");
     });
-    expect(await optionIds(container, "app.dispatch_task")).toEqual(["ask", "deny"]);
+    expect(await optionIds(container, "app.dispatch_task")).toEqual(["allow", "ask", "deny"]);
     expect(await optionIds(container, "screen.capture")).toEqual(["ask", "deny"]);
     expect(await optionIds(container, "device.action")).toEqual(["ask", "deny"]);
 
+    await choose(container, "app.dispatch_task", "allow");
     await choose(container, "device.action", "ask");
     await vi.waitFor(() => {
+      expect(calls).toContainEqual({
+        method: "permission.policy.set",
+        payload: { capability: "app.dispatch_task", mode: "allow" },
+      });
       expect(calls).toContainEqual({
         method: "permission.policy.set",
         payload: { capability: "device.action", mode: "ask" },

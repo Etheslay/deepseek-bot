@@ -33,9 +33,11 @@ export type GrantScope = z.infer<typeof GrantScopeSchema>;
 
 /**
  * Personal-agent defaults. Most capabilities are allow. The main settings
- * page only edits the ones that stay ask or off:
- * - `app.dispatch_task` messages another bot, so it stays ask
- * - `device.action` and `screen.capture` stay off until a person sets ask
+ * page only lists these three:
+ * - `app.dispatch_task` messages another bot, so it defaults to ask. The page
+ *   may set allow, ask, or deny.
+ * - `device.action` and `screen.capture` stay off until a person sets ask.
+ *   Allow is not a legal mode for either.
  *
  * A stored policy row still wins over these defaults, including an explicit deny.
  */
