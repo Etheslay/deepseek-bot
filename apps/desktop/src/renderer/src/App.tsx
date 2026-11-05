@@ -139,6 +139,7 @@ import {
   t,
   useLanguage,
 } from "./i18n.js";
+import { SidebarResizer } from "./features/shell/sidebar-resizer.js";
 import { syncTrayState } from "./features/system/tray-sync.js";
 import {
   createFocusTracker,
@@ -2172,6 +2173,7 @@ const logout = (): void => {
             </svg>
           </button>
         </div>
+        <SidebarResizer />
       </aside>
       <section className="content">
         <main className="panel">
