@@ -9415,3 +9415,65 @@ button.automation-notice-jump .automation-notice-main {
   width: min(440px, 100%);
   margin-inline: auto;
 }
+
+/* ---------- resizable desktop sidebar ----------
+   The column width is the `--sidebar-width` custom property (default 300px,
+   the previous fixed width). Inline theme rules above still set 300px; these
+   come last so a dragged width wins for both themes, and the top bar's left
+   edge stays flush with the column. The bot list keeps its own scroller. */
+
+.sidebar,
+[data-theme="light"] .sidebar,
+[data-theme="dark"] .sidebar {
+  position: relative;
+  width: var(--sidebar-width, 300px);
+  flex: 0 0 var(--sidebar-width, 300px);
+  min-width: var(--sidebar-width, 300px);
+  max-width: var(--sidebar-width, 300px);
+  /* The list scrolls in .sidebar-scroll. Hidden here keeps the drag handle
+     on the visible edge instead of riding an outer scrollbar. */
+  overflow: hidden;
+}
+
+[data-theme="light"] .top,
+[data-theme="dark"] .top {
+  left: var(--sidebar-width, 300px);
+}
+
+.sidebar-resizer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 8px;
+  z-index: 30;
+  cursor: col-resize;
+  touch-action: none;
+  background: transparent;
+}
+
+.sidebar-resizer::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: 2px;
+  background: transparent;
+}
+
+.sidebar-resizer:hover::after,
+.sidebar-resizer.dragging::after,
+.sidebar-resizer:focus-visible::after {
+  background: #8ab4ff;
+}
+
+.sidebar-resizer:focus-visible {
+  outline: none;
+}
+
+html.sidebar-resizing,
+html.sidebar-resizing * {
+  cursor: col-resize !important;
+  user-select: none !important;
+}

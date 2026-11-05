@@ -176,6 +176,7 @@ export const shellMessages = {
   "shell.renamed": { zh: "已改名", en: "Renamed" },
   "shell.renameFailed": { zh: "改名失败", en: "Rename failed" },
   "shell.repliedOnlyTo": { zh: "已只回", en: "Replied only to" },
+  "shell.resizeSidebar": { zh: "拖动调整侧边栏宽度", en: "Drag to resize the sidebar" },
   "shell.retry": { zh: "重试", en: "Retry" },
   "shell.runMonitorApprovals": { zh: "运行监控与审批", en: "Run Monitor & Approvals" },
   "shell.save": { zh: "保存", en: "Save" },
