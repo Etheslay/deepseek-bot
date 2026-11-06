@@ -1,8 +1,8 @@
 /**
  * Settings persistence (D24 renderer slice, extended by D22): the renderer keeps
- * its own preferences in localStorage — theme, account name, accent color,
- * language and notification choices. Host-owned data (API key, bots) never
- * passes through here.
+ * its own preferences in localStorage — theme, account name, account avatar,
+ * accent color, language and notification choices. Host-owned data (API key,
+ * bots) never passes through here.
  *
  * D22 adds `deepseek-bot.settings.v2`: `language` (bilingual) and
  * `notifications` (system notification settings). v1 payloads are migrated on
@@ -12,6 +12,8 @@
 import type { VoiceTranscriptionLanguage } from "@deepseek-bot/contracts";
 import { isLanguagePreference } from "../../../../shared/i18n/locale.js";
 import type { LanguagePreference } from "../../../../shared/i18n/types.js";
+import type { Avatar } from "../avatars/avatar-meta.js";
+import { GROK_BALL_COLORS, GROK_BALL_SHAPE_IDS, type GrokBallShapeId } from "../avatars/grok-ball-model.js";
 
 export type NotificationPrefs = {
   /** Master switch for OS notifications. */
@@ -22,10 +24,41 @@ export type NotificationPrefs = {
   mutedBotIds: string[];
 };
 
+/** Shown until the user picks their own. A face, not a letter disc. */
+export const DEFAULT_ACCOUNT_AVATAR: Avatar = {
+  kind: "grok",
+  shape: "blob",
+  color: "#2A92FE",
+};
+
+const ACCOUNT_SHAPES = new Set<string>(GROK_BALL_SHAPE_IDS);
+const ACCOUNT_COLORS = new Set<string>(GROK_BALL_COLORS);
+
+export function normalizeAccountAvatar(value: unknown): Avatar {
+  if (typeof value !== "object" || value === null) {
+    return DEFAULT_ACCOUNT_AVATAR;
+  }
+  const source = value as { kind?: unknown; shape?: unknown; color?: unknown };
+  if (source.kind === "mono") {
+    return { kind: "mono" };
+  }
+  if (
+    source.kind === "grok" &&
+    typeof source.shape === "string" &&
+    ACCOUNT_SHAPES.has(source.shape) &&
+    typeof source.color === "string" &&
+    ACCOUNT_COLORS.has(source.color)
+  ) {
+    return { kind: "grok", shape: source.shape as GrokBallShapeId, color: source.color };
+  }
+  return DEFAULT_ACCOUNT_AVATAR;
+}
+
 export type PersistedSettings = {
   theme: "dark" | "light";
   /** "" means "not set" — the UI shows the localized default name instead. */
   accountName: string;
+  accountAvatar: Avatar;
   accent: string;
   language: LanguagePreference;
   /** Hold-to-talk transcription language. Chinese when unset or invalid. */
@@ -39,6 +72,7 @@ export const UNSET_ACCOUNT_NAME = "";
 export const DEFAULT_SETTINGS: PersistedSettings = {
   theme: "dark",
   accountName: UNSET_ACCOUNT_NAME,
+  accountAvatar: DEFAULT_ACCOUNT_AVATAR,
   accent: "#6ea8ff",
   language: "system",
   voiceLanguage: "zh",
@@ -65,6 +99,7 @@ function withDefaults(parsed: Partial<PersistedSettings>): PersistedSettings {
   return {
     theme: parsed.theme === "light" ? "light" : "dark",
     accountName,
+    accountAvatar: normalizeAccountAvatar(parsed.accountAvatar),
     accent: isValidHex(parsed.accent) ? parsed.accent : DEFAULT_SETTINGS.accent,
     language: isLanguagePreference(parsed.language) ? parsed.language : DEFAULT_SETTINGS.language,
     voiceLanguage: parsed.voiceLanguage === "en" ? "en" : "zh",

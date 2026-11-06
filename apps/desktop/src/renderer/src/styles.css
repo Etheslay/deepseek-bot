@@ -351,11 +351,7 @@ body {
   flex: 0 0 30px;
   display: grid;
   place-items: center;
-  border-radius: 50%;
-  background: #14b8a6;
-  color: #04211d;
-  font-weight: 700;
-  font-size: 0.9rem;
+  background: transparent;
 }
 
 .foot-text {
@@ -1272,17 +1268,41 @@ body {
   padding: 0.9rem 1rem;
 }
 
+.account-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
 .account-avatar {
   width: 46px;
   height: 46px;
   flex: 0 0 46px;
   display: grid;
   place-items: center;
-  border-radius: 50%;
-  background: #14b8a6;
-  color: #04211d;
-  font-weight: 700;
-  font-size: 1.2rem;
+  padding: 0;
+  border: none;
+  border-radius: 14px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.account-avatar:hover,
+.account-avatar[aria-expanded="true"] {
+  background: var(--item-hover);
+}
+
+.account-avatar:focus-visible {
+  outline: 2px solid #8ab4ff;
+  outline-offset: 2px;
+}
+
+.account-avatar-picker {
+  background: var(--raised);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 0.9rem 1rem 1rem;
 }
 
 .account-meta {

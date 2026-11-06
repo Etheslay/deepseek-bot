@@ -2,6 +2,7 @@
 import { describe, expect, it } from "vitest";
 import {
   ACCENT_PRESETS,
+  DEFAULT_ACCOUNT_AVATAR,
   DEFAULT_SETTINGS,
   isValidHex,
   loadSettings,
@@ -104,6 +105,26 @@ describe("settings persistence", () => {
     storage.clear();
     storage.setItem("deepseek-bot.settings.v2", JSON.stringify({ notifications: "on" }));
     expect(loadSettings(storage).notifications).toEqual(DEFAULT_SETTINGS.notifications);
+  });
+
+  it("keeps a chosen account avatar and drops an unknown one", () => {
+    const storage = window.localStorage;
+    storage.clear();
+    const chosen = { kind: "grok" as const, shape: "heart" as const, color: "#FF5EB1" };
+    saveSettings(storage, { ...DEFAULT_SETTINGS, accountAvatar: chosen });
+    expect(loadSettings(storage).accountAvatar).toEqual(chosen);
+
+    storage.setItem(
+      "deepseek-bot.settings.v2",
+      JSON.stringify({ accountAvatar: { kind: "mono" } }),
+    );
+    expect(loadSettings(storage).accountAvatar).toEqual({ kind: "mono" });
+
+    storage.setItem(
+      "deepseek-bot.settings.v2",
+      JSON.stringify({ accountAvatar: { kind: "grok", shape: "circle", color: "#000000" } }),
+    );
+    expect(loadSettings(storage).accountAvatar).toEqual(DEFAULT_ACCOUNT_AVATAR);
   });
 
   it("presets are all valid hex", () => {

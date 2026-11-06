@@ -526,6 +526,8 @@ export function App(): JSX.Element {
     setMermaidTheme(theme);
   }, [theme]);
   const [accountName, setAccountName] = useState(initialSettings.accountName);
+  const [accountAvatar, setAccountAvatar] = useState<AvatarKind>(initialSettings.accountAvatar);
+  const [accountAvatarOpen, setAccountAvatarOpen] = useState(false);
   const [accent, setAccent] = useState(initialSettings.accent);
   const [language, setLanguage] = useState<LanguagePreference>(initialSettings.language);
   const [voiceLanguage, setVoiceLanguage] = useState<VoiceTranscriptionLanguage>(initialSettings.voiceLanguage);
@@ -621,8 +623,16 @@ export function App(): JSX.Element {
   >(null);
 
   useEffect(() => {
-    saveSettings(window.localStorage, { theme, accountName, accent, language, voiceLanguage, notifications });
-  }, [theme, accountName, accent, language, voiceLanguage, notifications]);
+    saveSettings(window.localStorage, {
+      theme,
+      accountName,
+      accountAvatar,
+      accent,
+      language,
+      voiceLanguage,
+      notifications,
+    });
+  }, [theme, accountName, accountAvatar, accent, language, voiceLanguage, notifications]);
 
   useEffect(() => {
     // Keeps the renderer store and the main process (tray, notifications) in sync.
@@ -2132,7 +2142,7 @@ const logout = (): void => {
             onClick={() => setSettingsOpen(true)}
           >
             <span className="avatar" aria-hidden="true">
-              {displayName.slice(0, 1).toUpperCase()}
+              <AvatarView avatar={accountAvatar} variant="sidebar" size={34} />
             </span>
             <span className="foot-id">
               <span className="foot-name">{displayName}</span>
@@ -2668,10 +2678,17 @@ const logout = (): void => {
                 {settingsSection === "general" && (
                   <div className="settings-general">
                     <div className="settings-section-title">{t("shell.account")}</div>
+                <div className="account-block">
                 <div className="account-card">
-                  <span className="account-avatar" aria-hidden="true">
-                    {displayName.slice(0, 1).toUpperCase()}
-                  </span>
+                  <button
+                    type="button"
+                    className="account-avatar"
+                    aria-label={t("shell.changeAvatar")}
+                    aria-expanded={accountAvatarOpen}
+                    onClick={() => setAccountAvatarOpen((open) => !open)}
+                  >
+                    <AvatarView avatar={accountAvatar} variant="inline" size={46} />
+                  </button>
                   <div className="account-meta">
                     {editingName ? (
                       <input
@@ -2714,6 +2731,16 @@ const logout = (): void => {
                       {t("shell.signOut")}
                     </button>
                   </div>
+                </div>
+                {accountAvatarOpen && (
+                  <div className="account-avatar-picker">
+                    <AvatarPicker
+                      value={accountAvatar}
+                      theme={theme}
+                      onChange={setAccountAvatar}
+                    />
+                  </div>
+                )}
                 </div>
                 {/* The permissions block and the screen-capture settings that
                     develop attached to it both live in the 权限 section now. */}
