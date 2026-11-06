@@ -35,6 +35,7 @@ export const shellMessages = {
   "shell.botReplyTurn": { zh: "在的 {0}，什么事？", en: "I’m here, {0}. What’s up?" },
   "shell.cancel": { zh: "取消", en: "Cancel" },
   "shell.cancelQuote": { zh: "取消引用", en: "Remove quote" },
+  "shell.changeAvatar": { zh: "更换头像", en: "Change avatar" },
   "shell.check": { zh: "检查", en: "Check" },
   "shell.checkForUpdates": { zh: "检查更新", en: "Check for updates" },
   "shell.choiceOther": { zh: "其他，我说明", en: "Other…" },
