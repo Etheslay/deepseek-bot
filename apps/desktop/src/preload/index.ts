@@ -87,6 +87,10 @@ export type DesktopBridge = {
   knowledge: {
     importFile: () => Promise<import("../shared/knowledge-import.js").KnowledgeImportResult>;
   };
+  /** Account picture: a file dialog in the main process. No path goes in or out. */
+  account: {
+    pickImage: () => Promise<import("../shared/account-avatar.js").AccountAvatarPickResult>;
+  };
   /**
    * Voice settings: local file dialogs for the whisper paths. The only
    * argument is which kind of file; the picked path comes back, never in.
@@ -161,6 +165,9 @@ const api: DesktopBridge = {
   },
   knowledge: {
     importFile: () => ipcRenderer.invoke(IPC_CHANNELS.KNOWLEDGE_IMPORT),
+  },
+  account: {
+    pickImage: () => ipcRenderer.invoke(IPC_CHANNELS.ACCOUNT_AVATAR_PICK),
   },
   voice: {
     pickFile: (kind) => ipcRenderer.invoke(IPC_CHANNELS.VOICE_PICK_FILE, kind),

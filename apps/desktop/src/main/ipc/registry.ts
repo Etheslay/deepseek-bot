@@ -25,6 +25,7 @@ import {
 } from "../../shared/system-integration.js";
 import type { NotificationOutcome } from "../notifications.js";
 import { assertValidVoicePickKind, type VoicePickResult } from "../../shared/voice-pick.js";
+import type { AccountAvatarPickResult } from "../../shared/account-avatar.js";
 import {
   assertAuthorizedSender,
   type SenderGuard,
@@ -44,6 +45,8 @@ export type IpcHandlers = {
   saveKey: (key: unknown) => Promise<{ configured: boolean }>;
   /** Open the knowledge file dialog. The caller cannot pass a path. */
   importKnowledge: () => Promise<import("../../shared/knowledge-import.js").KnowledgeImportResult>;
+  /** Open the account picture dialog. The caller cannot pass a path. */
+  pickAccountAvatar: () => Promise<AccountAvatarPickResult>;
   /** Open the whisper file dialog. The caller names the kind, not a path. */
   pickVoiceFile: (kind: unknown) => Promise<VoicePickResult>;
   /** D24: check GitHub Releases for a newer version. */
@@ -148,6 +151,10 @@ export function registerIpcHandlers(
   ipcMain.handle(
     IPC_CHANNELS.KNOWLEDGE_IMPORT,
     wrap(IPC_CHANNELS.KNOWLEDGE_IMPORT, () => handlers.importKnowledge()),
+  );
+  ipcMain.handle(
+    IPC_CHANNELS.ACCOUNT_AVATAR_PICK,
+    wrap(IPC_CHANNELS.ACCOUNT_AVATAR_PICK, () => handlers.pickAccountAvatar()),
   );
   ipcMain.handle(IPC_CHANNELS.VOICE_PICK_FILE, (event: IpcMainInvokeEvent, kind: unknown) => {
     assertAllowedChannel(IPC_CHANNELS.VOICE_PICK_FILE);

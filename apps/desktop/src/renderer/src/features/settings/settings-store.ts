@@ -14,6 +14,7 @@ import { isLanguagePreference } from "../../../../shared/i18n/locale.js";
 import type { LanguagePreference } from "../../../../shared/i18n/types.js";
 import type { Avatar } from "../avatars/avatar-meta.js";
 import { GROK_BALL_COLORS, GROK_BALL_SHAPE_IDS, type GrokBallShapeId } from "../avatars/grok-ball-model.js";
+import { isAccountAvatarDataUrl } from "../../../../shared/account-avatar.js";
 
 export type NotificationPrefs = {
   /** Master switch for OS notifications. */
@@ -38,7 +39,10 @@ export function normalizeAccountAvatar(value: unknown): Avatar {
   if (typeof value !== "object" || value === null) {
     return DEFAULT_ACCOUNT_AVATAR;
   }
-  const source = value as { kind?: unknown; shape?: unknown; color?: unknown };
+  const source = value as { kind?: unknown; shape?: unknown; color?: unknown; dataUrl?: unknown };
+  if (source.kind === "image" && typeof source.dataUrl === "string" && isAccountAvatarDataUrl(source.dataUrl)) {
+    return { kind: "image", dataUrl: source.dataUrl };
+  }
   if (source.kind === "mono") {
     return { kind: "mono" };
   }
