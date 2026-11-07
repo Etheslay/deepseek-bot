@@ -15,6 +15,7 @@ export const IPC_CHANNELS = {
   HOST_CALL: "host:call",
   /** Desktop file dialog for one .txt/.md knowledge note. No path argument. */
   KNOWLEDGE_IMPORT: "knowledge:import",
+  ACCOUNT_AVATAR_PICK: "account:pickAvatar",
   /**
    * Desktop file dialog for one local whisper path (binary or model). The
    * only argument is the file kind — the renderer never sends a path.

@@ -19,6 +19,7 @@ import {
   type GrokBallShapeId,
   type GrokBallState,
 } from "./grok-ball-model.js";
+import { isAccountAvatarDataUrl } from "../../../../shared/account-avatar.js";
 
 const CONTRACT_SHAPES = new Set<string>([...AVATAR_SHAPES, ...AVATAR_SHAPE_IDS_RETIRED]);
 const CONTRACT_COLORS = new Set<string>([...AVATAR_COLORS, ...AVATAR_COLORS_RETIRED]);
@@ -30,6 +31,8 @@ export function avatarColor(avatar: Avatar): string {
       return "var(--avatar-mono-bg)";
     case "grok":
       return avatar.color === "mono" ? "var(--avatar-mono-bg)" : avatar.color;
+    case "image":
+      return "var(--avatar-mono-bg)";
   }
 }
 
@@ -41,7 +44,14 @@ export type Avatar =
       shape: GrokBallShapeId;
       color: string;
       state?: GrokBallState;
-    };
+    }
+  | { kind: "image"; dataUrl: string };
+
+/** A local account photo, or null when the data URL is not a small JPEG. */
+export function accountImageAvatar(dataUrl: string): Avatar | null {
+  if (!isAccountAvatarDataUrl(dataUrl)) return null;
+  return { kind: "image", dataUrl };
+}
 
 /** Stable default mapping: same bot id → same Grok Ball avatar. */
 export function defaultAvatarFor(seed: string): Avatar {
@@ -80,6 +90,8 @@ export function avatarKey(avatar: Avatar): string {
       return "mono";
     case "grok":
       return `grok:${avatar.shape}:${avatar.color}:${avatar.state ?? "idle"}`;
+    case "image":
+      return `image:${avatar.dataUrl.length}:${avatar.dataUrl.slice(-24)}`;
   }
 }
 

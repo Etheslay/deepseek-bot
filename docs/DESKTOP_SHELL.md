@@ -76,6 +76,7 @@ pnpm --filter @deepseek-bot/desktop pack:win   # 构建 + electron-builder NSIS 
 | `settings:saveKey` | safeStorage 加密保存 API Key，仅回传 `cred:` 引用 |
 | `host:call` | 渲染层 → Host 契约调用（方法白名单在主进程与 Host 双重校验） |
 | `knowledge:import` | 打开文件对话框读一个 .txt/.md（无路径参数） |
+| `account:pickAvatar` | 打开图片对话框，主进程裁成小 JPEG 后只回 data URL（无路径参数） |
 | `updates:check` / `updates:downloadInstall` | D24 应用内更新（GitHub Releases 源） |
 | `backups:list` | 只读数据根 `backups/*/manifest.json` 摘要（D24） |
 | `app:hardwareAcceleration` | 读取/切换硬件加速偏好（userData 文件，重启生效；D24） |
@@ -88,7 +89,7 @@ pnpm --filter @deepseek-bot/desktop pack:win   # 构建 + electron-builder NSIS 
 
 所有跨边界 payload 在 `src/shared/system-integration.ts` 严格校验后才会被主进程使用：条目上限（托盘 50）、名字长度、状态枚举、图标必须是 `data:image/png;base64,` 且 ≤64 KiB、Chrome profile token 拒绝分隔符与 `..`。
 
-preload 暴露面：`deepseekBot.{getAppInfo, window.*, settings.saveKey, updates.*, knowledge.importFile, backups.list, app.hardwareAcceleration, host.{call,onMissed}, i18n.setLanguage, system.{tray.sync, notifications.show, chrome.*, onTrayAction, onNotificationClick, onWindowFocus}}`。不暴露 `ipcRenderer`、`require`、`process`、`fs` 或任意 channel。
+preload 暴露面：`deepseekBot.{getAppInfo, window.*, settings.saveKey, updates.*, knowledge.importFile, account.pickImage, backups.list, app.hardwareAcceleration, host.{call,onMissed}, i18n.setLanguage, system.{tray.sync, notifications.show, chrome.*, onTrayAction, onNotificationClick, onWindowFocus}}`。不暴露 `ipcRenderer`、`require`、`process`、`fs` 或任意 channel。
 
 ## Host 进程生命周期
 

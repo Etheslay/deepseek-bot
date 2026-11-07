@@ -127,6 +127,24 @@ describe("settings persistence", () => {
     expect(loadSettings(storage).accountAvatar).toEqual(DEFAULT_ACCOUNT_AVATAR);
   });
 
+  it("keeps a small jpeg account photo and drops anything else", () => {
+    const storage = window.localStorage;
+    storage.clear();
+    const photo = { kind: "image" as const, dataUrl: "data:image/jpeg;base64,AAAA" };
+    saveSettings(storage, { ...DEFAULT_SETTINGS, accountAvatar: photo });
+    expect(loadSettings(storage).accountAvatar).toEqual(photo);
+
+    for (const dataUrl of [
+      "data:image/svg+xml;base64,AAAA",
+      "data:image/png;base64,AAAA",
+      "https://example.com/face.jpg",
+      `data:image/jpeg;base64,${"A".repeat(200_000)}`,
+    ]) {
+      storage.setItem("deepseek-bot.settings.v2", JSON.stringify({ accountAvatar: { kind: "image", dataUrl } }));
+      expect(loadSettings(storage).accountAvatar).toEqual(DEFAULT_ACCOUNT_AVATAR);
+    }
+  });
+
   it("presets are all valid hex", () => {
     for (const preset of ACCENT_PRESETS) {
       expect(isValidHex(preset)).toBe(true);

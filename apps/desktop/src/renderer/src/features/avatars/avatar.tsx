@@ -44,5 +44,16 @@ export function Avatar(props: {
           state={state ?? avatar.state ?? "idle"}
         />
       );
+    case "image":
+      return (
+        <img
+          className="account-photo"
+          src={avatar.dataUrl}
+          alt=""
+          width={size ?? 46}
+          height={size ?? 46}
+          draggable={false}
+        />
+      );
   }
 }

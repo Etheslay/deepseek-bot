@@ -42,6 +42,12 @@ type DesktopBridge = {
       | { ok: false; code: "format" | "size" | "empty" | "encoding" | "cancelled" | "read" }
     >;
   };
+  account: {
+    pickImage: () => Promise<
+      | { ok: true; dataUrl: string }
+      | { ok: false; code: "cancelled" | "read" | "format" | "size" }
+    >;
+  };
   voice: {
     pickFile: (
       kind: "bin" | "model",

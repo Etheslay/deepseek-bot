@@ -63,6 +63,7 @@ import { Avatar as AvatarView } from "./features/avatars/avatar.js";
 import { AvatarPicker } from "./features/avatars/avatar-picker.js";
 import { GazeAvatar } from "./features/avatars/gaze-avatar.js";
 import {
+  accountImageAvatar,
   avatarColor,
   bubbleInk,
   toContractAvatar,
@@ -526,7 +527,7 @@ export function App(): JSX.Element {
   }, [theme]);
   const [accountName, setAccountName] = useState(initialSettings.accountName);
   const [accountAvatar, setAccountAvatar] = useState<AvatarKind>(initialSettings.accountAvatar);
-  const [accountAvatarOpen, setAccountAvatarOpen] = useState(false);
+  const pickingAvatar = useRef(false);
   const [accent, setAccent] = useState(initialSettings.accent);
   const [language, setLanguage] = useState<LanguagePreference>(initialSettings.language);
   const [voiceLanguage, setVoiceLanguage] = useState<VoiceTranscriptionLanguage>(initialSettings.voiceLanguage);
@@ -1569,6 +1570,29 @@ export function App(): JSX.Element {
       .catch(() => {
         setToast(t("shell.groupDeleteFailed"));
         setGroupMenu(null);
+      });
+  };
+
+  const pickAccountPhoto = (): void => {
+    if (pickingAvatar.current) return;
+    pickingAvatar.current = true;
+    void window.deepseekBot.account
+      .pickImage()
+      .then((result) => {
+        if (!result.ok) {
+          if (result.code !== "cancelled") setToast(t("shell.avatarUnreadable"));
+          return;
+        }
+        const avatar = accountImageAvatar(result.dataUrl);
+        if (avatar === null) {
+          setToast(t("shell.avatarUnreadable"));
+          return;
+        }
+        setAccountAvatar(avatar);
+      })
+      .catch(() => setToast(t("shell.avatarUnreadable")))
+      .finally(() => {
+        pickingAvatar.current = false;
       });
   };
 
@@ -2682,9 +2706,9 @@ const logout = (): void => {
                   <button
                     type="button"
                     className="account-avatar"
+                    title={t("shell.changeAvatar")}
                     aria-label={t("shell.changeAvatar")}
-                    aria-expanded={accountAvatarOpen}
-                    onClick={() => setAccountAvatarOpen((open) => !open)}
+                    onClick={pickAccountPhoto}
                   >
                     <AvatarView avatar={accountAvatar} variant="inline" size={46} />
                   </button>
@@ -2731,15 +2755,6 @@ const logout = (): void => {
                     </button>
                   </div>
                 </div>
-                {accountAvatarOpen && (
-                  <div className="account-avatar-picker">
-                    <AvatarPicker
-                      value={accountAvatar}
-                      theme={theme}
-                      onChange={setAccountAvatar}
-                    />
-                  </div>
-                )}
                 </div>
                 {/* The permissions block and the screen-capture settings that
                     develop attached to it both live in the 权限 section now. */}

@@ -27,6 +27,11 @@ describe("IPC allowlist", () => {
     expect(() => assertAllowedChannel(IPC_CHANNELS.KNOWLEDGE_IMPORT)).not.toThrow();
   });
 
+  it("registers the account picture channel without a path argument", () => {
+    expect(ALLOWED_CHANNELS.has(IPC_CHANNELS.ACCOUNT_AVATAR_PICK)).toBe(true);
+    expect(() => assertAllowedChannel(IPC_CHANNELS.ACCOUNT_AVATAR_PICK)).not.toThrow();
+  });
+
   it("registers the voice file-pick channel and only the two kinds", () => {
     expect(ALLOWED_CHANNELS.has(IPC_CHANNELS.VOICE_PICK_FILE)).toBe(true);
     expect(() => assertAllowedChannel(IPC_CHANNELS.VOICE_PICK_FILE)).not.toThrow();

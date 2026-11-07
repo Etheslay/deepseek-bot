@@ -26,6 +26,7 @@ import {
 } from "./chrome-bookmarks.js";
 import { DATA_ROOT_DIR_NAME, HOST_EVENT_CHAT_STREAM, HOST_EVENT_MISSED, SYSTEM_EVENT_WINDOW_FOCUS } from "../shared/ipc-channels.js";
 import { pickKnowledgeFile } from "./knowledge-import.js";
+import { pickAccountAvatar } from "./account-avatar.js";
 import { rendererPermissionAllowed } from "./session-permissions.js";
 import { pickVoiceFile } from "./voice-pick.js";
 import { assertValidVoicePickKind } from "../shared/voice-pick.js";
@@ -250,6 +251,7 @@ function registerShellIpc(win: BrowserWindow): void {
       }),
       saveKey: (key) => saveApiKey(key),
       importKnowledge: () => pickKnowledgeFile(win),
+      pickAccountAvatar: () => pickAccountAvatar(win),
       pickVoiceFile: (kind) => {
         assertValidVoicePickKind(kind);
         return pickVoiceFile(win, kind);

@@ -52,6 +52,9 @@ export function trayAvatarSvg(
   state: GrokBallState = "idle",
   pixels: number = TRAY_ICON_PIXELS,
 ): string {
+  if (avatar.kind === "image") {
+    return trayAvatarSvg({ kind: "mono" }, colors, state, pixels);
+  }
   const isMono = avatar.kind === "mono";
   const shapeId = isMono ? "circle" : avatar.shape;
   const definition = GROK_BALL_SHAPES[shapeId] ?? GROK_BALL_SHAPES.circle;
