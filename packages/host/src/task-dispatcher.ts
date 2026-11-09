@@ -36,7 +36,6 @@ import {
   getTaskByIdempotencyKey,
   insertTask,
   listPermissionGrants,
-  listPermissionPolicies,
   listQueuedHopsOfRoot,
   listTasks,
   markTaskRunning,
@@ -595,9 +594,8 @@ export class TaskDispatcher {
     if (bot === undefined || bot.archivedAt !== null) {
       throw unauthorized("dispatch sender bot does not exist or is archived", { botId });
     }
-    // Interop: no role gate — any live bot may dispatch. The human approval
-    // on app.dispatch_task stays the gate; the executor's own policy governs
-    // its turn.
+    // Interop: no role gate — any live bot may dispatch. Bot-to-bot messaging
+    // is not a human permission; the executor's own policy governs its turn.
     return bot;
   }
 
@@ -696,9 +694,10 @@ export class TaskDispatcher {
   }
 
   /**
-   * R-13.6 revalidation for relay hops: the D16 policy for
-   * app.dispatch_task must not be deny, and when the first hop recorded
-   * authorization refs, every grant must still be unrevoked and unexpired
+   * R-13.6 revalidation for relay hops: bot-to-bot messaging is not a human
+   * permission, so a stored ask or deny on app.dispatch_task does not stop
+   * the chain. When the first hop recorded authorization refs, every grant
+   * must still be unrevoked and unexpired
    * and the approval must not have been denied/cancelled/expired. Grant use
    * counts are NOT charged again — the single chain approval covers all
    * pre-declared hops (R-13.1/R-13.2). A chain dispatched without recorded
@@ -706,10 +705,6 @@ export class TaskDispatcher {
    * beyond the policy — the human can always cancel.
    */
   private revalidateChainAuthorization(root: Task): boolean {
-    const denyPolicy = listPermissionPolicies(this.db).find(
-      (policy) => policy.capability === "app.dispatch_task",
-    );
-    if (denyPolicy?.mode === "deny") return false;
     const authorization = this.readAuthorization(root);
     if (authorization === undefined) return true;
     if (authorization.approvalId !== undefined) {

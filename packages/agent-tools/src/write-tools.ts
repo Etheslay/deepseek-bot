@@ -43,7 +43,7 @@ const createBotsBatchShape: CapabilityShape = {
     "Pass newGroup to mint the group in the same operation, or groupId to " +
     "target an existing one — never both. Returns batchId for revoke_batch. " +
     "组队推荐顺序：先建成员，拿到返回的 botId，再用 save_workflow 保存引用这些 " +
-    "botId 的工作流——两次调用会合并进同一张审批卡。",
+    "botId 的工作流。保存成功后运行会自己开始。",
   inputSchema: z
     .object({
       groupId: z.string().uuid().optional(),

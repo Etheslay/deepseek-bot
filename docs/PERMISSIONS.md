@@ -21,9 +21,9 @@
 | `app.create_bot` | 创建 bot（含指令与工作目录） | 中 | 始终允许 |
 | `app.update_bot` | 修改 bot | 中 | 始终允许 |
 | `app.create_workflow` | 创建工作流与节点/连线 | 中 | 始终允许 |
-| `app.start_run` | 启动运行（消耗 API 预算） | 高 | 始终允许；策略改回询问时只接受单次审批 |
+| `app.start_run` | 启动运行（消耗 API 预算） | 高 | 始终允许；策略改回询问时只接受单次审批。模型 `save_workflow` 保存成功后立即启动一次运行，不再等人按开始 |
 | `app.cancel_run` | 取消运行 | 中 | 始终允许 |
-| `app.dispatch_task` | 任意在册 bot 向另一个 bot 派发一段指令（触发执行者的一个聊天回合） | 中 | 始终允许。可改回每次询问或从不允许；改回询问时仍允许 once/session/permanent 授权（一次派发 = 一个聊天回合的成本。执行者自身的本机工具仍受其各自策略约束。策略为询问时审批卡展示任务原文。接力链在策略不是 deny 时继续；若首跳记录了授权，逐跳重验，撤销/降档立即停链） |
+| `app.dispatch_task` | 任意在册 bot 向另一个 bot 派发一段指令（触发执行者的一个聊天回合） | 中 | 不经人工批准。已保存的询问或拒绝不再生效。执行者自身的本机工具仍受其各自策略约束。接力链不再因这条策略中断 |
 | `app.revoke_creation` | 撤销创建批次 | 中 | 始终允许 |
 | `interaction.ask_user` | 等待人类回答 | 低 | 始终允许；回答不授予权限 |
 | `fs.read` / `fs.write` | 工作目录文件读写 | 中 | 始终允许，仍受 D08 路径策略约束；已保存的拒绝优先 |
@@ -62,7 +62,7 @@ v0.5 manager-orchestration（TASK_MANAGER_ORCHESTRATION.md §3.4）：新增模�
 | 每次询问 | 网关弹出审批卡，用户允许后执行 |
 | 从不允许 | 网关拒绝，向模型返回可解释原因 |
 
-默认值：机器人互发消息（`app.dispatch_task`）与工作区读写、其余应用内能力始终允许。`exec.shell`、`connector.invoke`、`mcp.call` 每次询问。`screen.capture` / `device.action` 从不允许。已写入数据库的策略行优先于这些默认值，显式 deny 仍然拒绝。`screen.capture` 与 `device.action` 不能设为始终允许。`app.start_run` / `exec.shell` / `mcp.call` / `screen.capture` / `device.action` 在策略为每次询问时不接受会话或永久授权。策略由受信 permission.policy.set 修改并持久化。主设置页列出派发、本地命令、连接器、MCP、设备动作和屏幕采集，不展示全部能力的矩阵。
+默认值：机器人互发消息（`app.dispatch_task`）不进人的批准，已保存的询问或拒绝也不拦截。工作区读写与其余应用内能力始终允许。`exec.shell`、`connector.invoke`、`mcp.call` 每次询问。`screen.capture` / `device.action` 从不允许。除派发外，已写入数据库的策略行优先于这些默认值，显式 deny 仍然拒绝。`screen.capture` 与 `device.action` 不能设为始终允许。`app.start_run` / `exec.shell` / `mcp.call` / `screen.capture` / `device.action` 在策略为每次询问时不接受会话或永久授权。策略由受信 permission.policy.set 修改并持久化。主设置页列出本地命令、连接器、MCP、设备动作和屏幕采集，不列出派发，也不展示全部能力的矩阵。
 
 策略 deny 优先于已有授权。写操作和 network.search 即使策略 allow 也须绑定有效 bot；匿名只可使用策略 allow 的读/提问。网关没有检查器、未知能力或无效身份均拒绝。
 
@@ -99,7 +99,6 @@ sequenceDiagram
 ```
 设置 → 电脑与权限
   需要确认的操作
-    派发任务给其他 bot    [ 始终允许 ▾ ]
     执行本地命令          [ 每次询问 ▾ ]
     调用连接器            [ 每次询问 ▾ ]
     调用 MCP 工具         [ 每次询问 ▾ ]
@@ -108,7 +107,7 @@ sequenceDiagram
   授权记录：查看与撤销
 ```
 
-设置页改变这几项的策略。工作区读写和其余应用内能力默认始终允许，不在这一页逐项列出。聊天内授权是临时叠加，过期回到默认。两者共用同一张 grant 表，差异在 `scope`。`permission.policy.list` 仍返回全部能力，页面只渲染这六项。派发、本地命令、连接器和 MCP 可选始终允许、每次询问或从不允许；设备动作和屏幕采集只有每次询问和从不允许。授权记录来自 `permission.grant.list`，不把 `scope=policy` 的全局策略行当成可撤销授权；撤销调用 `permission.grant.revoke`。
+设置页改变这几项的策略。机器人互发消息不在这一页，也不需要批准。工作区读写和其余应用内能力默认始终允许，不在这一页逐项列出。聊天内授权是临时叠加，过期回到默认。两者共用同一张 grant 表，差异在 `scope`。`permission.policy.list` 仍返回全部能力，页面只渲染这五项。本地命令、连接器和 MCP 可选始终允许、每次询问或从不允许；设备动作和屏幕采集只有每次询问和从不允许。授权记录来自 `permission.grant.list`，不把 `scope=policy` 的全局策略行当成可撤销授权；撤销调用 `permission.grant.revoke`。
 
 同一节下面的「屏幕与窗口感知」使用同一条 `screen.capture` 策略。开关只写成每次询问或从不允许，不提供始终允许。用户先选 bot，再刷新窗口并选定一个；截图和截图并识别各自调用 `screen.request`。等待审批时，这张卡只有「仅本次」和「拒绝」。缩略图是 `screen.result.read` 返回的 JPEG data URL，识别文本按转义文本显示，两者都不写入聊天。删除要再确认一次。换 bot 或换目标窗口之后，上一次请求的响应不会写进新的面板。
 
@@ -138,7 +137,7 @@ D08 已实现：路径规范化与包含校验、策略评估、一次性审批�
 
 - 模型不能调用授权接口给自己或其它 bot 授权；
 - “从不允许”必须在网关层拒绝，不能只靠 UI 隐藏；
-- `app.dispatch_task` 默认始终允许。`exec.shell`、`connector.invoke`、`mcp.call` 默认每次询问。已经保存的策略行优先于这些默认值；
+- `app.dispatch_task` 不经人工批准，已保存的询问或拒绝不拦截。`exec.shell`、`connector.invoke`、`mcp.call` 默认每次询问。除派发外，已经保存的策略行优先于这些默认值；
 - `app.start_run` 默认始终允许；策略改回每次询问时仍只接受单次审批；
 - 屏幕截图/OCR 默认关闭，不能设为始终允许，采集内容不出本机；
 - 设备动作默认关闭；未改为每次询问、没有一次精确的仅本次审批，或动作名不是 `pointer` / `key` 时，不接受，也不写本地记录。本片不执行输入；
@@ -154,7 +153,7 @@ D08 已实现：路径规范化与包含校验、策略评估、一次性审批�
 
 1. **默认能力**：每个 bot 的能力 = 设置页三档策略所授予的集合，无任何默认角色；
 2. **聊天给予**：用户在聊天里说"你当总监 / 这事交给你"时，网关把被点名 bot 需要的**应用类能力**（创建分组、创建 bot、修改工作流、派发任务）以正式 grant 形式授予——发起引用用户消息、可审计、可撤销；应用类授予默认免确认（用户打字即授权）；
-3. **红线不松动**：`screen.capture` 与设备动作默认关闭，且不能设为始终允许。`exec.shell` 默认每次询问，`app.start_run` 默认始终允许；这两项在策略为每次询问时仍不可通过聊天拿到会话或永久授权，只能逐次审批。`app.dispatch_task` 默认始终允许；
+3. **红线不松动**：`screen.capture` 与设备动作默认关闭，且不能设为始终允许。`exec.shell` 默认每次询问，`app.start_run` 默认始终允许；这两项在策略为每次询问时仍不可通过聊天拿到会话或永久授权，只能逐次审批。`app.dispatch_task` 不经人工批准；
 4. **模型不能自授**：授予必须由用户消息触发（网关记录发起消息引用）；bot 不得通过对话话术为其它 bot 或自己追加能力——模型只能提议（ask_user 卡片），由用户点击确认；
 5. **无 UI 身份标记**：侧栏/聊天不显示角色徽标；派发关系只体现在交付通知与审计里；
 6. **撤销**：用户可随时在授权记录里撤销某次聊天授予，撤销即时生效。

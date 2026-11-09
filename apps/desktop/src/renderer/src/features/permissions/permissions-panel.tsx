@@ -2,8 +2,8 @@
  * Settings panel for the D16 permission model.
  *
  * The policy engine still stores a mode for every capability. This page lists
- * bot-to-bot messaging (default allow) and the computer actions that stay
- * gated: local commands, connectors, MCP, device input, and screen capture.
+ * the computer actions that stay gated: local commands, connectors, MCP,
+ * device input, and screen capture. Bot-to-bot messaging is not a permission.
  * Device input and screen capture stay ask or off. Workspace files and the
  * other in-app capabilities default to allow and are not listed.
  * Issued grants stay here so a person can revoke them.

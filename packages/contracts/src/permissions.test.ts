@@ -50,7 +50,6 @@ describe("permission schemas", () => {
     expect(defaultPermissionMode("screen.capture")).toBe("deny");
     expect(defaultPermissionMode("device.action")).toBe("deny");
     expect(SETTINGS_SURFACE_CAPABILITIES).toEqual([
-      "app.dispatch_task",
       "exec.shell",
       "connector.invoke",
       "mcp.call",
@@ -62,7 +61,7 @@ describe("permission schemas", () => {
     const listed = new Set<string>(SETTINGS_SURFACE_CAPABILITIES);
     for (const capability of CAPABILITY_IDS) {
       const mode = defaultPermissionMode(capability);
-      const onPage = asked.has(capability) || off.has(capability) || capability === "app.dispatch_task";
+      const onPage = asked.has(capability) || off.has(capability);
       expect(listed.has(capability)).toBe(onPage);
       if (asked.has(capability)) {
         expect(mode).toBe("ask");

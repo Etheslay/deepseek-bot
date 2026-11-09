@@ -33,8 +33,8 @@ export type GrantScope = z.infer<typeof GrantScopeSchema>;
 
 /**
  * Personal-agent defaults.
- * - Bot-to-bot messaging (`app.dispatch_task`) is allow. The page can still
- *   set ask or deny; a stored row wins over this default.
+ * - Bot-to-bot messaging (`app.dispatch_task`) is not a human permission.
+ *   The authorizer allows it even when an older stored row says ask or deny.
  * - Touching the machine outside the bot workspace asks first: local
  *   commands, connector calls, and MCP calls. Workspace file read/write stays
  *   allow so a handoff file in the shared workspace can be written and read.
@@ -57,7 +57,6 @@ export function defaultPermissionMode(capability: CapabilityId): PermissionMode 
  * still evaluates them.
  */
 export const SETTINGS_SURFACE_CAPABILITIES = [
-  "app.dispatch_task",
   "exec.shell",
   "connector.invoke",
   "mcp.call",

@@ -349,6 +349,9 @@ function plan(
   if (call.botId !== null && !activeBot(db, call.botId))
     return reject("permission actor is not active");
   for (const capability of call.capabilities) {
+    // Bot-to-bot messaging is not a human permission. A stored ask or deny
+    // row from an older default does not block the call.
+    if (capability === "app.dispatch_task") continue;
     const mode = policies.find((policy) => policy.capability === capability)!.mode;
     if (mode === "deny") return reject("capability policy denies this action");
     if (
@@ -472,6 +475,7 @@ function revalidateUnchecked(
       throw denied();
   }
   for (const capability of call.capabilities) {
+    if (capability === "app.dispatch_task") continue;
     const mode = policies.find((policy) => policy.capability === capability)!.mode;
     if (mode === "deny") throw denied();
     if (mode === "allow") continue;
