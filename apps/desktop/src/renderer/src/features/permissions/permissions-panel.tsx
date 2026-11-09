@@ -144,7 +144,6 @@ export function PermissionsPanel() {
       <div className="settings-row">
         <span>{t("permissions.capabilityPolicies")}</span>
       </div>
-      <p className="settings-soon">{t("permissions.sensitiveIntro")}</p>
       {policies
         .filter((policy) => SURFACE.has(policy.capability))
         .map((policy) => {
