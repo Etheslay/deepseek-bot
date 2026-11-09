@@ -12,6 +12,7 @@ export const CAPABILITY_IDS = [
   "app.cancel_run",
   "app.dispatch_task",
   "app.learn_skill",
+  "app.schedule_message",
   "app.revoke_creation",
   "interaction.ask_user",
   "network.search",
@@ -38,6 +39,8 @@ export type GrantScope = z.infer<typeof GrantScopeSchema>;
  *   The authorizer allows it even when an older stored row says ask or deny.
  * - Learning a skill (`app.learn_skill`) is the person asking this bot to
  *   remember instructions. It defaults to allow and is not listed in settings.
+ * - A chat schedule (`app.schedule_message`) is the person asking this bot
+ *   to speak later. It defaults to allow and is not listed in settings.
  * - Touching the machine outside the bot workspace asks first: local
  *   commands, connector calls, and MCP calls. Workspace file read/write stays
  *   allow so a handoff file in the shared workspace can be written and read.

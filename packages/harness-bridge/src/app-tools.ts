@@ -19,6 +19,9 @@ export const APPLICATION_TOOL_NAMES = [
   "list_tasks",
   "learn_skill",
   "list_skills",
+  "schedule_message",
+  "list_message_schedules",
+  "cancel_message_schedule",
   // D26: chat attachments land in the bot workspace; the bot reads them
   // back through this tool (keep in lockstep with the Host list).
   "read_workspace_file",

@@ -16,6 +16,9 @@ const names = [
   "list_tasks",
   "learn_skill",
   "list_skills",
+  "schedule_message",
+  "list_message_schedules",
+  "cancel_message_schedule",
   "read_workspace_file",
 ];
 interface Definition {

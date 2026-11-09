@@ -44,6 +44,8 @@ describe("permission schemas", () => {
     expect(defaultPermissionMode("app.dispatch_task")).toBe("allow");
     expect(defaultPermissionMode("app.learn_skill")).toBe("allow");
     expect(requiresPerActionApproval("app.learn_skill")).toBe(false);
+    expect(defaultPermissionMode("app.schedule_message")).toBe("allow");
+    expect(requiresPerActionApproval("app.schedule_message")).toBe(false);
     expect(defaultPermissionMode("fs.read")).toBe("allow");
     expect(defaultPermissionMode("fs.write")).toBe("allow");
     expect(defaultPermissionMode("exec.shell")).toBe("ask");

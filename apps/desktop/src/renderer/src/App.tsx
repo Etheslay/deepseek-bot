@@ -51,6 +51,7 @@ import {
   type StreamStateForBot,
 } from "./features/chat/stream-runner.js";
 import {
+  absorbArrivedMessages,
   CHAT_THREAD_HISTORY_LIMIT,
   historyThreadMessages,
   isSameStoredTurn,
@@ -246,6 +247,8 @@ type Msg = {
    * leave it unset so the pane can tell a replay from a new message.
    */
   history?: boolean;
+  /** Host row id for a stored bubble. A poll uses it to append only new rows. */
+  storedId?: string;
   /** G6: the message re-enters the thread as 重新生成 / 编辑后重发, weakly labelled. */
   meta?: "regenerate" | "edited_resend";
 };
@@ -1495,6 +1498,7 @@ export function App(): JSX.Element {
       system: false,
       origin: "history" as const,
       history: message.history,
+      storedId: message.storedId,
       ...(message.speakerKey !== undefined ? { speakerKey: message.speakerKey } : {}),
       ...(message.choices !== undefined ? { choices: message.choices } : {}),
     }));
@@ -1547,6 +1551,53 @@ export function App(): JSX.Element {
       return;
     }
     openThread(bot);
+  }, [selectedBot, bots, desktop]);
+
+  useEffect(() => {
+    if (selectedBot === null) {
+      return;
+    }
+    const bot = bots.find((candidate) => candidate.key === selectedBot);
+    if (bot === undefined) {
+      return;
+    }
+    const botKey = bot.key;
+    const botId = bot.bot.id;
+    let alive = true;
+    const load = (): void => {
+      if (!threadHistoryLoaded.current.has(botKey)) {
+        return;
+      }
+      const scoped = scopeToBotConversation({
+        botId,
+        limit: CHAT_THREAD_HISTORY_LIMIT,
+      });
+      void desktop.chat
+        .history(scoped.botId, scoped.limit)
+        .then((rows) => {
+          if (!alive) {
+            return;
+          }
+          const history = storedThread(rows, botKey);
+          setChats((prev) => {
+            const current = prev[botKey];
+            if (current === undefined) {
+              return prev;
+            }
+            const absorbed = absorbArrivedMessages(current, history);
+            if (!absorbed.changed) {
+              return prev;
+            }
+            return { ...prev, [botKey]: absorbed.messages };
+          });
+        })
+        .catch(() => undefined);
+    };
+    const timer = window.setInterval(load, 10_000);
+    return () => {
+      alive = false;
+      window.clearInterval(timer);
+    };
   }, [selectedBot, bots, desktop]);
 
   const dropBotToGroup = (botKey: number, groupKey: number): void => {

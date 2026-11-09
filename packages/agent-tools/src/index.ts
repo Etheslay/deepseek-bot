@@ -83,6 +83,14 @@ export {
 export { bindWorkflowTools } from "./workflow-tools.js";
 export { bindSkillTools, LearnSkillInputSchema, ListSkillsInputSchema } from "./skill-tools.js";
 export {
+  bindScheduleTools,
+  CancelMessageScheduleInputSchema,
+  ListMessageSchedulesInputSchema,
+  ScheduleMessageInputSchema,
+  type BotMessageScheduleStore,
+  type BotMessageScheduleView,
+} from "./schedule-tools.js";
+export {
   bindWorkspaceFileTool,
   WorkspaceFileInputSchema,
   WorkspaceFilePathSchema,

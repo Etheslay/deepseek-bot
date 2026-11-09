@@ -70,7 +70,7 @@ describe("chat memory", () => {
     expect(names).toContain("memory_search");
     expect(names).not.toContain("memory_delete");
     const catalog = (await (await request("/app-tools")).json()) as { tools: Array<{ name: string }> };
-    expect(catalog.tools).toHaveLength(12); // D26 adds read_workspace_file to the catalog
+    expect(catalog.tools).toHaveLength(17); // chat schedules, learned skills, and read_workspace_file
     for (const name of ["memory_write", "memory_search", "web_search", "ask_user"]) {
       expect(catalog.tools.map((tool) => tool.name)).not.toContain(name);
     }
