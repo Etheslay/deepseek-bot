@@ -1395,11 +1395,22 @@ body {
   margin: 0;
   padding: 0 0.2rem 0.75rem;
   text-align: right;
-  font-size: 0.74rem;
+  font-size: 0.78rem;
+}
+
+/* Event-rule empty lines are status text, but they sit under a left-aligned
+   heading. Keep them on the same size and the same edge as the other notes. */
+.settings-general .settings-card > .automation-queue-empty {
+  text-align: start;
+  font-size: 0.78rem;
 }
 
 .settings .pill-btn {
   font-size: 0.75rem;
+}
+
+.settings .form-error {
+  font-size: 0.78rem;
 }
 
 .settings-host-down {
@@ -1418,7 +1429,7 @@ body {
 
 .settings-soon {
   color: var(--muted);
-  font-size: 0.85rem;
+  font-size: 0.78rem;
 }
 
 /* ---------- chat page: docked composer ---------- */
@@ -2069,7 +2080,7 @@ body {
 
 .settings-ok {
   color: var(--bots);
-  font-size: 0.85rem;
+  font-size: 0.78rem;
 }
 
 /* ---------- D05 UI update: footer / form / header popovers ---------- */
@@ -7084,6 +7095,10 @@ button.msg-attachment-file {
   gap: 10px;
   padding: 4px 0;
 }
+
+.skills-panel .form-hint {
+  font-size: 0.78rem;
+}
 .skills-toolbar {
   display: flex;
   gap: 8px;
@@ -7113,16 +7128,16 @@ button.msg-attachment-file {
   min-width: 0;
 }
 .skills-name {
-  font-size: 13px;
+  font-size: 0.82rem;
 }
 .skills-version {
-  font-size: 11px;
+  font-size: 0.74rem;
   font-style: normal;
   opacity: 0.6;
 }
 .skills-caps,
 .skills-desc {
-  font-size: 11px;
+  font-size: 0.74rem;
   opacity: 0.65;
 }
 .skills-row-actions {
@@ -7937,6 +7952,7 @@ select:focus-visible {
   right: auto;
   top: auto;
   transform: none;
+  font-size: 0.75rem;
 }
 
 /* ---------- manager orchestration (v0.7) ---------- */
@@ -8380,6 +8396,18 @@ select:focus-visible {
   padding: 0.55rem 0 0.75rem;
 }
 
+/* The shared dropdown is sized for the composer. In this form it should match
+   the compact settings field next to it. */
+.automation-form .custom-select-trigger {
+  height: auto;
+  padding: 0.35rem 0.6rem;
+  font-size: 0.78rem;
+}
+
+.automation-form .select-arrow {
+  font-size: 0.7rem;
+}
+
 .automation-field {
   width: 100%;
 }
@@ -8403,7 +8431,7 @@ select:focus-visible {
   align-items: center;
   padding: 0.45rem 0;
   border-top: 1px solid var(--border);
-  font-size: 0.9rem;
+  font-size: 0.82rem;
 }
 
 .automation-rule-label {
@@ -8415,7 +8443,7 @@ select:focus-visible {
 
 .automation-rule-state {
   color: var(--muted);
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   white-space: nowrap;
 }
 
@@ -8427,7 +8455,7 @@ select:focus-visible {
 
 .automation-notice {
   color: var(--muted);
-  font-size: 0.85rem;
+  font-size: 0.78rem;
   padding-bottom: 0.3rem;
 }
 
@@ -8436,12 +8464,13 @@ select:focus-visible {
 }
 
 .automation-queue-title {
+  font-size: 0.82rem;
   font-weight: 600;
 }
 
 .automation-queue-empty {
   color: var(--muted);
-  font-size: 0.85rem;
+  font-size: 0.78rem;
   padding-top: 0.4rem;
 }
 
