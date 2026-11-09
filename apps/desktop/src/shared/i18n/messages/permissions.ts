@@ -13,10 +13,6 @@ export const permissionsMessages = {
   "permissions.cancelRun": { zh: "取消运行", en: "Cancel run" },
   "permissions.capabilitiesLine": { zh: "能力：{0}", en: "Capabilities: {0}" },
   "permissions.capabilityPolicies": { zh: "需要确认的操作", en: "Actions that stay gated" },
-  "permissions.sensitiveIntro": {
-    zh: "机器人之间发消息不在这里，也不需要批准。执行本地命令、调用本机连接器或 MCP 默认每次询问。截屏和键鼠默认关闭。工作区读写和其余应用内能力默认允许。已经保存的策略优先。",
-    en: "Bot-to-bot messages are not listed here and do not need approval. Local commands, connectors, and MCP ask every time. Screen capture and device input stay off. Workspace files and other in-app actions are allowed. A saved policy still wins.",
-  },
   "permissions.capabilityPolicy": { zh: "{0} 策略", en: "{0} policy" },
   "permissions.createBot": { zh: "创建 bot", en: "Create Bot" },
   "permissions.decisionFailed": { zh: "审批决定失败", en: "Approval decision failed" },

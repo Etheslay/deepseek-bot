@@ -186,7 +186,7 @@ describe("permissions settings panel", () => {
     ]);
     expect(calls[0]?.payload).toEqual({});
     expect(calls[1]?.payload).toEqual({});
-    expect(container.textContent).toContain("机器人之间发消息不在这里");
+    expect(container.textContent).not.toContain("机器人之间发消息不在这里");
     expect(() => controlByLabel(container, "app.dispatch_task")).toThrow(/missing policy control/);
     expect(shownMode(controlByLabel(container, "exec.shell"))).toBe("ask");
     expect(shownMode(controlByLabel(container, "connector.invoke"))).toBe("ask");
