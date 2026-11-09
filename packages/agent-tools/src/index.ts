@@ -82,6 +82,14 @@ export {
 } from "./task-tools.js";
 export { bindWorkflowTools } from "./workflow-tools.js";
 export {
+  bindScheduleTools,
+  CancelMessageScheduleInputSchema,
+  ListMessageSchedulesInputSchema,
+  ScheduleMessageInputSchema,
+  type BotMessageScheduleStore,
+  type BotMessageScheduleView,
+} from "./schedule-tools.js";
+export {
   bindWorkspaceFileTool,
   WorkspaceFileInputSchema,
   WorkspaceFilePathSchema,

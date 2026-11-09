@@ -14,6 +14,9 @@ const names = [
   "save_workflow",
   "dispatch_task",
   "list_tasks",
+  "schedule_message",
+  "list_message_schedules",
+  "cancel_message_schedule",
   "read_workspace_file",
 ];
 interface Definition {
@@ -232,7 +235,7 @@ describe("application tool plugin", () => {
   ])("fails closed on an invalid optional MCP directory and preserves readiness", async (mcp) => {
     const { ctx, tools, calls } = await fixture({ mcp });
     await apply(ctx);
-    expect(tools).toHaveLength(19); // catalog includes read_workspace_file; read is registered beside it
+    expect(tools).toHaveLength(names.length + 7); // app tools plus ask_user, memory, connector, web_search and read
     expect(tools.some((tool) => tool.name.startsWith("mcp__"))).toBe(false);
     expect(calls).toEqual([{ tools: names }]);
   });
@@ -240,7 +243,7 @@ describe("application tool plugin", () => {
   it("keeps regular tools ready when the MCP endpoint is unavailable", async () => {
     const { ctx, tools, calls } = await fixture({ mcpStatus: 503 });
     await apply(ctx);
-    expect(tools).toHaveLength(19); // catalog includes read_workspace_file; read is registered beside it
+    expect(tools).toHaveLength(names.length + 7); // app tools plus ask_user, memory, connector, web_search and read
     expect(calls).toEqual([{ tools: names }]);
   });
 
@@ -254,7 +257,7 @@ describe("application tool plugin", () => {
     try {
       const { ctx, tools, calls } = await fixture({ mcpSlow: true });
       await apply(ctx);
-      expect(tools).toHaveLength(19); // catalog includes read_workspace_file; read is registered beside it
+      expect(tools).toHaveLength(names.length + 7); // app tools plus ask_user, memory, connector, web_search and read
       expect(calls).toEqual([{ tools: names }]);
     } finally {
       timeout.mockRestore();

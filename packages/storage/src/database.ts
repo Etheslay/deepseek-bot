@@ -903,6 +903,37 @@ CREATE INDEX chat_sessions_bot_recent ON chat_sessions(bot_id, last_message_at);
 CREATE INDEX chat_messages_bot_session ON chat_messages(bot_id, session_id, created_at);
 `,
   },
+  {
+    // Chat-owned message schedules. A bot saves one from conversation
+    // ("每天五点发你好"); the scheduler later writes that exact text into
+    // the bot's default chat. These rows are not workflow schedules.
+    id: 27,
+    name: "0027-bot-message-schedules",
+    sql: /* sql */ `
+CREATE TABLE bot_message_schedules (
+  id TEXT PRIMARY KEY,
+  bot_id TEXT NOT NULL REFERENCES bots(id),
+  message TEXT NOT NULL,
+  timezone TEXT NOT NULL,
+  recurrence TEXT NOT NULL,
+  hour INTEGER NOT NULL CHECK (hour >= 0 AND hour <= 23),
+  minute INTEGER NOT NULL CHECK (minute >= 0 AND minute <= 59),
+  days TEXT NOT NULL CHECK (days IN ('every', 'weekdays')),
+  next_run_at TEXT,
+  enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX bot_message_schedules_bot ON bot_message_schedules(bot_id, enabled);
+
+CREATE TABLE bot_message_deliveries (
+  schedule_id TEXT NOT NULL REFERENCES bot_message_schedules(id) ON DELETE CASCADE,
+  occurrence_utc TEXT NOT NULL,
+  delivered_at TEXT NOT NULL,
+  PRIMARY KEY (schedule_id, occurrence_utc)
+);
+`,
+  },
 
 ];
 
