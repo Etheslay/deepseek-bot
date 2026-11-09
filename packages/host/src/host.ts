@@ -159,7 +159,7 @@ export interface HostOptions {
    * ChatManager already swallows sink errors.
    */
   readonly onTurnStream?: (notice: ChatStreamNotice) => void;
-  /** Trusted SearXNG configuration. No key, default public endpoint or automatic requests. */
+  /** Optional SearXNG override. With no address, search uses the saved DeepSeek API key. */
   readonly webSearch?: WebSearchOptions;
   /** v0.7 manager orchestration tuning (T7/Q3/Q6 defaults built in). */
   readonly tasks?: {
@@ -366,6 +366,11 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
   const db = openDatabase(layout.dbFile, options.now !== undefined ? { now: options.now } : {});
   seedDefaults(db, layout);
   restoreSearchEndpoint(webSearch, getSettingRaw(db, SEARXNG_ENDPOINT_SETTING));
+  webSearch.setApiKeyResolver(() => {
+    const profile = getModelProfile(db, DEFAULT_MODEL_PROFILE_ID);
+    if (profile === undefined) return Promise.reject(new Error("default model profile is missing"));
+    return options.resolveApiKey(profile.credentialRef);
+  });
   webSearch.observe((caller, result) => {
     try {
       recordChatSearch(db, chatSearches, caller, result);

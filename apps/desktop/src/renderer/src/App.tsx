@@ -15,7 +15,6 @@ import { PermissionChatCards } from "./features/permissions/permission-chat.js";
 import { TaskFeedCards } from "./features/chat/task-feed.js";
 import { SearchResultCards } from "./features/search/search-results.js";
 import { MemoryPanel } from "./features/memory/memory-panel.js";
-import { SearchSettings } from "./features/search/search-settings.js";
 import { AutomationPanel } from "./features/automation/automation-panel.js";
 import { ChatAutomationNotice } from "./features/automation/chat-automation-notice.js";
 import { EventRuleSettings } from "./features/event-rules/event-rule-settings.js";
@@ -2826,7 +2825,6 @@ const logout = (): void => {
                     {t("shell.hostDown")}
                   </p>
                 ) : null}
-                <SearchSettings />
                 <AutomationPanel />
                 {/* Per-bot eventRule state, pending review, and history. */}
                 <EventRuleSettings />

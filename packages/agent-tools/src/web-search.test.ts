@@ -19,10 +19,16 @@ async function endpoint(handler: (request: IncomingMessage, response: ServerResp
   return `http://127.0.0.1:${address.port}/search`;
 }
 
-function setup(url?: string, timeoutMs?: number, grants?: { allowed: boolean }) {
+function setup(
+  url?: string,
+  timeoutMs?: number,
+  grants?: { allowed: boolean },
+  deepseekUrl?: string,
+) {
   const search = new WebSearchService({
     ...(url !== undefined ? { endpoint: url } : {}),
     ...(timeoutMs !== undefined ? { timeoutMs } : {}),
+    ...(deepseekUrl !== undefined ? { deepseekUrl } : {}),
   });
   services.push(search);
   const audit = new MemoryAuditSink();
@@ -374,7 +380,81 @@ describe("SearXNG web_search", () => {
     expect(search.currentEndpoint()).toBeUndefined();
     await expect(
       gateway.call(caller, "web_search", { query: "q" }, { networkPermissions: allow }),
-    ).rejects.toMatchObject({ code: "RUNTIME_UNAVAILABLE" });
+    ).rejects.toMatchObject({ code: "RUNTIME_UNAVAILABLE", message: "API key is not configured" });
     expect(seen).toEqual(["chat:search-session/bot:T"]);
+  });
+
+  it("uses the saved API key when no search address is configured", async () => {
+    const secret = "sk-test-secret";
+    let authorization = "";
+    let body = "";
+    const url = await endpoint(async (request, response) => {
+      authorization = String(request.headers.authorization);
+      for await (const chunk of request) body += String(chunk);
+      response.setHeader("Content-Type", "application/json");
+      response.end(
+        JSON.stringify({
+          results: [
+            {
+              title: "DeepSeek",
+              url: "https://example.org/a#frag",
+              snippet: "short",
+              summary: "longer",
+            },
+          ],
+        }),
+      );
+    });
+    const { search, gateway } = setup(undefined, undefined, undefined, url);
+    search.setApiKeyResolver(async () => ` ${secret} `);
+    const authorize = vi.fn(async () => undefined);
+    const result = await gateway.call(
+      caller,
+      "web_search",
+      { query: "deepseek docs", maxResults: 3 },
+      { networkPermissions: { authorize } },
+    );
+    expect(authorization).toBe(`Bearer ${secret}`);
+    expect(JSON.parse(body)).toEqual({ query: "deepseek docs", count: 3 });
+    expect(JSON.stringify(authorize.mock.calls)).not.toContain(secret);
+    expect(result).toMatchObject({
+      provider: "deepseek",
+      query: "deepseek docs",
+      results: [{ title: "DeepSeek", url: "https://example.org/a", snippet: "short" }],
+    });
+  });
+
+  it("does not leak the API key or a credential-store path", async () => {
+    const secret = "sk-test-secret";
+    let hits = 0;
+    const url = await endpoint((_request, response) => {
+      hits += 1;
+      response.statusCode = 401;
+      response.setHeader("Content-Type", "application/json");
+      response.end(JSON.stringify({ error: { message: secret } }));
+    });
+    const { search, gateway } = setup(undefined, undefined, undefined, url);
+    search.setApiKeyResolver(async () => secret);
+    const rejected = await gateway
+      .call(caller, "web_search", { query: "q" }, { networkPermissions: allow })
+      .then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+    expect(rejected).toMatchObject({ code: "RUNTIME_UNAVAILABLE", message: "API key was rejected" });
+    expect(rejected).toBeInstanceOf(Error);
+    expect((rejected as Error).message).not.toContain(secret);
+    expect(hits).toBe(1);
+
+    const quiet = await endpoint(() => {
+      throw new Error("must not be contacted");
+    });
+    const missing = setup(undefined, undefined, undefined, quiet);
+    missing.search.setApiKeyResolver(async () => {
+      throw new Error("ENOENT: no such file /home/user/credentials/key.blob");
+    });
+    await expect(
+      missing.gateway.call(caller, "web_search", { query: "q" }, { networkPermissions: allow }),
+    ).rejects.toMatchObject({ code: "RUNTIME_UNAVAILABLE", message: "API key is not configured" });
   });
 });

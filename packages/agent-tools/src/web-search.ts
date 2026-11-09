@@ -16,15 +16,21 @@ export const WebSearchInputSchema = z
   .strict();
 type SearchInput = z.output<typeof WebSearchInputSchema>;
 
+/** Official DeepSeek Search API. Used when no SearXNG address is configured. */
+export const DEEPSEEK_SEARCH_URL = "https://api.deepseek.com/v1/tools/search";
+const DEEPSEEK_QUERY_LIMIT = 128;
+
 export interface WebSearchOptions {
-  /** Full SearXNG /search (or /) endpoint. No implicit public service. */
+  /** Full SearXNG /search (or /) endpoint. No implicit public SearXNG service. */
   readonly endpoint?: string;
   /** HTTP timeout, including body consumption; default 15 seconds. */
   readonly timeoutMs?: number;
+  /** Test override for the DeepSeek Search URL. Production uses the official endpoint. */
+  readonly deepseekUrl?: string;
 }
 
 export interface WebSearchResult {
-  readonly provider: "searxng";
+  readonly provider: "searxng" | "deepseek";
   readonly query: string;
   readonly results: Array<{ title: string; url: string; snippet: string }>;
   readonly warnings: string[];
@@ -33,6 +39,16 @@ export interface WebSearchResult {
 const providerResponse = z.object({
   results: z.array(z.object({ title: z.string(), url: z.string(), content: z.string().nullish() })),
   unresponsive_engines: z.array(z.unknown()).optional(),
+});
+const deepseekResponse = z.object({
+  results: z.array(
+    z.object({
+      title: z.string(),
+      url: z.string(),
+      snippet: z.string().nullish(),
+      summary: z.string().nullish(),
+    }),
+  ),
 });
 const MAX_RESPONSE_BYTES = 1_048_576;
 const HOST_CLOSED = Symbol("search host closed");
@@ -133,12 +149,13 @@ function plainText(value: string, max: number): string {
     .slice(0, max);
 }
 
-function normalize(body: unknown, input: SearchInput): WebSearchResult {
-  const parsed = providerResponse.safeParse(body);
-  if (!parsed.success) throw unavailable("web_search response does not match the SearXNG format");
+function collectResults(
+  items: Array<{ title: string; url: string; text: string }>,
+  input: SearchInput,
+): WebSearchResult["results"] {
   const results: WebSearchResult["results"] = [];
   const seen = new Set<string>();
-  for (const item of parsed.data.results) {
+  for (const item of items) {
     let url: URL;
     try {
       url = new URL(item.url);
@@ -151,28 +168,58 @@ function normalize(body: unknown, input: SearchInput): WebSearchResult {
     const title = plainText(item.title, 300);
     if (!title || seen.has(url.href)) continue;
     seen.add(url.href);
-    results.push({ title, url: url.href, snippet: plainText(item.content ?? "", 2_000) });
+    results.push({ title, url: url.href, snippet: plainText(item.text, 2_000) });
     if (results.length === input.maxResults) break;
   }
+  return results;
+}
+
+function normalize(body: unknown, input: SearchInput): WebSearchResult {
+  const parsed = providerResponse.safeParse(body);
+  if (!parsed.success) throw unavailable("web_search response does not match the SearXNG format");
   return {
     provider: "searxng",
     query: input.query,
-    results,
+    results: collectResults(
+      parsed.data.results.map((item) => ({ title: item.title, url: item.url, text: item.content ?? "" })),
+      input,
+    ),
     warnings: parsed.data.unresponsive_engines?.length
       ? ["Some search engines were unavailable; results may be incomplete."]
       : [],
   };
 }
 
+function normalizeDeepseek(body: unknown, input: SearchInput, warnings: string[]): WebSearchResult {
+  const parsed = deepseekResponse.safeParse(body);
+  if (!parsed.success) throw unavailable("web_search response does not match the DeepSeek format");
+  return {
+    provider: "deepseek",
+    query: input.query,
+    results: collectResults(
+      parsed.data.results.map((item) => ({
+        title: item.title,
+        url: item.url,
+        text: item.snippet ?? item.summary ?? "",
+      })),
+      input,
+    ),
+    warnings,
+  };
+}
+
 /** One Host-owned service; every outbound request requires a trusted D08-compatible handle. */
 export class WebSearchService {
   private endpoint: string | undefined;
+  private resolveApiKey: (() => Promise<string>) | undefined;
   private onResult: ((caller: ToolCaller, result: WebSearchResult) => void) | undefined;
+  private readonly deepseekUrl: string;
   private readonly timeoutMs: number;
   private readonly lifetime = new AbortController();
 
   constructor(options: WebSearchOptions = {}) {
     this.endpoint = options.endpoint === undefined ? undefined : parseEndpoint(options.endpoint);
+    this.deepseekUrl = parseEndpoint(options.deepseekUrl ?? DEEPSEEK_SEARCH_URL);
     this.timeoutMs = options.timeoutMs ?? 15_000;
     if (!Number.isSafeInteger(this.timeoutMs) || this.timeoutMs < 1 || this.timeoutMs > 60_000) {
       throw new ToolRejectionError(
@@ -191,6 +238,11 @@ export class WebSearchService {
     return this.endpoint;
   }
 
+  /** Same key the chat already saved. The key never enters tool arguments or errors. */
+  setApiKeyResolver(resolver: () => Promise<string>): void {
+    this.resolveApiKey = resolver;
+  }
+
   /** Called only after a successful normalize. The host must not throw. */
   observe(handler: (caller: ToolCaller, result: WebSearchResult) => void): void {
     this.onResult = handler;
@@ -202,13 +254,35 @@ export class WebSearchService {
       ...(context.signal !== undefined ? [context.signal] : []),
     ]);
     if (signal.aborted) throw interrupted(signal);
-    if (this.endpoint === undefined) throw unavailable("SearXNG endpoint is not configured");
+    const searxUrl = this.endpoint;
+    const usingSearx = searxUrl !== undefined;
+    const resolveApiKey = this.resolveApiKey;
+    if (!usingSearx && resolveApiKey === undefined) throw unavailable("API key is not configured");
     if (context.networkPermissions === undefined) {
       throw new ToolRejectionError(
         "UNAUTHORIZED_PATH",
         "web_search requires a trusted network permission handle",
       );
     }
+    let apiKey = "";
+    let sentQuery = input.query;
+    const extraWarnings: string[] = [];
+    if (!usingSearx && resolveApiKey !== undefined) {
+      try {
+        apiKey = (await abortable(resolveApiKey(), signal)).trim();
+      } catch (error) {
+        if (signal.aborted) throw interrupted(signal);
+        if (error instanceof ToolRejectionError) throw error;
+        throw unavailable("API key is not configured");
+      }
+      if (apiKey.length === 0) throw unavailable("API key is not configured");
+      const chars = [...input.query];
+      if (chars.length > DEEPSEEK_QUERY_LIMIT) {
+        sentQuery = chars.slice(0, DEEPSEEK_QUERY_LIMIT).join("");
+        extraWarnings.push("The query was shortened to 128 characters.");
+      }
+    }
+    const url = searxUrl ?? this.deepseekUrl;
     // Exact destination and arguments go to D08 before any DNS/HTTP work.
     try {
       await abortable(
@@ -216,15 +290,21 @@ export class WebSearchService {
           kind: "network.request",
           callId: randomUUID(),
           toolName: "web_search",
-          url: this.endpoint,
-          arguments: {
-            method: "POST",
-            query: input.query,
-            maxResults: input.maxResults,
-            format: "json",
-            categories: "general",
-            safesearch: 1,
-          },
+          url,
+          arguments: usingSearx
+            ? {
+                method: "POST",
+                query: input.query,
+                maxResults: input.maxResults,
+                format: "json",
+                categories: "general",
+                safesearch: 1,
+              }
+            : {
+                method: "POST",
+                query: input.query,
+                maxResults: input.maxResults,
+              },
         }),
         signal,
       );
@@ -254,37 +334,50 @@ export class WebSearchService {
     timer.unref();
     const httpSignal = AbortSignal.any([signal, timeout.signal]);
     try {
-      const response = await fetch(this.endpoint, {
+      const response = await fetch(url, {
         method: "POST",
         redirect: "error",
         signal: httpSignal,
-        headers: {
-          Accept: "application/json",
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
-        body: new URLSearchParams({
-          q: input.query,
-          format: "json",
-          categories: "general",
-          safesearch: "1",
-        }).toString(),
+        headers: usingSearx
+          ? {
+              Accept: "application/json",
+              "Content-Type": "application/x-www-form-urlencoded",
+            }
+          : {
+              Accept: "application/json",
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${apiKey}`,
+            },
+        body: usingSearx
+          ? new URLSearchParams({
+              q: input.query,
+              format: "json",
+              categories: "general",
+              safesearch: "1",
+            }).toString()
+          : JSON.stringify({ query: sentQuery, count: input.maxResults }),
       });
       if (!response.ok) {
         await response.body?.cancel().catch(() => undefined);
         if (response.status === 429)
           throw new ToolRejectionError("RATE_LIMITED", "web_search provider rate limit reached");
+        if (!usingSearx && response.status === 401) throw unavailable("API key was rejected");
+        if (!usingSearx && response.status === 402)
+          throw unavailable("the DeepSeek account has no balance for search");
         throw unavailable(
-          response.status === 403
+          usingSearx && response.status === 403
             ? "SearXNG denied the request; JSON output may be disabled"
             : "web_search provider returned an HTTP error",
         );
       }
       if (!response.headers.get("content-type")?.toLowerCase().includes("application/json")) {
         await response.body?.cancel().catch(() => undefined);
-        throw unavailable("SearXNG did not return JSON");
+        throw unavailable(usingSearx ? "SearXNG did not return JSON" : "web_search did not return JSON");
       }
       const text = await readBoundedBody(response, httpSignal);
-      const result = normalize(JSON.parse(text) as unknown, input);
+      const result = usingSearx
+        ? normalize(JSON.parse(text) as unknown, input)
+        : normalizeDeepseek(JSON.parse(text) as unknown, input, extraWarnings);
       this.onResult?.(context.caller, result);
       return result;
     } catch (error) {
@@ -308,7 +401,7 @@ export function bindWebSearchTool(
   return {
     name: "web_search",
     description:
-      "Search the web through the configured SearXNG service. Returns untrusted titles, URLs and snippets, not page contents. Requires network permission; search text is sent to that service.",
+      "Search the web. Returns untrusted titles, URLs and snippets, not page contents. Requires network permission. With no separate search address, the query is sent to DeepSeek using the saved API key. A configured SearXNG address is used instead.",
     inputSchema: WebSearchInputSchema,
     handler: (params, context) => search.search(params, context),
   };
