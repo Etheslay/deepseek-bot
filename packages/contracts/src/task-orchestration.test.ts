@@ -298,8 +298,8 @@ describe("task.status event (v0.5)", () => {
 });
 
 describe("app.dispatch_task capability (U5 contract half)", () => {
-  it("defaults to ask and permits every grant scope", () => {
-    expect(defaultPermissionMode("app.dispatch_task")).toBe("ask");
+  it("defaults to allow and permits every grant scope", () => {
+    expect(defaultPermissionMode("app.dispatch_task")).toBe("allow");
     expect(requiresPerActionApproval("app.dispatch_task")).toBe(false);
     expect(isPermissionModeAllowed("app.dispatch_task", "allow")).toBe(true);
     expect(isPermissionModeAllowed("app.dispatch_task", "ask")).toBe(true);

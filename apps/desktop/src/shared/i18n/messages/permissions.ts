@@ -14,8 +14,8 @@ export const permissionsMessages = {
   "permissions.capabilitiesLine": { zh: "能力：{0}", en: "Capabilities: {0}" },
   "permissions.capabilityPolicies": { zh: "需要确认的操作", en: "Actions that stay gated" },
   "permissions.sensitiveIntro": {
-    zh: "其余能力默认允许。这里只保留会给其他 bot 发消息、控制键鼠，或截取屏幕的操作。已经保存的「从不允许」仍然生效。",
-    en: "Everything else is allowed. Only messaging other bots, device input, and screen capture stay here. A saved Never allow still applies.",
+    zh: "机器人之间发消息默认直接进行。执行本地命令、调用本机连接器或 MCP 默认每次询问。截屏和键鼠默认关闭。工作区读写和其余应用内能力默认允许。已经保存的策略优先。",
+    en: "Bots message each other without asking. Local commands, connectors, and MCP ask every time. Screen capture and device input stay off. Workspace files and other in-app actions are allowed. A saved policy still wins.",
   },
   "permissions.capabilityPolicy": { zh: "{0} 策略", en: "{0} policy" },
   "permissions.createBot": { zh: "创建 bot", en: "Create Bot" },

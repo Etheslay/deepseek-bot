@@ -393,13 +393,32 @@ describe("U4 restart sweep (FR-10)", () => {
 });
 
 describe("U5 approval wiring for app.dispatch_task", () => {
-  it("asks by default, shows exact params, and honors deny policies", async () => {
+  it("allows bot-to-bot dispatch by default, asks when the policy says ask, and honors deny", async () => {
     const fx = await hostWithGroup();
-    const pendingCall = fx.host.agentTools.call(
-      { id: `chat:${fx.coordinator}`, botId: fx.coordinator, sessionId: `chat:${fx.coordinator}` },
-      "dispatch_task",
-      { toBotId: fx.workerA, task: "写本周选题清单" },
-    );
+    const caller = {
+      id: `chat:${fx.coordinator}`,
+      botId: fx.coordinator,
+      sessionId: `chat:${fx.coordinator}`,
+    };
+    const allowed = (await fx.host.agentTools.call(caller, "dispatch_task", {
+      toBotId: fx.workerA,
+      task: "直接交给对方",
+    })) as Task;
+    expect(allowed.status).toBe("queued");
+    const quiet = (await fx.host.handleMethod("permission.approval.list", {
+      botId: fx.coordinator,
+    })) as { approvals: AppApproval[] };
+    expect(quiet.approvals).toHaveLength(0);
+    await waitForTask(fx.host, allowed.id, "done");
+
+    await fx.host.handleMethod("permission.policy.set", {
+      capability: "app.dispatch_task",
+      mode: "ask",
+    });
+    const pendingCall = fx.host.agentTools.call(caller, "dispatch_task", {
+      toBotId: fx.workerA,
+      task: "写本周选题清单",
+    });
     let approval: AppApproval | undefined;
     await vi.waitFor(
       async () => {
