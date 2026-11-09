@@ -36,7 +36,9 @@ await result; // { requestId, optionId: "A", text: "整理资料" }
 
 ## `web_search` 后端切片
 
-搜索来源为 SearXNG 的官方 JSON API（[官方接口说明](https://docs.searxng.org/dev/search_api.html)）。Host 由受信配置指定完整 `/search` 或 `/` 地址；不默认选公共实例，不需要 API Key，不自动发起请求。服务地址必须启用 `json` 输出；公共实例可能禁用 JSON、限流或临时不可用。
+没有单独的搜索地址时，搜索使用已经保存的 DeepSeek API Key 调用官方 Search API（`POST https://api.deepseek.com/v1/tools/search`）。查询最长 128 个字符，更长的会被截断。Key 只放在请求头里，不进入审批参数、审计或错误文本。成功请求按 DeepSeek Search API 计费。不选取隐式公共 SearXNG 实例。
+
+可选覆盖仍是 SearXNG 的官方 JSON API（[官方接口说明](https://docs.searxng.org/dev/search_api.html)）。Host 可由受信配置指定完整 `/search` 或 `/` 地址。服务地址必须启用 `json` 输出；公共实例可能禁用 JSON、限流或临时不可用。
 
 ```ts
 const host = await createHost({
@@ -56,13 +58,13 @@ const result = await host.agentTools.call(caller, "web_search", {
 
 `query` 去除首尾空白后为 1–512 字符，`maxResults` 为 1–10 的整数、默认 5。工具参数不接受自选 endpoint、权限句柄或授权开关。`networkPermissions` 是受信进程内调用选项，结构兼容 D08 `NodePermissionHandle`；缺少句柄时返回 `UNAUTHORIZED_PATH`。真实聊天调用方接入时必须由宿主绑定对应 bot/运行的权限句柄及取消信号，不得由模型自行构造。
 
-出站前将精确 endpoint、POST、query、输出数量及固定请求参数交给 D08 `authorize`：禁用时拒绝，每次审批时等待，允许或批准后才发请求。查询通过 POST 表单发送给所配置的 SearXNG 服务及其上游搜索引擎。网关 `agent-tools-audit.jsonl` 只记参数/结果摘要；**D08 的本地 `tool.requested` 运行事件仍保存精确 query 与参数，用于审批和追踪**。
+出站前将精确 endpoint、POST、query、输出数量及固定请求参数交给 D08 `authorize`：禁用时拒绝，每次审批时等待，允许或批准后才发请求。没有 SearXNG 地址时，目标是官方 Search API，请求体是 JSON；`Authorization` 只带已保存的 Key，审批参数和审计里没有 Key。配置了 SearXNG 时，查询通过 POST 表单发给该服务及其上游搜索引擎。网关 `agent-tools-audit.jsonl` 只记参数/结果摘要；**D08 的本地 `tool.requested` 运行事件仍保存精确 query 与参数，用于审批和追踪**。
 
 仅允许 HTTPS 或 HTTP 回环地址；配置不能含凭据、查询串或 fragment。HTTP 默认超时 15 秒（配置 `timeoutMs` 可设 1–60,000 毫秒，仅计算 HTTP 阶段），响应体上限 1 MiB；禁止跟随重定向、无自动重试。返回标题/摘要文本（各最多 300/2,000 字符）与无凭据 HTTP(S) URL，按去掉 fragment 的 URL 去重，不访问结果网页。结果属于不可信外部内容，消费方仍需安全渲染，不能作为宿主指令或授权。
 
-无配置、提供方 HTTP/JSON 异常返回 `RUNTIME_UNAVAILABLE`，429 返回 `RATE_LIMITED`，超时为 `TOOL_TIMEOUT`，调用取消为 `CANCELLED`；Host 关闭终止活动请求并返回 `RUNTIME_UNAVAILABLE`。异常消息采用固定文本，避免原始查询、端点或响应内容混入网关错误审计。合法空结果返回空数组；上游报告引擎失败时返回“不完整结果”提示。未配置真实服务地址时，不将受控 HTTP 测试宣称为公共实例验证。
+没有可用的 API Key、或提供方 HTTP/JSON 异常，返回 `RUNTIME_UNAVAILABLE`；401 表示 Key 被拒绝，402 表示账户余额不足。429 返回 `RATE_LIMITED`，超时为 `TOOL_TIMEOUT`，调用取消为 `CANCELLED`；Host 关闭终止活动请求并返回 `RUNTIME_UNAVAILABLE`。异常消息采用固定文本，避免原始查询、端点、Key 或响应内容混入网关错误审计。合法空结果返回空数组；上游报告引擎失败时返回“不完整结果”提示。受控 HTTP 测试不宣称为公共实例或真实 DeepSeek 验收。
 
-独立 Host 进程可在启动前配置 `DEEPSEEK_BOT_SEARXNG_URL`，见[开发环境说明](../../docs/DEVELOPMENT_SETUP.md)。桌面可用受信方法保存或清空该地址；已保存的值在下次启动时覆盖环境变量，显式空值也会覆盖。聊天调用由 Host 绑定该 bot 的网络策略句柄，不由模型传入。`/app-tools` 仍只登记八个应用工具，`web_search` 走单独的 `/web-search` 路由。成功结果可记入该聊天 bot 的助手记录；工作流调用不写聊天记录。真实公共 SearXNG 与付费模型验收仍未执行。
+独立 Host 进程可在启动前配置 `DEEPSEEK_BOT_SEARXNG_URL`，见[开发环境说明](../../docs/DEVELOPMENT_SETUP.md)。设置页不再填写 SearXNG 地址。受信方法仍可保存或清空覆盖地址；已保存的值在下次启动时覆盖环境变量，显式空值也会覆盖。聊天调用由 Host 绑定该 bot 的网络策略句柄，不由模型传入。`/app-tools` 仍只登记八个应用工具，`web_search` 走单独的 `/web-search` 路由。成功结果可记入该聊天 bot 的助手记录；工作流调用不写聊天记录。真实公共 SearXNG 与付费模型验收仍未执行。
 
 ## 记忆
 

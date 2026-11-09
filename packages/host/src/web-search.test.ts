@@ -41,12 +41,12 @@ async function searchEndpoint() {
   return { endpoint: `http://127.0.0.1:${address.port}/search`, requests };
 }
 
-async function makeHost(endpoint?: string) {
+async function makeHost(endpoint?: string, resolveApiKey?: (credentialRef: string) => Promise<string>) {
   const root = mkdtempSync(join(tmpdir(), "dsb-web-search-"));
   roots.push(root);
   const host = await createHost({
     dataRoot: root,
-    resolveApiKey: async () => "unused",
+    resolveApiKey: resolveApiKey ?? (async () => "unused"),
     ...(endpoint !== undefined ? { webSearch: { endpoint } } : {}),
   });
   hosts.push(host);
@@ -77,12 +77,25 @@ afterEach(async () => {
 });
 
 describe("Host web_search", () => {
-  it("registers web_search and reports missing configuration explicitly", async () => {
+  it("registers web_search and still requires a permission handle when no address is set", async () => {
     const host = await makeHost();
     expect(host.agentTools.capabilities.list().map((tool) => tool.name)).toContain("web_search");
     await expect(
       host.agentTools.call(searchCaller(host), "web_search", { query }),
-    ).rejects.toMatchObject({ code: "RUNTIME_UNAVAILABLE" });
+    ).rejects.toMatchObject({ code: "UNAUTHORIZED_PATH" });
+  });
+
+  it("does not call the network when the saved API key cannot be read", async () => {
+    const host = await makeHost(undefined, async () => {
+      throw new Error("ENOENT: /secret/credentials/key.blob");
+    });
+    const authorize = vi.fn(async () => undefined);
+    await expect(
+      host.agentTools.call(searchCaller(host), "web_search", { query }, {
+        networkPermissions: { authorize },
+      }),
+    ).rejects.toMatchObject({ code: "RUNTIME_UNAVAILABLE", message: "API key is not configured" });
+    expect(authorize).not.toHaveBeenCalled();
   });
 
   it("requires a trusted permission handle even with an endpoint configured", async () => {
