@@ -23,6 +23,7 @@ export * from "./repos/profiles.js";
 export * from "./repos/tool-policies.js";
 export * from "./repos/workflows.js";
 export * from "./repos/schedules.js";
+export * from "./repos/bot-schedules.js";
 export * from "./repos/schedule-misses.js";
 export * from "./repos/runs.js";
 export * from "./repos/events.js";

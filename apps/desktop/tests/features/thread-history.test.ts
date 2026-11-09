@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { ChatHistoryRow } from "../../src/renderer/src/services/desktop-service.js";
 import { canAnswerChoice } from "../../src/renderer/src/features/questions/choice-answer.js";
 import {
+  absorbArrivedMessages,
   CHAT_THREAD_HISTORY_LIMIT,
   historyMessageId,
   historyThreadMessages,
@@ -347,5 +348,44 @@ describe("isSameStoredTurn", () => {
     expect(
       isSameStoredTurn({ ...stored, origin: "live" }, { from: "bot", text: "hello" }, OPENED_AT),
     ).toBe(false);
+  });
+});
+
+describe("absorbArrivedMessages", () => {
+  it("appends a scheduled line and stamps the live copy of an earlier turn", () => {
+    const local = [
+      turn({
+        from: "user",
+        text: "每天五点发你好",
+        time: OPENED_AT,
+        origin: "live",
+        id: 1,
+      }),
+      turn({ from: "bot", text: "好的", time: OPENED_AT + 20, origin: "live", id: 2 }),
+    ];
+    const history = [
+      {
+        ...turn({ from: "user", text: "每天五点发你好", time: OPENED_AT, origin: "history", id: -1 }),
+        storedId: "row-user",
+      },
+      {
+        ...turn({ from: "bot", text: "好的", time: OPENED_AT + 20, origin: "history", id: -2 }),
+        storedId: "row-ack",
+      },
+      {
+        ...turn({ from: "bot", text: "你好", time: OPENED_AT + 86_400_000, origin: "history", id: -3 }),
+        storedId: "row-hello",
+      },
+    ];
+    const absorbed = absorbArrivedMessages(local, history);
+    expect(absorbed.changed).toBe(true);
+    expect(absorbed.messages.map((message) => message.text)).toEqual([
+      "每天五点发你好",
+      "好的",
+      "你好",
+    ]);
+    expect(absorbed.messages[0]).toMatchObject({ storedId: "row-user" });
+    expect(absorbed.messages[2]).toMatchObject({ text: "你好", storedId: "row-hello" });
+    expect(absorbArrivedMessages(absorbed.messages, history).changed).toBe(false);
   });
 });

@@ -46,6 +46,8 @@ export type HistoryThreadMessage = ThreadTurn & {
   origin: "history";
   /** Replay of a stored row. Live composer turns never set this. */
   history: true;
+  /** Host chat row id, so a later poll can tell this bubble from a new one. */
+  storedId: string;
   speakerKey?: number;
   choices?: RestoredChoice;
 };
@@ -92,6 +94,7 @@ export function historyThreadMessages(
     const parsed = Date.parse(row.at);
     const message: HistoryThreadMessage = {
       id: historyMessageId(row.id, used),
+      storedId: row.id,
       from: row.role === "user" ? "user" : "bot",
       text: row.text,
       time: Number.isNaN(parsed) ? 0 : parsed,
@@ -162,4 +165,51 @@ export function mergeOpenedThread<T extends ThreadTurn>(
     extras.push(message);
   }
   return [...history, ...extras];
+}
+
+/**
+ * Fold chat rows that arrived after the thread was opened, such as a
+ * scheduled line. A stored row that is the copy of a live composer bubble
+ * is stamped onto that bubble instead of shown twice.
+ */
+export function absorbArrivedMessages<T extends ThreadTurn & { storedId?: string }>(
+  local: readonly T[],
+  history: readonly T[],
+): { messages: T[]; changed: boolean } {
+  const known = new Set(
+    local.flatMap((message) => (message.storedId !== undefined ? [message.storedId] : [])),
+  );
+  const pendingLive = local.flatMap((message, index) =>
+    (message.origin ?? "live") === "live" && message.storedId === undefined
+      ? [index]
+      : [],
+  );
+  const usedLive = new Set<number>();
+  const stamps = new Map<number, string>();
+  const arrivals: T[] = [];
+  for (const row of history) {
+    if (row.storedId === undefined || known.has(row.storedId)) {
+      continue;
+    }
+    const match = pendingLive.find(
+      (index) =>
+        !usedLive.has(index) && local[index]?.from === row.from && local[index]?.text === row.text,
+    );
+    if (match !== undefined) {
+      usedLive.add(match);
+      stamps.set(match, row.storedId);
+      known.add(row.storedId);
+      continue;
+    }
+    arrivals.push(row);
+    known.add(row.storedId);
+  }
+  if (stamps.size === 0 && arrivals.length === 0) {
+    return { messages: [...local], changed: false };
+  }
+  const stamped = local.map((message, index) => {
+    const storedId = stamps.get(index);
+    return storedId === undefined ? message : { ...message, storedId };
+  });
+  return { messages: [...stamped, ...arrivals], changed: true };
 }

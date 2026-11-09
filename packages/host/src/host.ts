@@ -29,6 +29,7 @@ import {
 } from "@deepseek-bot/exec-daemon";
 import {
   DeviceInputSchema,
+  isValidIanaTimeZone,
   methodContract,
   type Method,
   type Task,
@@ -43,7 +44,7 @@ import {
   type DshSdkExecutorOptions,
   type RunningApprovalBridge,
 } from "@deepseek-bot/harness-adapter";
-import { ChatManager, type ChatStreamNotice } from "./chat.js";
+import { ChatManager, chatSessionIdFor, type ChatStreamNotice } from "./chat.js";
 import { DEFAULT_CONTEXT_WINDOW_TOKENS } from "./context-window.js";
 import { createAttachmentStore, readWorkspaceFileText } from "./attachments.js";
 import { createWorkspaceArtifacts } from "./artifacts.js";
@@ -51,7 +52,11 @@ import {
   EngineError,
   NodeExecutionError,
   WorkflowEngine,
+  BotMessageScheduler,
   LocalScheduler,
+  messageScheduleRecurrence,
+  nextCronOccurrence,
+  parseCronExpression,
   evaluateEventRules,
   evaluateToolAction,
   type NodeExecutor,
@@ -59,13 +64,17 @@ import {
 } from "@deepseek-bot/runtime";
 import {
   appendChatMessage,
+  cancelBotMessageSchedule,
   ensureDataLayout,
   getBot,
   getModelProfile,
   getSettingRaw,
   getToolPolicy,
   getWorkspace,
+  listBotMessageSchedules,
   listMemories,
+  saveBotMessageSchedule,
+  touchChatSession,
   writeMemory,
   searchKnowledge,
   readRetentionPolicy,
@@ -87,6 +96,7 @@ import {
   bindAskUserTool,
   bindReadTools,
   bindTaskTools,
+  bindScheduleTools,
   bindWorkflowTools,
   bindWriteTools,
   bindWorkspaceFileTool,
@@ -214,6 +224,8 @@ export interface DeepSeekBotHost {
   readonly db: OpenedDatabase;
   readonly engine: WorkflowEngine;
   readonly scheduler: LocalScheduler;
+  /** Recurring chat lines saved from conversation, delivered without a model turn. */
+  readonly botMessageScheduler: BotMessageScheduler;
   readonly bridge: RunningApprovalBridge;
   readonly bootGeneration: number;
   /** Runs still recovered at startup (host restart before run completion). */
@@ -640,6 +652,27 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
       : {}),
     ...(options.onMissed !== undefined ? { onMissed: options.onMissed } : {}),
   });
+  const botMessageScheduler = new BotMessageScheduler({
+    db,
+    now,
+    ...(options.scheduler?.tickIntervalMs !== undefined
+      ? { tickIntervalMs: options.scheduler.tickIntervalMs }
+      : {}),
+    deliver(schedule) {
+      const bot = getBot(db, schedule.botId);
+      if (bot === undefined || bot.archivedAt !== null) {
+        throw new Error("scheduled bot is not available");
+      }
+      const sessionId = chatSessionIdFor(schedule.botId);
+      appendChatMessage(db, {
+        botId: schedule.botId,
+        sessionId,
+        role: "assistant",
+        text: schedule.message,
+      });
+      touchChatSession(db, schedule.botId, sessionId);
+    },
+  });
   const recoveredRuns = engine.recoverInterruptedRuns();
   // FR-10: dispatched tasks die with the process — queued/running rows
   // become `interrupted` and stay queryable, exactly like D10 run recovery.
@@ -876,6 +909,46 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
     // dispatched-task tools. Role rules live inside the task tool layer;
     // the dispatcher re-checks them authoritatively.
     ...bindWorkflowTools((method, payload) => dispatch(method as Method, payload)),
+    ...bindScheduleTools({
+      save(botId, input) {
+        const bot = getBot(db, botId);
+        if (bot === undefined || bot.archivedAt !== null) {
+          throw new ToolRejectionError("UNAUTHORIZED_PATH", "schedule bot is not available");
+        }
+        const timezone = computerTimeZone();
+        const recurrence = messageScheduleRecurrence(input);
+        const next = nextCronOccurrence(parseCronExpression(recurrence), timezone, now());
+        try {
+          const saved = saveBotMessageSchedule(db, {
+            botId,
+            message: input.message,
+            timezone,
+            recurrence,
+            hour: input.hour,
+            minute: input.minute,
+            days: input.days,
+            nextRunAt: next?.toISOString() ?? null,
+          });
+          return { created: saved.created, schedule: scheduleView(saved.schedule) };
+        } catch (error) {
+          throw scheduleToolError(error);
+        }
+      },
+      list(botId) {
+        const bot = getBot(db, botId);
+        if (bot === undefined || bot.archivedAt !== null) {
+          throw new ToolRejectionError("UNAUTHORIZED_PATH", "schedule bot is not available");
+        }
+        return listBotMessageSchedules(db, botId, { enabledOnly: true }).map(scheduleView);
+      },
+      cancel(botId, id) {
+        const bot = getBot(db, botId);
+        if (bot === undefined || bot.archivedAt !== null) {
+          throw new ToolRejectionError("UNAUTHORIZED_PATH", "schedule bot is not available");
+        }
+        return { cancelled: cancelBotMessageSchedule(db, botId, id) };
+      },
+    }),
     ...bindTaskTools({
       resolveBot: (botId) => {
         const bot = getBot(db, botId);
@@ -997,6 +1070,7 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
     db,
     engine,
     scheduler,
+    botMessageScheduler,
     bridge,
     bootGeneration,
     recoveredRuns,
@@ -1016,6 +1090,7 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
     handleMethod: dispatch,
     start(): void {
       scheduler.start();
+      botMessageScheduler.start();
     },
     async shutdown(): Promise<void> {
       if (closed) return;
@@ -1031,6 +1106,7 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
       questions.close();
       webSearch.close();
       scheduler.stop();
+      botMessageScheduler.stop();
       try {
         await bridge.close();
       } finally {
@@ -1209,6 +1285,38 @@ function authorizeChatSearch(
     message: "chat web_search cannot open a workflow approval",
     retryable: false,
   });
+}
+
+function computerTimeZone(): string {
+  const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  return isValidIanaTimeZone(zone) ? zone : "UTC";
+}
+
+function scheduleView(schedule: {
+  id: string;
+  message: string;
+  hour: number;
+  minute: number;
+  days: "every" | "weekdays";
+  timezone: string;
+  nextRunAt: string | null;
+}) {
+  return {
+    id: schedule.id,
+    message: schedule.message,
+    hour: schedule.hour,
+    minute: schedule.minute,
+    days: schedule.days,
+    timezone: schedule.timezone,
+    clock: `${String(schedule.hour).padStart(2, "0")}:${String(schedule.minute).padStart(2, "0")}`,
+    nextRunAt: schedule.nextRunAt,
+  };
+}
+
+function scheduleToolError(error: unknown): ToolRejectionError {
+  if (error instanceof ToolRejectionError) return error;
+  const message = error instanceof Error ? error.message : String(error);
+  return new ToolRejectionError("INVALID_INPUT", message);
 }
 
 /** Backup directory name for a backup id (backups live under layout.backups). */

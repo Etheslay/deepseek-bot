@@ -84,7 +84,7 @@ async function approve(host: DeepSeekBotHost, approval: AppApproval, scope = "on
   });
 }
 describe("authenticated chat application tool channel", () => {
-  it("exports precisely the twelve application schemas and proves plugin readiness", async () => {
+  it("exports the chat application schemas and proves plugin readiness", async () => {
     const { request, turn, server } = await setup();
     expect(Number(new URL(server.url).port)).toBeGreaterThanOrEqual(49152);
     const response = await request("/app-tools");
@@ -92,6 +92,7 @@ describe("authenticated chat application tool channel", () => {
       tools: Array<{ name: string; parameters: unknown }>;
     };
     expect(tools.map((t) => t.name).sort()).toEqual([
+      "cancel_message_schedule",
       "create_bot_draft",
       "create_bots_batch",
       "create_group",
@@ -100,10 +101,12 @@ describe("authenticated chat application tool channel", () => {
       "get_run_events",
       "list_bots",
       "list_groups",
+      "list_message_schedules",
       "list_tasks",
       "read_workspace_file",
       "revoke_batch",
       "save_workflow",
+      "schedule_message",
     ]);
     expect(tools.find((t) => t.name === "create_group")?.parameters).toMatchObject({
       type: "object",
