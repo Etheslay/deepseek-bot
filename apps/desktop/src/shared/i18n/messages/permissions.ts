@@ -24,6 +24,7 @@ export const permissionsMessages = {
   "permissions.deny": { zh: "拒绝", en: "Deny" },
   "permissions.dismissApproval": { zh: "收起这张卡", en: "Dismiss this card" },
   "permissions.dispatchTask": { zh: "派发任务给其他 bot", en: "Dispatch tasks to other bots" },
+  "permissions.learnSkill": { zh: "学习技能", en: "Learn a skill" },
   "permissions.scheduleMessage": { zh: "定时发消息", en: "Send a scheduled message" },
   "permissions.executeLocalCommand": { zh: "执行本地命令", en: "Execute local command" },
   "permissions.grantCount": { zh: "{0} 条", en: { one: "{0} grant", other: "{0} grants" } },

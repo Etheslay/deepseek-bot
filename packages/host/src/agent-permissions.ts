@@ -48,6 +48,8 @@ const CAPABILITIES: Readonly<Record<string, readonly CapabilityId[]>> = {
   save_workflow: ["app.create_workflow"],
   dispatch_task: ["app.dispatch_task"],
   list_tasks: ["app.read"],
+  learn_skill: ["app.learn_skill"],
+  list_skills: ["app.learn_skill"],
   schedule_message: ["app.schedule_message"],
   list_message_schedules: ["app.schedule_message"],
   cancel_message_schedule: ["app.schedule_message"],

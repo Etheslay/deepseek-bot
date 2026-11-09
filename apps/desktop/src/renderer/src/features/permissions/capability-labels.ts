@@ -30,6 +30,7 @@ const CAPABILITY_LABEL_KEYS = {
   "device.action": "permissions.deviceAction",
   "connector.invoke": "permissions.invokeConnector",
   "app.dispatch_task": "permissions.dispatchTask",
+  "app.learn_skill": "permissions.learnSkill",
   "app.schedule_message": "permissions.scheduleMessage",
   "mcp.call": "permissions.mcpCall",
 } as const satisfies Record<CapabilityId, MessageKey>;
@@ -49,6 +50,7 @@ const CAPABILITY_GLYPHS: Partial<Record<CapabilityId, string>> = {
   "app.cancel_run": "⏹️",
   "app.revoke_creation": "🤖",
   "app.dispatch_task": "📨",
+  "app.learn_skill": "📘",
   "app.schedule_message": "⏰",
   "interaction.ask_user": "❓",
   "network.search": "🔍",

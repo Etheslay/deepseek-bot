@@ -98,7 +98,7 @@ describe("chat web_search", () => {
     const { endpoint, requests } = await searchEndpoint();
     const { host, request, bot, sessionId } = await setup();
     const catalog = (await (await request("/app-tools")).json()) as { tools: Array<{ name: string }> };
-    expect(catalog.tools).toHaveLength(15); // three chat schedule tools plus D26 read_workspace_file
+    expect(catalog.tools).toHaveLength(17); // chat schedules, learned skills, and read_workspace_file
     expect(catalog.tools.map((tool) => tool.name)).not.toContain("web_search");
     expect(
       await (

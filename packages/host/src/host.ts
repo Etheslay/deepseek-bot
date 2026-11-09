@@ -87,6 +87,7 @@ import {
   type OpenedDatabase,
 } from "@deepseek-bot/storage";
 import { buildHandlers, type ChatSearchRecord, type HostContext } from "./handlers.js";
+import { learnSkillForBot, listSkillsForBot } from "./skill-library.js";
 import { AgentPermissionService, capabilitiesConsumedBy } from "./agent-permissions.js";
 import {
   AskUserCoordinator,
@@ -96,6 +97,7 @@ import {
   bindAskUserTool,
   bindReadTools,
   bindTaskTools,
+  bindSkillTools,
   bindScheduleTools,
   bindWorkflowTools,
   bindWriteTools,
@@ -909,6 +911,27 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
     // dispatched-task tools. Role rules live inside the task tool layer;
     // the dispatcher re-checks them authoritatively.
     ...bindWorkflowTools((method, payload) => dispatch(method as Method, payload)),
+    ...bindSkillTools({
+      learn(botId, input) {
+        const bot = getBot(db, botId);
+        if (bot === undefined || bot.archivedAt !== null) {
+          throw new ToolRejectionError("UNAUTHORIZED_PATH", "skill bot is not available");
+        }
+        try {
+          return learnSkillForBot(db, botId, input, now().getTime());
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          throw new ToolRejectionError("INVALID_INPUT", message);
+        }
+      },
+      list(botId) {
+        const bot = getBot(db, botId);
+        if (bot === undefined || bot.archivedAt !== null) {
+          throw new ToolRejectionError("UNAUTHORIZED_PATH", "skill bot is not available");
+        }
+        return listSkillsForBot(db, botId);
+      },
+    }),
     ...bindScheduleTools({
       save(botId, input) {
         const bot = getBot(db, botId);

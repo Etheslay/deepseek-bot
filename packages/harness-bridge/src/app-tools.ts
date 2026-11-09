@@ -17,6 +17,8 @@ export const APPLICATION_TOOL_NAMES = [
   "save_workflow",
   "dispatch_task",
   "list_tasks",
+  "learn_skill",
+  "list_skills",
   "schedule_message",
   "list_message_schedules",
   "cancel_message_schedule",

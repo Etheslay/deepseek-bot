@@ -92,6 +92,7 @@ MCP 实际调用使用独立能力 `mcp.call`，默认 `allow`。策略改回 `a
 | approval.list | v0.12 跨运行审批收件箱 | 请求 `{runId?: UUID, status?: pending\|approved\|denied\|expired\|consumed, limit?: 1–100（缺省 50）}` → `{approvals: Approval[]}`；按创建时间正序并截断到 limit。与 `permission.approval.list`（能力授权域）不同，本方法只针对 run 动作审批 |
 | approval.decide | 允许/拒绝指定动作 | 校验摘要、权限、有效期与 pending 状态；重复决定不得重复执行 |
 | schedule.save / enable / disable | 本地调度 | 唯一 scheduleId + occurrenceUtc 防重复。这是工作流定时，不是聊天里让 bot 自己发一句话 |
+| learn_skill / list_skills | 聊天里学会一条技能（模型工具，不是桌面方法） | 人让这个 bot 自己上网找技能，或把找到的技能发给它时，模型先搜索（如果需要）再调用 `learn_skill` 把做法记在这个 bot 上，不必打开设置。同一名称再学是更新。下一回合 Host 注入已绑定的技能；设置页仍能看见。能力 `app.learn_skill` 默认允许，不出现在设置页。学习只加指令，不新增电脑权限 |
 | schedule_message / list_message_schedules / cancel_message_schedule | 聊天定时消息（模型工具，不是桌面方法） | 人在和这个 bot 的对话里说「每天五点发你好」时，模型调用 `schedule_message` 把原文和钟点记在这个 bot 上，不必打开设置。hour 为这台电脑本地时区的 0–23。到点且 Host 在跑时，把原文写入该 bot 的默认会话，不另开模型回合。同一句、同一钟点再保存是同一条。应用没开着错过的不补发。取消只作用于本 bot。能力 `app.schedule_message` 默认允许，不出现在设置页 |
 | settings.testConnection / update | 接入与设置 | Key 写入与测试位于后端；前端只得到是否已配置。`update` 的 patch 支持 `ui.locale`（`"zh" \| "en"`）：桌面把解析后的界面语言推给 Host（启动与切换时各一次），Host 存入 settings KV 并即时生效——任务派发通知、交接框架（`【上游交接 · …】`）、画布冲突与凭据错误、ask_user 兜底选项等 Host 侧文案随该语言输出；缺省与非法值回落 zh。语言切换只影响之后新写入的行，历史回放保持原样 |
 | ui.state.get / set | v0.13 界面态快照（受信桌面） | `get` 无参 → `{state}`（`UiStateSchema`：botOrder/groupOrder 去重 UUID 列表 ≤1000、selectedBotId/selectedGroupId 可空；v0.14 起可选 collapsedGroupIds，0.13 写方省略仍被接受）；`set` 请求 `{state}` 整体校验后整快照落 settings KV 行 `ui.state.v1` 并回显，末写胜出。缺失/损坏行降级空态。只存稳定实体 ID，不存任意载荷、不存密钥 |

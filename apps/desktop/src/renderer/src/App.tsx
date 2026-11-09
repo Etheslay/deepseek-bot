@@ -545,6 +545,7 @@ export function App(): JSX.Element {
   const [skillLibrary, setSkillLibrary] = useState<SkillLibrary>(emptyLibrary);
   /** D17': any local edit wins over the in-flight boot load. */
   const skillLibraryTouchedRef = useRef(false);
+  const skillSaveGeneration = useRef(0);
 
   // D17': boot the skill library from the Host (via the service layer). When
   // the Host has none, the legacy localStorage copy migrates once behind an
@@ -591,14 +592,36 @@ export function App(): JSX.Element {
    * localStorage quota-loss path had.
    */
   const updateLibrary = useCallback((next: SkillLibrary) => {
+    const generation = ++skillSaveGeneration.current;
     skillLibraryTouchedRef.current = true;
     setSkillLibrary(next);
     void desktop.skills
       .saveLibrary(next)
-      .then(() => undefined)
+      .then(() => {
+        if (skillSaveGeneration.current === generation) {
+          skillLibraryTouchedRef.current = false;
+        }
+      })
       .catch(() => {
         setToast(t("skills.hostSaveFailed"));
       });
+  }, [desktop]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      if (skillLibraryTouchedRef.current) return;
+      void desktop.skills
+        .getLibrary()
+        .then((library) => {
+          if (skillLibraryTouchedRef.current) return;
+          const next = toRendererLibrary(library);
+          setSkillLibrary((current) =>
+            JSON.stringify(current) === JSON.stringify(next) ? current : next,
+          );
+        })
+        .catch(() => undefined);
+    }, 10_000);
+    return () => window.clearInterval(timer);
   }, [desktop]);
 
   const saveBotTemplate = (target: UiBot): void => {
