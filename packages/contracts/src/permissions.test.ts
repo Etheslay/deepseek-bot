@@ -42,6 +42,8 @@ describe("permission schemas", () => {
   it("lets bots message each other and asks before touching the machine", () => {
     expect(new Set(CAPABILITY_IDS).size).toBe(CAPABILITY_IDS.length);
     expect(defaultPermissionMode("app.dispatch_task")).toBe("allow");
+    expect(defaultPermissionMode("app.learn_skill")).toBe("allow");
+    expect(requiresPerActionApproval("app.learn_skill")).toBe(false);
     expect(defaultPermissionMode("fs.read")).toBe("allow");
     expect(defaultPermissionMode("fs.write")).toBe("allow");
     expect(defaultPermissionMode("exec.shell")).toBe("ask");

@@ -32,7 +32,7 @@ import {
   type LocalScheduler,
   type WorkflowEngine,
 } from "@deepseek-bot/runtime";
-import { readSkillLibrary, writeSkillLibrary } from "./skill-library.js";
+import { mergeTurnSkills, readSkillLibrary, writeSkillLibrary } from "./skill-library.js";
 import { readUiState, writeUiState } from "./ui-state.js";
 import {
   archiveBot,
@@ -1209,7 +1209,7 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
       });
       let outcome;
       try {
-        outcome = await chat.send(bot, turnText, history, payload.skills ?? [], {
+        outcome = await chat.send(bot, turnText, history, mergeTurnSkills(db, bot.id, payload.skills ?? []), {
           primitive,
           ...(summaryRow !== undefined ? { summary: summaryRow.summary } : {}),
           // B3'' 视觉输入: named raster attachments ride the turn as image

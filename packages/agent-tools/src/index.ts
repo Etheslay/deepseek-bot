@@ -81,6 +81,7 @@ export {
   type ListTasksInput,
 } from "./task-tools.js";
 export { bindWorkflowTools } from "./workflow-tools.js";
+export { bindSkillTools, LearnSkillInputSchema, ListSkillsInputSchema } from "./skill-tools.js";
 export {
   bindWorkspaceFileTool,
   WorkspaceFileInputSchema,

@@ -11,6 +11,7 @@ export const CAPABILITY_IDS = [
   "app.start_run",
   "app.cancel_run",
   "app.dispatch_task",
+  "app.learn_skill",
   "app.revoke_creation",
   "interaction.ask_user",
   "network.search",
@@ -35,6 +36,8 @@ export type GrantScope = z.infer<typeof GrantScopeSchema>;
  * Personal-agent defaults.
  * - Bot-to-bot messaging (`app.dispatch_task`) is not a human permission.
  *   The authorizer allows it even when an older stored row says ask or deny.
+ * - Learning a skill (`app.learn_skill`) is the person asking this bot to
+ *   remember instructions. It defaults to allow and is not listed in settings.
  * - Touching the machine outside the bot workspace asks first: local
  *   commands, connector calls, and MCP calls. Workspace file read/write stays
  *   allow so a handoff file in the shared workspace can be written and read.

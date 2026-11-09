@@ -84,7 +84,7 @@ async function approve(host: DeepSeekBotHost, approval: AppApproval, scope = "on
   });
 }
 describe("authenticated chat application tool channel", () => {
-  it("exports precisely the twelve application schemas and proves plugin readiness", async () => {
+  it("exports the chat application schemas and proves plugin readiness", async () => {
     const { request, turn, server } = await setup();
     expect(Number(new URL(server.url).port)).toBeGreaterThanOrEqual(49152);
     const response = await request("/app-tools");
@@ -98,8 +98,10 @@ describe("authenticated chat application tool channel", () => {
       "dispatch_task",
       "get_run",
       "get_run_events",
+      "learn_skill",
       "list_bots",
       "list_groups",
+      "list_skills",
       "list_tasks",
       "read_workspace_file",
       "revoke_batch",
