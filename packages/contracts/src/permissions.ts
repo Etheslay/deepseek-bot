@@ -32,30 +32,34 @@ export const GrantScopeSchema = z.enum(["policy", "once", "session", "permanent"
 export type GrantScope = z.infer<typeof GrantScopeSchema>;
 
 /**
- * Personal-agent defaults. Most capabilities are allow. The main settings
- * page only lists these three:
- * - `app.dispatch_task` messages another bot, so it defaults to ask. The page
- *   may set allow, ask, or deny.
+ * Personal-agent defaults.
+ * - Bot-to-bot messaging (`app.dispatch_task`) is not a human permission.
+ *   The authorizer allows it even when an older stored row says ask or deny.
+ * - Touching the machine outside the bot workspace asks first: local
+ *   commands, connector calls, and MCP calls. Workspace file read/write stays
+ *   allow so a handoff file in the shared workspace can be written and read.
  * - `device.action` and `screen.capture` stay off until a person sets ask.
  *   Allow is not a legal mode for either.
- *
- * A stored policy row still wins over these defaults, including an explicit deny.
  */
 const DEFAULT_OFF = new Set<CapabilityId>(["device.action", "screen.capture"]);
+const DEFAULT_ASK = new Set<CapabilityId>(["exec.shell", "connector.invoke", "mcp.call"]);
 
 export function defaultPermissionMode(capability: CapabilityId): PermissionMode {
   if (DEFAULT_OFF.has(capability)) return "deny";
-  if (capability === "app.dispatch_task") return "ask";
+  if (DEFAULT_ASK.has(capability)) return "ask";
   return "allow";
 }
 
 /**
  * The only capabilities the main permissions page shows. Order is the
- * settings surface, not the registry order. Every other capability defaults
- * to allow and is not listed there; the policy engine still evaluates it.
+ * settings surface, not the registry order. Workspace files and in-app
+ * capabilities default to allow and are not listed there; the policy engine
+ * still evaluates them.
  */
 export const SETTINGS_SURFACE_CAPABILITIES = [
-  "app.dispatch_task",
+  "exec.shell",
+  "connector.invoke",
+  "mcp.call",
   "device.action",
   "screen.capture",
 ] as const satisfies readonly CapabilityId[];

@@ -10,7 +10,8 @@
  *
  * The sender identity always comes from the trusted `ToolCaller.botId` bound
  * by the Host chat turn — never from model parameters. No role gate: any bot
- * may dispatch (the human approval on `app.dispatch_task` stays the gate).
+ * may dispatch. `app.dispatch_task` defaults to allow; a stored ask or deny
+ * policy is still the gate.
  * `list_tasks` is the read-only companion scoped to tasks the caller
  * participates in. An optional `idempotencyKey` makes a retried dispatch
  * replay the first task instead of queueing a duplicate.
@@ -132,8 +133,8 @@ export function bindTaskTools(deps: TaskToolDeps): ToolCapability[] {
         "executor runs it as its own chat turn). `task` is the exact line or " +
         "concrete work they should produce: if the human asked you to send " +
         "「你好」, task is 你好, not a note about how to say it. You cannot dispatch to " +
-        "yourself. Every dispatch still needs the human's app.dispatch_task " +
-        "approval. Optionally pre-declare a relay chain: each hop {botId, " +
+        "yourself. Bot-to-bot dispatch does not wait for a human permission. " +
+        "Optionally pre-declare a relay chain: each hop {botId, " +
         "instruction} runs after the previous hop succeeds — the whole chain " +
         "is capped at 4 hops and must not repeat a bot. Pass a fresh " +
         "idempotencyKey (uuid) when you re-send the same task: the retry " +

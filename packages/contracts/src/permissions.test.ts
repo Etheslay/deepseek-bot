@@ -39,25 +39,34 @@ const sessionGrant = {
 };
 
 describe("permission schemas", () => {
-  it("defaults a personal agent to allow except messaging, device input, and screen capture", () => {
+  it("lets bots message each other and asks before touching the machine", () => {
     expect(new Set(CAPABILITY_IDS).size).toBe(CAPABILITY_IDS.length);
-    expect(defaultPermissionMode("app.dispatch_task")).toBe("ask");
+    expect(defaultPermissionMode("app.dispatch_task")).toBe("allow");
+    expect(defaultPermissionMode("fs.read")).toBe("allow");
+    expect(defaultPermissionMode("fs.write")).toBe("allow");
+    expect(defaultPermissionMode("exec.shell")).toBe("ask");
+    expect(defaultPermissionMode("connector.invoke")).toBe("ask");
+    expect(defaultPermissionMode("mcp.call")).toBe("ask");
     expect(defaultPermissionMode("screen.capture")).toBe("deny");
     expect(defaultPermissionMode("device.action")).toBe("deny");
     expect(SETTINGS_SURFACE_CAPABILITIES).toEqual([
-      "app.dispatch_task",
+      "exec.shell",
+      "connector.invoke",
+      "mcp.call",
       "device.action",
       "screen.capture",
     ]);
+    const asked = new Set<string>(["exec.shell", "connector.invoke", "mcp.call"]);
+    const off = new Set<string>(["device.action", "screen.capture"]);
+    const listed = new Set<string>(SETTINGS_SURFACE_CAPABILITIES);
     for (const capability of CAPABILITY_IDS) {
       const mode = defaultPermissionMode(capability);
-      if (
-        capability === "app.dispatch_task" ||
-        capability === "device.action" ||
-        capability === "screen.capture"
-      ) {
-        expect(mode).not.toBe("allow");
-        expect(SETTINGS_SURFACE_CAPABILITIES).toContain(capability);
+      const onPage = asked.has(capability) || off.has(capability);
+      expect(listed.has(capability)).toBe(onPage);
+      if (asked.has(capability)) {
+        expect(mode).toBe("ask");
+      } else if (off.has(capability)) {
+        expect(mode).toBe("deny");
       } else {
         expect(mode).toBe("allow");
         expect(isPermissionModeAllowed(capability, "allow")).toBe(true);

@@ -1,10 +1,11 @@
 /**
  * Settings panel for the D16 permission model.
  *
- * The policy engine still stores a mode for every capability. This page only
- * lists messaging other bots, device input, and screen capture. Dispatch can
- * be always-allow, ask, or off. Device input and screen capture stay ask or
- * off. Everything else defaults to allow and is not listed.
+ * The policy engine still stores a mode for every capability. This page lists
+ * the computer actions that stay gated: local commands, connectors, MCP,
+ * device input, and screen capture. Bot-to-bot messaging is not a permission.
+ * Device input and screen capture stay ask or off. Workspace files and the
+ * other in-app capabilities default to allow and are not listed.
  * Issued grants stay here so a person can revoke them.
  */
 import { useCallback, useEffect, useState } from "react";
@@ -44,15 +45,11 @@ function isIssuedGrant(grant: PermissionGrant): grant is IssuedGrant {
 const SURFACE = new Set<CapabilityId>(SETTINGS_SURFACE_CAPABILITIES);
 
 /**
- * Dispatch offers always-allow, ask, and off. Device input and screen capture
- * stay ask or off; the policy schema also rejects allow for those two.
+ * Device input and screen capture stay ask or off; the policy schema rejects
+ * allow for those two. Every other row on this page offers allow, ask, and off.
  */
 function surfaceModes(capability: CapabilityId): PermissionMode[] {
-  return MODES.filter((mode) => {
-    if (!isPermissionModeAllowed(capability, mode)) return false;
-    if (mode === "allow") return capability === "app.dispatch_task";
-    return true;
-  });
+  return MODES.filter((mode) => isPermissionModeAllowed(capability, mode));
 }
 
 function isMode(value: string): value is PermissionMode {

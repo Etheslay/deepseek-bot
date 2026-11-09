@@ -9,8 +9,11 @@ import { setLanguagePreference } from "../../src/renderer/src/i18n.js";
 const POLICIES = [
   { capability: "app.create_group", mode: "allow" },
   { capability: "app.start_run", mode: "allow" },
-  { capability: "exec.shell", mode: "allow" },
-  { capability: "app.dispatch_task", mode: "ask" },
+  { capability: "fs.read", mode: "allow" },
+  { capability: "exec.shell", mode: "ask" },
+  { capability: "connector.invoke", mode: "ask" },
+  { capability: "mcp.call", mode: "ask" },
+  { capability: "app.dispatch_task", mode: "allow" },
   { capability: "screen.capture", mode: "deny" },
   { capability: "device.action", mode: "deny" },
 ];
@@ -175,7 +178,7 @@ describe("permissions settings panel", () => {
     const calls = installHost();
     const container = await renderPanel();
     await vi.waitFor(() => {
-      expect(shownMode(controlByLabel(container, "app.dispatch_task"))).toBe("ask");
+      expect(shownMode(controlByLabel(container, "exec.shell"))).toBe("ask");
     });
     expect(calls.map((call) => call.method)).toEqual([
       "permission.policy.list",
@@ -183,10 +186,14 @@ describe("permissions settings panel", () => {
     ]);
     expect(calls[0]?.payload).toEqual({});
     expect(calls[1]?.payload).toEqual({});
-    expect(container.textContent).toContain("其余能力默认允许");
+    expect(container.textContent).toContain("机器人之间发消息不在这里");
+    expect(() => controlByLabel(container, "app.dispatch_task")).toThrow(/missing policy control/);
+    expect(shownMode(controlByLabel(container, "exec.shell"))).toBe("ask");
+    expect(shownMode(controlByLabel(container, "connector.invoke"))).toBe("ask");
+    expect(shownMode(controlByLabel(container, "mcp.call"))).toBe("ask");
     expect(() => controlByLabel(container, "app.create_group")).toThrow(/missing policy control/);
     expect(() => controlByLabel(container, "app.start_run")).toThrow(/missing policy control/);
-    expect(() => controlByLabel(container, "exec.shell")).toThrow(/missing policy control/);
+    expect(() => controlByLabel(container, "fs.read")).toThrow(/missing policy control/);
     expect(container.textContent).toContain("本会话");
     expect(container.textContent).toContain("1/5");
     expect(container.textContent).not.toContain("app.read");
@@ -197,22 +204,23 @@ describe("permissions settings panel", () => {
     ).toHaveLength(1);
   });
 
-  it("offers always-allow for dispatch and keeps device and screen on ask or off", async () => {
+  it("keeps device and screen on ask or off and lets local commands be always-allow", async () => {
     const calls = installHost();
     const container = await renderPanel();
     await vi.waitFor(() => {
       expect(shownMode(controlByLabel(container, "device.action"))).toBe("deny");
     });
-    expect(await optionIds(container, "app.dispatch_task")).toEqual(["allow", "ask", "deny"]);
+    expect(() => controlByLabel(container, "app.dispatch_task")).toThrow(/missing policy control/);
+    expect(await optionIds(container, "exec.shell")).toEqual(["allow", "ask", "deny"]);
     expect(await optionIds(container, "screen.capture")).toEqual(["ask", "deny"]);
     expect(await optionIds(container, "device.action")).toEqual(["ask", "deny"]);
 
-    await choose(container, "app.dispatch_task", "allow");
+    await choose(container, "exec.shell", "allow");
     await choose(container, "device.action", "ask");
     await vi.waitFor(() => {
       expect(calls).toContainEqual({
         method: "permission.policy.set",
-        payload: { capability: "app.dispatch_task", mode: "allow" },
+        payload: { capability: "exec.shell", mode: "allow" },
       });
       expect(calls).toContainEqual({
         method: "permission.policy.set",

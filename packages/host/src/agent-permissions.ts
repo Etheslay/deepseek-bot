@@ -43,7 +43,7 @@ const CAPABILITIES: Readonly<Record<string, readonly CapabilityId[]>> = {
   knowledge_search: ["memory.read"],
   // v0.7 manager orchestration: workflow creation rides the existing
   // app.create_workflow capability; dispatching gets its own capability
-  // (default ask; other capabilities default to allow — see PERMISSIONS.md);
+  // (default allow — bots may message each other; see PERMISSIONS.md);
   // list_tasks is read-only (app.read, allow by default).
   save_workflow: ["app.create_workflow"],
   dispatch_task: ["app.dispatch_task"],
