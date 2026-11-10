@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   MAX_ARTIFACT_CONTENT_BYTES,
+  MAX_ATTACHMENT_BYTES,
   MAX_MESSAGE_BYTES,
   METHODS,
   METHOD_CONTRACTS,
@@ -473,7 +474,7 @@ describe("attachment methods", () => {
         envelope("attachment.begin", {
           botId,
           name: "big.md",
-          size: 2 * 1024 * 1024 + 1,
+          size: MAX_ATTACHMENT_BYTES + 1,
           sha256: "a".repeat(64),
         }),
         "attachment.begin",

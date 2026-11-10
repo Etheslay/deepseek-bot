@@ -12,6 +12,7 @@ import {
   composeAttachmentParseBlocks,
   extractDocxBody,
   extractPdfBody,
+  extractPptxBody,
   PARSE_INLINE_BYTES,
   parseAndStoreAttachment,
 } from "./attachment-parse.js";
@@ -70,6 +71,15 @@ describe("attachment body extraction (B4')", () => {
     await expect(
       extractPdfBody(new TextEncoder().encode("definitely not a pdf"), { aborted: false }),
     ).rejects.toThrow();
+  });
+
+  it("extracts pptx slide text in slide order", () => {
+    const pptx = zipSync({
+      "ppt/slides/slide2.xml": new TextEncoder().encode("<a:p><a:t>第二页</a:t></a:p>"),
+      "ppt/slides/slide1.xml": new TextEncoder().encode("<a:p><a:t>封面&amp;标题</a:t></a:p>"),
+      "ppt/slideLayouts/slideLayout1.xml": new TextEncoder().encode("<a:t>不要读版式</a:t>"),
+    });
+    expect(extractPptxBody(pptx).text).toBe("封面&标题\n\n第二页");
   });
 
   it("extracts docx runs with tabs, breaks and entity decoding", () => {
@@ -244,6 +254,9 @@ describe("attachment parse cache and chat injection (B4')", () => {
         "【附件 实验报告.pdf · 30 kB · attachments/实验报告.pdf】【附件 my report.docx · 2 KB · attachments/my report.docx】",
       ),
     ).toEqual(["attachments/实验报告.pdf", "attachments/my report.docx"]);
+    expect(
+      collectAttachmentParsePaths("【附件 答辩.pptx · 5.9 MB · attachments/答辩.pptx】"),
+    ).toEqual(["attachments/答辩.pptx"]);
     expect(blocks).toContain("附件正文已截断：原始 20000 字符");
     expect(blocks).toContain("read_workspace_file");
     // The body block's inline payload stays inside the 16 KiB budget: the

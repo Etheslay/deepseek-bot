@@ -8690,6 +8690,22 @@ select:focus-visible {
   flex: none;
 }
 
+.file-card-bar {
+  fill: #3b82f6;
+}
+
+.file-card[data-tone="word"] .file-card-bar {
+  fill: #3b82f6;
+}
+
+.file-card[data-tone="ppt"] .file-card-bar {
+  fill: #f97316;
+}
+
+.file-card[data-tone="pdf"] .file-card-bar {
+  fill: #e5484d;
+}
+
 .file-card-copy {
   display: flex;
   flex-direction: column;

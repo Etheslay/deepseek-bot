@@ -74,14 +74,14 @@ export const MAX_MESSAGE_BYTES = 1_048_576;
  */
 export const MAX_ARTIFACT_CONTENT_BYTES = 768 * 1024;
 /** Chat attachment bytes. One gateway import, staged in chunks under the 1 MiB envelope. */
-export const MAX_CHAT_ATTACHMENT_BYTES = 2 * 1024 * 1024;
+export const MAX_CHAT_ATTACHMENT_BYTES = 20 * 1024 * 1024;
 export const ATTACHMENT_CHUNK_RAW_BYTES = 192 * 1024;
 
 /**
- * One chat attachment may carry at most 2 MiB of file bytes (D26). Bytes ride
+ * One chat attachment may carry at most 20 MiB of file bytes. Bytes ride
  * chunked `attachment.*` calls because a single envelope stays capped at 1 MiB.
  */
-export const MAX_ATTACHMENT_BYTES = 2 * 1024 * 1024;
+export const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024;
 /** One `attachment.append` chunk carries at most 512 KiB of decoded bytes. */
 export const MAX_ATTACHMENT_CHUNK_BYTES = 512 * 1024;
 

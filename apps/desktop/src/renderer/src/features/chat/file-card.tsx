@@ -1,14 +1,22 @@
 import type { JSX } from "react";
 import { formatFileCardSize } from "./attachments.js";
 
-/** Document glyph from the drop reference: three rules and a blue bar. */
+/** Word is blue, PowerPoint orange, PDF red. Other files stay blue. */
+export function fileCardTone(name: string): "word" | "ppt" | "pdf" | "file" {
+  if (/\.pdf$/i.test(name)) return "pdf";
+  if (/\.pptx?$/i.test(name)) return "ppt";
+  if (/\.docx?$/i.test(name)) return "word";
+  return "file";
+}
+
+/** Document glyph: three rules and a colored bar. */
 function FileGlyph(): JSX.Element {
   return (
     <svg className="file-card-icon" viewBox="0 0 36 36" aria-hidden="true">
       <rect x="4" y="5" width="22" height="3.2" rx="1.6" fill="currentColor" opacity="0.72" />
       <rect x="4" y="12" width="18" height="3.2" rx="1.6" fill="currentColor" opacity="0.72" />
       <rect x="4" y="19" width="14" height="3.2" rx="1.6" fill="currentColor" opacity="0.55" />
-      <rect x="4" y="26.5" width="28" height="5" rx="2" fill="#3b82f6" />
+      <rect className="file-card-bar" x="4" y="26.5" width="28" height="5" rx="2" />
     </svg>
   );
 }
@@ -21,7 +29,7 @@ export function FileCard(props: {
   removeLabel?: string;
 }): JSX.Element {
   return (
-    <span className="file-card">
+    <span className="file-card" data-tone={fileCardTone(props.name)}>
       <FileGlyph />
       <span className="file-card-copy">
         <span className="file-card-name">{props.name}</span>

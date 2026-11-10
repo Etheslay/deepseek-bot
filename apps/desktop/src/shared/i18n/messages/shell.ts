@@ -21,10 +21,10 @@ export const shellMessages = {
   "shell.attachmentImageNotVisible": { zh: "图片仅存入工作区，当前模型暂无法看图", en: "The image is stored in the workspace; the current model cannot see it yet" },
   "shell.attachmentImportFailed": { zh: "附件没有写入工作区：{0}", en: "Attachment was not saved to the workspace: {0}" },
   "shell.attachmentNotModelReadable": { zh: "模型不可读", en: "Not readable by the model" },
-  "shell.attachmentTooLarge": { zh: "{0} 超过 2 MB 上限", en: "{0} exceeds the 2 MB limit" },
+  "shell.attachmentTooLarge": { zh: "{0} 超过 20 MB 上限", en: "{0} exceeds the 20 MB limit" },
   "shell.attachmentTypeUnsupported": {
-    zh: "{0} 不能放进聊天。可以拖入 PDF、Word（.docx）、文本和图片",
-    en: "{0} cannot go in the chat. Drop a PDF, Word (.docx), text, or image file",
+    zh: "{0} 不能放进聊天。可以拖入 PDF、Word（.docx）、PPT（.pptx）、文本和图片",
+    en: "{0} cannot go in the chat. Drop a PDF, Word (.docx), PowerPoint (.pptx), text, or image file",
   },
   "shell.dropAttachment": {
     zh: "松开后放到 {0} 的输入框",
