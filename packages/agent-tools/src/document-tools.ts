@@ -50,9 +50,11 @@ export function bindWriteDocumentTool(
   return {
     name: "write_document",
     description:
-      "Overwrite one .docx or .pdf in the bot workspace with the full replacement text. " +
-      "path is workspace-relative and must end in .docx or .pdf. text is the entire new " +
-      "document, not a patch. Word keeps the characters; PDF is a new text PDF. " +
+      "Write one .docx or .pdf in the bot workspace from the full text. " +
+      "path is workspace-relative and must end in .docx or .pdf. text is the entire document, " +
+      "not a patch. A .pdf path is rendered by the Harness LibreOffice engine into a real PDF, " +
+      "including Chinese; call it whenever the user wants a PDF document. " +
+      "A slide deck is write_presentation, not this tool. " +
       "Use this to rewrite a chat attachment such as attachments/report.docx.",
     inputSchema: WriteDocumentInputSchema,
     handler: async (params, context) => {

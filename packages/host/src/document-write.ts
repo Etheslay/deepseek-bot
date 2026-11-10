@@ -45,14 +45,36 @@ function xmlEscape(value: string): string {
     .replaceAll(">", "&gt;");
 }
 
+function docxRun(line: string, size: number, bold: boolean): string {
+  return (
+    `<w:r><w:rPr>` +
+    `<w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:eastAsia="Microsoft YaHei"/>` +
+    `<w:sz w:val="${size}"/>${bold ? `<w:b/>` : ""}` +
+    `</w:rPr><w:t xml:space="preserve">${xmlEscape(line)}</w:t></w:r>`
+  );
+}
+
 export function buildDocx(text: string): Uint8Array {
-  const paragraphs = text.replaceAll("\r\n", "\n").split("\n").map((line) => {
-    return `<w:p><w:r><w:t xml:space="preserve">${xmlEscape(line)}</w:t></w:r></w:p>`;
+  const lines = text.replaceAll("\r\n", "\n").split("\n");
+  const first = lines[0]?.trim() ?? "";
+  const heading = lines.length > 1 && first.length > 0 && first.length <= 40;
+  const paragraphs = lines.map((line, index) => {
+    const isHeading = heading && index === 0;
+    const size = isHeading ? 36 : 22;
+    return (
+      `<w:p><w:pPr><w:spacing w:after="${isHeading ? 240 : 120}" w:line="276" w:lineRule="auto"/>` +
+      `<w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:eastAsia="Microsoft YaHei"/>` +
+      `<w:sz w:val="${size}"/>${isHeading ? `<w:b/>` : ""}</w:rPr></w:pPr>` +
+      `${docxRun(line, size, isHeading)}</w:p>`
+    );
   }).join("");
   const documentXml =
     `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
     `<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
-    `<w:body>${paragraphs}<w:sectPr/></w:body></w:document>`;
+    `<w:body>${paragraphs}<w:sectPr>` +
+    `<w:pgSz w:w="11906" w:h="16838"/>` +
+    `<w:pgMar w:top="1134" w:right="1134" w:bottom="1134" w:left="1134" w:header="720" w:footer="720"/>` +
+    `</w:sectPr></w:body></w:document>`;
   const contentTypes =
     `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
     `<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">` +

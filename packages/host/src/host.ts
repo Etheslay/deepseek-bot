@@ -919,7 +919,8 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
       edit: (botId, input) => editBotDocument(db, botId, input),
     }),
     bindWritePresentationTool({
-      write: (botId, relativePath, slides) => writeBotPresentation(db, botId, relativePath, slides),
+      write: (botId, relativePath, slides, pdfPath) =>
+        writeBotPresentation(db, botId, relativePath, slides, pdfPath),
     }),
     bindDeviceInputTool(deviceInput),
     // v0.5 manager orchestration (T4/T3): coordinator workflow saving and
