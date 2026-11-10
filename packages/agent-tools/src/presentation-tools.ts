@@ -4,6 +4,7 @@
  * shape of the request. Authorization maps to `fs.write`.
  */
 import { z } from "zod";
+import { compilePresentationIr, PresentationIrSchema, presentationIrIssues } from "./presentation-ir.js";
 import { ToolRejectionError, type ToolCapability, type ToolContext } from "./types.js";
 import { WorkspaceFilePathSchema } from "./workspace-file.js";
 
@@ -73,8 +74,7 @@ export const WritePresentationInputSchema = z
     path: WorkspaceFilePathSchema,
     pdfPath: WorkspaceFilePathSchema.optional(),
     palette: z.enum(PRESENTATION_PALETTES).optional(),
-    script: z.string().trim().max(24_000).optional(),
-    slides: z.array(SlideSchema).min(1).max(MAX_PRESENTATION_SLIDES).optional(),
+    ir: PresentationIrSchema,
   })
   .strict()
   .superRefine((value, ctx) => {
@@ -84,61 +84,9 @@ export const WritePresentationInputSchema = z
     if (value.pdfPath !== undefined && !/\.pdf$/i.test(value.pdfPath)) {
       ctx.addIssue({ code: "custom", message: "pdfPath must end with .pdf" });
     }
-    if ((value.script?.length ?? 0) < 40) {
-      ctx.addIssue({
-        code: "custom",
-        message: "call find_github_skill first, then pass a pptxgenjs script. Do not hand-write slide layouts.",
-      });
+    for (const message of presentationIrIssues(value.ir)) {
+      ctx.addIssue({ code: "custom", message });
     }
-    (value.slides ?? []).forEach((slide, index) => {
-      const layout = slide.layout ?? "bullets";
-      if (layout === "agenda") {
-        const items = slide.bullets ?? [];
-        if (items.length < 2 || items.some((item) => item.length > 40)) {
-          ctx.addIssue({ code: "custom", message: `slide ${index + 1} agenda needs 2 to 6 short items` });
-        }
-      }
-      if (layout === "steps") {
-        const items = slide.bullets ?? [];
-        if (items.length < 3 || items.length > 4 || items.some((item) => item.length > 16)) {
-          ctx.addIssue({ code: "custom", message: `slide ${index + 1} steps needs 3 or 4 short labels` });
-        }
-      }
-      if (layout === "cards" && slide.cards === undefined) {
-        ctx.addIssue({ code: "custom", message: `slide ${index + 1} cards layout needs cards` });
-      }
-      if (layout === "summary" && (slide.bullets?.length ?? 0) < 1) {
-        ctx.addIssue({ code: "custom", message: `slide ${index + 1} summary needs bullets` });
-      }
-      if (layout === "quote" && slide.quote === undefined) {
-        ctx.addIssue({ code: "custom", message: `slide ${index + 1} quote layout needs quote` });
-      }
-      if (layout === "split") {
-        const count = (slide.left?.bullets?.length ?? 0) + (slide.right?.bullets?.length ?? 0);
-        if (count < 1) {
-          ctx.addIssue({ code: "custom", message: `slide ${index + 1} split layout needs a column` });
-        }
-      }
-      if (layout === "metrics" && slide.metrics === undefined) {
-        ctx.addIssue({ code: "custom", message: `slide ${index + 1} metrics layout needs metrics` });
-      }
-      if (layout === "table") {
-        const width = slide.headers?.length ?? 0;
-        if (width < 2 || slide.rows === undefined || slide.rows.some((row) => row.length !== width)) {
-          ctx.addIssue({ code: "custom", message: `slide ${index + 1} table rows must match its headers` });
-        }
-      }
-      if (slide.image !== undefined && !/\.(png|jpe?g)$/i.test(slide.image)) {
-        ctx.addIssue({ code: "custom", message: `slide ${index + 1} image must be a png or jpeg in the workspace` });
-      }
-      if (layout === "chart") {
-        const count = slide.categories?.length ?? 0;
-        const series = slide.series ?? [];
-        if (count < 2 || series.length < 1 || series.some((item) => item.values.length !== count)) {
-          ctx.addIssue({ code: "custom", message: `slide ${index + 1} chart series must match its categories` });
-        }
-      }
-    });
   });
 
 export type PresentationSlideInput = z.infer<typeof SlideSchema>;
@@ -180,23 +128,38 @@ export function bindWritePresentationTool(
   return {
     name: "write_presentation",
     description:
-      "Save a PowerPoint after find_github_skill has returned a skill. Do not call this first, " +
-      "and do not hand-write slides with layout fields. script is JavaScript that uses the " +
-      "provided pres from pptxgenjs and follows the skill. pres.layout is already LAYOUT_WIDE " +
-      "(13.3 by 7.5 inches). Add the slides the skill describes. Do not import, require, fetch, " +
-      "or write the file. path ends in .pptx, for example attachments/deck.pptx. " +
-      "pdfPath, when present, also writes a PDF and must end in .pdf. A written report that is " +
-      "not slides goes to write_document. After it returns, tell the user the file path.",
+      "Build a 16:9 PowerPoint from a semantic brief. Do not send coordinates, colors, font " +
+      "sizes, or a script. The host places every box. ir.brief requires topic, audience, goal, " +
+      "slide_budget from 2 to 16, and lang. evidence lists every number you will print, with id, " +
+      "claim, value, and source. must_keep phrases must appear in the deck. must_avoid phrases " +
+      "must not. slides start with layout cover and end with layout end. A title is a conclusion " +
+      "sentence, not a label: at most 24 characters, cover at most 18, section at most 12. " +
+      "blocks are only bullets, table, chart, image, callout, or kv, and a slide has at most 5. " +
+      "Choose the layout from the content: a chart uses chart_plus_note, a table wider than 3 " +
+      "columns uses table_full, a single callout uses statement, an image with bullets uses " +
+      "bullets_left_image_right, a sequence uses timeline, a comparison uses two_col_compare, " +
+      "and three points use statement_plus_3cols. Layouts are cover, section, statement, " +
+      "statement_plus_3cols, bullets_left_image_right, two_col_compare, table_full, " +
+      "chart_plus_note, timeline, quote, and end. Every number except a year must appear in an " +
+      "evidence value cited by that slide. If a number has no source, leave it out. notes is the " +
+      "spoken line, at most 120 characters. path ends in .pptx. pdfPath, when present, ends in " +
+      ".pdf. After it returns, tell the user the file path.",
     inputSchema: WritePresentationInputSchema,
     handler: async (params, context) => {
       const botId = requireBot(context);
+      let compiled: ReturnType<typeof compilePresentationIr>;
+      try {
+        compiled = compilePresentationIr(params.ir);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "presentation brief was rejected";
+        throw new ToolRejectionError("INVALID_INPUT", message);
+      }
       return writer.write(
         botId,
         params.path,
-        params.slides ?? [],
+        compiled.slides.map((slide) => SlideSchema.parse(slide)),
         params.pdfPath,
-        params.palette,
-        params.script,
+        params.palette ?? compiled.palette,
       );
     },
   };

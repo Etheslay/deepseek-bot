@@ -61,9 +61,8 @@ export function thinkingStatus(input: ThinkingStatusInput): ThinkingStatus | nul
   const editingDocument =
     input.makingDocument === true || input.toolName === "edit_document";
   const writingDeck = input.toolName === "write_presentation";
-  const findingSkill =
-    input.toolName === "find_github_skill" ||
-    (input.makingPresentation === true && !writingDeck && input.toolName !== "edit_document");
+  const findingSkill = input.toolName === "find_github_skill";
+  const presentation = writingDeck || input.makingPresentation === true;
   const namedTool =
     input.stage === "tool" &&
     input.toolName !== undefined &&
@@ -77,10 +76,10 @@ export function thinkingStatus(input: ThinkingStatusInput): ThinkingStatus | nul
       ? t("chat.thinkConvertingPdf")
       : editingDocument
         ? t("chat.thinkMakingDocument")
-        : writingDeck
-          ? t("chat.thinkMakingPresentation")
-          : findingSkill
-            ? t("chat.thinkFindingSkill")
+        : findingSkill
+          ? t("chat.thinkFindingSkill")
+          : presentation
+            ? t("chat.thinkMakingPresentation")
             : input.readingFile
             ? t("chat.thinkReadingFile")
             : input.stage === "preparing"

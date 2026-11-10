@@ -34,12 +34,10 @@ export function bindFindGithubSkillTool(
   return {
     name: "find_github_skill",
     description:
-      "Return the PowerPoint skill, then follow it. When the user asks for a PPT, slides, " +
-      "a deck, or a presentation, call this before write_presentation. The first call searches " +
-      "GitHub and saves the skill on this machine. Later calls return that saved skill and do " +
-      "not use the network. Do not hand-write the deck. query describes the task, for example " +
-      "\"powerpoint pptx\". Follow the instructions, then call write_presentation with a " +
-      "pptxgenjs script. The host provides pres and saves the file.",
+      "Search GitHub for an agent skill and return its instructions. Use this when the user " +
+      "asks to learn or look up a skill. A deck is still written with write_presentation ir; " +
+      "do not turn a skill into coordinates or a script. The first call searches GitHub and " +
+      "saves the skill. Later calls return the saved skill and do not use the network.",
     inputSchema: FindGithubSkillInputSchema,
     async handler(params, context) {
       requireBot(context);
@@ -48,12 +46,9 @@ export function bindFindGithubSkillTool(
         return {
           ...found,
           next: found.cached
-            ? "This skill is already saved. Do not search GitHub again. Follow it and call " +
-              "write_presentation with a pptxgenjs script that uses pres. pres.layout is already " +
-              "LAYOUT_WIDE (13.3 by 7.5 inches). Do not import, require, or write the file yourself."
-            : "Saved for the next deck. Follow this skill and call write_presentation with a " +
-              "pptxgenjs script that uses pres. pres.layout is already LAYOUT_WIDE (13.3 by 7.5 " +
-              "inches). Do not import, require, or write the file yourself.",
+            ? "This skill is already saved. Do not search GitHub again. A deck still uses " +
+              "write_presentation ir. Do not invent coordinates."
+            : "Saved for next time. A deck still uses write_presentation ir. Do not invent coordinates.",
         };
       } catch (error) {
         const message = error instanceof Error ? error.message : "GitHub skill search failed";

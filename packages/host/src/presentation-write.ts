@@ -426,7 +426,9 @@ function slideDocument(
     add(textBox(nextId++, "Title", 640000, 420000, 10800000, 900000, paragraph(slide.title, titlePt(slide.title, 3600), true, tone.ink)));
     add(tableFrame(nextId++, slide.headers ?? [], slide.rows ?? []));
   } else if (layout === "chart") {
-    add(textBox(nextId++, "Title", 640000, 360000, 10800000, 800000, paragraph(slide.title, titlePt(slide.title, 3600), true, tone.ink)));
+    const heading = paragraph(slide.title, titlePt(slide.title, 3200), true, tone.ink) +
+      (slide.subtitle === undefined ? "" : paragraph(slide.subtitle, 1400, false, tone.muted, { before: 200 }));
+    add(textBox(nextId++, "Title", 640000, 280000, 10800000, 1100000, heading));
     add(chartFrame(nextId++));
   } else {
     const heading = [
