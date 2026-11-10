@@ -297,9 +297,14 @@ describe("chat runtime", () => {
       text: "给小学三年级做一份 5 页的数学课 PPT",
     });
     const log = readFileSync(join(records, "fake-harness.jsonl"), "utf8");
-    expect(log).toContain("【必须交付演示文稿】");
+    expect(log.lastIndexOf("【必须交付演示文稿】")).toBeGreaterThan(log.lastIndexOf("[用户消息]"));
     expect(log).toContain("write_presentation");
-    expect(log).toContain("不要说工具通道断了");
+    expect(log).toContain("不要写 .bat");
+    expect(log).toContain("python-pptx");
+    await host.handleMethod("chat.send", { botId, text: "ppt呢" });
+    const again = readFileSync(join(records, "fake-harness.jsonl"), "utf8");
+    expect(again.lastIndexOf("【必须交付演示文稿】")).toBeGreaterThan(again.lastIndexOf("【最近对话】"));
+    expect(again).toContain("那些话作废");
     const plain = mkdtempSync(join(tmpdir(), "dsb-deck-plain-"));
     roots.push(plain);
     const second = await hostWithBot("ok", async () => "sk-test-only", {

@@ -141,11 +141,10 @@ function deckDeliveryRule(text: string): string {
   if (!/pptx|幻灯片|演示文稿|课件|(?:^|[^a-z])ppt(?:[^a-z]|$)/i.test(text)) return "";
   return [
     "【必须交付演示文稿】",
-    "用户要的是 .pptx 文件，不是聊天里的提纲。",
-    "write_presentation 已经接在这一轮。它在本机写文件，不启动 Python，也不打开 PowerPoint。",
-    "这一轮调用 write_presentation，把内容写进 .pptx。",
-    "不要说工具通道断了、进程起不来、临时目录没权限，或等恢复再做。",
-    "不要用文字稿、互动页或导出按钮代替这个文件。",
+    "用户要的是本机上的一个 .pptx 文件。这一轮调用 write_presentation，把内容写进这个文件。",
+    "这个工具已经接在这一轮。它在本机写文件，不启动 Python，不打开 PowerPoint，也不需要浏览器。",
+    "前面如果说过工具通道断了、让用户点「下载可编辑」、双击 bat、或自己装 python-pptx，那些话作废。不要再重复。",
+    "不要写 .bat，不要写安装脚本，不要说备用方案，不要用文字稿、互动页或导出按钮代替这个文件。",
     "工具返回后，把文件路径告诉用户。",
   ].join("\n");
 }
@@ -624,8 +623,6 @@ export class ChatManager {
     if (!primitive && summary !== undefined && summary.length > 0) {
       parts.push(`【更早对话摘要】\n${summary}`);
     }
-    const deckRule = deckDeliveryRule([text, ...history.map((entry) => entry.text)].join("\n"));
-    if (deckRule.length > 0) parts.push(deckRule);
     if (primitive) {
       parts.push("【原始人模式】只回答下面这一步：不铺垫、不复述上下文、不做总结；直接给最短可用的答案。");
     } else if (history.length > 0) {
@@ -635,6 +632,10 @@ export class ChatManager {
       parts.push(`【最近对话】\n${lines.join("\n")}`);
     }
     parts.push(`[用户消息]\n${text}`);
+    // After the history on purpose. Earlier replies that invented a broken
+    // channel would otherwise outrank a rule placed above them.
+    const deckRule = deckDeliveryRule([text, ...history.map((entry) => entry.text)].join("\n"));
+    if (deckRule.length > 0) parts.push(deckRule);
     return parts.join("\n\n");
   }
 
