@@ -6226,33 +6226,11 @@ select option {
   animation: grokFadeUp 0.18s ease-out both;
 }
 
-/* chat.history replay is a record. grokFadeUp fills every row back to
-   opacity 1, so a replay row keeps its own fill and stays quieter than
-   a live turn. Reduced motion drops the animation and keeps that opacity. */
-@keyframes grokFadeUpReplay {
-  from {
-    opacity: 0;
-    transform: translateY(4px);
-  }
-  to {
-    opacity: 0.7;
-    transform: none;
-  }
-}
-
-.msg-row.replay {
-  opacity: 0.7;
-  animation-name: grokFadeUpReplay;
-}
-
+/* History rows use the same entrance as a live turn and finish at full
+   opacity. A 0.7 fade turned the white reply gray on the dark bubble. */
 @media (prefers-reduced-motion: reduce) {
   .msg-row {
     animation: none;
-  }
-
-  .msg-row.replay {
-    animation: none;
-    opacity: 0.7;
   }
 }
 
