@@ -6068,9 +6068,12 @@ select option {
 }
 
 /* 3. user bubble: painted with the bot's exact colour, no transparency
-   (owner request 2026-10-26). The fill follows the bot. The type stays white
-   in the dark theme; auto-contrast ink turned bright fills into near-black.
-   `--bot-ink` remains the send button's arrow colour. */
+   (owner request 2026-10-26). The fill follows the bot. Coloured bots keep
+   the theme's type: white on dark, black on light. Auto-contrast used to turn
+   every bright fill near-black; only the mono body needs that flip, because
+   its fill is the theme's type colour (white on dark, black on light) and the
+   sentence would otherwise vanish. `--bot-ink` remains the send button's
+   arrow colour. */
 .msg-row.user .msg-bubble {
   background: var(--bot-color, var(--grok-user-bubble)) !important;
   border: 1px solid transparent;
@@ -6082,7 +6085,11 @@ select option {
 }
 
 [data-theme="light"] .msg-row.user .msg-bubble {
-  color: var(--bot-ink, #1b1b1f) !important;
+  color: #1b1b1f !important;
+}
+
+.chat-page[data-bubble-ink="mono"] .msg-row.user .msg-bubble {
+  color: var(--avatar-mono-fg) !important;
 }
 
 /* 4. composer: white send circle (dark) / black circle (light) */

@@ -95,6 +95,17 @@ export function avatarKey(avatar: Avatar): string {
   }
 }
 
+/**
+ * User-bubble type against a fill painted with the bot colour.
+ *
+ * Coloured bots keep the theme default: white type on a dark theme, black
+ * type on a light theme. The mono body is that same colour — white on dark,
+ * black on light — so its type has to flip or the sentence disappears.
+ */
+export function userBubbleInk(avatar: Avatar): "theme" | "mono" {
+  return avatarColor(avatar).includes("--avatar-mono-bg") ? "mono" : "theme";
+}
+
 /** Readable text ink for a bubble painted with the exact bot colour. */
 export function bubbleInk(color: string): string {
   if (color.includes("--avatar-mono-bg")) {
