@@ -97,6 +97,15 @@ export {
   type WrittenDocument,
 } from "./document-tools.js";
 export {
+  bindEditDocumentTool,
+  DOCUMENT_EDIT_ACTIONS,
+  EditDocumentInputSchema,
+  type DocumentEditAction,
+  type DocumentEditInput,
+  type DocumentEditResult,
+  type DocumentEditor,
+} from "./document-edit-tools.js";
+export {
   bindWorkspaceFileTool,
   WorkspaceFileInputSchema,
   WorkspaceFilePathSchema,

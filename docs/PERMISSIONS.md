@@ -46,7 +46,7 @@ v0.5 manager-orchestration（TASK_MANAGER_ORCHESTRATION.md §3.4）：新增模�
 
 `memory_search` 绑定 `memory.read`，`memory_write` 绑定 `memory.write`。两者都只使用受信 `ToolCaller.botId`，模型参数不能指定 bot。默认不跨 bot 共享，也没有共享开关。用户经受信方法 `memory.list` / `memory.write` / `memory.delete` 查看、写入和删除当前 bot 的记忆；删除是物理删除，模型目录没有删除工具。网关 JSONL 仍只存摘要。知识导入是桌面文件对话框，不接收渲染进程传入的路径，也不是模型工具。通过后仍调用 `memory.write`，隔离规则不变。只接受 `.txt` / `.md`，文件不超过 16 KiB，正文仍须放进一条 1–4000 字的记忆。
 
-`import_attachment` 绑定 `fs.write`，模型工具 `read` 绑定 `fs.read`。`write_document` 也绑定 `fs.write`，用来覆盖工作区内的一个 `.docx` 或 `.pdf`。三者默认始终允许。导入只接受 Host 已经暂存的字节，模型参数不能带文件正文或 bot id。`read` 的参数只有工作区相对路径 `file_path`。审批预览不含附件正文。
+`import_attachment` 绑定 `fs.write`，模型工具 `read` 绑定 `fs.read`。`write_document` 也绑定 `fs.write`，用来覆盖工作区内的一个 `.docx` 或 `.pdf`。`edit_document` 的读取绑定 `fs.read`，其余动作绑定 `fs.write`。这些读写工作区的工具默认始终允许。导入只接受 Host 已经暂存的字节，模型参数不能带文件正文或 bot id。`read` 的参数只有工作区相对路径 `file_path`。审批预览不含附件正文。
 
 `connector.*` 管理方法只对受信桌面开放，新登记连接器默认关闭。Stable Diffusion 使用 `connector_invoke`；自定义 MCP 使用独立的 `mcp.call` 能力。MCP 首版只接受无凭据的本机 HTTP(S) Streamable HTTP 端点，可带路径；localhost 固定归一化为 127.0.0.1，拒绝远程主机、URL 用户信息、查询、片段及重定向。Host 不解析或注入 MCP 凭据。
 

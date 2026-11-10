@@ -33,6 +33,10 @@ export type ThinkingStatusInput = {
   hasText: boolean;
   /** This turn is waiting on a Word/PDF body the Host is extracting. */
   readingFile?: boolean;
+  /** The user asked for a Word file, or edit_document is the turn's tool. */
+  makingDocument?: boolean;
+  /** The user asked to turn a file into a PDF. */
+  convertingToPdf?: boolean;
 };
 
 /** Seconds become visible only once the wait is long enough to feel stuck. */
@@ -52,14 +56,23 @@ export function thinkingStatus(input: ThinkingStatusInput): ThinkingStatus | nul
   }
   const hint =
     input.elapsedMs >= ELAPSED_HINT_AFTER_MS ? formatElapsed(input.elapsedMs) : null;
+  const editingDocument =
+    input.makingDocument === true || input.toolName === "edit_document";
   const namedTool =
-    input.stage === "tool" && input.toolName !== undefined && input.toolName.length > 0;
+    input.stage === "tool" &&
+    input.toolName !== undefined &&
+    input.toolName.length > 0 &&
+    input.toolName !== "edit_document";
   const text = namedTool
     ? t("chat.thinkTool", [input.toolName ?? ""])
-    : input.readingFile
-      ? t("chat.thinkReadingFile")
-      : input.stage === "preparing"
-        ? t("chat.thinkPreparing")
-        : t("chat.thinkReasoning");
+    : input.convertingToPdf
+      ? t("chat.thinkConvertingPdf")
+      : editingDocument
+        ? t("chat.thinkMakingDocument")
+        : input.readingFile
+          ? t("chat.thinkReadingFile")
+          : input.stage === "preparing"
+            ? t("chat.thinkPreparing")
+            : t("chat.thinkReasoning");
   return { text, hint };
 }

@@ -62,6 +62,7 @@ const CAPABILITIES: Readonly<Record<string, readonly CapabilityId[]>> = {
   // native filesystem reads; policy defaults to allow, audit records the path.
   read_workspace_file: ["fs.read"],
   write_document: ["fs.write"],
+  edit_document: ["fs.write"],
   // D26 gateway: importing a chat attachment writes the bot workspace;
   // reading it back is the model `read` tool. Both default to allow.
   import_attachment: ["fs.write"],
@@ -79,6 +80,13 @@ export function capabilitiesConsumedBy(
   tool: string,
   params: unknown,
 ): readonly CapabilityId[] | undefined {
+  if (tool === "edit_document") {
+    const action =
+      params !== null && typeof params === "object" && !Array.isArray(params)
+        ? (params as { action?: unknown }).action
+        : undefined;
+    return [action === "read" ? "fs.read" : "fs.write"];
+  }
   const mapped = Object.hasOwn(CAPABILITIES, tool) ? CAPABILITIES[tool] : undefined;
   if (mapped === undefined) return undefined;
   const capabilities = [...mapped];

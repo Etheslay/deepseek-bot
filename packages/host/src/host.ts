@@ -48,6 +48,7 @@ import { ChatManager, chatSessionIdFor, type ChatStreamNotice } from "./chat.js"
 import { DEFAULT_CONTEXT_WINDOW_TOKENS } from "./context-window.js";
 import { createAttachmentStore, readWorkspaceFileText } from "./attachments.js";
 import { writeBotDocument } from "./document-write.js";
+import { editBotDocument } from "./document-edit.js";
 import { createWorkspaceArtifacts } from "./artifacts.js";
 import {
   EngineError,
@@ -104,6 +105,7 @@ import {
   bindWriteTools,
   bindWorkspaceFileTool,
   bindWriteDocumentTool,
+  bindEditDocumentTool,
   type UserQuestionControls,
 } from "@deepseek-bot/agent-tools";
 import {
@@ -910,6 +912,9 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
     }),
     bindWriteDocumentTool({
       write: (botId, relativePath, text) => writeBotDocument(db, botId, relativePath, text),
+    }),
+    bindEditDocumentTool({
+      edit: (botId, input) => editBotDocument(db, botId, input),
     }),
     bindDeviceInputTool(deviceInput),
     // v0.5 manager orchestration (T4/T3): coordinator workflow saving and

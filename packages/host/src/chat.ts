@@ -257,7 +257,12 @@ export class ChatManager {
         return;
       }
       if (event.type === "tool/result" && current.stage === "tool") {
-        session.progress = { stage: "thinking", startedAt: current.startedAt };
+        // Keep the document tool name so the chat line can stay on
+        // "制作文档" until the reply text arrives.
+        session.progress =
+          current.toolName === "edit_document"
+            ? { stage: "thinking", startedAt: current.startedAt, toolName: current.toolName }
+            : { stage: "thinking", startedAt: current.startedAt };
       } else if (current.stage === "preparing") {
         // The enqueue receipt (or any turn traffic) means the harness took
         // the prompt: the model is generating now.

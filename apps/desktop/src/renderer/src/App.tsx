@@ -120,6 +120,7 @@ import {
   type VisionNoteMode,
 } from "./features/chat/attachments.js";
 import { prepareVisionImage } from "./features/chat/image-vision.js";
+import { asksToConvertToPdf, asksToMakeDocument } from "./features/chat/document-intent.js";
 import type { StreamOptions } from "./services/desktop-service.js";
 import { GlobalSearch } from "./features/search/global-search.js";
 import { ContextRing } from "./features/chat/context-ring.js";
@@ -3717,6 +3718,8 @@ function BotsPlaceholder({
   const [pendingFiles, setPendingFiles] = useState<AttachmentDraft[]>([]);
   const [fileDropActive, setFileDropActive] = useState(false);
   const [readingFile, setReadingFile] = useState(false);
+  const [makingDocument, setMakingDocument] = useState(false);
+  const [convertingToPdf, setConvertingToPdf] = useState(false);
   const [skills, setSkills] = useState<Skill[]>(() => listSkills(window.localStorage));
   const [skillMenuOpen, setSkillMenuOpen] = useState(false);
   /** G6: a pending 编辑重发 labels the next sent user bubble. */
@@ -4174,6 +4177,8 @@ function BotsPlaceholder({
         const settled = result.cancelled || result.failure !== null;
         onBotStatus(me.bot.id, "idle");
         setReadingFile(false);
+        setMakingDocument(false);
+        setConvertingToPdf(false);
         if (!settled) {
           onReplyCompleted(me.bot.id, me.bot.name);
         }
@@ -4354,6 +4359,8 @@ function BotsPlaceholder({
     setFailedText(text);
     setDraft("");
     setReadingFile(files.some((file) => classifyAttachment(file.mime, file.name) === "document"));
+    setMakingDocument(asksToMakeDocument(text));
+    setConvertingToPdf(asksToConvertToPdf(text));
     startChatStream(composeAttachmentPrompt(text, pointers), imageBlocks);
   };
 
@@ -4574,7 +4581,13 @@ function BotsPlaceholder({
                         ? t("shell.toolCompleted")
                         : t("shell.toolFailed")}
                 </span>
-                <span className="tool-name">{tool.toolName}</span>
+                <span className="tool-name">
+                  {tool.toolName === "edit_document"
+                    ? convertingToPdf
+                      ? t("chat.thinkConvertingPdf")
+                      : t("chat.thinkMakingDocument")
+                    : tool.toolName}
+                </span>
                 {tool.summary && <span className="tool-summary">{tool.summary}</span>}
               </div>
             ))}
@@ -4599,7 +4612,13 @@ function BotsPlaceholder({
                   </div>
                 ) : (
                   <div className="stream-pending">
-                    <ThinkingLine botId={me.bot.id} avatar={me.avatar} readingFile={readingFile} />
+                    <ThinkingLine
+                      botId={me.bot.id}
+                      avatar={me.avatar}
+                      readingFile={readingFile}
+                      makingDocument={makingDocument}
+                      convertingToPdf={convertingToPdf}
+                    />
                     <button
                       type="button"
                       className="stream-cancel"

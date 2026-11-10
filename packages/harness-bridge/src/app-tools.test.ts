@@ -21,6 +21,7 @@ const names = [
   "cancel_message_schedule",
   "read_workspace_file",
   "write_document",
+  "edit_document",
 ];
 interface Definition {
   name: string;
