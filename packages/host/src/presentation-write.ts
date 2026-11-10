@@ -26,7 +26,7 @@ import {
 import { getBot, getWorkspace, type OpenedDatabase } from "@deepseek-bot/storage";
 import { resolveInsideWorkspace } from "./artifacts.js";
 import { parseAndStoreAttachment } from "./attachment-parse.js";
-import { embeddedFaces, type EmbeddedFace } from "./presentation-font.js";
+import { cjkEmbeddingRefusal, embeddedFaces, type EmbeddedFace } from "./presentation-font.js";
 import { renderPptxScript } from "./presentation-script.js";
 import { convertOfficeToPdf } from "./office-pdf.js";
 
@@ -684,7 +684,10 @@ export async function buildPptx(
         : palette === "dusk" ? PALETTES.dusk
           : palette === "tide" ? PALETTES.tide
             : PALETTES.ink;
-  const faces = await embeddedFaces(deckText(deck));
+  const drawn = deckText(deck);
+  const faces = await embeddedFaces(drawn);
+  const missingCjk = cjkEmbeddingRefusal(drawn, faces.cjk !== undefined);
+  if (missingCjk !== null) throw invalid(missingCjk);
   latinFamily = faces.latin?.family ?? "Calibri";
   cjkFamily = faces.cjk?.family ?? "Microsoft YaHei";
   const files: Record<string, Uint8Array> = {
