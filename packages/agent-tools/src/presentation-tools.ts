@@ -12,6 +12,7 @@ export const MAX_SLIDE_TITLE = 80;
 export const MAX_SLIDE_BULLETS = 6;
 export const MAX_BULLET_CHARS = 180;
 export const PRESENTATION_LAYOUTS = ["cover", "section", "bullets", "split", "quote", "metrics", "table", "chart"] as const;
+export const PRESENTATION_ICONS = ["arrow", "check", "star", "alert", "spark", "target"] as const;
 
 const MetricSchema = z
   .object({
@@ -51,6 +52,8 @@ const SlideSchema = z
     categories: z.array(z.string().trim().min(1).max(16)).min(2).max(6).optional(),
     series: z.array(ChartSeriesSchema).min(1).max(2).optional(),
     notes: z.string().trim().min(1).max(400).optional(),
+    icon: z.enum(PRESENTATION_ICONS).optional(),
+    image: z.string().trim().min(1).max(240).optional(),
   })
   .strict();
 
@@ -87,6 +90,9 @@ export const WritePresentationInputSchema = z
         if (width < 2 || slide.rows === undefined || slide.rows.some((row) => row.length !== width)) {
           ctx.addIssue({ code: "custom", message: `slide ${index + 1} table rows must match its headers` });
         }
+      }
+      if (slide.image !== undefined && !/\.(png|jpe?g)$/i.test(slide.image)) {
+        ctx.addIssue({ code: "custom", message: `slide ${index + 1} image must be a png or jpeg in the workspace` });
       }
       if (layout === "chart") {
         const count = slide.categories?.length ?? 0;
@@ -142,7 +148,10 @@ export function bindWritePresentationTool(
       "subtitle), section (a short divider), bullets (at most 6 short lines), split (left and right " +
       "columns), quote (one sentence in quote plus attribution), metrics (2 to 4 big figures), " +
       "table (headers plus rows), chart (categories plus one or two numeric series, drawn as columns). " +
-      "notes is speaker text and stays off the slide. Do not make every slide the same bullet list. " +
+      "notes is speaker text and stays off the slide. icon is one of arrow, check, star, alert, " +
+      "spark, target. image is a workspace png or jpeg drawn on that slide. Shapes fade in when " +
+      "the deck is presented. The deck embeds the CJK font it draws with. Do not make every slide " +
+      "the same bullet list. " +
       "pdfPath, when present, also writes a PDF of the finished deck and must end in " +
       ".pdf. A written PDF report that is not slides goes to write_document with a .pdf path. " +
       "After it returns, tell the user the file path.",

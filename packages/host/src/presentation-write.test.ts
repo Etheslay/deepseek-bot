@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { unzipSync } from "fflate";
@@ -14,8 +14,8 @@ afterEach(() => {
 });
 
 describe("write_presentation bytes", () => {
-  it("round-trips Chinese slide text in slide order", () => {
-    const pptx = buildPptx([
+  it("round-trips Chinese slide text in slide order", async () => {
+    const pptx = await buildPptx([
       { title: "封面&标题", bullets: ["第一点"] },
       { title: "第二页", bullets: ["要点"] },
     ]);
@@ -27,8 +27,8 @@ describe("write_presentation bytes", () => {
     expect(extractPptxBody(pptx).pages).toBe(2);
   });
 
-  it("keeps cover, split, and quote text, and paints the cover dark", () => {
-    const pptx = buildPptx([
+  it("keeps cover, split, and quote text, and paints the cover dark", async () => {
+    const pptx = await buildPptx([
       { layout: "cover", kicker: "季度", title: "封面", subtitle: "一句话" },
       {
         layout: "split",
@@ -46,8 +46,8 @@ describe("write_presentation bytes", () => {
     expect(slide).toContain("C2410C");
   });
 
-  it("draws metrics, a table, a column chart, and speaker notes", () => {
-    const pptx = buildPptx([
+  it("draws metrics, a table, a column chart, and speaker notes", async () => {
+    const pptx = await buildPptx([
       { layout: "metrics", title: "结果", metrics: [{ value: "42%", label: "完成" }, { value: "3", label: "风险" }] },
       { layout: "table", title: "对照表", headers: ["项", "值"], rows: [["甲", "1"]] },
       {
@@ -65,6 +65,39 @@ describe("write_presentation bytes", () => {
     expect(new TextDecoder().decode(entries["ppt/charts/chart3.xml"])).toContain(">18<");
     expect(new TextDecoder().decode(entries["ppt/notesSlides/notesSlide3.xml"])).toContain("先讲同比");
     expect(entries["ppt/notesMasters/notesMaster1.xml"]).toBeDefined();
+  });
+
+  it("embeds a real font, an icon, a picture, and a fade", async () => {
+    const root = mkdtempSync(join(tmpdir(), "ppt-media-"));
+    roots.push(root);
+    writeFileSync(
+      join(root, "dot.png"),
+      Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+        "base64",
+      ),
+    );
+    const written = await writePresentationAt(root, "attachments/图.pptx", [
+      { title: "带图", bullets: ["一行"], icon: "star", image: "dot.png" },
+    ]);
+    const entries = unzipSync(readFileSync(join(root, written.path)));
+    const slide = new TextDecoder().decode(entries["ppt/slides/slide1.xml"]);
+    const presentation = new TextDecoder().decode(entries["ppt/presentation.xml"]);
+    expect(extractPptxBody(readFileSync(join(root, written.path))).text).toBe("带图\n一行");
+    expect(slide).toContain('filter="fade"');
+    expect(slide).toContain('prst="star5"');
+    expect(slide).toContain('r:embed="rIdImage"');
+    expect(entries["ppt/media/image1.png"]).toBeDefined();
+    const fontPart = Object.keys(entries).find((name) => name.endsWith(".fntdata"));
+    const fontBytes = fontPart === undefined ? undefined : entries[fontPart];
+    expect(fontBytes).toBeDefined();
+    expect(Buffer.from(fontBytes ?? new Uint8Array()).subarray(0, 4).toString("hex")).toBe("00010000");
+    expect(presentation).toContain("embeddedFontLst");
+    expect(presentation).toMatch(/Droid Sans Fallback|Microsoft YaHei|Noto Sans CJK SC|WenQuanYi Micro Hei/);
+    expect(presentation).toMatch(/DejaVu Sans|Calibri/);
+    await expect(writePresentationAt(root, "attachments/坏.pptx", [
+      { title: "坏", image: "../dot.png" },
+    ])).rejects.toThrow(/workspace|image/i);
   });
 
   it("renders a table, chart, and figures into a PDF", async () => {
