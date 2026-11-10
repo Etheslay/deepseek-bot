@@ -71,10 +71,16 @@ describe("thinkingStatus", () => {
     expect(at("tool", 0, "")?.text).toBe("正在深度思考");
   });
 
-  it("hides once the reply text starts arriving", () => {
+  it("stays visible under a paragraph that is already on screen", () => {
     expect(
-      thinkingStatus({ stage: "thinking", elapsedMs: 3_000, hasText: true }),
-    ).toBeNull();
+      thinkingStatus({ stage: "thinking", elapsedMs: 3_000, hasText: true })?.text,
+    ).toBe("正在深度思考");
+    expect(
+      thinkingStatus({ stage: "preparing", elapsedMs: 0, hasText: true })?.text,
+    ).toBe("正在深度思考");
+    expect(
+      thinkingStatus({ stage: "tool", toolName: "write", elapsedMs: 0, hasText: true })?.text,
+    ).toBe("正在调用 write");
   });
 
   it("shows the elapsed hint only after the threshold", () => {

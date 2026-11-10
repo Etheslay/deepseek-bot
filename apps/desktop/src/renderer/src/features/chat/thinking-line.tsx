@@ -5,8 +5,9 @@
  * Polls `chat.status` once a second (the house pattern — question cards poll
  * the same way) so the stage copy only ever repeats what the harness actually
  * reported: preparing → thinking → tool calls by name. The ticker doubles as
- * the elapsed-hint clock, so no extra timers are needed. The component
- * unmounts as soon as the first reply chunk arrives.
+ * the elapsed-hint clock, so no extra timers are needed. It stays mounted
+ * for the whole turn: after a paragraph is spoken it sits under that
+ * paragraph until the next one is ready, instead of vanishing mid-reply.
  *
  * The visible copy changes with the turn, so it stays aria-hidden; the
  * `aria-live` region carries one stable truthful sentence ("正在处理…").
@@ -31,6 +32,8 @@ export function ThinkingLine(props: {
   convertingToPdf?: boolean;
   /** This turn is making a PowerPoint. */
   makingPresentation?: boolean;
+  /** A finished paragraph is already on screen above this line. */
+  hasText?: boolean;
 }): JSX.Element {
   useLanguage();
   const startedAt = useRef<number>(Date.now());
@@ -72,7 +75,7 @@ export function ThinkingLine(props: {
   const status = thinkingStatus({
     ...progress,
     elapsedMs,
-    hasText: false,
+    hasText: props.hasText === true,
     ...(props.readingFile ? { readingFile: true } : {}),
     ...(props.makingDocument ? { makingDocument: true } : {}),
     ...(props.convertingToPdf ? { convertingToPdf: true } : {}),

@@ -1,6 +1,11 @@
 /**
  * Reply pacing for chat bubbles (adaptive replay).
  *
+ * The live chat path does not use this. Dripping a finished segment sentence
+ * by sentence left a half-written line on screen while the turn was still
+ * going, and that pause read as a freeze. Segments are spoken whole; this
+ * module stays for a caller that really does have to replay a long text.
+ *
  * The Host answers `chat.send` with the whole reply text, so the renderer has
  * nothing incremental to forward — whatever we show is a replay. Emitting that
  * replay in one tick (the old behaviour: `reply.match(/[\s\S]{1,32}/g)` in a

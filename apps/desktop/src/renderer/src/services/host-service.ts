@@ -19,7 +19,6 @@ import {
   type UiState,
 } from "@deepseek-bot/contracts";
 import { bytesToBase64 } from "../features/chat/attachments.js";
-import { planPacing } from "../features/chat/stream-pacer.js";
 import {
   ServiceError,
   type AttachmentUploadResult,
@@ -367,11 +366,8 @@ export function createHostService(bridge: HostBridge): DesktopService {
       },
       stream: (botId, text, handlers, options) => {
         let cancelled = false;
-        /** What handlers.onDelta has already emitted (paced, in order). */
+        /** What handlers.onDelta has already emitted, in order. */
         let shown = "";
-        /** In-flight paced beat between two chunks (cleared on cancel). */
-        let paceTimer: ReturnType<typeof setTimeout> | null = null;
-        let releasePace: (() => void) | null = null;
         // The cancel key stays bot-scoped: one turn per bot runs at a time,
         // no matter which session it was started from.
         const cancelSessionId = `chat:${botId}`;
@@ -394,39 +390,27 @@ export function createHostService(bridge: HostBridge): DesktopService {
         }
         /**
          * B6 incremental streaming. The Host pushes one notification per
-         * settled assistant segment (the pinned harness has no token-level
-         * deltas: a segment is a whole message). Each segment is smoothed
-         * through the existing pacing rules (features/chat/stream-pacer.ts)
-         * instead of being dumped at once, and emissions serialize so a tool
-         * turn's narration keeps its order.
+         * settled assistant segment (a whole message, not tokens). Each
+         * segment is spoken in full: dripping it sentence by sentence left a
+         * half-written line on screen while the next tool or paragraph was
+         * still pending, and that pause read as a freeze. Emissions still
+         * serialize so a tool turn's narration keeps its order. The thinking
+         * line stays up under the finished paragraph until the turn ends.
          */
-        let paced: Promise<void> = Promise.resolve();
-        const emitPaced = (piece: string): Promise<void> => {
-          const run = paced.then(async () => {
-            const plan = planPacing(piece);
-            for (let index = 0; index < plan.chunks.length; index += 1) {
-              if (cancelled) return;
-              const chunk = plan.chunks[index]!;
-              shown += chunk;
-              handlers.onDelta(chunk);
-              if (index === plan.chunks.length - 1) return;
-              await new Promise<void>((resolve) => {
-                releasePace = resolve;
-                paceTimer = setTimeout(() => {
-                  paceTimer = null;
-                  releasePace = null;
-                  resolve();
-                }, plan.intervalMs);
-              });
-            }
+        let queued: Promise<void> = Promise.resolve();
+        const emitWhole = (piece: string): Promise<void> => {
+          const run = queued.then(() => {
+            if (cancelled || piece.length === 0) return;
+            shown += piece;
+            handlers.onDelta(piece);
           });
-          paced = run;
+          queued = run;
           return run;
         };
         const unsubscribe =
           bridge.host.onChatStream?.((notice) => {
             if (cancelled || notice.botId !== botId) return;
-            void emitPaced(notice.text);
+            void emitWhole(notice.text);
           }) ?? null;
         const done = bridge.host
           .call("chat.send", payload)
@@ -439,19 +423,19 @@ export function createHostService(bridge: HostBridge): DesktopService {
             }
             /**
              * The reply is authoritative (chat.send's response). Wait for the
-             * live pacing to settle, then converge: what was shown stays when
+             * live segments to settle, then converge: what was shown stays when
              * it is a prefix of the reply (single-segment turns — only the
-             * remainder is replayed; no live segments — the whole reply is
-             * paced here exactly like the old replay path). Interim narration
-             * of a tool turn is not part of the reply, so nothing more is
-             * emitted and the caller commits `text`, replacing the bubble.
+             * remainder is spoken; no live segments — the whole reply is
+             * spoken here). Interim narration of a tool turn is not part of
+             * the reply, so nothing more is emitted and the caller commits
+             * `text`, replacing the bubble.
              */
-            await paced;
+            await queued;
             if (cancelled) {
               return { cancelled: true, failure: null, text: reply } satisfies StreamResult;
             }
             if (reply.startsWith(shown) && reply.length > shown.length) {
-              await emitPaced(reply.slice(shown.length));
+              await emitWhole(reply.slice(shown.length));
             }
             return { cancelled, failure: null, text: reply } satisfies StreamResult;
           })
@@ -469,15 +453,6 @@ export function createHostService(bridge: HostBridge): DesktopService {
         return {
           cancel: () => {
             cancelled = true;
-            // Release a paced beat that is waiting between two chunks, otherwise
-            // the finish promise would never settle and the bubble would stay
-            // busy.
-            if (paceTimer !== null) {
-              clearTimeout(paceTimer);
-              paceTimer = null;
-            }
-            releasePace?.();
-            releasePace = null;
             unsubscribe?.();
             void bridge.host.call("chat.cancel", { sessionId: cancelSessionId }).catch(() => undefined);
           },

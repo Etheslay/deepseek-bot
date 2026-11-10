@@ -1,9 +1,8 @@
 // @vitest-environment jsdom
 /**
- * B6 incremental streaming in the host service: live assistant segments are
- * smoothed through the shared pacing rules, the authoritative reply wins at
- * settlement, and a bridge without the channel degrades to the old full
- * replay.
+ * B6 incremental streaming in the host service: a settled segment is spoken
+ * whole (not dripped mid-sentence), the authoritative reply wins at
+ * settlement, and a bridge without the channel still delivers the full reply.
  */
 import { describe, expect, it } from "vitest";
 import { createHostService } from "../../src/renderer/src/services/host-service.js";
@@ -69,15 +68,15 @@ function makeService(reply: string, options: { segments?: Notice[] } = {}): {
 const joined = (deltas: string[]): string => deltas.join("");
 
 describe("chat streaming (B6 incremental)", () => {
-  it("keeps the paced full replay when the bridge has no stream channel", async () => {
-    const reply = "第一句。第二句。";
+  it("speaks a reply as one paragraph when the bridge has no stream channel", async () => {
+    const reply = "第一句。第二句。第三句还没被切开";
     const stream = makeService(reply);
     await stream.finish();
     await waitFor(() => joined(stream.deltas) === reply);
-    expect(joined(stream.deltas)).toBe(reply);
+    expect(stream.deltas).toEqual([reply]);
   });
 
-  it("paces a live segment and settles on the authoritative reply", async () => {
+  it("speaks a live segment whole and settles on the authoritative reply", async () => {
     const reply = "最终回复";
     const stream = makeService(reply, {
       segments: [{ botId: "bot-1", sessionId: "chat:bot-1:s1", text: reply }],
