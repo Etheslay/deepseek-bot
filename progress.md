@@ -1,5 +1,11 @@
 # 工作记录
 
+## 2026-11-10：剩余缺陷任务书（对照 develop `2dc5b9f`）
+
+- 静态对照 PR #245 合入后的 `develop`。没有改产品代码，没有打开 PowerPoint，没有调用 API。
+- 在途：#246 语义简报、#247 运行时测试超时。新的代码项只有一条：有汉字却没有嵌入中文脸时不得再写成微软雅黑。PowerPoint 打开和真机手册由负责人留证。
+- 任务书：[TASK_REMAINING_DEFECTS](docs/TASK_REMAINING_DEFECTS.md)。
+
 ## 2026-11-01：开放缺陷任务书（对照 develop `030c54d`）
 
 - 静态对照该提交上的视觉标志、上下文窗口表、会话加载 effect 与 CONTRACTS / TASK_B3P / MANUAL_ACCEPTANCE。没有改产品代码，没有复跑桌面，没有调用 API。

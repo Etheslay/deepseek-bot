@@ -1,5 +1,7 @@
 # 开放缺陷收口任务书
 
+> **勘误（2026-11-10）**：第 0 节的三项已不再是当前缺口。视觉标志与 flash 窗口已在后续提交落地；会话子列表已收成每个 bot 一条对话。后续要做的事见 [TASK_REMAINING_DEFECTS](TASK_REMAINING_DEFECTS.md)。下文保留作当时的任务记录。
+
 - 任务：对照 `develop` `030c54d` 收口已坐实的行为缺口，并修正会把人带偏的台账
 - 基线：`origin/develop` = `030c54db0253eac4742c06bddf00785838c38139`（PR #199，2026-11-01 15:45 +0800，即太平洋时间 2026-10-31 23:45）
 - 证据来源：该提交上的源码与 `docs/CONTRACTS.md`、`docs/TASK_B3P_VISION_INPUT.md`、`docs/TASK_CONTEXT_METER.md`、`docs/MANUAL_ACCEPTANCE.md`、`docs/GAP_AUDIT.md`、`docs/SPRINTS.md`、`progress.md` 的静态对照
