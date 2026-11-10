@@ -300,6 +300,8 @@ describe("chat runtime", () => {
     expect(log.lastIndexOf("【必须交付演示文稿】")).toBeGreaterThan(log.lastIndexOf("[用户消息]"));
     expect(log).toContain("write_presentation");
     expect(log).toContain("不要写 .bat");
+    expect(log).toContain("不要调用 dispatch_task");
+    expect(log).toContain("不要向用户索要派发权限");
     expect(log).toContain("python-pptx");
     await host.handleMethod("chat.send", { botId, text: "ppt呢" });
     const again = readFileSync(join(records, "fake-harness.jsonl"), "utf8");

@@ -41,6 +41,7 @@ import {
 } from "@deepseek-bot/harness-adapter";
 import type { ToolCaller } from "@deepseek-bot/agent-tools";
 import type { ApplicationToolTurn } from "./app-tool-channel.js";
+import { userAskedAnotherBot } from "./dispatch-relevance.js";
 import type { UiLocale } from "./host.js";
 import { composeSkillBlock, skillCapabilityAllowlist } from "./skill-injection.js";
 import { resolveTurnModel, TurnUsageAccumulator, type TurnUsage } from "./usage-capture.js";
@@ -105,6 +106,11 @@ export interface ChatToolWiring {
     caller: ToolCaller,
     signal: AbortSignal,
     skillCapabilities?: readonly CapabilityId[],
+    /**
+     * False when this user message did not ask to hand work to another bot.
+     * The turn then refuses dispatch_task instead of raising a permission card.
+     */
+    allowDispatch?: boolean,
   ): ApplicationToolTurn;
   /**
    * G3: register/unregister the turn's native-tool gate with the D08 approval
@@ -145,6 +151,8 @@ function deckDeliveryRule(text: string): string {
     "这个工具已经接在这一轮。它在本机写文件，不启动 Python，不打开 PowerPoint，也不需要浏览器。",
     "前面如果说过工具通道断了、让用户点「下载可编辑」、双击 bat、或自己装 python-pptx，那些话作废。不要再重复。",
     "不要写 .bat，不要写安装脚本，不要说备用方案，不要用文字稿、互动页或导出按钮代替这个文件。",
+    "不要调用 dispatch_task，不要把这件事交给其他 bot，也不要向用户索要派发权限。",
+    "不要执行本地命令来生成这个文件。write_presentation 会自己把它写成 .pptx。",
     "工具返回后，把文件路径告诉用户。",
   ].join("\n");
 }
@@ -381,6 +389,7 @@ export class ChatManager {
         { id: chatSessionIdFor(bot.id), botId: bot.id, sessionId: chatSessionIdFor(bot.id) },
         controller.signal,
         skillCapabilityAllowlist(skills),
+        userAskedAnotherBot(text),
       );
       await whileActive(turn.prepare?.() ?? Promise.resolve(), controller.signal);
       const baseOptions = this.buildOptions(inputs);
@@ -521,6 +530,7 @@ export class ChatManager {
         { id: chatSessionIdFor(bot.id), botId: bot.id, sessionId: chatSessionIdFor(bot.id) },
         controller.signal,
         [],
+        false,
       );
       await turn.prepare?.();
       const baseOptions = this.buildOptions(inputs);
