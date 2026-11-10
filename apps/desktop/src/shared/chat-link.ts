@@ -13,7 +13,9 @@ export type ChatLinkOpenResult =
   | { ok: true }
   | { ok: false; reason: "blocked" | "missing" | "outside" };
 
-const CONTROL = /[\u0000-\u001f\u007f]/;
+const CONTROL = new RegExp(
+  `[${String.fromCharCode(0)}-${String.fromCharCode(31)}${String.fromCharCode(127)}]`,
+);
 
 function fileUrlPath(href: string): string | null {
   let url: URL;

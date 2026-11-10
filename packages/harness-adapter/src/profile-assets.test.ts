@@ -109,7 +109,7 @@ describe("installBridgeIntoProfile", () => {
     });
     expect(calls).toEqual([
       {
-        command: "pnpm.cmd",
+        command: process.platform === "win32" ? "pnpm.cmd" : "pnpm",
         args: ["add", "file:D:\\app\\harness-bridge", "--prefer-offline"],
         cwd: "D:\\home\\profiles\\sdk",
       },

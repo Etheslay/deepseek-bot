@@ -11,13 +11,6 @@ const cssPath = resolve(
 
 const css = readFileSync(cssPath, "utf8");
 
-function ruleBody(selector: string): string {
-  const pattern = new RegExp(`${selector.replaceAll(".", "\\.")}\\s*\\{([^}]+)\\}`);
-  const match = css.match(pattern);
-  expect(match, selector).not.toBeNull();
-  return match![1] ?? "";
-}
-
 describe("history replay row", () => {
   afterEach(() => {
     document.head.innerHTML = "";
