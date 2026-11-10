@@ -102,4 +102,13 @@ describe("formatElapsed", () => {
     expect(formatElapsed(9_999)).toBe("9s");
     expect(formatElapsed(-5)).toBe("0s");
   });
+
+  it("rolls 60 seconds into a minute and 60 minutes into an hour", () => {
+    expect(formatElapsed(59_000)).toBe("59s");
+    expect(formatElapsed(60_000)).toBe("1min");
+    expect(formatElapsed(108_000)).toBe("1min 48s");
+    expect(formatElapsed(59 * 60_000)).toBe("59min");
+    expect(formatElapsed(60 * 60_000)).toBe("1h");
+    expect(formatElapsed(61 * 60_000)).toBe("1h 1min");
+  });
 });

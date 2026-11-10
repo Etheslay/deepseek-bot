@@ -48,15 +48,29 @@ export type ThinkingStatusInput = {
   makingPresentation?: boolean;
 };
 
-/** Seconds become visible only once the wait is long enough to feel stuck. */
+/** The clock becomes visible only once the wait is long enough to feel stuck. */
 export const ELAPSED_HINT_AFTER_MS = 10_000;
 
+/**
+ * Whole seconds, then minutes, then hours. 60s is 1min and 60min is 1h.
+ * A leftover smaller unit stays visible, so 108s is 1min 48s rather than 108s.
+ */
 export function formatElapsed(ms: number): string {
-  return `${Math.floor(Math.max(0, ms) / 1000)}s`;
+  const total = Math.floor(Math.max(0, ms) / 1000);
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const seconds = total % 60;
+  if (hours > 0) {
+    return minutes === 0 ? `${hours}h` : `${hours}h ${minutes}min`;
+  }
+  if (minutes > 0) {
+    return seconds === 0 ? `${minutes}min` : `${minutes}min ${seconds}s`;
+  }
+  return `${seconds}s`;
 }
 
 /**
- * Copy for the reported stage, plus an optional elapsed-seconds hint.
+ * Copy for the reported stage, plus an optional elapsed-time hint.
  * Stays available after speech has started so the wait between paragraphs
  * is still labeled.
  */
