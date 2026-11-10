@@ -46,6 +46,52 @@ describe("write_presentation bytes", () => {
     expect(slide).toContain("C2410C");
   });
 
+  it("draws metrics, a table, a column chart, and speaker notes", () => {
+    const pptx = buildPptx([
+      { layout: "metrics", title: "结果", metrics: [{ value: "42%", label: "完成" }, { value: "3", label: "风险" }] },
+      { layout: "table", title: "对照表", headers: ["项", "值"], rows: [["甲", "1"]] },
+      {
+        layout: "chart",
+        title: "趋势",
+        categories: ["一季", "二季"],
+        series: [{ name: "收入", values: [12, 18] }],
+        notes: "先讲同比",
+      },
+    ]);
+    const entries = unzipSync(pptx);
+    expect(extractPptxBody(pptx).text).toContain("42%");
+    expect(extractPptxBody(pptx).text).toContain("甲");
+    expect(new TextDecoder().decode(entries["ppt/charts/chart3.xml"])).toContain("一季");
+    expect(new TextDecoder().decode(entries["ppt/charts/chart3.xml"])).toContain(">18<");
+    expect(new TextDecoder().decode(entries["ppt/notesSlides/notesSlide3.xml"])).toContain("先讲同比");
+    expect(entries["ppt/notesMasters/notesMaster1.xml"]).toBeDefined();
+  });
+
+  it("renders a table, chart, and figures into a PDF", async () => {
+    const root = mkdtempSync(join(tmpdir(), "ppt-rich-"));
+    roots.push(root);
+    const written = await writePresentationAt(
+      root,
+      "attachments/数据.pptx",
+      [
+        { layout: "table", title: "对照表", headers: ["项", "值"], rows: [["甲", "1"]] },
+        {
+          layout: "chart",
+          title: "趋势",
+          categories: ["一季", "二季"],
+          series: [{ name: "收入", values: [12, 18] }],
+        },
+      ],
+      "attachments/数据.pdf",
+    );
+    const body = await extractPdfBody(readFileSync(join(root, written.pdfPath ?? "")), { aborted: false });
+    expect(body.text).toContain("对照表");
+    expect(body.text).toContain("甲");
+    expect(body.text).toContain("一季");
+    expect(body.text).toContain("收入");
+    expect(body.pages).toBeGreaterThanOrEqual(2);
+  }, 60_000);
+
   it("also writes a PDF of the deck", async () => {
     const root = mkdtempSync(join(tmpdir(), "ppt-pdf-"));
     roots.push(root);
