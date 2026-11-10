@@ -6068,9 +6068,12 @@ select option {
 }
 
 /* 3. user bubble: painted with the bot's exact colour, no transparency
-   (owner request 2026-10-26). The fill follows the bot. The type stays white
-   in the dark theme; auto-contrast ink turned bright fills into near-black.
-   `--bot-ink` remains the send button's arrow colour. */
+   (owner request 2026-10-26). The fill follows the bot. Coloured bots keep
+   the theme's type: white on dark, black on light. Auto-contrast used to turn
+   every bright fill near-black; only the mono body needs that flip, because
+   its fill is the theme's type colour (white on dark, black on light) and the
+   sentence would otherwise vanish. `--bot-ink` remains the send button's
+   arrow colour. */
 .msg-row.user .msg-bubble {
   background: var(--bot-color, var(--grok-user-bubble)) !important;
   border: 1px solid transparent;
@@ -6082,7 +6085,11 @@ select option {
 }
 
 [data-theme="light"] .msg-row.user .msg-bubble {
-  color: var(--bot-ink, #1b1b1f) !important;
+  color: #1b1b1f !important;
+}
+
+.chat-page[data-bubble-ink="mono"] .msg-row.user .msg-bubble {
+  color: var(--avatar-mono-fg) !important;
 }
 
 /* 4. composer: white send circle (dark) / black circle (light) */
@@ -8647,6 +8654,102 @@ select:focus-visible {
 .chat-page {
   position: relative;
 }
+
+.chat-stage {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.jump-arrow,
+.jump-fresh {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  z-index: 4;
+  transform: translateX(-50%);
+}
+
+.jump-arrow {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px solid color-mix(in srgb, #ffffff 14%, transparent);
+  background: rgba(32, 32, 36, 0.94);
+  color: #ffffff;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+  display: grid;
+  place-items: center;
+  padding: 0;
+  cursor: pointer;
+}
+
+.jump-arrow svg,
+.jump-fresh svg {
+  width: 18px;
+  height: 18px;
+}
+
+.jump-fresh {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 34px;
+  padding: 0 4px 0 10px;
+  border-radius: 999px;
+  background: #3b82f6;
+  color: #ffffff;
+  box-shadow: 0 8px 20px rgba(37, 99, 235, 0.35);
+}
+
+.jump-fresh-go,
+.jump-fresh-dismiss {
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  padding: 0;
+}
+
+.jump-fresh-go {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding-right: 6px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.jump-fresh-go svg {
+  width: 15px;
+  height: 15px;
+}
+
+.jump-fresh-dismiss {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.jump-fresh-dismiss:hover,
+.jump-arrow:hover {
+  filter: brightness(1.08);
+}
+
+[data-theme="light"] .jump-arrow {
+  background: #ffffff;
+  color: #1b1b1f;
+  border-color: rgba(0, 0, 0, 0.08);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
+}
+
 
 .composer-row {
   display: flex;

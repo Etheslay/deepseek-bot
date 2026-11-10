@@ -86,7 +86,8 @@ export function formatFileCardSize(bytes: number): string {
   return `${mb >= 10 ? mb.toFixed(0) : mb.toFixed(1)} MB`;
 }
 
-/** First sentence when the user sends a Word/PDF without typing anything. */
+/** First sentence when the user sends a document without typing anything. */
+// i18n-ignore: model reply sentence, matched again when the answer is split
 export const DOCUMENT_ACK = "收到文件，我先打开看看内容。";
 
 /**
@@ -94,12 +95,15 @@ export const DOCUMENT_ACK = "收到文件，我先打开看看内容。";
  * extracted the body and appended it; this only fixes the reply shape.
  */
 export function documentOnlyReplyInstruction(): string {
-  return (
-    "用户没有另写文字，只发来了这个文件。请严格按顺序回复，不要加标题。" +
-    `第一段只写这一句：${DOCUMENT_ACK}` +
-    "然后空一行，用自己的话转述并总结抽出的正文：这份文件是什么、要做什么。" +
-    "不要说自己读不了原件，也不要复述工作区路径。"
-  );
+  // i18n-ignore: model-facing instruction, not interface copy
+  const lead = "用户没有另写文字，只发来了这个文件。请严格按顺序回复，不要加标题。";
+  // i18n-ignore: model-facing instruction, not interface copy
+  const sentence = `第一段只写这一句：${DOCUMENT_ACK}`;
+  // i18n-ignore: model-facing instruction, not interface copy
+  const summary = "然后空一行，用自己的话转述并总结抽出的正文：这份文件是什么、要做什么。";
+  // i18n-ignore: model-facing instruction, not interface copy
+  const close = "不要说自己读不了原件，也不要复述工作区路径。";
+  return lead + sentence + summary + close;
 }
 
 /** Split a reply that opened with the document acknowledgement. */
@@ -154,6 +158,7 @@ export function buildAttachmentContext(draft: {
 }): string {
   const name = draft.name.replaceAll("```", "``\u200b`");
   const relativePath = draft.relativePath.replaceAll("```", "``\u200b`");
+  // i18n-ignore: model-facing attachment header, not interface copy
   const header = `【附件 ${name} · ${formatAttachmentSize(draft.size)} · ${relativePath}】`;
   if (draft.kind === "document") {
     // i18n-ignore: model-facing attachment block, not interface copy
@@ -265,8 +270,8 @@ export function composeAttachmentBlocks(
         `${header}\n（图片已保存到工作区；本 bot 的模型未登记视觉能力，本次不附图像块。需要看图可将模型切换为 deepseek-flash。工作区副本：${card.path}。）`,
       );
     } else if (card.kind === "document") {
-      // i18n-ignore: model-facing attachment note
       blocks.push(
+        // i18n-ignore: model-facing attachment note
         `${header}\n（PDF、Word 或 PPT 已保存到工作区。正文由 Host 抽出后附在本条消息里。原件不能用 read_workspace_file 当文本读。要改写成 .docx 或 .pdf 请调用 write_document。）`,
       );
     } else {

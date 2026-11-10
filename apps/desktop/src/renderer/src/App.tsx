@@ -58,6 +58,14 @@ import {
   mergeOpenedThread,
   type ThreadOrigin,
 } from "./features/chat/thread-history.js";
+import {
+  dismissFresh,
+  isNearBottom,
+  jumpMode,
+  noteArrival,
+  pinToLatest,
+  type JumpState,
+} from "./features/chat/jump-latest.js";
 import type { StreamHandle } from "./services/desktop-service.js";
 import { Avatar as AvatarView } from "./features/avatars/avatar.js";
 import { AvatarPicker } from "./features/avatars/avatar-picker.js";
@@ -67,6 +75,7 @@ import {
   avatarColor,
   bubbleInk,
   toContractAvatar,
+  userBubbleInk,
   type Avatar as AvatarKind,
 } from "./features/avatars/avatar-meta.js";
 import { ChoiceCard, type ChoiceOption } from "./features/questions/choice-card.js";
@@ -3586,6 +3595,21 @@ function MessageBubble({
   );
 }
 
+function JumpChevron(): JSX.Element {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        d="M6 9.5 12 15.5 18 9.5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 function BotsPlaceholder({
   bots,
   groups,
@@ -3828,9 +3852,41 @@ function BotsPlaceholder({
      taken: this branch answers choice cards through the shared chat stream
      (see the handleChoice below), so keeping both would shadow it. */
   const stickToBottom = useRef(true);
+  const [awayFromBottom, setAwayFromBottom] = useState(false);
+  const [jump, setJump] = useState<JumpState>({ unseen: 0, dismissed: 0 });
+  const jumpRef = useRef(jump);
+  const seenCount = useRef(-1);
+  /** A live stream is one more row than the stored thread. Replacing it with the stored copy does not add a second arrival. */
+  const liveCount = msgs.length + (stream !== null ? 1 : 0);
+  const followLatest = (): void => {
+    stickToBottom.current = true;
+    setAwayFromBottom(false);
+    const cleared = pinToLatest();
+    jumpRef.current = cleared;
+    setJump(cleared);
+  };
+  const sendAndFollow: typeof onSend = (text, attachments, meta) => {
+    followLatest();
+    onSend(text, attachments, meta);
+  };
+  const dismissNewMessages = (): void => {
+    const next = dismissFresh(jumpRef.current);
+    jumpRef.current = next;
+    setJump(next);
+  };
   useEffect(() => {
-    listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
-  }, [msgs.length]);
+    const previous = seenCount.current;
+    seenCount.current = liveCount;
+    if (previous < 0) {
+      return;
+    }
+    const next = noteArrival(jumpRef.current, previous, liveCount, stickToBottom.current);
+    if (next.unseen === jumpRef.current.unseen && next.dismissed === jumpRef.current.dismissed) {
+      return;
+    }
+    jumpRef.current = next;
+    setJump(next);
+  }, [liveCount]);
   useLayoutEffect(() => {
     const list = listRef.current;
     if (!list || !stickToBottom.current) return;
@@ -4138,7 +4194,7 @@ function BotsPlaceholder({
     setDraft("");
     if (target.kind === "seed") {
       onAnswerSeedCard(me.key, target.msgId, text);
-      onSend(text);
+      sendAndFollow(text);
       setFailedText(text);
       startChatStream(text);
       return;
@@ -4155,7 +4211,7 @@ function BotsPlaceholder({
             text: parsed.text,
           },
         }));
-        onSend(parsed.text);
+        sendAndFollow(parsed.text);
       })
       .catch(() => {
         setClarify(target);
@@ -4292,7 +4348,7 @@ function BotsPlaceholder({
     if (documentOnly) {
       pointers.push(documentOnlyReplyInstruction());
     }
-    onSend(text, outgoing.length > 0 ? outgoing : undefined, meta);
+    sendAndFollow(text, outgoing.length > 0 ? outgoing : undefined, meta);
     setPendingMeta(null);
     setPendingFiles([]);
     setFailedText(text);
@@ -4307,7 +4363,7 @@ function BotsPlaceholder({
     if (lastUser === undefined) {
       return;
     }
-    onSend(lastUser.text, undefined, "regenerate");
+    sendAndFollow(lastUser.text, undefined, "regenerate");
     setFailedText(lastUser.text);
     startChatStream(lastUser.text);
   };
@@ -4323,7 +4379,7 @@ function BotsPlaceholder({
     if (failedText.trim()) {
       const text = failedText;
       setFailedText("");
-      onSend(text);
+      sendAndFollow(text);
       startChatStream(text);
     }
   };
@@ -4340,7 +4396,7 @@ function BotsPlaceholder({
       return;
     }
     onAnswerSeedCard(me.key, msgId, option.label);
-    onSend(option.label);
+    sendAndFollow(option.label);
     setFailedText(option.label);
     startChatStream(option.label);
   };
@@ -4365,6 +4421,9 @@ function BotsPlaceholder({
   return (
     <div
       className="chat-page"
+      /* Coloured bots keep the theme's type. The mono body matches that type
+         (white on dark, black on light), so its bubble flips. */
+      data-bubble-ink={userBubbleInk(me.avatar)}
       /* SPRINTS §6 #8: the user bubble follows the current bot's colour, and so
          does the composer's send button. The pair is scoped to the page rather
          than to the message list, because the composer is its sibling — a
@@ -4383,13 +4442,24 @@ function BotsPlaceholder({
         </div>
       )}
       <ChatAutomationNotice botId={me.bot.id} onOpenAutomation={onOpenAutomation} />
+      <div className="chat-stage">
       <div
         className="chat"
         ref={listRef}
         onScroll={() => {
           const list = listRef.current;
           if (!list) return;
-          stickToBottom.current = list.scrollHeight - list.scrollTop - list.clientHeight < 80;
+          const near = isNearBottom(list.scrollHeight, list.scrollTop, list.clientHeight);
+          if (near) {
+            if (!stickToBottom.current || awayFromBottom || jumpRef.current.unseen > 0) {
+              followLatest();
+            }
+            return;
+          }
+          if (stickToBottom.current) {
+            stickToBottom.current = false;
+            setAwayFromBottom(true);
+          }
         }}
       >
         <TimelineOrderProvider times={msgs.map((message) => message.time)}>
@@ -4567,7 +4637,7 @@ function BotsPlaceholder({
           onAnswered={(requestId, entry) =>
             setAnsweredQuestions((prev) => ({ ...prev, [requestId]: entry }))
           }
-          onUserBubble={onSend}
+          onUserBubble={sendAndFollow}
           onFallback={(requestId, question) => {
             setClarify({ forKey: me.key, kind: "ask", requestId, question });
             inputRef.current?.focus();
@@ -4588,6 +4658,28 @@ function BotsPlaceholder({
           onOpenExchange={(botKey) => setDetailOther(botKey)}
         />
         </TimelineOrderProvider>
+      </div>
+      {jumpMode(awayFromBottom, jump) === "fresh" && (
+        <div className="jump-fresh" role="status">
+          <button type="button" className="jump-fresh-go" onClick={followLatest}>
+            <JumpChevron />
+            {t("shell.newMessages", [jump.unseen])}
+          </button>
+          <button
+            type="button"
+            className="jump-fresh-dismiss"
+            aria-label={t("shell.dismissNewMessages")}
+            onClick={dismissNewMessages}
+          >
+            ×
+          </button>
+        </div>
+      )}
+      {jumpMode(awayFromBottom, jump) === "arrow" && (
+        <button type="button" className="jump-arrow" aria-label={t("shell.backToLatest")} onClick={followLatest}>
+          <JumpChevron />
+        </button>
+      )}
       </div>
       {quoteDraft && (
         <div className="quote-chip">

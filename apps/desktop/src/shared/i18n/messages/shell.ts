@@ -143,6 +143,12 @@ export const shellMessages = {
   "shell.moveTo": { zh: "移至", en: "Move to" },
   "shell.moveToGroup": { zh: "移至分组", en: "Move to Group" },
   "shell.myChoice": { zh: "我选择：{0}", en: "I choose: {0}" },
+  "shell.newMessages": {
+    zh: "{0} 条新消息",
+    en: { one: "{0} new message", other: "{0} new messages" },
+  },
+  "shell.backToLatest": { zh: "回到最新", en: "Back to latest" },
+  "shell.dismissNewMessages": { zh: "关闭新消息提示", en: "Dismiss new messages" },
   "shell.newVersionFound": { zh: "发现新版本 {0}", en: "New version {0} available" },
   "shell.noArtifacts": { zh: "暂无产物", en: "No artifacts" },
   "shell.noExchangesYet": { zh: "暂无消息往来。", en: "No message exchanges yet." },
