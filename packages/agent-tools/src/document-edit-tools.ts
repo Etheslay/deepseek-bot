@@ -98,7 +98,8 @@ export function bindEditDocumentTool(
       "append adds text at the end of an existing .docx. " +
       "replace with find swaps every occurrence, and without find rewrites the whole .docx. " +
       "delete_text removes every occurrence of find. delete_file removes the .docx or .pdf. " +
-      "convert writes the other format at to (.docx becomes .pdf, .pdf becomes .docx) and keeps the source. " +
+      "convert writes the other format at to and keeps the source. A .docx becomes a PDF through the " +
+      "Harness LibreOffice engine, so the PDF keeps the Word layout. A PDF becomes a .docx from its text. " +
       "When the user asks for a new Word file, an edit, or a PDF conversion, call this tool instead of refusing.",
     inputSchema: EditDocumentInputSchema,
     handler: async (params, context) => {

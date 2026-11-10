@@ -115,5 +115,5 @@ describe("edit_document", () => {
     expect(docx.outputPath).toBe("attachments/报告-from-pdf.docx");
     const docxBytes = readFileSync(join(dir, "attachments/报告-from-pdf.docx"));
     expect(extractDocxBody(docxBytes).text).toContain("你好");
-  }, 30_000);
+  }, 60_000);
 });

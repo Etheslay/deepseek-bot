@@ -15,7 +15,8 @@ import type { DocumentEditInput, DocumentEditResult } from "@deepseek-bot/agent-
 import { getBot, getWorkspace, type OpenedDatabase } from "@deepseek-bot/storage";
 import { resolveInsideWorkspace } from "./artifacts.js";
 import { extractDocxBody, extractPdfBody, parseAndStoreAttachment } from "./attachment-parse.js";
-import { buildDocx, buildPdf } from "./document-write.js";
+import { buildDocx } from "./document-write.js";
+import { convertOfficeToPdf } from "./office-pdf.js";
 
 const MAX_WRITE_BYTES = 2 * 1024 * 1024;
 const MAX_READ_CHARS = 20_000;
@@ -114,6 +115,14 @@ export async function editDocumentAt(
   }
 
   if (!target.exists) throw invalid("document does not exist");
+  if (input.action === "convert" && input.to !== undefined && formatOf(input.to) === "pdf") {
+    if (format !== "docx") throw invalid("converting a .docx writes a .pdf");
+    const output = locate(root, input.to);
+    if (output.absolute === target.absolute) throw invalid("convert target must be a different file");
+    const bytes = await convertOfficeToPdf(target.absolute, output.absolute);
+    const outputPath = path.relative(root, output.absolute).split(path.sep).join("/");
+    return { action: "convert", path: stored, format: "pdf", outputPath, bytes };
+  }
   const current = readFileBytes(target.absolute);
   const body = await textOf(format, current);
 
@@ -139,15 +148,15 @@ export async function editDocumentAt(
     }
     const output = locate(root, input.to);
     if (output.absolute === target.absolute) throw invalid("convert target must be a different file");
-    const bytes = outputFormat === "pdf" ? await buildPdf(body) : buildDocx(body);
-    storeFile(output.absolute, bytes);
+    const built = buildDocx(body);
+    storeFile(output.absolute, built);
     const outputPath = path.relative(root, output.absolute).split(path.sep).join("/");
     return {
       action: "convert",
       path: stored,
       format: outputFormat,
       outputPath,
-      bytes: bytes.byteLength,
+      bytes: built.byteLength,
     };
   }
 
