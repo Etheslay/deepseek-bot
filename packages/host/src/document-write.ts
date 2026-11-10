@@ -116,7 +116,7 @@ export async function buildPdf(text: string): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
   doc.registerFontkit(fontkit);
   const fontBytes = findFontBytes();
-  const needsCjk = /[^\u0000-\u00ff]/.test(text);
+  const needsCjk = [...text].some((char) => (char.codePointAt(0) ?? 0) > 0xff);
   let font: PDFFont;
   if (fontBytes !== null) {
     font = await doc.embedFont(fontBytes, { subset: true });
