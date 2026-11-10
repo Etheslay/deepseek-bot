@@ -4,8 +4,8 @@
  * note, the exact parameter preview and three actions 从不 / 始终允许 /
  * 允许一次. Per-action capabilities (exec.shell, screen.capture, …) only
  * ever offer 从不 / 允许一次: the contract forbids lasting grants for
- * them. Once decided, the card disappears and only a centred status line
- * remains ({bot} 本次可以… / 已始终允许… / 已拒绝…); the session scope
+ * them. Once decided, the card disappears and only a left-aligned status
+ * line remains ({bot} 本次可以… / 已始终允许… / 已拒绝…); the session scope
  * remains a contract value (approvalDecision) but is no longer a card
  * button. Proactive grants, policy edits and revocation live in
  * Settings → Permissions.

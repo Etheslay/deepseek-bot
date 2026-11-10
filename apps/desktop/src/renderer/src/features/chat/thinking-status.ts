@@ -10,6 +10,10 @@
  * The elapsed seconds are returned separately from the sentence: the visible
  * text sits outside the `aria-live` region, and the seconds tick every second,
  * so folding them into an announced node would make screen readers repeat.
+ *
+ * The line stays up after a paragraph is already on screen. Hiding it the
+ * moment the first characters arrived left a finished sentence with no
+ * signal that the turn was still going, and that silence read as a freeze.
  */
 
 import { t } from "../../i18n.js";
@@ -29,6 +33,11 @@ export type ThinkingStatusInput = {
   toolName?: string;
   /** How long the placeholder has been on screen. */
   elapsedMs: number;
+  /**
+   * A finished paragraph is already on screen. Preparation is over; the
+   * line keeps describing the real stage under that paragraph.
+   */
+  hasText: boolean;
   /** This turn is waiting on a Word/PDF body the Host is extracting. */
   readingFile?: boolean;
   /** The user asked for a Word file, or edit_document is the turn's tool. */
@@ -47,20 +56,22 @@ export function formatElapsed(ms: number): string {
 }
 
 /**
- * The stage copy stays for the whole turn. A first chunk of reply text is
- * often narration while a tool is still running, so hiding it there made the
- * bubble look finished. The caller unmounts this line when the turn ends.
+ * Copy for the reported stage, plus an optional elapsed-seconds hint.
+ * Stays available after speech has started so the wait between paragraphs
+ * is still labeled.
  */
-export function thinkingStatus(input: ThinkingStatusInput): ThinkingStatus {
+export function thinkingStatus(input: ThinkingStatusInput): ThinkingStatus | null {
   const hint =
     input.elapsedMs >= ELAPSED_HINT_AFTER_MS ? formatElapsed(input.elapsedMs) : null;
+  const stage: ChatTurnStage =
+    input.hasText && input.stage === "preparing" ? "thinking" : input.stage;
   const editingDocument =
     input.makingDocument === true || input.toolName === "edit_document";
   const writingDeck = input.toolName === "write_presentation";
   const findingSkill = input.toolName === "find_github_skill";
   const presentation = writingDeck || input.makingPresentation === true;
   const namedTool =
-    input.stage === "tool" &&
+    stage === "tool" &&
     input.toolName !== undefined &&
     input.toolName.length > 0 &&
     input.toolName !== "edit_document" &&
@@ -78,7 +89,7 @@ export function thinkingStatus(input: ThinkingStatusInput): ThinkingStatus {
             ? t("chat.thinkMakingPresentation")
             : input.readingFile
             ? t("chat.thinkReadingFile")
-            : input.stage === "preparing"
+            : stage === "preparing"
               ? t("chat.thinkPreparing")
               : t("chat.thinkReasoning");
   return { text, hint };

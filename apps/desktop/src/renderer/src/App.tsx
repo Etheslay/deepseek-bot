@@ -4601,7 +4601,7 @@ function BotsPlaceholder({
             ))}
             {(stream.text || (!stream.failure && !stream.cancelled)) && (
               <div className="msg-row bot streaming" style={{ order: streamSlotOrder(msgs.length) }}>
-                <div className="stream-live">
+                <div className="stream-column">
                   {stream.text ? (
                     <div className="hover-wrap">
                       {liveAck ? <p className="file-ack-line">{liveAck.ack}</p> : null}
@@ -4617,6 +4617,7 @@ function BotsPlaceholder({
                         makingDocument={makingDocument}
                         convertingToPdf={convertingToPdf}
                         makingPresentation={makingPresentation}
+                        hasText={stream.text.length > 0}
                       />
                       <button
                         type="button"

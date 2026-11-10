@@ -8338,15 +8338,23 @@ select:focus-visible {
   }
 }
 
-/* The reply bubble and the stage line stack. The stage line stays until
-   the turn settles, so a partial answer does not look like the end. */
-.stream-live {
+/* Spoken paragraph, then the thinking line under it. The cancel stays with
+   the thinking line so it does not sit inside the sentence. */
+.stream-column {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: 8px;
-  max-width: 100%;
   min-width: 0;
+  max-width: min(72%, 720px);
+}
+
+.msg-row.bot.streaming .stream-column > .hover-wrap,
+.chat > .msg-row.bot.streaming .stream-column > .hover-wrap {
+  max-width: 100%;
+  width: auto;
+  margin-left: 0;
+  margin-right: 0;
 }
 
 /* ---- 等待答复行：bot 头像球（thinking 态）+ 状态行 + 取消 ---- */
@@ -8355,6 +8363,10 @@ select:focus-visible {
   align-items: center;
   gap: 10px;
   padding: 4px 2px;
+}
+
+.stream-pending .stream-cancel {
+  margin-left: 0;
 }
 
 /* ============================================================
@@ -9802,4 +9814,23 @@ html.sidebar-resizing,
 html.sidebar-resizing * {
   cursor: col-resize !important;
   user-select: none !important;
+}
+
+/* Small status rows share the reply's left edge. A centered strip reads as
+   a pause floating in the middle of the conversation. */
+.chat > .sys-line,
+.chat > .chat-time,
+.chat > .deliver-notice,
+.chat .deliver-notice,
+.chat > .chat-summary,
+.chat .chat-summary,
+.chat .dispatch-msg,
+.chat .task-notice {
+  align-self: flex-start;
+  width: auto;
+  max-width: 100%;
+  margin-left: 0 !important;
+  margin-right: auto !important;
+  text-align: left;
+  justify-content: flex-start !important;
 }
