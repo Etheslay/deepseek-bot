@@ -699,6 +699,7 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
     "permission.policy.list": () => ({ policies: listPermissionPolicies(db) }),
     "permission.policy.set": (payload) => {
       const policy = setPermissionPolicy(db, payload);
+      if (policy.mode === "allow") context.permissions.allowCapability(policy.capability);
       if (policy.mode === "deny") context.permissions.denyCapability(policy.capability);
       if (policy.mode === "deny" && policy.capability === "mcp.call") context.mcp.invalidate({});
       if (policy.capability === "screen.capture") context.screen.invalidate();

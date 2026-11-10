@@ -428,6 +428,39 @@ export function authorizePermissionCall(
     return authorization;
   });
 }
+/**
+ * A policy just became allow. Pending asks whose every capability is now
+ * covered by policy are authorized and closed, so the chat card goes away
+ * and the waiting call continues. An ask that still needs another capability
+ * stays pending.
+ */
+export function releaseApprovalsCoveredByPolicy(
+  db: OpenedDatabase,
+  capability: CapabilityId,
+  generation: number,
+): { approval: AppApproval; authorization: PermissionAuthorization; call: PermissionCall }[] {
+  return runInTransaction(db.raw, () => {
+    const released: {
+      approval: AppApproval;
+      authorization: PermissionAuthorization;
+      call: PermissionCall;
+    }[] = [];
+    for (const approval of listPermissionApprovals(db, { status: "pending" })) {
+      if (approval.generation !== generation || !approval.capabilities.includes(capability))
+        continue;
+      const call = approvalCall(approval);
+      const { authorization, selected } = plan(db, call);
+      if (!authorization.allowed) continue;
+      consume(db, call, authorization, selected);
+      released.push({
+        approval: finishApproval(db, approval, "consumed", "host"),
+        authorization,
+        call,
+      });
+    }
+    return released;
+  });
+}
 export function revalidatePermissionAuthorization(
   db: OpenedDatabase,
   call: PermissionCall,

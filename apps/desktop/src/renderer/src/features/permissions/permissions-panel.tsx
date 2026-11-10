@@ -122,18 +122,29 @@ export function PermissionsPanel() {
 
   const savePolicy = (capability: CapabilityId, mode: PermissionMode): void => {
     if (!isPermissionModeAllowed(capability, mode)) return;
+    // Show the choice immediately. Allow means later asks for this capability
+    // are let through; the closed control must not stay on 每次询问.
+    const snapshot = policies;
+    setPolicies(
+      policies.map((policy) => (policy.capability === capability ? { capability, mode } : policy)),
+    );
     void window.deepseekBot.host
       .call("permission.policy.set", { capability, mode })
-      .then((response) => {
+      .then(async (response) => {
         PERMISSION_METHODS["permission.policy.set"].response.parse(response);
         setNoticeError(false);
         setNotice(
           () => () =>
             t("permissions.policySaved", [capabilityLabel(capability), t(MODE_LABEL_KEYS[mode])]),
         );
-        return reload();
+        try {
+          await reload();
+        } catch {
+          // The choice is already stored. Keep the label the person just picked.
+        }
       })
       .catch(() => {
+        setPolicies(snapshot);
         setNoticeError(true);
         setNotice(() => () => t("permissions.policySaveFailed"));
       });

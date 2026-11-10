@@ -18,6 +18,7 @@ import {
   cancelPermissionApproval,
   decidePermissionApproval,
   expirePermissionState,
+  releaseApprovalsCoveredByPolicy,
   requestPermissionApproval,
   revalidatePermissionAuthorization,
   getPermissionApproval,
@@ -257,6 +258,23 @@ export class AgentPermissionService implements GrantCheckpoint {
       });
     }
     return { approval: result.approval, grants: result.grants };
+  }
+
+  /**
+   * A new allow policy covers later calls by itself. Calls already waiting
+   * on a card are released when every capability on that card is now allowed,
+   * so the person is not asked again for the action they just switched off.
+   */
+  allowCapability(capability: CapabilityId): void {
+    let released: ReturnType<typeof releaseApprovalsCoveredByPolicy> = [];
+    try {
+      released = releaseApprovalsCoveredByPolicy(this.db, capability, this.generation);
+    } catch {
+      return;
+    }
+    for (const item of released) {
+      this.waiters.get(item.approval.id)?.authorize(item.authorization);
+    }
   }
 
   /** A new deny policy takes effect on waiting calls immediately. */

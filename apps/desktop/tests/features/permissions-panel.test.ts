@@ -72,15 +72,22 @@ afterEach(() => {
 
 function installHost(responder?: (method: string, payload: unknown) => unknown): Call[] {
   const calls: Call[] = [];
+  let policies = POLICIES.map((policy) => ({ ...policy }));
   window.deepseekBot = {
     host: {
       call: async (method: string, payload: unknown) => {
         calls.push({ method, payload });
         const overridden = responder?.(method, payload);
         if (overridden !== undefined) return overridden;
-        if (method === "permission.policy.list") return { policies: POLICIES };
+        if (method === "permission.policy.list") return { policies };
         if (method === "permission.grant.list") return { grants: [POLICY_ROW, GRANT] };
-        if (method === "permission.policy.set") return payload;
+        if (method === "permission.policy.set") {
+          const next = payload as { capability: string; mode: "allow" | "ask" | "deny" };
+          policies = policies.map((policy) =>
+            policy.capability === next.capability ? { ...policy, mode: next.mode } : policy,
+          );
+          return payload;
+        }
         if (method === "permission.grant.revoke") {
           return { grant: { ...GRANT, revokedAt: "2026-10-26T09:00:00.000Z" } };
         }
@@ -226,6 +233,7 @@ describe("permissions settings panel", () => {
         method: "permission.policy.set",
         payload: { capability: "device.action", mode: "ask" },
       });
+      expect(shownMode(controlByLabel(container, "exec.shell"))).toBe("allow");
     });
     expect(calls.some((call) => call.method === "policy.set")).toBe(false);
   });

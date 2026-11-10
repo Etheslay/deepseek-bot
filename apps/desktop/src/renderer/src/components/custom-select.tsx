@@ -86,6 +86,7 @@ export function CustomSelect({
   const [placement, setPlacement] = useState<MenuPlacement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const pickedRef = useRef(false);
 
   const close = (): void => {
     setOpen(false);
@@ -102,6 +103,7 @@ export function CustomSelect({
       return;
     }
     const pinToRightEdge = triggerRef.current?.closest(".settings-row") != null;
+    pickedRef.current = false;
     setPlacement(placeCustomSelectMenu(rect, window.innerWidth, pinToRightEdge));
     setOpen(true);
   };
@@ -156,8 +158,8 @@ export function CustomSelect({
       {open &&
         placement !== null &&
         createPortal(
-          <>
-            <div className="menu-overlay" style={{ zIndex: 140 }} onClick={close} />
+          <div className="custom-select-layer">
+            <div className="menu-overlay" onMouseDown={close} onClick={close} />
             <div
               ref={menuRef}
               className="custom-select-menu"
@@ -165,8 +167,6 @@ export function CustomSelect({
               aria-label={t("components.listLabel", [ariaLabel])}
               style={{
                 position: "fixed",
-                // Above .modal-backdrop (100); below the 260 full-screen layer.
-                zIndex: 150,
                 top: placement.top,
                 bottom: placement.bottom,
                 left: placement.left,
@@ -174,26 +174,43 @@ export function CustomSelect({
                 minWidth: placement.minWidth,
                 maxWidth: placement.maxWidth,
               }}
+              onMouseDown={(event) => event.stopPropagation()}
+              onClick={(event) => event.stopPropagation()}
             >
-              {options.map((o) => (
-                <button
-                  key={o.value}
-                  type="button"
-                  role="option"
-                  aria-selected={o.value === value}
-                  data-value={o.value}
-                  className={"custom-select-item" + (o.value === value ? " current" : "")}
-                  onClick={() => {
-                    onChange(String(o.value));
-                    close();
-                  }}
-                >
-                  {o.label}
-                  {o.value === value && <span className="menu-check">✓</span>}
-                </button>
-              ))}
+              {options.map((o) => {
+                const pick = (): void => {
+                  if (pickedRef.current) return;
+                  pickedRef.current = true;
+                  onChange(String(o.value));
+                  close();
+                };
+                return (
+                  <button
+                    key={o.value}
+                    type="button"
+                    role="option"
+                    aria-selected={o.value === value}
+                    data-value={o.value}
+                    className={"custom-select-item" + (o.value === value ? " current" : "")}
+                    onMouseDown={(event) => {
+                      // Keep the row mounted through mouseup. Closing here
+                      // would drop the click onto the settings backdrop.
+                      event.preventDefault();
+                      event.stopPropagation();
+                    }}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      pick();
+                    }}
+                  >
+                    {o.label}
+                    {o.value === value && <span className="menu-check">✓</span>}
+                  </button>
+                );
+              })}
             </div>
-          </>,
+          </div>,
           document.body,
         )}
     </div>
