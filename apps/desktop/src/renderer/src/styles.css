@@ -5939,33 +5939,54 @@ select option {
 
 /* ---------- Grok Ball body tones: one colour per theme ----------
    The persisted avatar colour is the light-theme value. `data-tone` maps it
-   back to its pair, so a dark panel gets the deeper tone instead of a colour
-   that glows out of it. A hex outside the palette carries no tone and renders
-   as itself in both themes. `:root` is the dark theme; light overrides. */
+   back to its pair. The dark theme paints the brighter step: the old deep
+   tones sank into the dark panel. `--gb-ink-*` is the send-button arrow for
+   that fill. A hex outside the palette carries no tone and renders as itself
+   in both themes. `:root` is the dark theme; light overrides. */
 :root {
-  --gb-body-brown: #855C36;
-  --gb-body-red: #E02135;
-  --gb-body-orange: #FF6700;
-  --gb-body-yellow: #FF9800;
-  --gb-body-green: #009957;
-  --gb-body-cyan: #00A592;
-  --gb-body-blue: #0E74E0;
-  --gb-body-violet: #804EE0;
-  --gb-body-magenta: #E02A88;
-  --gb-body-gray: #777777;
+  --gb-body-brown: #C49A6A;
+  --gb-ink-brown: #15151a;
+  --gb-body-red: #FF5C6C;
+  --gb-ink-red: #15151a;
+  --gb-body-orange: #FF9340;
+  --gb-ink-orange: #15151a;
+  --gb-body-yellow: #FFBE4D;
+  --gb-ink-yellow: #15151a;
+  --gb-body-green: #22E090;
+  --gb-ink-green: #15151a;
+  --gb-body-cyan: #36D9C8;
+  --gb-ink-cyan: #15151a;
+  --gb-body-blue: #54AEFF;
+  --gb-ink-blue: #15151a;
+  --gb-body-violet: #C09BFF;
+  --gb-ink-violet: #15151a;
+  --gb-body-magenta: #FF7EC4;
+  --gb-ink-magenta: #15151a;
+  --gb-body-gray: #B0B0B0;
+  --gb-ink-gray: #15151a;
 }
 
 :root[data-theme="light"] {
   --gb-body-brown: #A27952;
+  --gb-ink-brown: #ffffff;
   --gb-body-red: #FF3E51;
+  --gb-ink-red: #ffffff;
   --gb-body-orange: #FF781C;
+  --gb-ink-orange: #15151a;
   --gb-body-yellow: #FFAF38;
+  --gb-ink-yellow: #15151a;
   --gb-body-green: #00C972;
+  --gb-ink-green: #15151a;
   --gb-body-cyan: #1CC3B0;
+  --gb-ink-cyan: #15151a;
   --gb-body-blue: #2A92FE;
+  --gb-ink-blue: #15151a;
   --gb-body-violet: #A97EFE;
+  --gb-ink-violet: #15151a;
   --gb-body-magenta: #FF5EB1;
+  --gb-ink-magenta: #15151a;
   --gb-body-gray: #959595;
+  --gb-ink-gray: #15151a;
 }
 
 .grok-ball[data-tone="brown"],
@@ -6130,7 +6151,8 @@ select option {
   height: 20px;
 }
 
-/* 6. sidebar: quieter labels */
+/* 6. sidebar labels. Bot names, the header name and the account name are
+   bright white on the dark rail. The old 0.92 row fade greyed them. */
 .group-label {
   font-size: 0.7rem;
   color: var(--muted);
@@ -6141,14 +6163,19 @@ select option {
   color: var(--muted);
 }
 
+:root:not([data-theme="light"]) .sidebar .identity-name,
+:root:not([data-theme="light"]) .sidebar .tab-title,
+:root:not([data-theme="light"]) .sidebar .foot-name,
+:root:not([data-theme="light"]) .sidebar .group-label,
+:root:not([data-theme="light"]) .sidebar .group-label.static {
+  color: #ffffff;
+}
+
 .tab-title {
   font-size: 0.86rem;
 }
 
-.tab {
-  opacity: 0.92;
-}
-
+.tab,
 .tab.active {
   opacity: 1;
 }

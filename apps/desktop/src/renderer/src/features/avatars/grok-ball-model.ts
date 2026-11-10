@@ -778,23 +778,23 @@ export function mixColor(a: string, b: string, t: number): string {
  * theme-aware mono ball, whose swatch renders black on the light theme and
  * white on the dark one.
  *
- * Each tone carries a value per theme. The brighter one belongs to the light
- * theme and the deeper one to the dark theme, so a body keeps its contrast
- * against the surface instead of glowing out of a dark panel. The `light`
- * value is canonical: it is what gets persisted, and `toneKeyFor` maps a
- * stored colour back to its pair.
+ * `light` is what the contract stores. `dark` is the colour painted on the
+ * dark theme: a brighter, more saturated step, because the old deep tones
+ * disappeared into the dark panel. `legacy` keeps those deep hexes, and the
+ * retired contract swatches, mapped to the same tone so an already-saved bot
+ * picks up the brighter paint without a rewrite.
  */
 export const GROK_BALL_TONES = [
-  { key: "brown", light: "#A27952", dark: "#855C36" },
-  { key: "red", light: "#FF3E51", dark: "#E02135" },
-  { key: "orange", light: "#FF781C", dark: "#FF6700" },
-  { key: "yellow", light: "#FFAF38", dark: "#FF9800" },
-  { key: "green", light: "#00C972", dark: "#009957" },
-  { key: "cyan", light: "#1CC3B0", dark: "#00A592" },
-  { key: "blue", light: "#2A92FE", dark: "#0E74E0" },
-  { key: "violet", light: "#A97EFE", dark: "#804EE0" },
-  { key: "magenta", light: "#FF5EB1", dark: "#E02A88" },
-  { key: "gray", light: "#959595", dark: "#777777" },
+  { key: "brown", light: "#A27952", dark: "#C49A6A", legacy: ["#855C36", "#8b5e3c"] },
+  { key: "red", light: "#FF3E51", dark: "#FF5C6C", legacy: ["#E02135", "#e8483f"] },
+  { key: "orange", light: "#FF781C", dark: "#FF9340", legacy: ["#FF6700", "#f08a24"] },
+  { key: "yellow", light: "#FFAF38", dark: "#FFBE4D", legacy: ["#FF9800", "#f0b429"] },
+  { key: "green", light: "#00C972", dark: "#22E090", legacy: ["#009957", "#3ecf8e"] },
+  { key: "cyan", light: "#1CC3B0", dark: "#36D9C8", legacy: ["#00A592", "#2fbfa0"] },
+  { key: "blue", light: "#2A92FE", dark: "#54AEFF", legacy: ["#0E74E0", "#3b93f0"] },
+  { key: "violet", light: "#A97EFE", dark: "#C09BFF", legacy: ["#804EE0", "#8b5cf6"] },
+  { key: "magenta", light: "#FF5EB1", dark: "#FF7EC4", legacy: ["#E02A88", "#e152b0"] },
+  { key: "gray", light: "#959595", dark: "#B0B0B0", legacy: ["#777777", "#a3a3a3"] },
 ] as const;
 
 export type GrokBallToneKey = (typeof GROK_BALL_TONES)[number]["key"];
@@ -813,8 +813,20 @@ export function toneKeyFor(color: string): GrokBallToneKey | null {
     if (tone.light.toLowerCase() === wanted || tone.dark.toLowerCase() === wanted) {
       return tone.key;
     }
+    for (const old of tone.legacy) {
+      if (old.toLowerCase() === wanted) return tone.key;
+    }
   }
   return null;
+}
+
+/** The hex the ball and the bubble actually paint for this theme. */
+export function paintHex(color: string, theme: "dark" | "light"): string {
+  const key = toneKeyFor(color);
+  if (key === null) return color;
+  const tone = GROK_BALL_TONES.find((item) => item.key === key);
+  if (tone === undefined) return color;
+  return theme === "light" ? tone.light : tone.dark;
 }
 
 /** Fixed-slot identity roles; `inline` renders a static (non-animated) glyph. */

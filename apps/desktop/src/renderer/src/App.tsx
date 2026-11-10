@@ -2140,10 +2140,7 @@ const logout = (): void => {
                       if (b.avatar.kind === "grok") {
                         const face = document.createElement("span");
                         face.className = "drag-ghost-avatar drag-ghost-minimal";
-                        face.style.background =
-                          b.avatar.color === "mono"
-                            ? "var(--avatar-mono-bg)"
-                            : b.avatar.color;
+                        face.style.background = avatarColor(b.avatar);
                         ghost.append(face);
                       } else {
                         const face = document.createElement("span");

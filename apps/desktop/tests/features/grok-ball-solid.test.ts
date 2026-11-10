@@ -162,13 +162,21 @@ describe("GrokBall solid renderer", () => {
       root?.unmount();
     });
     host?.remove();
-    root = null;
-    host = null;
 
-    // A retired or hand-picked hex has no pair: no tone hook, painted as is.
+    // A retired swatch still belongs to its tone, so it picks up the brighter paint.
     mount(createElement(GrokBall, { variant: "inline", shape: "blob", color: "#3b93f0" }));
-    expect(host!.querySelector(".grok-ball")!.getAttribute("data-tone")).toBeNull();
+    expect(host!.querySelector(".grok-ball")!.getAttribute("data-tone")).toBe("blue");
     expect(body(shell()).fill).toBe("var(--gb-body, #3b93f0)");
+
+    act(() => {
+      root?.unmount();
+    });
+    host?.remove();
+
+    // A hand-picked hex has no pair: no tone hook, painted as is.
+    mount(createElement(GrokBall, { variant: "inline", shape: "blob", color: "#abcdef" }));
+    expect(host!.querySelector(".grok-ball")!.getAttribute("data-tone")).toBeNull();
+    expect(body(shell()).fill).toBe("var(--gb-body, #abcdef)");
   });
 
   it("turns the eyes around the body and repaints the outline on a glance", async () => {

@@ -14,6 +14,7 @@ import {
   GROK_BALL_SHAPES,
   GROK_BALL_STATE_FRAMES,
   contourPath,
+  paintHex,
   sampleContour,
   type GrokBallState,
 } from "../avatars/grok-ball-model.js";
@@ -25,6 +26,8 @@ export type TrayIconColors = {
   /** Concrete color for the theme-aware "mono" avatar (CSS vars do not exist here). */
   mono: string;
   eye: string;
+  /** Which palette step to paint. A hand-picked hex is left as stored. */
+  theme: "dark" | "light";
 };
 
 function escapeAttribute(value: string): string {
@@ -60,7 +63,7 @@ export function trayAvatarSvg(
   const definition = GROK_BALL_SHAPES[shapeId] ?? GROK_BALL_SHAPES.circle;
   const bodyPath = contourPath(sampleContour(definition.points, 72));
   const frame = GROK_BALL_STATE_FRAMES[state] ?? GROK_BALL_STATE_FRAMES.idle;
-  const fill = isMono ? colors.mono : escapeAttribute(avatar.color);
+  const fill = escapeAttribute(isMono ? colors.mono : paintHex(avatar.color, colors.theme));
   const eyePath = contourPath(frame.left.points);
   return [
     `<svg xmlns="http://www.w3.org/2000/svg" width="${pixels}" height="${pixels}" viewBox="0 0 100 100">`,

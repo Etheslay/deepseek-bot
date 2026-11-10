@@ -47,8 +47,8 @@ export function buildTrayPayload(
 
 export function trayIconColors(theme: "dark" | "light"): TrayIconColors {
   return theme === "dark"
-    ? { mono: "#ececf1", eye: "#12131699" }
-    : { mono: "#1a1a1e", eye: "#f6f6f899" };
+    ? { theme, mono: "#ececf1", eye: "#12131699" }
+    : { theme, mono: "#1a1a1e", eye: "#f6f6f899" };
 }
 
 /**
