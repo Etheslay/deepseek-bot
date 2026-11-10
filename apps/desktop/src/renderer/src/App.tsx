@@ -121,6 +121,7 @@ import {
 } from "./features/chat/attachments.js";
 import { prepareVisionImage } from "./features/chat/image-vision.js";
 import { asksToConvertToPdf, asksToMakeDocument } from "./features/chat/document-intent.js";
+import { asksToMakePresentation } from "./features/chat/presentation-intent.js";
 import type { StreamOptions } from "./services/desktop-service.js";
 import { GlobalSearch } from "./features/search/global-search.js";
 import { ContextRing } from "./features/chat/context-ring.js";
@@ -3720,6 +3721,7 @@ function BotsPlaceholder({
   const [readingFile, setReadingFile] = useState(false);
   const [makingDocument, setMakingDocument] = useState(false);
   const [convertingToPdf, setConvertingToPdf] = useState(false);
+  const [makingPresentation, setMakingPresentation] = useState(false);
   const [skills, setSkills] = useState<Skill[]>(() => listSkills(window.localStorage));
   const [skillMenuOpen, setSkillMenuOpen] = useState(false);
   /** G6: a pending 编辑重发 labels the next sent user bubble. */
@@ -4179,6 +4181,7 @@ function BotsPlaceholder({
         setReadingFile(false);
         setMakingDocument(false);
         setConvertingToPdf(false);
+        setMakingPresentation(false);
         if (!settled) {
           onReplyCompleted(me.bot.id, me.bot.name);
         }
@@ -4361,6 +4364,7 @@ function BotsPlaceholder({
     setReadingFile(files.some((file) => classifyAttachment(file.mime, file.name) === "document"));
     setMakingDocument(asksToMakeDocument(text));
     setConvertingToPdf(asksToConvertToPdf(text));
+    setMakingPresentation(asksToMakePresentation(text));
     startChatStream(composeAttachmentPrompt(text, pointers), imageBlocks);
   };
 
@@ -4586,7 +4590,9 @@ function BotsPlaceholder({
                     ? convertingToPdf
                       ? t("chat.thinkConvertingPdf")
                       : t("chat.thinkMakingDocument")
-                    : tool.toolName}
+                    : tool.toolName === "write_presentation"
+                      ? t("chat.thinkMakingPresentation")
+                      : tool.toolName}
                 </span>
                 {tool.summary && <span className="tool-summary">{tool.summary}</span>}
               </div>
@@ -4618,6 +4624,7 @@ function BotsPlaceholder({
                       readingFile={readingFile}
                       makingDocument={makingDocument}
                       convertingToPdf={convertingToPdf}
+                      makingPresentation={makingPresentation}
                     />
                     <button
                       type="button"

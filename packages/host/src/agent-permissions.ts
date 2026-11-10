@@ -63,6 +63,7 @@ const CAPABILITIES: Readonly<Record<string, readonly CapabilityId[]>> = {
   read_workspace_file: ["fs.read"],
   write_document: ["fs.write"],
   edit_document: ["fs.write"],
+  write_presentation: ["fs.write"],
   // D26 gateway: importing a chat attachment writes the bot workspace;
   // reading it back is the model `read` tool. Both default to allow.
   import_attachment: ["fs.write"],

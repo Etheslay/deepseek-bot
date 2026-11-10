@@ -49,6 +49,7 @@ import { DEFAULT_CONTEXT_WINDOW_TOKENS } from "./context-window.js";
 import { createAttachmentStore, readWorkspaceFileText } from "./attachments.js";
 import { writeBotDocument } from "./document-write.js";
 import { editBotDocument } from "./document-edit.js";
+import { writeBotPresentation } from "./presentation-write.js";
 import { createWorkspaceArtifacts } from "./artifacts.js";
 import {
   EngineError,
@@ -106,6 +107,7 @@ import {
   bindWorkspaceFileTool,
   bindWriteDocumentTool,
   bindEditDocumentTool,
+  bindWritePresentationTool,
   type UserQuestionControls,
 } from "@deepseek-bot/agent-tools";
 import {
@@ -915,6 +917,9 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
     }),
     bindEditDocumentTool({
       edit: (botId, input) => editBotDocument(db, botId, input),
+    }),
+    bindWritePresentationTool({
+      write: (botId, relativePath, slides) => writeBotPresentation(db, botId, relativePath, slides),
     }),
     bindDeviceInputTool(deviceInput),
     // v0.5 manager orchestration (T4/T3): coordinator workflow saving and

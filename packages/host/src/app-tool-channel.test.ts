@@ -111,6 +111,7 @@ describe("authenticated chat application tool channel", () => {
       "save_workflow",
       "schedule_message",
       "write_document",
+      "write_presentation",
     ]);
     expect(tools.find((t) => t.name === "create_group")?.parameters).toMatchObject({
       type: "object",

@@ -29,6 +29,8 @@ export function ThinkingLine(props: {
   makingDocument?: boolean;
   /** This turn is converting a file to PDF. */
   convertingToPdf?: boolean;
+  /** This turn is making a PowerPoint. */
+  makingPresentation?: boolean;
 }): JSX.Element {
   useLanguage();
   const startedAt = useRef<number>(Date.now());
@@ -74,6 +76,7 @@ export function ThinkingLine(props: {
     ...(props.readingFile ? { readingFile: true } : {}),
     ...(props.makingDocument ? { makingDocument: true } : {}),
     ...(props.convertingToPdf ? { convertingToPdf: true } : {}),
+    ...(props.makingPresentation ? { makingPresentation: true } : {}),
   });
 
   return (

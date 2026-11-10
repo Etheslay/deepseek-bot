@@ -257,10 +257,10 @@ export class ChatManager {
         return;
       }
       if (event.type === "tool/result" && current.stage === "tool") {
-        // Keep the document tool name so the chat line can stay on
-        // "制作文档" until the reply text arrives.
+        // Keep the document or presentation tool name so the chat line can
+        // stay on "制作文档" or "制作演示文稿" until the reply text arrives.
         session.progress =
-          current.toolName === "edit_document"
+          current.toolName === "edit_document" || current.toolName === "write_presentation"
             ? { stage: "thinking", startedAt: current.startedAt, toolName: current.toolName }
             : { stage: "thinking", startedAt: current.startedAt };
       } else if (current.stage === "preparing") {

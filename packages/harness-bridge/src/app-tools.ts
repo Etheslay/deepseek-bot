@@ -27,6 +27,7 @@ export const APPLICATION_TOOL_NAMES = [
   "read_workspace_file",
   "write_document",
   "edit_document",
+  "write_presentation",
 ] as const;
 
 // Allow ten minutes for human approval plus two minutes for the service call.

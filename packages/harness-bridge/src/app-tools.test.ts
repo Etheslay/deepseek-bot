@@ -22,6 +22,7 @@ const names = [
   "read_workspace_file",
   "write_document",
   "edit_document",
+  "write_presentation",
 ];
 interface Definition {
   name: string;
