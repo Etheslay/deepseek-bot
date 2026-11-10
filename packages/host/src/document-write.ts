@@ -73,14 +73,33 @@ export function buildDocx(text: string): Uint8Array {
   });
 }
 
-function findFontBytes(): Uint8Array | null {
+function findFontCandidates(): Uint8Array[] {
+  const found: Uint8Array[] = [];
   for (const candidate of FONT_CANDIDATES) {
     if (fs.existsSync(candidate)) {
-      return fs.readFileSync(candidate);
+      found.push(fs.readFileSync(candidate));
     }
   }
-  return null;
+  return found;
 }
+
+/**
+ * pdf-lib subsets by calling `font.createSubset()`. A TrueType collection
+ * (Windows `msyh.ttc`, WenQuanYi) opens as a collection, which has no
+ * `createSubset`. Hand back the first face that does.
+ */
+const subsettingFontkit = {
+  create(buffer: Uint8Array): ReturnType<typeof fontkit.create> {
+    const opened = fontkit.create(buffer);
+    if (typeof opened.createSubset === "function") return opened;
+    const faces = (opened as { fonts?: Array<{ createSubset?: () => unknown }> }).fonts;
+    const face = faces?.find((item) => typeof item.createSubset === "function");
+    if (face === undefined) {
+      throw new Error("font cannot be subset");
+    }
+    return face as ReturnType<typeof fontkit.create>;
+  },
+};
 
 function wrapLines(text: string, font: PDFFont, size: number, maxWidth: number): string[] {
   const lines: string[] = [];
@@ -112,17 +131,27 @@ function wrapLines(text: string, font: PDFFont, size: number, maxWidth: number):
   return lines;
 }
 
-export async function buildPdf(text: string): Promise<Uint8Array> {
+export async function buildPdf(
+  text: string,
+  fontBytes?: readonly Uint8Array[],
+): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
-  doc.registerFontkit(fontkit);
-  const fontBytes = findFontBytes();
+  doc.registerFontkit(subsettingFontkit);
+  const candidates = fontBytes ?? findFontCandidates();
   const needsCjk = [...text].some((char) => (char.codePointAt(0) ?? 0) > 0xff);
-  let font: PDFFont;
-  if (fontBytes !== null) {
-    font = await doc.embedFont(fontBytes, { subset: true });
-  } else if (needsCjk) {
-    throw invalid("这台电脑没有可用的中文字体，写不出含中文的 PDF");
-  } else {
+  let font: PDFFont | undefined;
+  for (const bytes of candidates) {
+    try {
+      font = await doc.embedFont(bytes, { subset: true });
+      break;
+    } catch {
+      font = undefined;
+    }
+  }
+  if (font === undefined) {
+    if (needsCjk) {
+      throw invalid("这台电脑没有可用的中文字体，写不出含中文的 PDF");
+    }
     font = await doc.embedFont(StandardFonts.Helvetica);
   }
   const pageWidth = 612;

@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -20,6 +20,14 @@ describe("write_document bytes", () => {
 
   it("puts Chinese into a PDF text layer", async () => {
     const pdf = await buildPdf("你好 PDF");
+    const body = await extractPdfBody(pdf, { aborted: false });
+    expect(body.text).toContain("你好");
+  }, 30_000);
+
+  it("subsets a TrueType collection instead of failing createSubset", async () => {
+    const ttc = "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc";
+    if (!existsSync(ttc)) return;
+    const pdf = await buildPdf("你好", [readFileSync(ttc)]);
     const body = await extractPdfBody(pdf, { aborted: false });
     expect(body.text).toContain("你好");
   }, 30_000);
