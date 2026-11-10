@@ -26,7 +26,7 @@ describe("find_github_skill", () => {
     const fresh = await tool.handler({ query: "pptx" }, context(signal));
     expect(seen).toBe(signal);
     const cached = await tool.handler({ query: "cached" }, context());
-    expect(fresh).toMatchObject({ name: "pptx", next: expect.stringContaining("Saved for the next deck") });
+    expect(fresh).toMatchObject({ name: "pptx", next: expect.stringContaining("Saved for next time") });
     expect(cached).toMatchObject({ cached: true, next: expect.stringContaining("already saved") });
   });
 

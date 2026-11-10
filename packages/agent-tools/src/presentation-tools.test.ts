@@ -1,39 +1,56 @@
 import { describe, expect, it } from "vitest";
 import { bindWritePresentationTool, WritePresentationInputSchema } from "./presentation-tools.js";
 import { ToolRejectionError } from "./types.js";
+import type { PresentationIr } from "./presentation-ir.js";
 
 const BOT = "22222222-2222-4222-8222-222222222222";
-const SCRIPT = "const slide = pres.addSlide(); slide.addText('封面', { x: 1, y: 1, w: 4, h: 1 });";
+
+function ir(): PresentationIr {
+  return {
+    brief: {
+      topic: "生涯发展",
+      audience: "评委",
+      goal: "记住差异",
+      slide_budget: 2,
+      lang: "zh-CN",
+      must_keep: ["差异"],
+    },
+    slides: [
+      { id: "s01", layout: "cover", title: "把规划写成清单" },
+      {
+        id: "s02",
+        layout: "end",
+        title: "差异来自场景和工程",
+        blocks: [{ type: "bullets", items: ["收束"] }],
+      },
+    ],
+  };
+}
 
 describe("write_presentation input", () => {
-  it("accepts a script and rejects each layout that is missing its content", () => {
+  it("accepts a brief and rejects a path that is not a deck", () => {
     expect(WritePresentationInputSchema.safeParse({
       path: "attachments/deck.pptx",
       pdfPath: "attachments/deck.pdf",
       palette: "ink",
-      script: SCRIPT,
+      ir: ir(),
     }).success).toBe(true);
-    const rejected = [
-      { path: "deck.docx", script: SCRIPT },
-      { path: "deck.pptx", pdfPath: "deck.txt", script: SCRIPT },
-      { path: "deck.pptx", script: "short" },
-      { path: "deck.pptx", script: SCRIPT, slides: [{ title: "目录", layout: "agenda", bullets: ["只有这一条", `第二条${"很长".repeat(20)}`] }] },
-      { path: "deck.pptx", script: SCRIPT, slides: [{ title: "步骤", layout: "steps", bullets: ["一", "二"] }] },
-      { path: "deck.pptx", script: SCRIPT, slides: [{ title: "卡片", layout: "cards" }] },
-      { path: "deck.pptx", script: SCRIPT, slides: [{ title: "收束", layout: "summary" }] },
-      { path: "deck.pptx", script: SCRIPT, slides: [{ title: "引文", layout: "quote" }] },
-      { path: "deck.pptx", script: SCRIPT, slides: [{ title: "对比", layout: "split" }] },
-      { path: "deck.pptx", script: SCRIPT, slides: [{ title: "数字", layout: "metrics" }] },
-      { path: "deck.pptx", script: SCRIPT, slides: [{ title: "表", layout: "table", headers: ["甲", "乙"], rows: [["只一列"]] }] },
-      { path: "deck.pptx", script: SCRIPT, slides: [{ title: "图", image: "notes.txt" }] },
-      { path: "deck.pptx", script: SCRIPT, slides: [{ title: "图", layout: "chart", categories: ["一", "二"], series: [{ name: "甲", values: [1] }] }] },
-    ];
-    for (const input of rejected) {
-      expect(WritePresentationInputSchema.safeParse(input).success).toBe(false);
-    }
+    expect(WritePresentationInputSchema.safeParse({
+      path: "deck.docx",
+      ir: ir(),
+    }).success).toBe(false);
+    expect(WritePresentationInputSchema.safeParse({
+      path: "deck.pptx",
+      pdfPath: "deck.txt",
+      ir: ir(),
+    }).success).toBe(false);
+    expect(WritePresentationInputSchema.safeParse({
+      path: "deck.pptx",
+      ir: { ...ir(), slides: [{ id: "s01", layout: "end", title: "没有封面" }] },
+    }).success).toBe(false);
   });
 
-  it("writes the script for the calling bot", async () => {
+  it("places the brief for the calling bot and refuses a caller with no bot", async () => {
     let seenPalette: string | undefined;
     const tool = bindWritePresentationTool({
       write(_botId, path, slides, _pdfPath, palette) {
@@ -42,14 +59,27 @@ describe("write_presentation input", () => {
       },
     });
     const written = await tool.handler(
-      { path: "attachments/deck.pptx", script: SCRIPT, palette: "harbor" },
+      {
+        path: "attachments/deck.pptx",
+        ir: {
+          ...ir(),
+          brief: { ...ir().brief, style: { keywords: ["科技深蓝"] } },
+        },
+      },
       { caller: { id: "chat:s", botId: BOT } },
     );
-    expect(written).toMatchObject({ path: "attachments/deck.pptx" });
+    expect(written).toMatchObject({ path: "attachments/deck.pptx", slides: 2 });
     expect(seenPalette).toBe("harbor");
     await expect(tool.handler(
-      { path: "attachments/deck.pptx", script: SCRIPT },
+      { path: "attachments/deck.pptx", ir: ir() },
       { caller: { id: "chat:s" } },
     )).rejects.toBeInstanceOf(ToolRejectionError);
+    await expect(tool.handler(
+      {
+        path: "attachments/deck.pptx",
+        ir: { ...ir(), slides: [ir().slides[1]!, ir().slides[1]!] },
+      },
+      { caller: { id: "chat:s", botId: BOT } },
+    )).rejects.toMatchObject({ code: "INVALID_INPUT" });
   });
 });

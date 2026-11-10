@@ -264,7 +264,13 @@ export function presentationIrIssues(ir: PresentationIr): string[] {
     ) {
       issues.push(`${where} has an image and bullets, so its layout must be bullets_left_image_right`);
     }
-    if ((slide.blocks ?? []).length === 1 && callouts.length === 1 && slide.layout !== "statement" && slide.layout !== "quote") {
+    if (
+      (slide.blocks ?? []).length === 1 &&
+      callouts.length === 1 &&
+      slide.layout !== "statement" &&
+      slide.layout !== "quote" &&
+      slide.layout !== "section"
+    ) {
       issues.push(`${where} has only a callout, so its layout must be statement or quote`);
     }
     for (const table of tables) {
