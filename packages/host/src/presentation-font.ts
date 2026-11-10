@@ -44,9 +44,51 @@ function firstFile(paths: readonly string[]): string | undefined {
   return paths.find((item) => fs.existsSync(item));
 }
 
+/**
+ * A TrueType collection (Windows YaHei ships as .ttc) is not a font file.
+ * Lift the first face out so the subsetter receives one sfnt.
+ */
+export function extractFirstTrueType(data: Uint8Array): Uint8Array {
+  const source = Buffer.from(data);
+  if (source.subarray(0, 4).toString("latin1") !== "ttcf") return new Uint8Array(source);
+  const faceCount = source.readUInt32BE(8);
+  if (faceCount < 1 || source.length < 16) {
+    throw new Error("font collection has no face");
+  }
+  const faceOffset = source.readUInt32BE(12);
+  const tableCount = source.readUInt16BE(faceOffset + 4);
+  const records = Array.from({ length: tableCount }, (_, index) => {
+    const at = faceOffset + 12 + index * 16;
+    return {
+      tag: source.subarray(at, at + 4),
+      checksum: source.readUInt32BE(at + 4),
+      offset: source.readUInt32BE(at + 8),
+      length: source.readUInt32BE(at + 12),
+    };
+  });
+  let cursor = 12 + tableCount * 16;
+  const placed = records.map((record) => {
+    const next = { ...record, newOffset: cursor };
+    cursor += record.length + ((4 - (record.length % 4)) % 4);
+    return next;
+  });
+  const out = Buffer.alloc(cursor);
+  source.copy(out, 0, faceOffset, faceOffset + 12);
+  placed.forEach((record, index) => {
+    const at = 12 + index * 16;
+    record.tag.copy(out, at);
+    out.writeUInt32BE(record.checksum, at + 4);
+    out.writeUInt32BE(record.newOffset, at + 8);
+    out.writeUInt32BE(record.length, at + 12);
+    source.copy(out, record.newOffset, record.offset, record.offset + record.length);
+  });
+  return new Uint8Array(out);
+}
+
 async function subsetFace(file: string, text: string): Promise<Uint8Array | undefined> {
   try {
-    const bytes = await subsetFont(fs.readFileSync(file), text, { targetFormat: "truetype" });
+    const face = Buffer.from(extractFirstTrueType(fs.readFileSync(file)));
+    const bytes = await subsetFont(face, text, { targetFormat: "truetype" });
     if (bytes.byteLength < 12 || bytes.byteLength > 1_500_000) return undefined;
     const signature = Buffer.from(bytes.subarray(0, 4)).toString("hex");
     if (signature !== "00010000" && signature !== "74727565") return undefined;

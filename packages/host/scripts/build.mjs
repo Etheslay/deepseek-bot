@@ -7,11 +7,34 @@
  * standalone child process (the desktop main spawns it with `node`).
  */
 import { build } from "esbuild";
+import { createRequire } from "node:module";
 import process from "node:process";
 import { URL, fileURLToPath, pathToFileURL } from "node:url";
 import { cp, mkdir, readFile, writeFile } from "node:fs/promises";
-import { join, resolve, sep } from "node:path";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import { buildOcrResources } from "../../exec-daemon/scripts/build-resources.mjs";
+
+const hostRequire = createRequire(new URL("../package.json", import.meta.url));
+
+/** The bundled Host loads subset-font with require, so the copy must ship it. */
+async function copyRuntimeClosure(name, destRoot, fromRequire = hostRequire, seen = new Set()) {
+  if (seen.has(name)) return;
+  seen.add(name);
+  const manifestPath = fromRequire.resolve(`${name}/package.json`);
+  const source = dirname(manifestPath);
+  const dest = join(destRoot, name);
+  await mkdir(dirname(dest), { recursive: true });
+  await cp(source, dest, {
+    recursive: true,
+    dereference: true,
+    filter: (item) => !relative(source, item).split(sep).includes("node_modules"),
+  });
+  const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+  const childRequire = createRequire(manifestPath);
+  for (const dependency of Object.keys(manifest.dependencies ?? {})) {
+    await copyRuntimeClosure(dependency, destRoot, childRequire, seen);
+  }
+}
 
 const entry = fileURLToPath(new URL("../src/main.ts", import.meta.url));
 const distribution =
@@ -77,3 +100,4 @@ await build({
     js: 'import { createRequire as __dsbCreateRequire } from "node:module"; const require = __dsbCreateRequire(import.meta.url);',
   },
 });
+await copyRuntimeClosure("subset-font", join(distribution, "node_modules"));
