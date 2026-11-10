@@ -492,6 +492,10 @@ export function createFixtureService(): DesktopService {
         };
       },
 
+      aside(): Promise<boolean> {
+        return Promise.resolve(false);
+      },
+
       stream(botId, userText, handlers, options): StreamHandle {
         const bot = requireBot(botId);
         assertLive(bot);

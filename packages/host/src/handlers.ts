@@ -1284,6 +1284,27 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
       }
     },
 
+    "chat.aside": (payload) => {
+      const bot = getBot(db, payload.botId);
+      if (bot === undefined) {
+        throw invalid(`bot '${payload.botId}' was not found`);
+      }
+      if (bot.archivedAt !== null) {
+        throw invalid("archived bots cannot chat");
+      }
+      if (!chat.enqueueAside(bot.id, payload.text)) {
+        return { queued: false };
+      }
+      const session = resolveChatSession(db, bot.id, undefined);
+      appendChatMessage(db, {
+        botId: bot.id,
+        sessionId: session.id,
+        role: "user",
+        text: payload.text,
+      });
+      return { queued: true };
+    },
+
     "chat.cancel": (payload) => {
       const cancelled = chat.cancel(payload.sessionId);
       const botId = payload.sessionId.startsWith("chat:")

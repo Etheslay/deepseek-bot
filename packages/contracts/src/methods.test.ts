@@ -33,8 +33,8 @@ describe("method whitelist", () => {
     // surface (workflow.get, run.snapshot, approval.list); v0.13 adds the
     // interface-state methods (ui.state.get/set); v0.14 adds group.archive,
     // vision.status (B3'' 视觉输入 — chat.send.images is a field, not a
-    // method) and the four chat.session.* methods (G12 多会话), for 133.
-    expect(METHODS).toHaveLength(133);
+    // method) and the four chat.session.* methods (G12 多会话), plus chat.aside, for 134.
+    expect(METHODS).toHaveLength(134);
   });
 
   it("covers every method group from CONTRACTS §3", () => {

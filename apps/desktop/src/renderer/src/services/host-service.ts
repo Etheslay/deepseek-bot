@@ -323,6 +323,12 @@ export function createHostService(bridge: HostBridge): DesktopService {
       }),
       history: async (botId, limit = 100, sessionId) =>
         readHistory(botId, limit, sessionId),
+      aside: async (botId, text) => {
+        const response = METHOD_CONTRACTS["chat.aside"].response.parse(
+          await hostCall("chat.aside", { botId, text }),
+        );
+        return response.queued;
+      },
       contextUsage: async (botId, sessionId) =>
         METHOD_CONTRACTS["chat.contextUsage"].response.parse(
           await bridge.host.call("chat.contextUsage", {

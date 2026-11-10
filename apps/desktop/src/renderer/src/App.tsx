@@ -4362,10 +4362,20 @@ function BotsPlaceholder({
     setFailedText(text);
     setDraft("");
     setReadingFile(files.some((file) => classifyAttachment(file.mime, file.name) === "document"));
-    setMakingDocument(asksToMakeDocument(text));
-    setConvertingToPdf(asksToConvertToPdf(text));
-    setMakingPresentation(asksToMakePresentation(text));
-    startChatStream(composeAttachmentPrompt(text, pointers), imageBlocks);
+    setMakingDocument(asksToMakeDocument(text) || makingDocument);
+    setConvertingToPdf(asksToConvertToPdf(text) || convertingToPdf);
+    setMakingPresentation(asksToMakePresentation(text) || makingPresentation);
+    const prompt = composeAttachmentPrompt(text, pointers);
+    const turnLive =
+      stream !== null && stream.forKey === me.key && stream.failure === null && !stream.cancelled;
+    if (turnLive) {
+      try {
+        if (await service.chat.aside(me.bot.id, prompt)) return;
+      } catch {
+        // The live turn did not take the line. Send it as its own turn.
+      }
+    }
+    startChatStream(prompt, imageBlocks);
   };
 
   /** G6: 重新生成 — re-ask the latest user question as a new labelled turn. */
