@@ -552,4 +552,45 @@ describe("chat capability grant", () => {
     });
     expect(() => issue(archived, "app.create_bot")).toThrow();
   });
+
+  it("cancels a pending dispatch ask and keeps an ask that still needs a person", () => {
+    const { db, clock, bot } = fixture();
+    const expiresAt = new Date(clock.now().getTime() + 600_000).toISOString();
+    const base = {
+      callerId: "caller",
+      botId: bot.id,
+      sessionId: "s1",
+      params: { task: "做一份 ppt" },
+      generation: 1,
+    };
+    storage.requestPermissionApproval(
+      db,
+      {
+        ...base,
+        invocationId: randomUUID(),
+        tool: "dispatch_task",
+        capabilities: ["app.dispatch_task"],
+        actionDigest: "b".repeat(64),
+      },
+      expiresAt,
+    );
+    const write = storage.requestPermissionApproval(
+      db,
+      {
+        ...base,
+        invocationId: randomUUID(),
+        tool: "write_presentation",
+        capabilities: ["fs.write", "app.dispatch_task"],
+        actionDigest: "c".repeat(64),
+      },
+      expiresAt,
+    );
+    const cancelled = storage.cancelUnaskedDispatchApprovals(db, 1);
+    expect(cancelled.map((approval) => approval.tool)).toEqual(["dispatch_task"]);
+    expect(cancelled[0]?.status).toBe("cancelled");
+    expect(storage.listPermissionApprovals(db, { status: "pending" }).map((approval) => approval.id)).toEqual([
+      write.id,
+    ]);
+    expect(storage.cancelUnaskedDispatchApprovals(db, 1)).toEqual([]);
+  });
 });

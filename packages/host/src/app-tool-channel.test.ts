@@ -452,4 +452,71 @@ describe("authenticated chat application tool channel", () => {
     // The cap only shrinks the prompt copy; the file on disk keeps every byte.
     expect(readFileSync(filePath, "utf8")).toBe(content);
   });
+
+  it("refuses dispatch_task when this turn was not a handoff and raises no approval", async () => {
+    const { server, host, bot } = await setup();
+    const controller = new AbortController();
+    const sessionId = `physical:${randomUUID()}`;
+    const quiet = server.openTurn({
+      sessionId,
+      caller: { id: `chat:${bot.id}`, botId: bot.id, sessionId: `chat:${bot.id}` },
+      signal: controller.signal,
+      allowDispatch: false,
+    });
+    const response = await fetch(`${server.url}/app-tools/call`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${quiet.env.DSB_APP_TOOLS_TOKEN}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        sessionId,
+        callId: randomUUID(),
+        tool: "dispatch_task",
+        params: { toBotId: bot.id, task: "帮我做 ppt" },
+      }),
+    });
+    expect(await response.json()).toEqual({
+      ok: false,
+      error: {
+        code: "INVALID_INPUT",
+        message: "用户没有让你把这件事交给其他 bot。不要派发，也不要索要这个权限，用你自己的工具做完。",
+      },
+    });
+    expect(await host.handleMethod("permission.approval.list", { botId: bot.id })).toEqual({
+      approvals: [],
+    });
+    controller.abort();
+    await quiet.close();
+  });
+
+  it("still reaches the gateway when this turn was asked to message another bot", async () => {
+    const { server, bot } = await setup();
+    const controller = new AbortController();
+    const sessionId = `physical:${randomUUID()}`;
+    const handed = server.openTurn({
+      sessionId,
+      caller: { id: `chat:${bot.id}`, botId: bot.id, sessionId: `chat:${bot.id}` },
+      signal: controller.signal,
+      allowDispatch: true,
+    });
+    const response = await fetch(`${server.url}/app-tools/call`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${handed.env.DSB_APP_TOOLS_TOKEN}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        sessionId,
+        callId: randomUUID(),
+        tool: "dispatch_task",
+        params: { toBotId: bot.id, task: "发给写手" },
+      }),
+    });
+    const body = (await response.json()) as { ok: boolean; error?: { message?: string } };
+    expect(body.ok).toBe(false);
+    expect(body.error?.message).toBe("application tool invocation did not complete");
+    controller.abort();
+    await handed.close();
+  });
 });

@@ -2,6 +2,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { stableStringify } from "@deepseek-bot/runtime";
 import {
+  type AppApproval,
   type CapabilityId,
   type PermissionDecisionRequest,
   UuidSchema,
@@ -16,6 +17,7 @@ import {
 import {
   authorizePermissionCall,
   cancelPermissionApproval,
+  cancelUnaskedDispatchApprovals,
   decidePermissionApproval,
   expirePermissionState,
   requestPermissionApproval,
@@ -134,6 +136,7 @@ export class AgentPermissionService implements GrantCheckpoint {
       return { allowed: false, code: "RUNTIME_UNAVAILABLE", reason: "permission host is closed" };
     if (options.signal?.aborted)
       return { allowed: false, code: "CANCELLED", reason: "tool call was cancelled" };
+    this.releaseUnaskedDispatch();
     const mapped = capabilitiesConsumedBy(tool, params);
     if (
       mapped === undefined ||
@@ -218,6 +221,30 @@ export class AgentPermissionService implements GrantCheckpoint {
       options.signal?.addEventListener("abort", abort, { once: true });
       if (options.signal?.aborted) abort();
     });
+  }
+
+  /**
+   * A leftover ask that only covers bot-to-bot messaging is not a human
+   * permission. Cancel it and release the waiter so the chat never shows a
+   * card or a status line for a capability this request did not need.
+   */
+  releaseUnaskedDispatch(): void {
+    let cancelled: AppApproval[] = [];
+    try {
+      cancelled = cancelUnaskedDispatchApprovals(this.db, this.generation);
+    } catch {
+      return;
+    }
+    for (const approval of cancelled) {
+      this.waiters.get(approval.id)?.finish({
+        allowed: false,
+        code: "INVALID_INPUT",
+        reason: "messaging another bot was not part of this request",
+        capabilities: approval.capabilities,
+        approvalId: approval.id,
+        decision: "denied",
+      });
+    }
   }
 
   decide(request: PermissionDecisionRequest) {

@@ -130,7 +130,10 @@ export function bindTaskTools(deps: TaskToolDeps): ToolCapability[] {
       name: "dispatch_task",
       description:
         "Dispatch one task instruction to any other live bot — any group (the " +
-        "executor runs it as its own chat turn). `task` is the exact line or " +
+        "executor runs it as its own chat turn). Call this only when the user " +
+        "asked you to hand this work to another bot. A file, slide deck, document, " +
+        "or any task they gave to you is your own work: do it yourself, and do not " +
+        "ask them for permission to message other bots. `task` is the exact line or " +
         "concrete work they should produce: if the human asked you to send " +
         "「你好」, task is 你好, not a note about how to say it. You cannot dispatch to " +
         "yourself. Bot-to-bot dispatch does not wait for a human permission. " +

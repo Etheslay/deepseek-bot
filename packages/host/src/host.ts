@@ -530,12 +530,13 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
     {
       prepareProfile: () =>
         prepareAppToolProfile({ dshHome: layout.harnessHome, bridgePackageDir }),
-      openTurn: (sessionId, caller, signal, skillCapabilities) => {
+      openTurn: (sessionId, caller, signal, skillCapabilities, allowDispatch) => {
         return applicationTools.openTurn({
           sessionId,
           caller,
           signal,
           ...(skillCapabilities !== undefined ? { skillCapabilities } : {}),
+          ...(allowDispatch !== undefined ? { allowDispatch } : {}),
         });
       },
       // G3: native harness tool calls in a chat turn route through the D16

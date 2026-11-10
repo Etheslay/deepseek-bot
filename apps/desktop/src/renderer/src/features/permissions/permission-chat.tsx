@@ -5,7 +5,9 @@
  * 允许一次. Per-action capabilities (exec.shell, screen.capture, …) only
  * ever offer 从不 / 允许一次: the contract forbids lasting grants for
  * them. Once decided, the card disappears and only a centred status
- * line remains ({bot} 本次可以… / 已始终允许… / 已拒绝…); the session scope
+ * line remains ({bot} 本次可以… / 已始终允许… / 已拒绝…).
+ * `app.dispatch_task` is not a human permission: it is left off the card
+ * and off that line, and a dispatch-only ask is not shown. The session scope
  * remains a contract value (approvalDecision) but is no longer a card
  * button. Proactive grants, policy edits and revocation live in
  * Settings → Permissions.
@@ -67,8 +69,17 @@ export function approvalDecision(
   };
 }
 
+/**
+ * Bot-to-bot messaging is not a human permission. A deck or any other
+ * single-bot request must not show a card or a "已始终允许 … 派发任务给其他
+ * bot" line for it. Other capabilities on the same ask stay visible.
+ */
+function askedCapabilities(capabilities: readonly CapabilityId[]): CapabilityId[] {
+  return capabilities.filter((capability) => capability !== "app.dispatch_task");
+}
+
 function capabilityLine(capabilities: readonly CapabilityId[]): string {
-  return capabilities.map(capabilityLabel).join(t("d22.listSeparator"));
+  return askedCapabilities(capabilities).map(capabilityLabel).join(t("d22.listSeparator"));
 }
 
 export function PermissionChatCards(props: {
@@ -100,7 +111,8 @@ function ApprovalCard(props: {
   onDismiss?: (approvalId: string) => void;
 }): JSX.Element {
   const { approval, botName, order, busy, onDecide, onDismiss } = props;
-  const capabilities = capabilityLine(approval.capabilities);
+  const shown = askedCapabilities(approval.capabilities);
+  const capabilities = capabilityLine(shown);
   const preview =
     approval.tool === "mcp_call"
       ? {
@@ -114,7 +126,7 @@ function ApprovalCard(props: {
     <div className="approval-card" style={{ order }} aria-label={t("permissions.approvalFor", [approval.tool])}>
       <div className="approval-head">
         <span className="approval-glyph" aria-hidden="true">
-          {capabilityGlyph(approval.capabilities)}
+          {capabilityGlyph(shown)}
         </span>
         <span className="approval-cap">{capabilities}</span>
         {onDismiss !== undefined && (
@@ -145,7 +157,7 @@ function ApprovalCard(props: {
           >
             {t("permissions.never")}
           </button>
-          {approvalChoices(approval).includes("permanent") && (
+          {approvalChoices({ capabilities: shown }).includes("permanent") && (
             <button
               type="button"
               className="approval-btn dark"
@@ -225,7 +237,10 @@ function BotPermissionChatCards(props: {
   }, [load]);
 
   const pendingVisible = (approvals ?? []).filter(
-    (approval) => approval.status === "pending" && !hidden.includes(approval.id),
+    (approval) =>
+      approval.status === "pending" &&
+      !hidden.includes(approval.id) &&
+      askedCapabilities(approval.capabilities).length > 0,
   );
 
   useEffect(() => {
@@ -283,25 +298,27 @@ function BotPermissionChatCards(props: {
           onDismiss={dismiss}
         />
       ))}
-      {resolved.map(({ approval, choice }) => (
-        <p
-          key={approval.id}
-          className="sys-line"
-          style={{ order: pinSlotOrder(times, Date.parse(approval.createdAt)) }}
-        >
-          {choice === "deny"
-            ? t("permissions.grantedDeniedLine", [botName, capabilityLine(approval.capabilities)])
-            : choice === "permanent"
-              ? t("permissions.grantedPermanentLine", [
-                  botName,
-                  capabilityLine(approval.capabilities),
-                ])
-              : t("permissions.grantedOnceLine", [
-                  botName,
-                  capabilityLine(approval.capabilities),
-                ])}
-        </p>
-      ))}
+      {resolved.map(({ approval, choice }) =>
+        askedCapabilities(approval.capabilities).length === 0 ? null : (
+          <p
+            key={approval.id}
+            className="sys-line"
+            style={{ order: pinSlotOrder(times, Date.parse(approval.createdAt)) }}
+          >
+            {choice === "deny"
+              ? t("permissions.grantedDeniedLine", [botName, capabilityLine(approval.capabilities)])
+              : choice === "permanent"
+                ? t("permissions.grantedPermanentLine", [
+                    botName,
+                    capabilityLine(approval.capabilities),
+                  ])
+                : t("permissions.grantedOnceLine", [
+                    botName,
+                    capabilityLine(approval.capabilities),
+                  ])}
+          </p>
+        ),
+      )}
       {notice !== null ? (
         <p className="sys-line" style={{ order: pinSlotOrder(times, noticeAnchor()) }}>
           {t(notice.key, notice.params ?? [])}

@@ -633,6 +633,31 @@ export function decidePermissionApproval(
     });
   return result;
 }
+/**
+ * Bot-to-bot messaging is not a human permission. A pending ask that only
+ * covers dispatch is cancelled so the chat does not keep a card or an
+ * "已始终允许 … 派发任务给其他 bot" line for a capability this request did not
+ * need. An ask that also needs a real capability stays pending.
+ */
+export function cancelUnaskedDispatchApprovals(
+  db: OpenedDatabase,
+  generation: number,
+): AppApproval[] {
+  return runInTransaction(db.raw, () => {
+    const cancelled: AppApproval[] = [];
+    for (const approval of listPermissionApprovals(db, { status: "pending" })) {
+      if (approval.generation !== generation) continue;
+      if (
+        approval.capabilities.length === 0 ||
+        approval.capabilities.some((capability) => capability !== "app.dispatch_task")
+      ) {
+        continue;
+      }
+      cancelled.push(finishApproval(db, approval, "cancelled", "host"));
+    }
+    return cancelled;
+  });
+}
 export function cancelPermissionApproval(
   db: OpenedDatabase,
   id: string,
