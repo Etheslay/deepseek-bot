@@ -2,7 +2,7 @@
 
 基于 DeepSeek Harness 的本地桌面机器人与工作流应用。目标是提供接近 Grok Bot 的机器人协作体验，让用户在自己的电脑上创建机器人、交办任务并组织可重复执行的工作流。
 
-**当前阶段：运行时与桌面已集成到协议 v0.14；发布验收尚未完成。现状与缺口以 [docs/GAP_AUDIT.md](docs/GAP_AUDIT.md) 与 [docs/SPRINTS.md](docs/SPRINTS.md) §4 为准。**
+**当前阶段：运行时与桌面已集成到协议 v0.14；发布验收尚未完成。现状与缺口以 [docs/GAP_AUDIT.md](docs/GAP_AUDIT.md) 与 [docs/SPRINTS.md](docs/SPRINTS.md) §4 为准。2026-11-10 之后还没收口的事见 [docs/TASK_REMAINING_DEFECTS.md](docs/TASK_REMAINING_DEFECTS.md)。**
 
 ## 已确定的产品边界
 
@@ -32,6 +32,7 @@
 | [开发启动清单](docs/KICKOFF_CHECKLIST.md) | 阶段 0 清障、D01 接入验证与后续任务链的执行顺序 |
 | [开发环境基线](docs/DEVELOPMENT_SETUP.md) | 实测的 Node/pnpm 安装与 lint/typecheck/test/CI 命令 |
 | [开放缺陷收口](docs/TASK_OPEN_DEFECTS.md) | `develop` `030c54d` 上已坐实的行为缺口、已知取舍，以及不得当成缺陷的未验收项 |
+| [剩余缺陷](docs/TASK_REMAINING_DEFECTS.md) | 2026-11-10 基线上还没收口的演示文稿、测试超时、字体和真机验收 |
 | [桌面壳](docs/DESKTOP_SHELL.md) | Electron 壳结构、启动/打包命令、IPC 白名单与安全设置 |
 | [贡献指南](CONTRIBUTING.md) | 每次开发开始和结束时的操作步骤 |
 
