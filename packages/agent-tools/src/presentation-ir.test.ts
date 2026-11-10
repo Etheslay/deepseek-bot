@@ -212,6 +212,41 @@ describe("presentation ir", () => {
         expect.arrayContaining([expect.stringContaining(fragment)]),
       );
     }
-    expect(() => compilePresentationIr(deck([end, cover]))).toThrow(/cover/);
+    const repaired = compilePresentationIr(deck([end, cover]));
+    expect(repaired.slides[0]?.layout).toBe("cover");
+    expect(repaired.slides[repaired.slides.length - 1]?.layout).toBe("summary");
+  });
+
+  it("finishes a fractions lesson that forgot the cover, the ending, and the ledger", () => {
+    const compiled = compilePresentationIr({
+      brief: {
+        topic: "三年级数学认识分数",
+        audience: "小学三年级学生和家长",
+        goal: "讲清什么是分数、怎么比较大小",
+        slide_budget: 8,
+        lang: "zh-CN",
+        must_keep: ["1/2 大于 1/4", "分母相同看分子"],
+      },
+      slides: [
+        {
+          id: "1",
+          layout: "statement",
+          title: "今天认识分数并且学会比较大小",
+          blocks: [{ type: "bullets", items: ["把一个整体平均分成 4 份", "1/2 大于 1/4"] }],
+        },
+        {
+          id: "2",
+          layout: "statement",
+          title: "分母相同的时候看分子",
+          blocks: [{ type: "callout", text: "分母相同看分子" }],
+        },
+      ],
+    });
+    const text = JSON.stringify(compiled.slides);
+    expect(compiled.slides[0]?.layout).toBe("cover");
+    expect(compiled.slides[compiled.slides.length - 1]?.layout).toBe("summary");
+    expect(text).toContain("1/2 大于 1/4");
+    expect(text).toContain("分母相同看分子");
+    expect(text).toContain("4 份");
   });
 });
