@@ -36,6 +36,7 @@ const APPLICATION_TOOLS = [
   // back through this tool (keep in lockstep with the bridge list).
   "read_workspace_file",
   "write_document",
+  "write_presentation",
 ] as const;
 const MAX_BODY_BYTES = 1024 * 1024;
 const MAX_CALLS_PER_TURN = 1000;

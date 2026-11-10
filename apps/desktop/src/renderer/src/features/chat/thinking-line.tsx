@@ -25,6 +25,8 @@ export function ThinkingLine(props: {
   avatar: AvatarConfig;
   /** Word or PDF is on this turn, so the wait is the file being read. */
   readingFile?: boolean;
+  /** This turn is making a PowerPoint. */
+  makingPresentation?: boolean;
 }): JSX.Element {
   useLanguage();
   const startedAt = useRef<number>(Date.now());
@@ -68,6 +70,7 @@ export function ThinkingLine(props: {
     elapsedMs,
     hasText: false,
     ...(props.readingFile ? { readingFile: true } : {}),
+    ...(props.makingPresentation ? { makingPresentation: true } : {}),
   });
 
   return (
