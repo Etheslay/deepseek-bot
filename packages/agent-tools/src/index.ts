@@ -97,6 +97,17 @@ export {
   type WrittenDocument,
 } from "./document-tools.js";
 export {
+  bindWritePresentationTool,
+  MAX_BULLET_CHARS,
+  MAX_PRESENTATION_SLIDES,
+  MAX_SLIDE_BULLETS,
+  MAX_SLIDE_TITLE,
+  WritePresentationInputSchema,
+  type PresentationSlideInput,
+  type PresentationWriter,
+  type WrittenPresentation,
+} from "./presentation-tools.js";
+export {
   bindWorkspaceFileTool,
   WorkspaceFileInputSchema,
   WorkspaceFilePathSchema,

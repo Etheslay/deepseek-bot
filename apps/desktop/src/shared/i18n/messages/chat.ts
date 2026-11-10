@@ -41,6 +41,7 @@ export const chatMessages = {
   "chat.thinkingBusyWith": { zh: "正在处理「{0}」", en: "Working on “{0}”…" },
   "chat.thinkPreparing": { zh: "正在准备", en: "Getting ready" },
   "chat.thinkReadingFile": { zh: "正在读取文件", en: "Reading the file" },
+  "chat.thinkMakingPresentation": { zh: "制作演示文稿", en: "Making the presentation" },
   "chat.thinkReasoning": { zh: "正在深度思考", en: "Thinking it through" },
   "chat.thinkTool": { zh: "正在调用 {0}", en: "Calling {0}" },
   "chat.toolRequest": { zh: "工具请求", en: "Tool request" },

@@ -33,6 +33,8 @@ export type ThinkingStatusInput = {
   hasText: boolean;
   /** This turn is waiting on a Word/PDF body the Host is extracting. */
   readingFile?: boolean;
+  /** The user asked for a deck, or write_presentation is the turn's tool. */
+  makingPresentation?: boolean;
 };
 
 /** Seconds become visible only once the wait is long enough to feel stuck. */
@@ -52,14 +54,21 @@ export function thinkingStatus(input: ThinkingStatusInput): ThinkingStatus | nul
   }
   const hint =
     input.elapsedMs >= ELAPSED_HINT_AFTER_MS ? formatElapsed(input.elapsedMs) : null;
+  const presentation =
+    input.makingPresentation === true || input.toolName === "write_presentation";
   const namedTool =
-    input.stage === "tool" && input.toolName !== undefined && input.toolName.length > 0;
+    input.stage === "tool" &&
+    input.toolName !== undefined &&
+    input.toolName.length > 0 &&
+    input.toolName !== "write_presentation";
   const text = namedTool
     ? t("chat.thinkTool", [input.toolName ?? ""])
-    : input.readingFile
-      ? t("chat.thinkReadingFile")
-      : input.stage === "preparing"
-        ? t("chat.thinkPreparing")
-        : t("chat.thinkReasoning");
+    : presentation
+      ? t("chat.thinkMakingPresentation")
+      : input.readingFile
+        ? t("chat.thinkReadingFile")
+        : input.stage === "preparing"
+          ? t("chat.thinkPreparing")
+          : t("chat.thinkReasoning");
   return { text, hint };
 }

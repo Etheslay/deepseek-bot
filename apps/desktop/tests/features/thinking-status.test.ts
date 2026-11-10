@@ -27,6 +27,19 @@ describe("thinkingStatus", () => {
     ).toBe("正在读取文件");
   });
 
+  it("says it is making a presentation for that turn or that tool", () => {
+    expect(
+      thinkingStatus({
+        stage: "preparing",
+        elapsedMs: 0,
+        hasText: false,
+        makingPresentation: true,
+      })?.text,
+    ).toBe("制作演示文稿");
+    expect(at("thinking", 0, "write_presentation")?.text).toBe("制作演示文稿");
+    expect(at("tool", 0, "write_presentation")?.text).toBe("制作演示文稿");
+  });
+
   it("names the tool while a real tool/call is in flight", () => {
     expect(at("tool", 0, "write")?.text).toBe("正在调用 write");
   });
