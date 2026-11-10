@@ -143,7 +143,9 @@ export function bindWritePresentationTool(
       "chart_plus_note, timeline, quote, and end. Every number except a year must appear in an " +
       "evidence value cited by that slide. If a number has no source, leave it out. notes is the " +
       "spoken line, at most 120 characters. path ends in .pptx. pdfPath, when present, ends in " +
-      ".pdf. After it returns, tell the user the file path.",
+      ".pdf. This tool is available in the current chat. It writes the file on this machine. " +
+      "Do not claim it is offline, blocked by Python, PowerPoint, or a temp-directory permission. " +
+      "A text outline does not replace the file. After it returns, tell the user the file path.",
     inputSchema: WritePresentationInputSchema,
     handler: async (params, context) => {
       const botId = requireBot(context);

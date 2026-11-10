@@ -286,6 +286,28 @@ describe("chat runtime", () => {
       queued: false,
     });
   });
+  it("tells a deck request to call write_presentation instead of claiming the tools are down", async () => {
+    const records = mkdtempSync(join(tmpdir(), "dsb-deck-rule-"));
+    roots.push(records);
+    const { host, botId } = await hostWithBot("ok", async () => "sk-test-only", {
+      FAKE_RECORD_DIR: records,
+    });
+    await host.handleMethod("chat.send", {
+      botId,
+      text: "给小学三年级做一份 5 页的数学课 PPT",
+    });
+    const log = readFileSync(join(records, "fake-harness.jsonl"), "utf8");
+    expect(log).toContain("【必须交付演示文稿】");
+    expect(log).toContain("write_presentation");
+    expect(log).toContain("不要说工具通道断了");
+    const plain = mkdtempSync(join(tmpdir(), "dsb-deck-plain-"));
+    roots.push(plain);
+    const second = await hostWithBot("ok", async () => "sk-test-only", {
+      FAKE_RECORD_DIR: plain,
+    });
+    await second.host.handleMethod("chat.send", { botId: second.botId, text: "你好" });
+    expect(readFileSync(join(plain, "fake-harness.jsonl"), "utf8")).not.toContain("必须交付演示文稿");
+  });
   it("sends a turn through the harness and persists both sides", async () => {
     const { host, botId } = await hostWithBot();
     const sent = (await host.handleMethod("chat.send", {
