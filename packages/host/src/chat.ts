@@ -132,6 +132,24 @@ function asidePrompt(lines: readonly string[]): string {
   ].join("\n");
 }
 
+/**
+ * A deck request has to leave as a file. The model otherwise invents a broken
+ * tool channel and answers with an outline. write_presentation is already
+ * bound on this turn.
+ */
+function deckDeliveryRule(text: string): string {
+  if (!/pptx|幻灯片|演示文稿|课件|(?:^|[^a-z])ppt(?:[^a-z]|$)/i.test(text)) return "";
+  return [
+    "【必须交付演示文稿】",
+    "用户要的是 .pptx 文件，不是聊天里的提纲。",
+    "write_presentation 已经接在这一轮。它在本机写文件，不启动 Python，也不打开 PowerPoint。",
+    "这一轮调用 write_presentation，把内容写进 .pptx。",
+    "不要说工具通道断了、进程起不来、临时目录没权限，或等恢复再做。",
+    "不要用文字稿、互动页或导出按钮代替这个文件。",
+    "工具返回后，把文件路径告诉用户。",
+  ].join("\n");
+}
+
 /** Concatenated text blocks of one assistant message (harness-attempt shape). */
 function assistantTextOf(event: SessionEventEnvelope): string | null {
   const content = (event.data as { message?: { content?: unknown } } | undefined)?.message
@@ -606,6 +624,8 @@ export class ChatManager {
     if (!primitive && summary !== undefined && summary.length > 0) {
       parts.push(`【更早对话摘要】\n${summary}`);
     }
+    const deckRule = deckDeliveryRule([text, ...history.map((entry) => entry.text)].join("\n"));
+    if (deckRule.length > 0) parts.push(deckRule);
     if (primitive) {
       parts.push("【原始人模式】只回答下面这一步：不铺垫、不复述上下文、不做总结；直接给最短可用的答案。");
     } else if (history.length > 0) {
