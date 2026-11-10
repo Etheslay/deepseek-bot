@@ -35,6 +35,7 @@ const APPLICATION_TOOLS = [
   // D26: chat attachments land in the bot workspace; the bot reads them
   // back through this tool (keep in lockstep with the bridge list).
   "read_workspace_file",
+  "write_document",
 ] as const;
 const MAX_BODY_BYTES = 1024 * 1024;
 const MAX_CALLS_PER_TURN = 1000;

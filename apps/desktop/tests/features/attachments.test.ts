@@ -7,6 +7,11 @@ import {
   bytesToBase64,
   classifyAttachment,
   composeAttachmentBlocks,
+  DOCUMENT_ACK,
+  documentOnlyReplyInstruction,
+  formatFileCardSize,
+  isAcceptedChatFile,
+  splitDocumentAck,
   composeAttachmentPrompt,
   encodeBase64,
   formatAttachmentSize,
@@ -20,6 +25,11 @@ describe("chat attachments", () => {
     expect(classifyAttachment("text/plain", "notes.txt")).toBe("text");
     expect(classifyAttachment("application/octet-stream", "data.bin")).toBe("binary");
     expect(classifyAttachment("", "script.ts")).toBe("text");
+    expect(classifyAttachment("", "报告.pdf")).toBe("document");
+    expect(classifyAttachment("", "笔记.docx")).toBe("document");
+    expect(classifyAttachment("", "旧档.doc")).toBe("binary");
+    expect(isAcceptedChatFile("", "报告.pdf")).toBe(true);
+    expect(isAcceptedChatFile("", "旧档.doc")).toBe(false);
   });
 
   it("formats sizes in human units", () => {
@@ -76,10 +86,25 @@ describe("chat attachments", () => {
     expect(attachmentMediaType("", "blob.bin")).toBe("application/octet-stream");
   });
 
-  it("accept list covers text and images", () => {
+  it("accept list covers text, images, pdf and docx", () => {
     const accept = attachmentAccept();
     expect(accept).toContain(".md");
     expect(accept).toContain("image/*");
+    expect(accept).toContain(".pdf");
+    expect(accept).toContain(".docx");
+  });
+
+  it("formats the file card size like 30 kB", () => {
+    expect(formatFileCardSize(30 * 1024)).toBe("30 kB");
+  });
+
+  it("tells a document-only turn to acknowledge, then summarize", () => {
+    expect(documentOnlyReplyInstruction()).toContain(DOCUMENT_ACK);
+    expect(splitDocumentAck(`${DOCUMENT_ACK}\n\n这是一份实验报告。`)).toEqual({
+      ack: DOCUMENT_ACK,
+      summary: "这是一份实验报告。",
+    });
+    expect(splitDocumentAck("普通回复")).toBeNull();
   });
 
   it("composes an inline block with the workspace path for small text", () => {

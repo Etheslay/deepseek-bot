@@ -20,7 +20,12 @@ import { t, useLanguage } from "../../i18n.js";
 
 type TurnProgress = { stage: ChatTurnStage; toolName?: string };
 
-export function ThinkingLine(props: { botId: string; avatar: AvatarConfig }): JSX.Element {
+export function ThinkingLine(props: {
+  botId: string;
+  avatar: AvatarConfig;
+  /** Word or PDF is on this turn, so the wait is the file being read. */
+  readingFile?: boolean;
+}): JSX.Element {
   useLanguage();
   const startedAt = useRef<number>(Date.now());
   const [elapsedMs, setElapsedMs] = useState<number>(0);
@@ -58,7 +63,12 @@ export function ThinkingLine(props: { botId: string; avatar: AvatarConfig }): JS
     };
   }, [props.botId]);
 
-  const status = thinkingStatus({ ...progress, elapsedMs, hasText: false });
+  const status = thinkingStatus({
+    ...progress,
+    elapsedMs,
+    hasText: false,
+    ...(props.readingFile ? { readingFile: true } : {}),
+  });
 
   return (
     <span className="thinking-line">

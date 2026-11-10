@@ -345,7 +345,9 @@ export async function parseAndStoreAttachment(
  */
 export function collectAttachmentParsePaths(promptText: string): string[] {
   const paths: string[] = [];
-  const pattern = /attachments\/[A-Za-z0-9._-]+\.(?:pdf|docx)\b/gi;
+  // Filenames keep the user's spelling, including spaces and non-ASCII.
+  // The renderer always closes the path with 】, a space, or the end of the line.
+  const pattern = /attachments\/([^/\\【】\n]+?\.(?:pdf|docx))(?=】|\s|$)/gi;
   let match: RegExpExecArray | null;
   while ((match = pattern.exec(promptText)) !== null) {
     paths.push(match[0]);

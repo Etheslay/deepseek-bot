@@ -239,6 +239,11 @@ describe("attachment parse cache and chat injection (B4')", () => {
         "【附件 a.pdf · 1 KB · attachments/a.pdf】【附件 b.docx · 2 KB · attachments/b.docx】",
       ),
     ).toEqual(["attachments/a.pdf", "attachments/b.docx"]);
+    expect(
+      collectAttachmentParsePaths(
+        "【附件 实验报告.pdf · 30 kB · attachments/实验报告.pdf】【附件 my report.docx · 2 KB · attachments/my report.docx】",
+      ),
+    ).toEqual(["attachments/实验报告.pdf", "attachments/my report.docx"]);
     expect(blocks).toContain("附件正文已截断：原始 20000 字符");
     expect(blocks).toContain("read_workspace_file");
     // The body block's inline payload stays inside the 16 KiB budget: the

@@ -8648,6 +8648,147 @@ select:focus-visible {
   position: relative;
 }
 
+.composer-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+}
+
+.composer.has-files {
+  flex-direction: column;
+  align-items: stretch;
+  border-radius: 22px;
+  padding: 10px 10px 8px;
+}
+
+.composer-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 2px 4px 8px;
+}
+
+.file-card {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 360px;
+  min-width: 200px;
+  padding: 8px 10px;
+  border-radius: 14px;
+  background: #2c2c31;
+  color: #f4f4f6;
+  text-align: left;
+}
+
+.file-card-icon {
+  width: 36px;
+  height: 36px;
+  flex: none;
+}
+
+.file-card-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 2px;
+}
+
+.file-card-name {
+  font-size: 0.86rem;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.file-card-size,
+.file-card-flag {
+  font-size: 0.75rem;
+  line-height: 1.2;
+  color: #9b9ba3;
+}
+
+.file-card-remove {
+  border: none;
+  background: transparent;
+  color: #9b9ba3;
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0 2px;
+  margin-left: auto;
+}
+
+.file-card-remove:hover {
+  color: #ffffff;
+}
+
+[data-theme="light"] .file-card {
+  background: #f2f2f5;
+  color: #1b1b1f;
+}
+
+[data-theme="light"] .file-card-size,
+[data-theme="light"] .file-card-flag,
+[data-theme="light"] .file-card-remove {
+  color: #6d6d76;
+}
+
+button.file-card-open,
+.file-card-open {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.msg-row.user .msg-bubble.file-only {
+  background: transparent !important;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+}
+
+.msg-row.user .file-card {
+  background: #2a2a2e;
+}
+
+[data-theme="light"] .msg-row.user .file-card {
+  background: #ececf1;
+}
+
+.file-ack-line {
+  display: inline-block;
+  margin: 0 0 8px;
+  padding: 8px 14px;
+  border-radius: 16px;
+  background: var(--bubble);
+  color: var(--text);
+}
+
+.chat-file-drop {
+  position: absolute;
+  inset: 12px;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  border: 2px dashed var(--accent, #6ea8ff);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--bg, #0e0e12) 86%, transparent);
+  color: var(--text);
+  font-size: 0.95rem;
+  text-align: center;
+  pointer-events: none;
+}
+
 .chat-page::before {
   content: "";
   position: absolute;

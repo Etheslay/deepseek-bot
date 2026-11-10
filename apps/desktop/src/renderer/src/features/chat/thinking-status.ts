@@ -31,6 +31,8 @@ export type ThinkingStatusInput = {
   elapsedMs: number;
   /** First reply chunk arrived: the bubble switches to the real text. */
   hasText: boolean;
+  /** This turn is waiting on a Word/PDF body the Host is extracting. */
+  readingFile?: boolean;
 };
 
 /** Seconds become visible only once the wait is long enough to feel stuck. */
@@ -50,9 +52,12 @@ export function thinkingStatus(input: ThinkingStatusInput): ThinkingStatus | nul
   }
   const hint =
     input.elapsedMs >= ELAPSED_HINT_AFTER_MS ? formatElapsed(input.elapsedMs) : null;
-  const text =
-    input.stage === "tool" && input.toolName !== undefined && input.toolName.length > 0
-      ? t("chat.thinkTool", [input.toolName])
+  const namedTool =
+    input.stage === "tool" && input.toolName !== undefined && input.toolName.length > 0;
+  const text = namedTool
+    ? t("chat.thinkTool", [input.toolName ?? ""])
+    : input.readingFile
+      ? t("chat.thinkReadingFile")
       : input.stage === "preparing"
         ? t("chat.thinkPreparing")
         : t("chat.thinkReasoning");

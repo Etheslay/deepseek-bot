@@ -91,6 +91,12 @@ export {
   type BotMessageScheduleView,
 } from "./schedule-tools.js";
 export {
+  bindWriteDocumentTool,
+  WriteDocumentInputSchema,
+  type DocumentWriter,
+  type WrittenDocument,
+} from "./document-tools.js";
+export {
   bindWorkspaceFileTool,
   WorkspaceFileInputSchema,
   WorkspaceFilePathSchema,

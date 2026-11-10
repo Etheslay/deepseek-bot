@@ -22,6 +22,14 @@ export const shellMessages = {
   "shell.attachmentImportFailed": { zh: "附件没有写入工作区：{0}", en: "Attachment was not saved to the workspace: {0}" },
   "shell.attachmentNotModelReadable": { zh: "模型不可读", en: "Not readable by the model" },
   "shell.attachmentTooLarge": { zh: "{0} 超过 2 MB 上限", en: "{0} exceeds the 2 MB limit" },
+  "shell.attachmentTypeUnsupported": {
+    zh: "{0} 不能放进聊天。可以拖入 PDF、Word（.docx）、文本和图片",
+    en: "{0} cannot go in the chat. Drop a PDF, Word (.docx), text, or image file",
+  },
+  "shell.dropAttachment": {
+    zh: "松开后放到 {0} 的输入框",
+    en: "Release to add it to {0}'s message",
+  },
   "shell.attachmentUploadFailed": { zh: "附件上传失败：{0}（{1}），未发送", en: "Attachment upload failed: {0} ({1}); nothing was sent" },
   "shell.attachmentStoredPath": { zh: "已存工作区 {0}", en: "Stored in workspace {0}" },
   "shell.backToCurrentSession": { zh: "返回当前会话", en: "Back to current session" },

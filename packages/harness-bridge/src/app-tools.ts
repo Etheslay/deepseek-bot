@@ -25,6 +25,7 @@ export const APPLICATION_TOOL_NAMES = [
   // D26: chat attachments land in the bot workspace; the bot reads them
   // back through this tool (keep in lockstep with the Host list).
   "read_workspace_file",
+  "write_document",
 ] as const;
 
 // Allow ten minutes for human approval plus two minutes for the service call.

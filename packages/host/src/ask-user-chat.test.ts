@@ -61,7 +61,7 @@ describe("ask_user desktop answer return", () => {
       tools: Array<{ name: string }>;
     };
     expect(catalog.tools.map((tool) => tool.name)).not.toContain("ask_user");
-    expect(catalog.tools).toHaveLength(17); // chat schedules, learned skills, and read_workspace_file
+    expect(catalog.tools).toHaveLength(18); // schedules, skills, read_workspace_file, write_document
     expect(
       await (
         await request("/app-tools/call", {
