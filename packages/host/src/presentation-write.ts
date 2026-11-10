@@ -4,8 +4,9 @@
  * The package is a designed 16:9 deck: cover, section, bullets, split, quote,
  * metrics, table, and a column chart. Speaker notes stay off the slide.
  * PowerPoint and the pptx reader see the same text. Chinese stays in the XML
- * and names Microsoft YaHei. An optional PDF is the same deck rendered by the
- * Harness LibreOffice engine.
+ * and embeds that CJK face, plus a Latin face when one is installed. Slides can
+ * carry an icon, a png/jpeg, and a fade-in. An optional PDF is the same deck
+ * rendered by the Harness LibreOffice engine.
  */
 import { createHash, randomBytes } from "node:crypto";
 import fs from "node:fs";
@@ -23,9 +24,14 @@ import {
 import { getBot, getWorkspace, type OpenedDatabase } from "@deepseek-bot/storage";
 import { resolveInsideWorkspace } from "./artifacts.js";
 import { parseAndStoreAttachment } from "./attachment-parse.js";
+import { embeddedFaces, type EmbeddedFace } from "./presentation-font.js";
 import { convertOfficeToPdf } from "./office-pdf.js";
 
-const MAX_PRESENTATION_BYTES = 2 * 1024 * 1024;
+const MAX_PRESENTATION_BYTES = 8 * 1024 * 1024;
+const MAX_SLIDE_IMAGE_BYTES = 1_500_000;
+
+let latinFamily = "Calibri";
+let cjkFamily = "Microsoft YaHei";
 
 function invalid(message: string): EngineError {
   return new EngineError({ code: "INVALID_INPUT", message, retryable: false });
@@ -49,7 +55,7 @@ function run(text: string, size: number, bold: boolean, color: string): string {
   return (
     `<a:r><a:rPr lang="zh-CN" sz="${size}"${bold ? ` b="1"` : ""} dirty="0">` +
     `<a:solidFill><a:srgbClr val="${color}"/></a:solidFill>` +
-    `<a:latin typeface="Calibri"/><a:ea typeface="Microsoft YaHei"/>` +
+    `<a:latin typeface="${xmlEscape(latinFamily)}"/><a:ea typeface="${xmlEscape(cjkFamily)}"/>` +
     `</a:rPr><a:t>${xmlEscape(text)}</a:t></a:r>`
   );
 }
@@ -63,7 +69,7 @@ function paragraph(
 ): string {
   const before = options?.before ?? 0;
   const bullet = options?.bullet === true
-    ? `<a:buFont typeface="Arial"/><a:buClr><a:srgbClr val="${EMBER}"/></a:buClr><a:buChar char="•"/>`
+    ? `<a:buFont typeface="${xmlEscape(latinFamily)}"/><a:buClr><a:srgbClr val="${EMBER}"/></a:buClr><a:buChar char="•"/>`
     : `<a:buNone/>`;
   const margin = options?.bullet === true ? ` marL="285750" indent="-171450"` : "";
   return (
@@ -177,12 +183,86 @@ function chartXml(slide: PresentationSlideInput): string {
   );
 }
 
-function slideDocument(slide: PresentationSlideInput): { readonly xml: string; readonly chartXml?: string } {
+const ICON_PRESET: Record<string, string> = {
+  arrow: "rightArrow",
+  star: "star5",
+  alert: "triangle",
+  spark: "lightningBolt",
+  target: "donut",
+};
+
+function iconShape(id: number, kind: string, color: string): string {
+  const check = kind === "check";
+  const geom = check
+    ? `<a:custGeom><a:avLst/><a:gdLst/><a:ahLst/><a:cxnLst/><a:rect l="l" t="t" r="r" b="b"/>` +
+      `<a:pathLst><a:path w="100" h="100">` +
+      `<a:moveTo><a:pt x="16" y="52"/></a:moveTo><a:lnTo><a:pt x="40" y="78"/></a:lnTo>` +
+      `<a:lnTo><a:pt x="86" y="20"/></a:lnTo></a:path></a:pathLst></a:custGeom>`
+    : `<a:prstGeom prst="${ICON_PRESET[kind] ?? "ellipse"}"><a:avLst/></a:prstGeom>`;
+  const fill = check ? `<a:noFill/>` : `<a:solidFill><a:srgbClr val="${color}"/></a:solidFill>`;
+  const line = check
+    ? `<a:ln w="45000" cap="rnd"><a:solidFill><a:srgbClr val="${color}"/></a:solidFill></a:ln>`
+    : `<a:ln><a:noFill/></a:ln>`;
+  return (
+    `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="Icon"/>` +
+    `<p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr>` +
+    `<a:xfrm><a:off x="11220000" y="280000"/><a:ext cx="460000" cy="460000"/></a:xfrm>` +
+    `${geom}${fill}${line}</p:spPr>` +
+    `<p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:endParaRPr lang="zh-CN"/></a:p></p:txBody></p:sp>`
+  );
+}
+
+function pictureShape(id: number): string {
+  return (
+    `<p:pic><p:nvPicPr><p:cNvPr id="${id}" name="Picture"/>` +
+    `<p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr><p:nvPr/></p:nvPicPr>` +
+    `<p:blipFill><a:blip r:embed="rIdImage"/><a:stretch><a:fillRect/></a:stretch></p:blipFill>` +
+    `<p:spPr><a:xfrm><a:off x="9000000" y="3900000"/><a:ext cx="2500000" cy="2200000"/></a:xfrm>` +
+    `<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr></p:pic>`
+  );
+}
+
+function fadeTiming(shapeIds: readonly number[]): string {
+  if (shapeIds.length === 0) return "";
+  let next = 10;
+  const effects = shapeIds.map((shapeId) => {
+    const group = next++;
+    const effect = next++;
+    return (
+      `<p:par><p:cTn id="${group}" fill="hold"><p:stCondLst><p:cond delay="0"/></p:stCondLst>` +
+      `<p:childTnLst><p:animEffect transition="in" filter="fade"><p:cBhvr>` +
+      `<p:cTn id="${effect}" dur="450"/><p:tgtEl><p:spTgt spid="${shapeId}"/></p:tgtEl>` +
+      `</p:cBhvr></p:animEffect></p:childTnLst></p:cTn></p:par>`
+    );
+  }).join("");
+  return (
+    `<p:timing><p:tnLst><p:par><p:cTn id="1" dur="indefinite" restart="never" nodeType="tmRoot">` +
+    `<p:childTnLst><p:seq concurrent="1" nextAc="seek"><p:cTn id="2" dur="indefinite" nodeType="mainSeq">` +
+    `<p:childTnLst>${effects}</p:childTnLst></p:cTn>` +
+    `<p:prevCondLst><p:cond evt="onPrev" delay="0"><p:tgtEl><p:sldTgt/></p:tgtEl></p:cond></p:prevCondLst>` +
+    `<p:nextCondLst><p:cond evt="onNext" delay="0"><p:tgtEl><p:sldTgt/></p:tgtEl></p:cond></p:nextCondLst>` +
+    `</p:seq></p:childTnLst></p:cTn></p:par></p:tnLst></p:timing>`
+  );
+}
+
+interface SlideImage {
+  readonly ext: "png" | "jpeg";
+  readonly bytes: Uint8Array;
+}
+
+function slideDocument(
+  slide: PresentationSlideInput,
+  image: SlideImage | undefined,
+): { readonly xml: string; readonly chartXml?: string; readonly image?: SlideImage } {
   const layout = slide.layout ?? "bullets";
   const parts: string[] = [];
+  const motion: number[] = [];
   let nextId = 2;
   const add = (shape: string): void => {
     parts.push(shape);
+    if (shape.includes('name="Panel')) return;
+    const match = /<p:cNvPr id="(\d+)"/.exec(shape);
+    if (match?.[1] !== undefined) motion.push(Number(match[1]));
   };
   if (layout === "cover") {
     add(panel(nextId++, 0, 0, 150000, 6858000, EMBER));
@@ -262,10 +342,14 @@ function slideDocument(slide: PresentationSlideInput): { readonly xml: string; r
       640000,
       1760000,
       10800000,
-      4500000,
+      image === undefined ? 4500000 : 2000000,
       bullets.length > 0 ? bullets : `<a:p><a:endParaRPr lang="zh-CN" sz="1800"/></a:p>`,
     ));
   }
+  if (slide.icon !== undefined) {
+    add(iconShape(nextId++, slide.icon, EMBER));
+  }
+  if (image !== undefined) add(pictureShape(nextId++));
   const background = layout === "cover" ? INK : PAPER;
   return {
     xml:
@@ -278,8 +362,10 @@ function slideDocument(slide: PresentationSlideInput): { readonly xml: string; r
       `<p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/>` +
       `<a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>` +
       parts.join("") +
-      `</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>`,
+      `</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>` +
+      `${fadeTiming(motion)}</p:sld>`,
     ...(layout === "chart" ? { chartXml: chartXml(slide) } : {}),
+    ...(image !== undefined ? { image } : {}),
   };
 }
 
@@ -412,15 +498,79 @@ function normalizeSlides(slides: readonly PresentationSlideInput[]): Presentatio
       ...(categories.length > 0 ? { categories } : {}),
       ...(series.length > 0 ? { series } : {}),
       ...(notes !== undefined && notes.length > 0 ? { notes } : {}),
+      ...(slide.icon !== undefined ? { icon: slide.icon } : {}),
+      ...(slide.image !== undefined ? { image: slide.image } : {}),
     };
   });
 }
 
+function deckText(slides: readonly PresentationSlideInput[]): string {
+  return slides.map((slide) => [
+    slide.kicker, slide.title, slide.subtitle, ...(slide.bullets ?? []),
+    slide.left?.title, ...(slide.left?.bullets ?? []),
+    slide.right?.title, ...(slide.right?.bullets ?? []),
+    slide.quote, slide.attribution,
+    ...(slide.metrics ?? []).flatMap((metric) => [metric.value, metric.label]),
+    ...(slide.headers ?? []), ...(slide.rows ?? []).flat(),
+    ...(slide.categories ?? []), ...(slide.series ?? []).flatMap((item) => [item.name, ...item.values.map(String)]),
+    slide.notes,
+  ].filter((item) => item !== undefined).join("")).join("");
+}
+
+function embeddedFontXml(faces: readonly EmbeddedFace[], firstRel: number): {
+  readonly xml: string;
+  readonly rels: string;
+  readonly files: Record<string, Uint8Array>;
+} {
+  const files: Record<string, Uint8Array> = {};
+  const rels: string[] = [];
+  const entries: string[] = [];
+  let rel = firstRel;
+  let file = 1;
+  for (const face of faces) {
+    const regularId = `rId${rel++}`;
+    files[`ppt/fonts/font${file}.fntdata`] = face.regular;
+    rels.push(
+      `<Relationship Id="${regularId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/font" Target="fonts/font${file}.fntdata"/>`,
+    );
+    file += 1;
+    let boldId = "";
+    if (face.bold !== undefined) {
+      boldId = `rId${rel++}`;
+      files[`ppt/fonts/font${file}.fntdata`] = face.bold;
+      rels.push(
+        `<Relationship Id="${boldId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/font" Target="fonts/font${file}.fntdata"/>`,
+      );
+      file += 1;
+    }
+    entries.push(
+      `<p:embeddedFont><p:font typeface="${xmlEscape(face.family)}" pitchFamily="34" charset="0"/>` +
+      `<p:regular r:id="${regularId}"/>${boldId === "" ? "" : `<p:bold r:id="${boldId}"/>`}</p:embeddedFont>`,
+    );
+  }
+  return {
+    xml: entries.length === 0 ? "" : `<p:embeddedFontLst>${entries.join("")}</p:embeddedFontLst>`,
+    rels: rels.join(""),
+    files,
+  };
+}
+
 /** One 16:9 deck. Slide text round-trips through the pptx reader. */
-export function buildPptx(slides: readonly PresentationSlideInput[]): Uint8Array {
+export async function buildPptx(
+  slides: readonly PresentationSlideInput[],
+  images?: ReadonlyMap<number, SlideImage>,
+): Promise<Uint8Array> {
   const deck = normalizeSlides(slides);
+  const faces = await embeddedFaces(deckText(deck));
+  latinFamily = faces.latin?.family ?? "Calibri";
+  cjkFamily = faces.cjk?.family ?? "Microsoft YaHei";
   const files: Record<string, Uint8Array> = {
-    "ppt/theme/theme1.xml": strToU8(THEME_XML),
+    "ppt/theme/theme1.xml": strToU8(
+      THEME_XML
+        .replaceAll('typeface="Calibri Light"', `typeface="${xmlEscape(latinFamily)}"`)
+        .replaceAll('typeface="Calibri"', `typeface="${xmlEscape(latinFamily)}"`)
+        .replaceAll('<a:ea typeface=""/>', `<a:ea typeface="${xmlEscape(cjkFamily)}"/>`),
+    ),
     "ppt/slideLayouts/slideLayout1.xml": strToU8(LAYOUT_XML),
     "ppt/slideLayouts/_rels/slideLayout1.xml.rels": strToU8(
       `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
@@ -488,10 +638,14 @@ export function buildPptx(slides: readonly PresentationSlideInput[]): Uint8Array
       `<Override PartName="/ppt/notesMasters/notesMaster1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.notesMaster+xml"/>`,
     );
   }
+  let usesPng = false;
+  let usesJpeg = false;
   deck.forEach((slide, index) => {
     const number = index + 1;
     const rel = `rId${number + 1}`;
-    const built = slideDocument(slide);
+    const image = images?.get(index);
+    if (slide.image !== undefined && image === undefined) throw invalid("slide image was not loaded");
+    const built = slideDocument(slide, image);
     files[`ppt/slides/slide${number}.xml`] = strToU8(built.xml);
     const rels = [
       `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/>`,
@@ -503,6 +657,15 @@ export function buildPptx(slides: readonly PresentationSlideInput[]): Uint8Array
       );
       overrides.push(
         `<Override PartName="/ppt/charts/chart${number}.xml" ContentType="application/vnd.openxmlformats-officedocument.drawingml.chart+xml"/>`,
+      );
+    }
+    if (built.image !== undefined) {
+      const extension = built.image.ext === "png" ? "png" : "jpeg";
+      if (extension === "png") usesPng = true;
+      else usesJpeg = true;
+      files[`ppt/media/image${number}.${extension}`] = built.image.bytes;
+      rels.push(
+        `<Relationship Id="rIdImage" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/image${number}.${extension}"/>`,
       );
     }
     if (slide.notes !== undefined) {
@@ -545,16 +708,25 @@ export function buildPptx(slides: readonly PresentationSlideInput[]): Uint8Array
       `<Override PartName="/ppt/slides/slide${number}.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>`,
     );
   });
+  const fontFaces = [faces.latin, faces.cjk].filter((face): face is EmbeddedFace => face !== undefined);
+  let maxRel = 1;
+  for (const rel of presentationRels) {
+    const match = /Id="rId(\d+)"/.exec(rel);
+    if (match?.[1] !== undefined) maxRel = Math.max(maxRel, Number(match[1]));
+  }
+  const embedded = embeddedFontXml(fontFaces, maxRel + 1);
+  Object.assign(files, embedded.files);
+  if (embedded.rels.length > 0) presentationRels.push(embedded.rels);
   files["ppt/presentation.xml"] = strToU8(
     `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
       `<p:presentation xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" ` +
       `xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" ` +
-      `xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" saveSubsetFonts="1">` +
+      `xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" embedTrueTypeFonts="1" saveSubsetFonts="1">` +
       `<p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="rId1"/></p:sldMasterIdLst>` +
       (notesMasterId === undefined ? "" : `<p:notesMasterIdLst><p:notesMasterId r:id="${notesMasterId}"/></p:notesMasterIdLst>`) +
       `<p:sldIdLst>${slideIds.join("")}</p:sldIdLst>` +
       `<p:sldSz cx="12192000" cy="6858000" type="screen16x9"/>` +
-      `<p:notesSz cx="6858000" cy="9144000"/></p:presentation>`,
+      `<p:notesSz cx="6858000" cy="9144000"/>${embedded.xml}</p:presentation>`,
   );
   files["ppt/_rels/presentation.xml.rels"] = strToU8(
     `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
@@ -566,6 +738,9 @@ export function buildPptx(slides: readonly PresentationSlideInput[]): Uint8Array
       `<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">` +
       `<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>` +
       `<Default Extension="xml" ContentType="application/xml"/>` +
+      (fontFaces.length > 0 ? `<Default Extension="fntdata" ContentType="application/x-fontdata"/>` : "") +
+      (usesPng ? `<Default Extension="png" ContentType="image/png"/>` : "") +
+      (usesJpeg ? `<Default Extension="jpeg" ContentType="image/jpeg"/>` : "") +
       `${overrides.join("")}</Types>`,
   );
   files["_rels/.rels"] = strToU8(
@@ -577,6 +752,25 @@ export function buildPptx(slides: readonly PresentationSlideInput[]): Uint8Array
       `</Relationships>`,
   );
   return zipSync(files);
+}
+
+function readSlideImage(root: string, relativePath: string): SlideImage {
+  if (!/\.(png|jpe?g)$/i.test(relativePath)) throw invalid("slide image must be a png or jpeg");
+  const segments = relativePath.split(/[\\/]/);
+  if (
+    segments.some((segment) => segment.length === 0 || segment === "." || segment === "..") ||
+    segments.some((segment) => segment.startsWith("."))
+  ) {
+    throw invalid("slide image must stay inside the bot workspace");
+  }
+  const absolute = resolveInsideWorkspace(root, relativePath).absolute;
+  if (!fs.existsSync(absolute)) throw invalid("slide image was not found");
+  const bytes = fs.readFileSync(absolute);
+  if (bytes.byteLength > MAX_SLIDE_IMAGE_BYTES) throw invalid("slide image exceeds 1.5 MB");
+  const png = bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47;
+  const jpeg = bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+  if (!png && !jpeg) throw invalid("slide image must be a png or jpeg");
+  return { ext: png ? "png" : "jpeg", bytes };
 }
 
 function workspaceFile(root: string, relativePath: string, extension: "pptx" | "pdf"): string {
@@ -604,9 +798,14 @@ export async function writePresentationAt(
   if (pdfAbsolute !== undefined && pdfAbsolute === absolute) {
     throw invalid("pdf path must be a different file");
   }
-  const bytes = buildPptx(slides);
+  const images = new Map<number, SlideImage>();
+  for (const [index, slide] of slides.entries()) {
+    if (slide.image === undefined) continue;
+    images.set(index, readSlideImage(root, slide.image));
+  }
+  const bytes = await buildPptx(slides, images);
   if (bytes.byteLength > MAX_PRESENTATION_BYTES) {
-    throw invalid("written presentation exceeds 2 MB");
+    throw invalid("written presentation exceeds 8 MB");
   }
   fs.mkdirSync(path.dirname(absolute), { recursive: true });
   const temporary = `${absolute}.tmp-${randomBytes(4).toString("hex")}`;
