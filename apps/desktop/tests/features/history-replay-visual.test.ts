@@ -24,17 +24,13 @@ describe("history replay row", () => {
     document.body.innerHTML = "";
   });
 
-  it("stays quieter than a live row after the entrance animation fills", () => {
-    expect(ruleBody(".msg-row.replay")).toMatch(/opacity:\s*0\.7\b/);
-    expect(ruleBody(".msg-row.replay")).toMatch(/animation-name:\s*grokFadeUpReplay/);
+  it("keeps history text as bright as a live row", () => {
+    expect(css).not.toMatch(/\.msg-row\.replay\s*\{[^}]*opacity:\s*0\.7\b/);
+    expect(css).not.toMatch(/@keyframes grokFadeUpReplay/);
     expect(css).toMatch(/@keyframes grokFadeUp\s*\{[\s\S]*?to\s*\{[^}]*opacity:\s*1\b/);
-    expect(css).toMatch(/@keyframes grokFadeUpReplay\s*\{[\s\S]*?to\s*\{[^}]*opacity:\s*0\.7\b/);
-    expect(css).toMatch(
-      /@media \(prefers-reduced-motion:\s*reduce\)\s*\{[\s\S]*?\.msg-row\.replay\s*\{[^}]*animation:\s*none;[^}]*opacity:\s*0\.7\b/,
-    );
   });
 
-  it("computes a lower opacity on a replay row than on a live row", () => {
+  it("computes the same opacity on a replay row as on a live row", () => {
     const style = document.createElement("style");
     style.textContent = css;
     document.head.appendChild(style);
@@ -46,7 +42,7 @@ describe("history replay row", () => {
     document.body.append(live, replay);
     const liveOpacity = Number(getComputedStyle(live).opacity);
     const replayOpacity = Number(getComputedStyle(replay).opacity);
-    expect(replayOpacity).toBeLessThan(liveOpacity);
-    expect(replayOpacity).toBe(0.7);
+    expect(replayOpacity).toBe(liveOpacity);
+    expect(replayOpacity).toBe(1);
   });
 });
