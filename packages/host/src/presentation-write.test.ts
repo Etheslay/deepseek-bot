@@ -102,6 +102,12 @@ describe("write_presentation bytes", () => {
     const presentation = new TextDecoder().decode(entries["ppt/presentation.xml"]);
     expect(extractPptxBody(readFileSync(join(root, written.path))).text).toBe("带图\n一行");
     expect(slide).toContain('filter="fade"');
+    expect(slide).toContain('filter="wipe(up)"');
+    expect(slide).toContain('nodeType="clickEffect"');
+    expect(slide).toContain('presetClass="entr"');
+    expect(slide).toContain("<p:transition");
+    expect(slide).toContain("<p:fade/>");
+    expect(slide).toContain("style.visibility");
     expect(slide).toContain('prst="star5"');
     expect(slide).toContain('r:embed="rIdImage"');
     expect(entries["ppt/media/image1.png"]).toBeDefined();
@@ -115,6 +121,48 @@ describe("write_presentation bytes", () => {
     await expect(writePresentationAt(root, "attachments/坏.pptx", [
       { title: "坏", image: "../dot.png" },
     ])).rejects.toThrow(/workspace|image/i);
+  });
+
+  it("fades the title in with the slide and reveals each step on a click", async () => {
+    const cover = new TextDecoder().decode(unzipSync(await buildPptx([
+      { layout: "cover", title: "开场" },
+    ]))["ppt/slides/slide1.xml"]);
+    expect(cover).toContain('nodeType="withEffect"');
+    expect(cover).not.toContain("clickEffect");
+    expect(cover).toContain("<p:fade/>");
+    const steps = new TextDecoder().decode(unzipSync(await buildPptx([
+      { layout: "steps", title: "三步", bullets: ["开工", "验收", "交付"] },
+    ]))["ppt/slides/slide1.xml"]);
+    expect(steps.match(/nodeType="clickEffect"/g)?.length).toBe(3);
+    const split = new TextDecoder().decode(unzipSync(await buildPptx([
+      {
+        layout: "split",
+        title: "对照",
+        left: { title: "以前", bullets: ["手工"] },
+        right: { title: "现在", bullets: ["自动"] },
+      },
+    ]))["ppt/slides/slide1.xml"]);
+    expect(split).toContain('filter="wipe(right)"');
+    expect(split).toContain('filter="wipe(left)"');
+  });
+
+  it("adds the same fade and click builds to a pptxgenjs script", async () => {
+    const root = mkdtempSync(join(tmpdir(), "ppt-script-motion-"));
+    roots.push(root);
+    const written = await writePresentationAt(
+      root,
+      "attachments/脚本.pptx",
+      [],
+      undefined,
+      undefined,
+      "const slide = pres.addSlide(); slide.addText('封面', { x: 0.6, y: 1, w: 10, h: 1 }); slide.addText('下一句', { x: 0.6, y: 3, w: 10, h: 1 });",
+    );
+    const slide = new TextDecoder().decode(unzipSync(readFileSync(join(root, written.path)))["ppt/slides/slide1.xml"]);
+    expect(slide).toContain('filter="fade"');
+    expect(slide).toContain('filter="wipe(up)"');
+    expect(slide).toContain('nodeType="clickEffect"');
+    expect(slide).toContain("<p:fade/>");
+    expect(extractPptxBody(readFileSync(join(root, written.path))).text).toContain("封面");
   });
 
   it("renders a table, chart, and figures into a PDF", async () => {
