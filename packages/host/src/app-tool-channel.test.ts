@@ -98,6 +98,7 @@ describe("authenticated chat application tool channel", () => {
       "create_group",
       "dispatch_task",
       "edit_document",
+      "find_github_skill",
       "get_run",
       "get_run_events",
       "learn_skill",

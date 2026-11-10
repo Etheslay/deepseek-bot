@@ -4592,7 +4592,9 @@ function BotsPlaceholder({
                       : t("chat.thinkMakingDocument")
                     : tool.toolName === "write_presentation"
                       ? t("chat.thinkMakingPresentation")
-                      : tool.toolName}
+                      : tool.toolName === "find_github_skill"
+                        ? t("chat.thinkFindingSkill")
+                        : tool.toolName}
                 </span>
                 {tool.summary && <span className="tool-summary">{tool.summary}</span>}
               </div>

@@ -37,6 +37,7 @@ const APPLICATION_TOOLS = [
   "read_workspace_file",
   "write_document",
   "edit_document",
+  "find_github_skill",
   "write_presentation",
 ] as const;
 const MAX_BODY_BYTES = 1024 * 1024;

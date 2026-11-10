@@ -22,6 +22,7 @@ const names = [
   "read_workspace_file",
   "write_document",
   "edit_document",
+  "find_github_skill",
   "write_presentation",
 ];
 interface Definition {

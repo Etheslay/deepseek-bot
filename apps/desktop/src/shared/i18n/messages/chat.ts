@@ -43,6 +43,7 @@ export const chatMessages = {
   "chat.thinkReadingFile": { zh: "正在读取文件", en: "Reading the file" },
   "chat.thinkMakingDocument": { zh: "制作文档", en: "Writing the document" },
   "chat.thinkConvertingPdf": { zh: "转换成 PDF", en: "Converting to PDF" },
+  "chat.thinkFindingSkill": { zh: "正在查找技能", en: "Finding a skill" },
   "chat.thinkMakingPresentation": { zh: "制作演示文稿", en: "Making the presentation" },
   "chat.thinkReasoning": { zh: "正在深度思考", en: "Thinking it through" },
   "chat.thinkTool": { zh: "正在调用 {0}", en: "Calling {0}" },

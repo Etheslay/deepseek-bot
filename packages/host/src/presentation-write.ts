@@ -1,8 +1,9 @@
 /**
  * Create a workspace .pptx from titled slides.
  *
- * The package is a designed 16:9 deck: cover, section, bullets, split, quote,
- * metrics, table, and a column chart. Speaker notes stay off the slide.
+ * The package is a designed 16:9 deck. One palette covers the file. Cover,
+ * section, and summary slides are dark; the middle stays light. Layouts include
+ * agenda, cards, steps, split, metrics, table, chart, quote, and bullets.
  * PowerPoint and the pptx reader see the same text. Chinese stays in the XML
  * and embeds that CJK face, plus a Latin face when one is installed. Slides can
  * carry an icon, a png/jpeg, and a fade-in. An optional PDF is the same deck
@@ -18,6 +19,7 @@ import {
   MAX_PRESENTATION_SLIDES,
   MAX_SLIDE_BULLETS,
   MAX_SLIDE_TITLE,
+  PRESENTATION_PALETTES,
   type PresentationSlideInput,
   type WrittenPresentation,
 } from "@deepseek-bot/agent-tools";
@@ -25,6 +27,7 @@ import { getBot, getWorkspace, type OpenedDatabase } from "@deepseek-bot/storage
 import { resolveInsideWorkspace } from "./artifacts.js";
 import { parseAndStoreAttachment } from "./attachment-parse.js";
 import { embeddedFaces, type EmbeddedFace } from "./presentation-font.js";
+import { renderPptxScript } from "./presentation-script.js";
 import { convertOfficeToPdf } from "./office-pdf.js";
 
 const MAX_PRESENTATION_BYTES = 8 * 1024 * 1024;
@@ -44,12 +47,32 @@ function xmlEscape(value: string): string {
     .replaceAll(">", "&gt;");
 }
 
-const INK = "1C1917";
-const PAPER = "F7F3EC";
-const EMBER = "C2410C";
-const CREAM = "FFFBF5";
-const MUTED = "6F675E";
-const CARD = "FFFBF7";
+interface DeckTone {
+  readonly ink: string;
+  readonly paper: string;
+  readonly accent: string;
+  readonly card: string;
+  readonly cream: string;
+  readonly muted: string;
+  readonly mist: string;
+}
+
+const PALETTES = {
+  ink: { ink: "1C1917", paper: "F7F7F5", accent: "C2410C", card: "F3F1EC", cream: "FFFBF5", muted: "5C564E", mist: "D6D0C6" },
+  harbor: { ink: "0E3A4D", paper: "F4F7F8", accent: "1F6F8B", card: "E6EEF2", cream: "F7FBFC", muted: "4E6670", mist: "C5D4DC" },
+  grove: { ink: "1B3A2F", paper: "F4F7F4", accent: "3E7A5A", card: "E5EFE8", cream: "F8FBF8", muted: "4E6356", mist: "C9D9CE" },
+  clay: { ink: "3E2A24", paper: "F8F4F0", accent: "C4654A", card: "F1E6DE", cream: "FBF8F5", muted: "6A5348", mist: "E4D2C6" },
+  dusk: { ink: "241C38", paper: "F6F5F8", accent: "7A5EA7", card: "E9E4F0", cream: "F8F7FB", muted: "5C5468", mist: "D5D0DE" },
+  tide: { ink: "12343A", paper: "F3F7F7", accent: "0E8A86", card: "E3F0EF", cream: "F7FBFA", muted: "4A6564", mist: "C5DDDB" },
+};
+
+let tone: DeckTone = PALETTES.ink;
+
+function titlePt(title: string, preferred: number): number {
+  if (title.length > 24) return Math.min(preferred, 2800);
+  if (title.length > 16) return Math.min(preferred, 3200);
+  return preferred;
+}
 
 function run(text: string, size: number, bold: boolean, color: string): string {
   return (
@@ -69,7 +92,7 @@ function paragraph(
 ): string {
   const before = options?.before ?? 0;
   const bullet = options?.bullet === true
-    ? `<a:buFont typeface="${xmlEscape(latinFamily)}"/><a:buClr><a:srgbClr val="${EMBER}"/></a:buClr><a:buChar char="•"/>`
+    ? `<a:buFont typeface="${xmlEscape(latinFamily)}"/><a:buClr><a:srgbClr val="${tone.accent}"/></a:buClr><a:buChar char="•"/>`
     : `<a:buNone/>`;
   const margin = options?.bullet === true ? ` marL="285750" indent="-171450"` : "";
   return (
@@ -126,10 +149,10 @@ function cell(text: string, fill: string, color: string, bold: boolean): string 
 function tableFrame(id: number, headers: readonly string[], rows: readonly (readonly string[])[]): string {
   const width = Math.floor(10800000 / headers.length);
   const grid = headers.map(() => `<a:gridCol w="${width}"/>`).join("");
-  const headerRow = `<a:tr h="460000">${headers.map((header) => cell(header, INK, CREAM, true)).join("")}</a:tr>`;
+  const headerRow = `<a:tr h="460000">${headers.map((header) => cell(header, tone.ink, tone.cream, true)).join("")}</a:tr>`;
   const body = rows.map((row, index) => {
-    const fill = index % 2 === 0 ? CARD : PAPER;
-    return `<a:tr h="420000">${row.map((value) => cell(value, fill, INK, false)).join("")}</a:tr>`;
+    const fill = index % 2 === 0 ? tone.card : tone.paper;
+    return `<a:tr h="420000">${row.map((value) => cell(value, fill, tone.ink, false)).join("")}</a:tr>`;
   }).join("");
   return (
     `<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="${id}" name="Table"/>` +
@@ -159,11 +182,13 @@ function chartXml(slide: PresentationSlideInput): string {
   const cats = categories.map((item, index) => `<c:pt idx="${index}"><c:v>${xmlEscape(item)}</c:v></c:pt>`).join("");
   const bars = series.map((item, index) => {
     const points = item.values.map((value, point) => `<c:pt idx="${point}"><c:v>${value}</c:v></c:pt>`).join("");
-    const color = index === 0 ? EMBER : INK;
+    const color = index === 0 ? tone.accent : tone.ink;
     return (
       `<c:ser><c:idx val="${index}"/><c:order val="${index}"/>` +
       `<c:tx><c:v>${xmlEscape(item.name)}</c:v></c:tx>` +
       `<c:spPr><a:solidFill><a:srgbClr val="${color}"/></a:solidFill></c:spPr>` +
+      `<c:dLbls><c:showLegendKey val="0"/><c:showVal val="1"/><c:showCatName val="0"/>` +
+      `<c:showSerName val="0"/><c:showPercent val="0"/><c:showBubbleSize val="0"/></c:dLbls>` +
       `<c:cat><c:strLit><c:ptCount val="${categories.length}"/>${cats}</c:strLit></c:cat>` +
       `<c:val><c:numLit><c:formatCode>General</c:formatCode><c:ptCount val="${item.values.length}"/>${points}</c:numLit></c:val>` +
       `</c:ser>`
@@ -179,7 +204,8 @@ function chartXml(slide: PresentationSlideInput): string {
     `<c:axPos val="b"/><c:crossAx val="2"/></c:catAx>` +
     `<c:valAx><c:axId val="2"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/>` +
     `<c:axPos val="l"/><c:crossAx val="1"/></c:valAx></c:plotArea>` +
-    `<c:legend><c:legendPos val="b"/></c:legend><c:plotVisOnly val="1"/></c:chart></c:chartSpace>`
+    `<c:legend><c:legendPos val="b"/></c:legend>` +
+    `<c:plotVisOnly val="1"/></c:chart></c:chartSpace>`
   );
 }
 
@@ -191,7 +217,29 @@ const ICON_PRESET: Record<string, string> = {
   target: "donut",
 };
 
-function iconShape(id: number, kind: string, color: string): string {
+function disc(id: number, x: number, y: number, size: number, color: string): string {
+  return (
+    `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="Disc"/>` +
+    `<p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr>` +
+    `<a:xfrm><a:off x="${x}" y="${y}"/><a:ext cx="${size}" cy="${size}"/></a:xfrm>` +
+    `<a:prstGeom prst="ellipse"><a:avLst/></a:prstGeom>` +
+    `<a:solidFill><a:srgbClr val="${color}"/></a:solidFill><a:ln><a:noFill/></a:ln></p:spPr>` +
+    `<p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:endParaRPr lang="zh-CN"/></a:p></p:txBody></p:sp>`
+  );
+}
+
+function roundPanel(id: number, x: number, y: number, cx: number, cy: number, color: string): string {
+  return (
+    `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="Card ${id}"/>` +
+    `<p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr>` +
+    `<a:xfrm><a:off x="${x}" y="${y}"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm>` +
+    `<a:prstGeom prst="roundRect"><a:avLst><a:gd name="adj" fmla="val 8000"/></a:avLst></a:prstGeom>` +
+    `<a:solidFill><a:srgbClr val="${color}"/></a:solidFill><a:ln><a:noFill/></a:ln></p:spPr>` +
+    `<p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:endParaRPr lang="zh-CN"/></a:p></p:txBody></p:sp>`
+  );
+}
+
+function iconShape(id: number, kind: string, color: string, x: number, y: number, size: number): string {
   const check = kind === "check";
   const geom = check
     ? `<a:custGeom><a:avLst/><a:gdLst/><a:ahLst/><a:cxnLst/><a:rect l="l" t="t" r="r" b="b"/>` +
@@ -206,7 +254,8 @@ function iconShape(id: number, kind: string, color: string): string {
   return (
     `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="Icon"/>` +
     `<p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr>` +
-    `<a:xfrm><a:off x="11220000" y="280000"/><a:ext cx="460000" cy="460000"/></a:xfrm>` +
+    `<a:xfrm><a:off x="${x + Math.round(size * 0.24)}" y="${y + Math.round(size * 0.24)}"/>` +
+    `<a:ext cx="${Math.round(size * 0.52)}" cy="${Math.round(size * 0.52)}"/></a:xfrm>` +
     `${geom}${fill}${line}</p:spPr>` +
     `<p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:endParaRPr lang="zh-CN"/></a:p></p:txBody></p:sp>`
   );
@@ -264,51 +313,103 @@ function slideDocument(
     const match = /<p:cNvPr id="(\d+)"/.exec(shape);
     if (match?.[1] !== undefined) motion.push(Number(match[1]));
   };
-  if (layout === "cover") {
-    add(panel(nextId++, 0, 0, 150000, 6858000, EMBER));
+  const badge = (kind: string, x: number, y: number, size: number): void => {
+    add(disc(nextId++, x, y, size, tone.accent));
+    add(iconShape(nextId++, kind, tone.cream, x, y, size));
+  };
+  const dark = layout === "cover" || layout === "section" || layout === "summary";
+  if (layout === "cover" || layout === "section") {
     const lines = [
-      slide.kicker === undefined ? "" : paragraph(slide.kicker, 1400, true, EMBER, { before: 0 }),
-      paragraph(slide.title, 4400, true, CREAM),
-      slide.subtitle === undefined ? "" : paragraph(slide.subtitle, 1800, false, "D6D0C6", { before: 800 }),
+      slide.kicker === undefined ? "" : paragraph(slide.kicker, 1400, true, tone.cream, { before: 0 }),
+      paragraph(slide.title, titlePt(slide.title, layout === "cover" ? 4000 : 3600), true, tone.cream),
+      slide.subtitle === undefined ? "" : paragraph(slide.subtitle, 1800, false, tone.mist, { before: 800 }),
     ].join("");
-    add(textBox(nextId++, "Title", 720000, 1860000, 10600000, 2800000, lines, "ctr"));
-  } else if (layout === "section") {
-    add(panel(nextId++, 0, 0, 420000, 6858000, EMBER));
+    add(textBox(nextId++, "Title", 720000, 2000000, 10400000, 2800000, lines));
+    if (slide.icon === undefined) add(disc(nextId++, 720000, 1500000, 220000, tone.accent));
+  } else if (layout === "summary") {
     const lines = [
-      slide.kicker === undefined ? "" : paragraph(slide.kicker, 1400, true, EMBER),
-      paragraph(slide.title, 4000, true, INK),
-      slide.subtitle === undefined ? "" : paragraph(slide.subtitle, 1800, false, MUTED, { before: 600 }),
+      paragraph(slide.title, titlePt(slide.title, 3600), true, tone.cream),
+      ...(slide.bullets ?? []).map((line) => paragraph(line, 2000, false, tone.cream, { bullet: true, before: 700 })),
     ].join("");
-    add(textBox(nextId++, "Title", 1100000, 2200000, 9800000, 2400000, lines, "ctr"));
+    add(textBox(nextId++, "Title", 900000, 1500000, 10000000, 4200000, lines));
+    if (slide.icon === undefined) add(disc(nextId++, 720000, 980000, 220000, tone.accent));
+  } else if (layout === "agenda") {
+    add(textBox(nextId++, "Title", 640000, 420000, 10800000, 900000, paragraph(slide.title, titlePt(slide.title, 3600), true, tone.ink)));
+    (slide.bullets ?? []).forEach((line, index) => {
+      const y = 1600000 + index * 780000;
+      add(disc(nextId++, 640000, y, 420000, tone.accent));
+      add(textBox(nextId++, `N${index + 1}`, 640000, y, 420000, 420000, paragraph(String(index + 1), 1600, true, tone.cream, { align: "ctr" }), "ctr"));
+      add(roundPanel(nextId++, 1220000, y, 10200000, 420000, tone.card));
+      add(textBox(nextId++, `Item ${index + 1}`, 1400000, y, 9800000, 420000, paragraph(line, 1800, false, tone.ink), "ctr"));
+    });
+  } else if (layout === "steps") {
+    const steps = slide.bullets ?? [];
+    add(textBox(nextId++, "Title", 640000, 420000, 10800000, 900000, paragraph(slide.title, titlePt(slide.title, 3600), true, tone.ink)));
+    const gap = 200000;
+    const span = 10900000;
+    const width = Math.floor((span - gap * (steps.length - 1)) / steps.length);
+    steps.forEach((line, index) => {
+      const x = 640000 + index * (width + gap);
+      add(roundPanel(nextId++, x, 1900000, width, 3600000, tone.card));
+      add(disc(nextId++, x + Math.floor((width - 520000) / 2), 2140000, 520000, tone.accent));
+      add(textBox(
+        nextId++,
+        `N${index + 1}`,
+        x + Math.floor((width - 520000) / 2),
+        2140000,
+        520000,
+        520000,
+        paragraph(String(index + 1), 1800, true, tone.cream, { align: "ctr" }),
+        "ctr",
+      ));
+      add(textBox(nextId++, `Step ${index + 1}`, x + 120000, 2900000, width - 240000, 1800000, paragraph(line, 1800, true, tone.ink, { align: "ctr" }), "ctr"));
+    });
+  } else if (layout === "cards") {
+    const cards = slide.cards ?? [];
+    add(textBox(nextId++, "Title", 640000, 420000, 10800000, 900000, paragraph(slide.title, titlePt(slide.title, 3600), true, tone.ink)));
+    const columns = cards.length === 4 ? 2 : cards.length;
+    const gap = 200000;
+    const span = 10900000;
+    const width = Math.floor((span - gap * (columns - 1)) / columns);
+    cards.forEach((card, index) => {
+      const column = index % columns;
+      const row = Math.floor(index / columns);
+      const x = 640000 + column * (width + gap);
+      const y = 1600000 + row * (cards.length === 4 ? 2300000 : 0);
+      const height = cards.length === 4 ? 2100000 : 2400000;
+      add(roundPanel(nextId++, x, y, width, height, tone.card));
+      const body = paragraph(card.title, 2000, true, tone.ink) +
+        (card.text === undefined ? "" : paragraph(card.text, 1500, false, tone.muted, { before: 400 }));
+      add(textBox(nextId++, `Card ${index + 1}`, x + 160000, y + 200000, width - 320000, height - 360000, body));
+    });
   } else if (layout === "quote") {
     const hero = slide.quote ?? slide.title;
     const lines = [
-      hero === slide.title ? "" : paragraph(slide.title, 1400, true, EMBER),
-      paragraph(hero, 3200, false, INK, { before: hero === slide.title ? 0 : 800 }),
-      slide.attribution === undefined ? "" : paragraph(slide.attribution, 1400, false, MUTED, { before: 1000 }),
+      hero === slide.title ? "" : paragraph(slide.title, 1400, true, tone.accent),
+      paragraph(hero, 3200, false, tone.ink, { before: hero === slide.title ? 0 : 800 }),
+      slide.attribution === undefined ? "" : paragraph(slide.attribution, 1400, false, tone.muted, { before: 1000 }),
     ].join("");
     add(textBox(nextId++, "Quote", 1100000, 1800000, 10000000, 3200000, lines, "ctr"));
   } else if (layout === "split") {
-    add(panel(nextId++, 0, 0, 12192000, 90000, EMBER));
-    add(panel(nextId++, 640000, 2100000, 5300000, 4000000, CARD));
-    add(panel(nextId++, 6240000, 2100000, 5300000, 4000000, CARD));
-    add(textBox(nextId++, "Title", 640000, 280000, 10800000, 900000, paragraph(slide.title, 2800, true, INK)));
+    add(roundPanel(nextId++, 640000, 1700000, 5300000, 4400000, tone.card));
+    add(roundPanel(nextId++, 6240000, 1700000, 5300000, 4400000, tone.card));
+    add(textBox(nextId++, "Title", 640000, 420000, 10800000, 900000, paragraph(slide.title, titlePt(slide.title, 3600), true, tone.ink)));
     const column = (side: PresentationSlideInput["left"]): string => {
-      const heading = side?.title === undefined ? "" : paragraph(side.title, 1800, true, INK);
-      const bullets = (side?.bullets ?? []).map((line) => paragraph(line, 1600, false, INK, { bullet: true, before: 400 })).join("");
+      const heading = side?.title === undefined ? "" : paragraph(side.title, 1800, true, tone.ink);
+      const bullets = (side?.bullets ?? []).map((line) => paragraph(line, 1600, false, tone.ink, { bullet: true, before: 400 })).join("");
       return `${heading}${bullets}`;
     };
-    add(textBox(nextId++, "Left", 820000, 2280000, 4940000, 3600000, column(slide.left)));
-    add(textBox(nextId++, "Right", 6420000, 2280000, 4940000, 3600000, column(slide.right)));
+    add(textBox(nextId++, "Left", 820000, 1900000, 4940000, 3900000, column(slide.left)));
+    add(textBox(nextId++, "Right", 6420000, 1900000, 4940000, 3900000, column(slide.right)));
   } else if (layout === "metrics") {
     const metrics = slide.metrics ?? [];
-    add(textBox(nextId++, "Title", 640000, 480000, 10800000, 900000, paragraph(slide.title, 3000, true, INK)));
+    add(textBox(nextId++, "Title", 640000, 420000, 10800000, 900000, paragraph(slide.title, titlePt(slide.title, 3600), true, tone.ink)));
     const gap = 180000;
     const span = 10800000;
     const cardWidth = Math.floor((span - gap * (metrics.length - 1)) / metrics.length);
     metrics.forEach((metric, index) => {
       const x = 640000 + index * (cardWidth + gap);
-      add(panel(nextId++, x, 1900000, cardWidth, 3200000, INK));
+      add(panel(nextId++, x, 1900000, cardWidth, 3200000, tone.ink));
       add(textBox(
         nextId++,
         `Metric ${index + 1}`,
@@ -316,26 +417,25 @@ function slideDocument(
         2300000,
         cardWidth - 240000,
         2400000,
-        paragraph(metric.value, 4000, true, CREAM, { align: "ctr" }) +
-          paragraph(metric.label, 1400, false, "D6D0C6", { align: "ctr", before: 600 }),
+        paragraph(metric.value, 4000, true, tone.cream, { align: "ctr" }) +
+          paragraph(metric.label, 1400, false, tone.mist, { align: "ctr", before: 600 }),
         "ctr",
       ));
     });
   } else if (layout === "table") {
-    add(textBox(nextId++, "Title", 640000, 360000, 10800000, 900000, paragraph(slide.title, 3000, true, INK)));
+    add(textBox(nextId++, "Title", 640000, 420000, 10800000, 900000, paragraph(slide.title, titlePt(slide.title, 3600), true, tone.ink)));
     add(tableFrame(nextId++, slide.headers ?? [], slide.rows ?? []));
   } else if (layout === "chart") {
-    add(textBox(nextId++, "Title", 640000, 280000, 10800000, 900000, paragraph(slide.title, 3000, true, INK)));
+    add(textBox(nextId++, "Title", 640000, 360000, 10800000, 800000, paragraph(slide.title, titlePt(slide.title, 3600), true, tone.ink)));
     add(chartFrame(nextId++));
   } else {
-    add(panel(nextId++, 0, 0, 12192000, 90000, EMBER));
     const heading = [
-      slide.kicker === undefined ? "" : paragraph(slide.kicker, 1200, true, EMBER),
-      paragraph(slide.title, 3000, true, INK),
-      slide.subtitle === undefined ? "" : paragraph(slide.subtitle, 1600, false, MUTED, { before: 200 }),
+      slide.kicker === undefined ? "" : paragraph(slide.kicker, 1400, true, tone.accent),
+      paragraph(slide.title, titlePt(slide.title, 3600), true, tone.ink),
+      slide.subtitle === undefined ? "" : paragraph(slide.subtitle, 1600, false, tone.muted, { before: 200 }),
     ].join("");
-    add(textBox(nextId++, "Title", 640000, 280000, 10800000, 1400000, heading));
-    const bullets = (slide.bullets ?? []).map((line) => paragraph(line, 1800, false, INK, { bullet: true, before: 500 })).join("");
+    add(textBox(nextId++, "Title", 640000, 420000, slide.icon === undefined ? 10800000 : 9800000, 1400000, heading));
+    const bullets = (slide.bullets ?? []).map((line) => paragraph(line, 1600, false, tone.ink, { bullet: true, before: 500 })).join("");
     add(textBox(
       nextId++,
       "Body",
@@ -346,11 +446,9 @@ function slideDocument(
       bullets.length > 0 ? bullets : `<a:p><a:endParaRPr lang="zh-CN" sz="1800"/></a:p>`,
     ));
   }
-  if (slide.icon !== undefined) {
-    add(iconShape(nextId++, slide.icon, EMBER));
-  }
-  if (image !== undefined) add(pictureShape(nextId++));
-  const background = layout === "cover" ? INK : PAPER;
+  if (slide.icon !== undefined) badge(slide.icon, 11020000, 380000, 560000);
+  if (image !== undefined && layout !== "cards" && layout !== "steps" && layout !== "agenda") add(pictureShape(nextId++));
+  const background = dark ? tone.ink : tone.paper;
   return {
     xml:
       `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
@@ -365,7 +463,7 @@ function slideDocument(
       `</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>` +
       `${fadeTiming(motion)}</p:sld>`,
     ...(layout === "chart" ? { chartXml: chartXml(slide) } : {}),
-    ...(image !== undefined ? { image } : {}),
+    ...(image !== undefined && layout !== "cards" && layout !== "steps" && layout !== "agenda" ? { image } : {}),
   };
 }
 
@@ -479,6 +577,20 @@ function normalizeSlides(slides: readonly PresentationSlideInput[]): Presentatio
     ) {
       throw invalid("chart series must match its categories");
     }
+    if (layout === "agenda" && (bullets.length < 2 || bullets.some((line) => line.length > 40))) {
+      throw invalid("agenda needs 2 to 6 short items");
+    }
+    if (layout === "steps" && (bullets.length < 3 || bullets.length > 4 || bullets.some((line) => line.length > 16))) {
+      throw invalid("steps needs 3 or 4 short labels");
+    }
+    if (layout === "summary" && bullets.length < 1) throw invalid("summary needs bullets");
+    const cards = (slide.cards ?? []).map((card) => ({
+      title: card.title.trim(),
+      ...(card.text !== undefined && card.text.trim().length > 0 ? { text: card.text.trim() } : {}),
+    }));
+    if (layout === "cards" && (cards.length < 2 || cards.length > 4)) {
+      throw invalid("cards layout needs 2 to 4 cards");
+    }
     const notes = slide.notes?.trim();
     return {
       layout,
@@ -497,6 +609,7 @@ function normalizeSlides(slides: readonly PresentationSlideInput[]): Presentatio
       ...(rows.length > 0 ? { rows } : {}),
       ...(categories.length > 0 ? { categories } : {}),
       ...(series.length > 0 ? { series } : {}),
+      ...(cards.length > 0 ? { cards } : {}),
       ...(notes !== undefined && notes.length > 0 ? { notes } : {}),
       ...(slide.icon !== undefined ? { icon: slide.icon } : {}),
       ...(slide.image !== undefined ? { image: slide.image } : {}),
@@ -513,6 +626,7 @@ function deckText(slides: readonly PresentationSlideInput[]): string {
     ...(slide.metrics ?? []).flatMap((metric) => [metric.value, metric.label]),
     ...(slide.headers ?? []), ...(slide.rows ?? []).flat(),
     ...(slide.categories ?? []), ...(slide.series ?? []).flatMap((item) => [item.name, ...item.values.map(String)]),
+    ...(slide.cards ?? []).flatMap((card) => [card.title, card.text]),
     slide.notes,
   ].filter((item) => item !== undefined).join("")).join("");
 }
@@ -559,8 +673,15 @@ function embeddedFontXml(faces: readonly EmbeddedFace[], firstRel: number): {
 export async function buildPptx(
   slides: readonly PresentationSlideInput[],
   images?: ReadonlyMap<number, SlideImage>,
+  palette?: (typeof PRESENTATION_PALETTES)[number],
 ): Promise<Uint8Array> {
   const deck = normalizeSlides(slides);
+  tone = palette === "harbor" ? PALETTES.harbor
+    : palette === "grove" ? PALETTES.grove
+      : palette === "clay" ? PALETTES.clay
+        : palette === "dusk" ? PALETTES.dusk
+          : palette === "tide" ? PALETTES.tide
+            : PALETTES.ink;
   const faces = await embeddedFaces(deckText(deck));
   latinFamily = faces.latin?.family ?? "Calibri";
   cjkFamily = faces.cjk?.family ?? "Microsoft YaHei";
@@ -678,7 +799,7 @@ export async function buildPptx(
           `<p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>` +
           `<p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/>` +
           `<a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>` +
-          textBox(2, "Notes", 400000, 400000, 6000000, 8000000, paragraph(slide.notes, 1400, false, INK)) +
+          textBox(2, "Notes", 400000, 400000, 6000000, 8000000, paragraph(slide.notes, 1400, false, tone.ink)) +
           `</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:notes>`,
       );
       files[`ppt/notesSlides/_rels/notesSlide${number}.xml.rels`] = strToU8(
@@ -792,18 +913,29 @@ export async function writePresentationAt(
   relativePath: string,
   slides: readonly PresentationSlideInput[],
   pdfPath?: string,
+  palette?: (typeof PRESENTATION_PALETTES)[number],
+  script?: string,
 ): Promise<WrittenPresentation> {
   const absolute = workspaceFile(root, relativePath, "pptx");
   const pdfAbsolute = pdfPath === undefined ? undefined : workspaceFile(root, pdfPath, "pdf");
   if (pdfAbsolute !== undefined && pdfAbsolute === absolute) {
     throw invalid("pdf path must be a different file");
   }
+  const skillScript = script?.trim();
   const images = new Map<number, SlideImage>();
-  for (const [index, slide] of slides.entries()) {
-    if (slide.image === undefined) continue;
-    images.set(index, readSlideImage(root, slide.image));
+  let bytes: Uint8Array;
+  let slideCount: number;
+  if (skillScript !== undefined && skillScript.length >= 40) {
+    bytes = await renderPptxScript(skillScript);
+    slideCount = Math.max(1, (skillScript.match(/\.addSlide\s*\(/g) ?? []).length);
+  } else {
+    for (const [index, slide] of slides.entries()) {
+      if (slide.image === undefined) continue;
+      images.set(index, readSlideImage(root, slide.image));
+    }
+    bytes = await buildPptx(slides, images, palette);
+    slideCount = slides.length;
   }
-  const bytes = await buildPptx(slides, images);
   if (bytes.byteLength > MAX_PRESENTATION_BYTES) {
     throw invalid("written presentation exceeds 8 MB");
   }
@@ -813,7 +945,7 @@ export async function writePresentationAt(
   fs.renameSync(temporary, absolute);
   const stored = path.relative(root, absolute).split(path.sep).join("/");
   if (pdfAbsolute === undefined) {
-    return { path: stored, bytes: bytes.byteLength, format: "pptx", slides: slides.length };
+    return { path: stored, bytes: bytes.byteLength, format: "pptx", slides: slideCount };
   }
   const pdfBytes = await convertOfficeToPdf(absolute, pdfAbsolute);
   const storedPdf = path.relative(root, pdfAbsolute).split(path.sep).join("/");
@@ -821,7 +953,7 @@ export async function writePresentationAt(
     path: stored,
     bytes: bytes.byteLength,
     format: "pptx",
-    slides: slides.length,
+    slides: slideCount,
     pdfPath: storedPdf,
     pdfBytes,
   };
@@ -833,13 +965,22 @@ export async function writeBotPresentation(
   relativePath: string,
   slides: readonly PresentationSlideInput[],
   pdfPath?: string,
+  palette?: (typeof PRESENTATION_PALETTES)[number],
+  script?: string,
 ): Promise<WrittenPresentation> {
   const bot = getBot(db, botId);
   if (bot === undefined) throw invalid(`bot '${botId}' was not found`);
   if (bot.archivedAt !== null) throw invalid("archived bots have no workspace");
   const workspace = getWorkspace(db, bot.workspaceId);
   if (workspace === undefined) throw invalid(`workspace '${bot.workspaceId}' was not found`);
-  const written = await writePresentationAt(workspace.canonicalPath, relativePath, slides, pdfPath);
+  const written = await writePresentationAt(
+    workspace.canonicalPath,
+    relativePath,
+    slides,
+    pdfPath,
+    palette,
+    script,
+  );
   const checksum = createHash("sha256").update(fs.readFileSync(
     path.resolve(workspace.canonicalPath, ...written.path.split("/")),
   )).digest("hex");
