@@ -92,6 +92,8 @@ interface ChatSession {
    * Starts resolved so the first message does not wait.
    */
   gate: Promise<void>;
+  /** Lines the user inserted while this turn is running. Drained before the reply is committed. */
+  asides: string[];
   /** Live progress of the running turn; null while idle. */
   progress: TurnProgress | null;
 }
@@ -118,6 +120,16 @@ export interface ChatToolWiring {
     readonly botId: string;
     readonly signal: AbortSignal;
   }) => NodePermissionHandle;
+}
+
+/** A mid-turn line: an intent change or a supplement, read before the reply is committed. */
+function asidePrompt(lines: readonly string[]): string {
+  return [
+    "用户在这一轮还没结束时插了话。这通常是用意的变更，或是对正在做的事的补充。",
+    "请把下面每一句读进你正在进行的思考，按新的用意继续。已经做完的部分保留，不要推倒重来，也不要只回复“收到”。",
+    "",
+    ...lines.map((line, index) => `${index + 1}. ${line}`),
+  ].join("\n");
 }
 
 /** Concatenated text blocks of one assistant message (harness-attempt shape). */
@@ -216,14 +228,15 @@ export class ChatManager {
         controller: null,
         settled: null,
         gate: Promise.resolve(),
+        asides: [],
         progress: null,
       };
       this.sessions.set(bot.id, session);
     }
-    // A follow-up is allowed. The composer cancels the live turn and sends
-    // the new line at once; rejecting here raced that cancel and showed
+    // A second send is allowed. Rejecting it raced a cancel and showed
     // "already answering". Take a place in line, then run once the previous
-    // turn has released the bot.
+    // turn has released the bot. A line the composer keeps on this turn goes
+    // through enqueueAside instead, and is read before the reply is committed.
     let releaseGate!: () => void;
     const gate = new Promise<void>((resolve) => {
       releaseGate = resolve;
@@ -397,7 +410,14 @@ export class ChatManager {
           mimeType: image.mimeType,
         })),
       ];
-      const outcome = await attempt.runTurn(sessionId, contentBlocks, controller.signal, observeEvent);
+      let outcome = await attempt.runTurn(sessionId, contentBlocks, controller.signal, observeEvent);
+      // An aside arrived while this turn was running. Read it on the same
+      // session before the reply is committed, so a change of intent or a
+      // supplement is part of the thinking the user is waiting on.
+      while (session.asides.length > 0 && !controller.signal.aborted) {
+        const lines = session.asides.splice(0, session.asides.length);
+        outcome = await attempt.runTurn(sessionId, asidePrompt(lines), controller.signal, observeEvent);
+      }
       session.lastSessionId = sessionId;
       /*
        * Accounting must never fail a turn: a usage write error is swallowed so
@@ -424,6 +444,7 @@ export class ChatManager {
       session.active = null;
       session.controller = null;
       session.busy = false;
+      session.asides = [];
       session.progress = null;
       finish();
       session.settled = null;
@@ -431,6 +452,18 @@ export class ChatManager {
     } finally {
       releaseGate();
     }
+  }
+
+  /**
+   * Keep a line the user sent while this bot is answering. The open turn
+   * reads it before committing a reply. Returns false when no turn is open,
+   * so the caller can start an ordinary send.
+   */
+  enqueueAside(botId: string, text: string): boolean {
+    const session = this.sessions.get(botId);
+    if (session === undefined || !session.busy) return false;
+    session.asides.push(text);
+    return true;
   }
 
   cancel(sessionId: string): boolean {

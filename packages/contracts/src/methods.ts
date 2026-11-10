@@ -170,6 +170,7 @@ export const METHODS = [
   "approval.list",
   "approval.decide",
   "chat.send",
+  "chat.aside",
   "chat.attach",
   "chat.history",
   "chat.cancel",
@@ -737,6 +738,21 @@ export const METHOD_CONTRACTS = {
       messageId: UuidSchema,
       text: z.string(),
       at: IsoDateTimeUtcSchema,
+    }),
+  },
+  /**
+   * A line sent while this bot is already answering. The live turn is not
+   * cancelled: the text is kept and read into that same session before the
+   * reply is committed. `queued` is false when nothing is in progress, so
+   * the caller starts an ordinary `chat.send`.
+   */
+  "chat.aside": {
+    request: z.object({
+      botId: UuidSchema,
+      text: z.string().min(1).max(4000),
+    }),
+    response: z.object({
+      queued: z.boolean(),
     }),
   },
   /**

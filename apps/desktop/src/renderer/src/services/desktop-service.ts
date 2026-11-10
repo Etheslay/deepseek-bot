@@ -262,6 +262,11 @@ export interface DesktopService {
       },
       options?: StreamOptions,
     ): StreamHandle;
+    /**
+     * A line sent while this bot is already answering. True means the live
+     * turn will read it. False means nothing is in progress.
+     */
+    aside(botId: string, text: string): Promise<boolean>;
   };
   /**
    * D26 attachment upload (trusted desktop only): bytes stage chunked through

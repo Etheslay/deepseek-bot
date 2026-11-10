@@ -253,6 +253,39 @@ describe("chat runtime", () => {
     await cancelled;
     await expect(second).resolves.toMatchObject({ text: "fake final response" });
   });
+  it("reads an aside into the same turn before the reply is committed", async () => {
+    const records = mkdtempSync(join(tmpdir(), "dsb-aside-"));
+    roots.push(records);
+    const { host, botId } = await hostWithBot("slow-tool", async () => "sk-test-only", {
+      FAKE_RECORD_DIR: records,
+    });
+    const sent = host.handleMethod("chat.send", { botId, text: "先做一版" });
+    await vi.waitFor(async () => {
+      expect(await host.handleMethod("chat.status", { botId })).toMatchObject({
+        active: true,
+        stage: "tool",
+      });
+    });
+    await expect(
+      host.handleMethod("chat.aside", { botId, text: "改成五页，给三年级" }),
+    ).resolves.toEqual({ queued: true });
+    await expect(sent).resolves.toMatchObject({ text: "fake final response" });
+    const log = readFileSync(join(records, "fake-harness.jsonl"), "utf8");
+    const prompts = log.split("\n").filter((line) => line.includes('"session/prompt"'));
+    expect(prompts.length).toBeGreaterThanOrEqual(2);
+    expect(log).toContain("改成五页，给三年级");
+    expect(log).toContain("用意的变更");
+    const history = (await host.handleMethod("chat.history", { botId, limit: 10 })) as {
+      messages: { role: string; text: string }[];
+    };
+    expect(history.messages.map((message) => message.text)).toContain("改成五页，给三年级");
+  });
+  it("does not queue an aside when the bot is idle", async () => {
+    const { host, botId } = await hostWithBot();
+    await expect(host.handleMethod("chat.aside", { botId, text: "没人在答" })).resolves.toEqual({
+      queued: false,
+    });
+  });
   it("sends a turn through the harness and persists both sides", async () => {
     const { host, botId } = await hostWithBot();
     const sent = (await host.handleMethod("chat.send", {
