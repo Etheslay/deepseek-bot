@@ -7,6 +7,7 @@ import {
   GROK_BALL_STATE_FRAMES,
   GROK_BALL_COLORS,
   GROK_BALL_TONES,
+  paintHex,
   toneKeyFor,
   contourPath,
   interpolatePoints,
@@ -17,6 +18,7 @@ import {
   sampleContour,
   type GrokBallShapeId,
 } from "../../src/renderer/src/features/avatars/grok-ball-model.js";
+import { avatarColor, bubbleInk } from "../../src/renderer/src/features/avatars/avatar-meta.js";
 
 /** What the picker hands out. */
 const OFFERED_SHAPES = [
@@ -185,23 +187,29 @@ describe("Grok Ball palette", () => {
     }
   });
 
-  it("pairs every colour with a deeper value for the dark theme", () => {
+  it("paints a brighter body on the dark theme than the stored swatch", () => {
     for (const tone of GROK_BALL_TONES) {
       expect(tone.light).toMatch(/^#[0-9A-F]{6}$/);
       expect(tone.dark).toMatch(/^#[0-9A-F]{6}$/);
       expect(tone.dark, tone.key).not.toBe(tone.light);
+      expect(paintHex(tone.light, "dark"), tone.key).toBe(tone.dark);
+      expect(paintHex(tone.light, "light"), tone.key).toBe(tone.light);
     }
   });
 
-  it("resolves a stored colour back to its tone, either theme or not", () => {
+  it("resolves a stored colour back to its tone, including older hexes", () => {
     for (const tone of GROK_BALL_TONES) {
       expect(toneKeyFor(tone.light), tone.key).toBe(tone.key);
-      // A row saved while the app was dark still maps to the same pair.
       expect(toneKeyFor(tone.dark), tone.key).toBe(tone.key);
       expect(toneKeyFor(tone.light.toLowerCase()), tone.key).toBe(tone.key);
+      for (const old of tone.legacy) {
+        expect(toneKeyFor(old), `${tone.key} ${old}`).toBe(tone.key);
+        expect(paintHex(old, "dark"), old).toBe(tone.dark);
+      }
     }
-    // A retired or hand-picked hex has no pair: it renders as itself.
-    expect(toneKeyFor("#3b93f0")).toBeNull();
+    // A hand-picked hex has no pair: it renders as itself.
+    expect(toneKeyFor("#abcdef")).toBeNull();
+    expect(paintHex("#abcdef", "dark")).toBe("#abcdef");
     expect(toneKeyFor("mono")).toBeNull();
   });
 
@@ -215,8 +223,18 @@ describe("Grok Ball palette", () => {
     for (const tone of GROK_BALL_TONES) {
       expect(css, `${tone.key} dark`).toContain(`--gb-body-${tone.key}: ${tone.dark}`);
       expect(css, `${tone.key} light`).toContain(`--gb-body-${tone.key}: ${tone.light}`);
+      expect(css, `${tone.key} dark ink`).toContain(`--gb-ink-${tone.key}: ${bubbleInk(tone.dark)}`);
+      expect(css, `${tone.key} light ink`).toContain(`--gb-ink-${tone.key}: ${bubbleInk(tone.light)}`);
       expect(css, `${tone.key} rule`).toContain(`[data-tone="${tone.key}"]`);
     }
+  });
+
+  it("sends a saved palette colour through the brighter theme paint", () => {
+    const blue = { kind: "grok" as const, shape: "blob" as const, color: "#2A92FE" };
+    const retired = { kind: "grok" as const, shape: "blob" as const, color: "#3b93f0" };
+    expect(avatarColor(blue)).toBe("var(--gb-body-blue)");
+    expect(avatarColor(retired)).toBe("var(--gb-body-blue)");
+    expect(bubbleInk(avatarColor(blue))).toBe("var(--gb-ink-blue)");
   });
 });
 

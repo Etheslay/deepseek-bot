@@ -19,6 +19,11 @@ describe("tray avatar raster", () => {
     expect(svg.startsWith('<svg xmlns="http://www.w3.org/2000/svg"')).toBe(true);
     expect(svg).toContain('width="32"');
     expect(svg).toContain('fill="#f59e0b"');
+    const blue = trayAvatarSvg(
+      { kind: "grok", shape: "blob", color: "#2A92FE" },
+      trayIconColors("dark"),
+    );
+    expect(blue).toContain('fill="#54AEFF"');
     // No CSS variables survive into the tray image.
     expect(svg).not.toContain("var(--");
     expect(svg.match(/<path/g)?.length).toBe(3);

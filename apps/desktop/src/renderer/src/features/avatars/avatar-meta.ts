@@ -16,6 +16,7 @@ import {
 import {
   GROK_BALL_COLORS,
   GROK_BALL_SHAPE_IDS,
+  toneKeyFor,
   type GrokBallShapeId,
   type GrokBallState,
 } from "./grok-ball-model.js";
@@ -29,8 +30,13 @@ export function avatarColor(avatar: Avatar): string {
   switch (avatar.kind) {
     case "mono":
       return "var(--avatar-mono-bg)";
-    case "grok":
-      return avatar.color === "mono" ? "var(--avatar-mono-bg)" : avatar.color;
+    case "grok": {
+      if (avatar.color === "mono") return "var(--avatar-mono-bg)";
+      const tone = toneKeyFor(avatar.color);
+      // Palette bots follow the theme paint, so a saved deep or retired hex
+      // still shows the brighter body. Anything else stays the stored colour.
+      return tone === null ? avatar.color : `var(--gb-body-${tone})`;
+    }
     case "image":
       return "var(--avatar-mono-bg)";
   }
@@ -110,6 +116,10 @@ export function userBubbleInk(avatar: Avatar): "theme" | "mono" {
 export function bubbleInk(color: string): string {
   if (color.includes("--avatar-mono-bg")) {
     return "var(--avatar-mono-fg)";
+  }
+  const tone = /^var\(--gb-body-([a-z]+)\)$/.exec(color.trim());
+  if (tone !== null) {
+    return `var(--gb-ink-${tone[1]})`;
   }
   const m = /^#?([0-9a-f]{6})$/i.exec(color.trim());
   if (m === null) {
