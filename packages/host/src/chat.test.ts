@@ -239,6 +239,20 @@ describe("chat runtime", () => {
       await sent;
     }
   });
+  it("accepts a follow-up while the previous turn is still closing", async () => {
+    let release!: (value: string) => void;
+    const credential = new Promise<string>((resolve) => {
+      release = resolve;
+    });
+    const { host, botId } = await hostWithBot("ok", () => credential);
+    const first = host.handleMethod("chat.send", { botId, text: "第一句" });
+    const cancelled = expect(first).rejects.toMatchObject({ code: "CANCELLED" });
+    await host.handleMethod("chat.cancel", { sessionId: `chat:${botId}` });
+    const second = host.handleMethod("chat.send", { botId, text: "插话" });
+    release("unused");
+    await cancelled;
+    await expect(second).resolves.toMatchObject({ text: "fake final response" });
+  });
   it("sends a turn through the harness and persists both sides", async () => {
     const { host, botId } = await hostWithBot();
     const sent = (await host.handleMethod("chat.send", {
