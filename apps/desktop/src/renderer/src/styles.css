@@ -8338,28 +8338,23 @@ select:focus-visible {
   }
 }
 
-/* Spoken paragraph stays with the bot. The status line under it is centered
-   in the conversation, and the cancel stays on that line. */
+/* Spoken paragraph, then the thinking line under it. The line and its cancel
+   stay at the reply's left edge, where the waiting row already sat. */
 .stream-column {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: 8px;
-  width: 100%;
   min-width: 0;
-  max-width: 100%;
+  max-width: min(72%, 720px);
 }
 
 .msg-row.bot.streaming .stream-column > .hover-wrap,
 .chat > .msg-row.bot.streaming .stream-column > .hover-wrap {
+  max-width: 100%;
   width: auto;
-  max-width: 72%;
   margin-left: 0;
-  margin-right: auto;
-}
-
-.stream-column > .stream-pending {
-  align-self: center;
+  margin-right: 0;
 }
 
 /* ---- 等待答复行：bot 头像球（thinking 态）+ 状态行 + 取消 ---- */
