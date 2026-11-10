@@ -4601,43 +4601,34 @@ function BotsPlaceholder({
             ))}
             {(stream.text || (!stream.failure && !stream.cancelled)) && (
               <div className="msg-row bot streaming" style={{ order: streamSlotOrder(msgs.length) }}>
-                {stream.text ? (
-                  <div className="hover-wrap">
-                    {liveAck ? <p className="file-ack-line">{liveAck.ack}</p> : null}
-                    <div className="msg-bubble">
-                      {liveAck ? liveAck.summary : stream.text}
-                      {!stream.failure && !stream.cancelled && (
-                        <button
-                          type="button"
-                          className="stream-cancel"
-                          title={t("shell.cancel")}
-                          onClick={() => streamHandles.get(me.key)?.cancel()}
-                        >
-                          {t("shell.cancel")}
-                        </button>
-                      )}
+                <div className="stream-live">
+                  {stream.text ? (
+                    <div className="hover-wrap">
+                      {liveAck ? <p className="file-ack-line">{liveAck.ack}</p> : null}
+                      <div className="msg-bubble">{liveAck ? liveAck.summary : stream.text}</div>
                     </div>
-                  </div>
-                ) : (
-                  <div className="stream-pending">
-                    <ThinkingLine
-                      botId={me.bot.id}
-                      avatar={me.avatar}
-                      readingFile={readingFile}
-                      makingDocument={makingDocument}
-                      convertingToPdf={convertingToPdf}
-                      makingPresentation={makingPresentation}
-                    />
-                    <button
-                      type="button"
-                      className="stream-cancel"
-                      title={t("shell.cancel")}
-                      onClick={() => streamHandles.get(me.key)?.cancel()}
-                    >
-                      {t("shell.cancel")}
-                    </button>
-                  </div>
-                )}
+                  ) : null}
+                  {!stream.failure && !stream.cancelled && (
+                    <div className="stream-pending">
+                      <ThinkingLine
+                        botId={me.bot.id}
+                        avatar={me.avatar}
+                        readingFile={readingFile}
+                        makingDocument={makingDocument}
+                        convertingToPdf={convertingToPdf}
+                        makingPresentation={makingPresentation}
+                      />
+                      <button
+                        type="button"
+                        className="stream-cancel"
+                        title={t("shell.cancel")}
+                        onClick={() => streamHandles.get(me.key)?.cancel()}
+                      >
+                        {t("shell.cancel")}
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
             {stream.failure && (

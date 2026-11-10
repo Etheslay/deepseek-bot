@@ -29,8 +29,6 @@ export type ThinkingStatusInput = {
   toolName?: string;
   /** How long the placeholder has been on screen. */
   elapsedMs: number;
-  /** First reply chunk arrived: the bubble switches to the real text. */
-  hasText: boolean;
   /** This turn is waiting on a Word/PDF body the Host is extracting. */
   readingFile?: boolean;
   /** The user asked for a Word file, or edit_document is the turn's tool. */
@@ -49,13 +47,11 @@ export function formatElapsed(ms: number): string {
 }
 
 /**
- * Null once the reply starts arriving; otherwise the copy for the reported
- * stage plus an optional elapsed-seconds hint.
+ * The stage copy stays for the whole turn. A first chunk of reply text is
+ * often narration while a tool is still running, so hiding it there made the
+ * bubble look finished. The caller unmounts this line when the turn ends.
  */
-export function thinkingStatus(input: ThinkingStatusInput): ThinkingStatus | null {
-  if (input.hasText) {
-    return null;
-  }
+export function thinkingStatus(input: ThinkingStatusInput): ThinkingStatus {
   const hint =
     input.elapsedMs >= ELAPSED_HINT_AFTER_MS ? formatElapsed(input.elapsedMs) : null;
   const editingDocument =

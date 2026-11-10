@@ -8338,6 +8338,17 @@ select:focus-visible {
   }
 }
 
+/* The reply bubble and the stage line stack. The stage line stays until
+   the turn settles, so a partial answer does not look like the end. */
+.stream-live {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  max-width: 100%;
+  min-width: 0;
+}
+
 /* ---- 等待答复行：bot 头像球（thinking 态）+ 状态行 + 取消 ---- */
 .stream-pending {
   display: inline-flex;

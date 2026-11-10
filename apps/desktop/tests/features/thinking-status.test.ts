@@ -13,7 +13,7 @@ import { setLanguagePreference } from "../../src/renderer/src/i18n.js";
 setLanguagePreference("zh");
 
 const at = (stage: "preparing" | "thinking" | "tool", elapsedMs = 0, toolName?: string) =>
-  thinkingStatus({ stage, ...(toolName !== undefined ? { toolName } : {}), elapsedMs, hasText: false });
+  thinkingStatus({ stage, ...(toolName !== undefined ? { toolName } : {}), elapsedMs });
 
 describe("thinkingStatus", () => {
   it("names the real turn stage, never a clock-driven guess", () => {
@@ -23,7 +23,7 @@ describe("thinkingStatus", () => {
 
   it("says it is reading a file while a document turn has not started talking", () => {
     expect(
-      thinkingStatus({ stage: "thinking", elapsedMs: 0, hasText: false, readingFile: true })?.text,
+      thinkingStatus({ stage: "thinking", elapsedMs: 0, readingFile: true })?.text,
     ).toBe("正在读取文件");
   });
 
@@ -32,7 +32,6 @@ describe("thinkingStatus", () => {
       thinkingStatus({
         stage: "preparing",
         elapsedMs: 0,
-        hasText: false,
         makingDocument: true,
       })?.text,
     ).toBe("制作文档");
@@ -42,7 +41,6 @@ describe("thinkingStatus", () => {
         stage: "tool",
         toolName: "edit_document",
         elapsedMs: 0,
-        hasText: false,
         convertingToPdf: true,
       })?.text,
     ).toBe("转换成 PDF");
@@ -53,7 +51,6 @@ describe("thinkingStatus", () => {
       thinkingStatus({
         stage: "preparing",
         elapsedMs: 0,
-        hasText: false,
         makingPresentation: true,
       })?.text,
     ).toBe("制作演示文稿");
@@ -71,10 +68,24 @@ describe("thinkingStatus", () => {
     expect(at("tool", 0, "")?.text).toBe("正在深度思考");
   });
 
-  it("hides once the reply text starts arriving", () => {
+  it("keeps the stage line after reply text has started", () => {
     expect(
-      thinkingStatus({ stage: "thinking", elapsedMs: 3_000, hasText: true }),
-    ).toBeNull();
+      thinkingStatus({ stage: "thinking", elapsedMs: 3_000 })?.text,
+    ).toBe("正在深度思考");
+    expect(
+      thinkingStatus({
+        stage: "tool",
+        toolName: "edit_document",
+        elapsedMs: 3_000,
+      })?.text,
+    ).toBe("制作文档");
+    expect(
+      thinkingStatus({
+        stage: "thinking",
+        elapsedMs: 3_000,
+        makingPresentation: true,
+      })?.text,
+    ).toBe("制作演示文稿");
   });
 
   it("shows the elapsed hint only after the threshold", () => {
