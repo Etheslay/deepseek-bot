@@ -29,6 +29,7 @@ import { pickKnowledgeFile } from "./knowledge-import.js";
 import { pickAccountAvatar } from "./account-avatar.js";
 import { rendererPermissionAllowed } from "./session-permissions.js";
 import { pickVoiceFile } from "./voice-pick.js";
+import { openDesktopChatLink } from "./open-chat-link.js";
 import { assertValidVoicePickKind } from "../shared/voice-pick.js";
 import { listBackups, type RestoreOutcome } from "./backups.js";
 import {
@@ -259,6 +260,7 @@ function registerShellIpc(win: BrowserWindow): void {
       checkUpdates: () => checkUpdates(),
       downloadAndInstallUpdate: () => downloadAndInstallUpdate(),
       setLanguage: (preference) => setMainLanguagePreference(preference),
+      openChatLink: (href) => openDesktopChatLink(resolveDataRoot(), href),
       hostCall: async (method, payload) => {
         // Humanized errors (streaming-reply era UX): the channel never throws —
         // it resolves an envelope so the renderer gets the Host's own message

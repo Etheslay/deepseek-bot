@@ -17,6 +17,7 @@ import katex from "katex";
 import { Marked } from "marked";
 // KaTeX layout + fonts ship from the npm package (bundled locally).
 import "katex/dist/katex.min.css";
+import { classifyChatLink, encodeChatLinkHref } from "../../../../shared/chat-link.js";
 import { t } from "../../i18n.js";
 
 /** Inline math must look like math before we touch it: bare `$1 $2` shell
@@ -67,6 +68,13 @@ const parser = new Marked({
   gfm: true,
   breaks: true,
   renderer: {
+    link({ href, text }: { href: string; text: string }) {
+      const link = classifyChatLink(href);
+      if (link === null) {
+        return text;
+      }
+      return `<a href="${escapeHtml(encodeChatLinkHref(link))}">${text}</a>`;
+    },
     code({ text, lang }: { text: string; lang?: string }) {
       const language = (lang ?? "").split(/\s+/)[0] ?? "";
       /*
@@ -86,10 +94,28 @@ const parser = new Marked({
   },
 });
 
+/**
+ * A raw `<a href="file://…">` or `<a href="下载PPT.html">` would lose its href
+ * in the sanitizer and stay blue but dead. Rewrite those targets first.
+ */
+function preserveOpenableHrefs(html: string): string {
+  return html.replace(/href\s*=\s*(["'])(.*?)\1/gi, (match, quote: string, raw: string) => {
+    const href = raw.replaceAll("&amp;", "&");
+    if (href.startsWith("app-file:")) {
+      return match;
+    }
+    const link = classifyChatLink(href);
+    if (link === null || link.kind !== "file") {
+      return match;
+    }
+    return `href=${quote}${escapeHtml(encodeChatLinkHref(link))}${quote}`;
+  });
+}
+
 /** Render untrusted chat text to sanitized HTML. */
 export function renderChatMarkdown(source: string): string {
   const { text, math } = liftMath(source);
-  const markedHtml = parser.parse(text) as string;
+  const markedHtml = preserveOpenableHrefs(parser.parse(text) as string);
 
   const clean = DOMPurify.sanitize(markedHtml, {
     ALLOWED_TAGS: [
@@ -101,7 +127,7 @@ export function renderChatMarkdown(source: string): string {
     ],
     ALLOWED_ATTR: ["class", "href", "title", "type", "aria-label"],
     ALLOW_DATA_ATTR: false,
-    ALLOWED_URI_REGEXP: /^(?:https?:|mailto:)/i,
+    ALLOWED_URI_REGEXP: /^(?:https?:|mailto:|app-file:)/i,
   });
 
   return clean.replace(/zzmathph(\d+)zz/g, (_m, index: string) => {

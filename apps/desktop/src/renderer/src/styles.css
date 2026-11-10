@@ -6336,7 +6336,7 @@ select option {
   color: inherit;
 }
 
-.chat-md a { color: var(--md-link, #6ea8ff); text-decoration: none; }
+.chat-md a { color: var(--md-link, #6ea8ff); text-decoration: none; cursor: pointer; }
 /* Chat body text never carries underline decorations (user preference, 2026-10-25). */
 .chat-md p,
 .chat-md li,

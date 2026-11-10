@@ -1,6 +1,7 @@
 import { ipcMain, type IpcMainInvokeEvent } from "electron";
 import {
   IPC_CHANNELS,
+  IpcDeniedError,
   assertAllowedChannel,
   assertValidLanguagePreference,
   assertValidTitleBarOverlayColors,
@@ -8,6 +9,7 @@ import {
   type HardwareAccelerationStatus,
   type UpdateStatus,
 } from "../../shared/ipc-channels.js";
+import { parseChatLinkHref, type ChatLinkOpenResult } from "../../shared/chat-link.js";
 import type { LanguagePreference } from "../../shared/i18n/types.js";
 import {
   assertValidChromeToken,
@@ -39,6 +41,8 @@ export type IpcHandlers = {
   toggleMaximizeWindow: () => void;
   closeWindow: () => void;
   setTitleBarOverlay: (colors: { color: string; symbolColor: string }) => void;
+  /** Open one classified chat link outside the window. */
+  openChatLink: (href: string) => Promise<ChatLinkOpenResult>;
   /** Forward one allowlisted contract method call to the Host process. */
   hostCall: (method: unknown, payload: unknown) => Promise<unknown>;
   /** Encrypt the API key with safeStorage and register the credential ref. */
@@ -140,6 +144,14 @@ export function registerIpcHandlers(
       handlers.setTitleBarOverlay(payload);
     },
   );
+  ipcMain.handle(IPC_CHANNELS.SHELL_OPEN_LINK, (event: IpcMainInvokeEvent, href: unknown) => {
+    assertAllowedChannel(IPC_CHANNELS.SHELL_OPEN_LINK);
+    assertAuthorizedSender(event, isAuthorized);
+    if (typeof href !== "string" || parseChatLinkHref(href) === null) {
+      throw new IpcDeniedError("INVALID_PAYLOAD", "chat link href is not openable");
+    }
+    return handlers.openChatLink(href);
+  });
   ipcMain.handle(
     IPC_CHANNELS.HOST_CALL,
     (event: IpcMainInvokeEvent, method: unknown, payload: unknown) => {
