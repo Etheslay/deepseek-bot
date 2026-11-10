@@ -70,6 +70,10 @@ export type DesktopBridge = {
     close: () => Promise<void>;
     setTitleBarOverlay: (colors: { color: string; symbolColor: string }) => Promise<void>;
   };
+  /** Open a link from a chat reply outside this window. */
+  shell: {
+    openLink: (href: string) => Promise<{ ok: true } | { ok: false; reason: "blocked" | "missing" | "outside" }>;
+  };
   /**
    * CONTRACTS §3 method surface, forwarded to the Host process. The method
    * allowlist and payload schemas are enforced in the main process and the
@@ -155,6 +159,9 @@ const api: DesktopBridge = {
     close: () => ipcRenderer.invoke(IPC_CHANNELS.WINDOW_CLOSE),
     setTitleBarOverlay: (colors) =>
       ipcRenderer.invoke(IPC_CHANNELS.WINDOW_SET_TITLEBAR_OVERLAY, colors),
+  },
+  shell: {
+    openLink: (href) => ipcRenderer.invoke(IPC_CHANNELS.SHELL_OPEN_LINK, href),
   },
   settings: {
     saveKey: (key) => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_SAVE_KEY, key),

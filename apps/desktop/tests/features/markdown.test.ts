@@ -43,6 +43,25 @@ describe("chat markdown pipeline", () => {
     expect(html).toContain("$HOME");
   });
 
+  it("keeps a webpage link and a workspace file link clickable", () => {
+    const web = renderChatMarkdown("[DeepSeek](https://api.deepseek.com)");
+    expect(web).toContain('href="https://api.deepseek.com"');
+    const file = renderChatMarkdown("[打开这个网页文件](下载PPT.html)");
+    expect(file).toContain('href="app-file:%E4%B8%8B%E8%BD%BDPPT.html"');
+    expect(file).toContain("打开这个网页文件");
+    const local = renderChatMarkdown(
+      "[打开](file:///C:/Users/me/DeepSeekBot/workspace/%E4%B8%8B%E8%BD%BDPPT.html)",
+    );
+    expect(local).toContain("app-file:");
+    expect(local).not.toContain("javascript:");
+    const raw = renderChatMarkdown(
+      '<a href="file:///C:/Users/me/DeepSeekBot/workspace/deck.html">打开这个网页文件</a>',
+    );
+    expect(raw).toContain('href="app-file:');
+    expect(raw).toContain("打开这个网页文件");
+    expect(raw).not.toContain("file:///");
+  });
+
   it("sanitizes hostile html from model output", () => {
     const html = renderChatMarkdown(
       '<script>alert(1)</script>\n\n<img src=x onerror="alert(2)">\n\n[点击](javascript:alert(3))',

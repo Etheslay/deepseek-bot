@@ -9,6 +9,8 @@ export const IPC_CHANNELS = {
   WINDOW_TOGGLE_MAXIMIZE: "window:toggleMaximize",
   WINDOW_CLOSE: "window:close",
   WINDOW_SET_TITLEBAR_OVERLAY: "window:set-titlebar-overlay",
+  /** Open one chat-message link outside this window. The href was already classified. */
+  SHELL_OPEN_LINK: "shell:openLink",
   /** Encrypt and persist the API key via safeStorage, then point the Host at it. */
   SETTINGS_SAVE_KEY: "settings:saveKey",
   /** Renderer → Host contract call (method allowlist enforced in main). */

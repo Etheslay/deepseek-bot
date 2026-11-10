@@ -17,6 +17,11 @@ type DesktopBridge = {
     close: () => Promise<void>;
     setTitleBarOverlay: (colors: { color: string; symbolColor: string }) => Promise<void>;
   };
+  shell: {
+    openLink: (
+      href: string,
+    ) => Promise<{ ok: true } | { ok: false; reason: "blocked" | "missing" | "outside" }>;
+  };
   settings: {
     saveKey: (key: string) => Promise<{ configured: boolean }>;
   };

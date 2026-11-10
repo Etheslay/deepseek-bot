@@ -12,16 +12,33 @@
  * block stays with an error note.
  */
 import { useEffect, useMemo, useRef, type JSX } from "react";
+import { parseChatLinkHref, type ChatLinkOpenResult } from "../../../../shared/chat-link.js";
 import { renderChatMarkdown } from "./markdown.js";
 import { linkMentions, type MentionTable } from "./mentions.js";
 import { copyCodeBlock } from "./code-copy.js";
 import { renderMermaidSvg } from "./mermaid.js";
 import { t } from "../../i18n.js";
 
+const LINK_FAILURE: Record<Exclude<ChatLinkOpenResult, { ok: true }>["reason"], "shell.linkBlocked" | "shell.linkMissing" | "shell.linkOutside"> = {
+  blocked: "shell.linkBlocked",
+  missing: "shell.linkMissing",
+  outside: "shell.linkOutside",
+};
+
+async function openChatAnchor(href: string): Promise<ChatLinkOpenResult | null> {
+  const bridge = window.deepseekBot;
+  if (bridge?.shell === undefined) {
+    return null;
+  }
+  return bridge.shell.openLink(href);
+}
+
 export function ChatMarkdown(props: {
   text: string;
   mentions?: MentionTable | undefined;
   onMentionClick?: ((botKey: number) => void) | undefined;
+  /** Told when a link cannot be opened. Opening itself happens in the desktop process. */
+  onNotify?: ((message: string) => void) | undefined;
 }): JSX.Element {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const html = useMemo(() => {
@@ -91,6 +108,20 @@ export function ChatMarkdown(props: {
         if (copy instanceof HTMLElement) {
           void copyCodeBlock(copy);
           return;
+        }
+        const anchor = origin.closest?.("a");
+        if (anchor instanceof HTMLAnchorElement) {
+          const href = anchor.getAttribute("href");
+          if (href !== null && parseChatLinkHref(href) !== null) {
+            event.preventDefault();
+            event.stopPropagation();
+            void openChatAnchor(href).then((result) => {
+              if (result !== null && !result.ok) {
+                props.onNotify?.(t(LINK_FAILURE[result.reason]));
+              }
+            });
+            return;
+          }
         }
         const target = origin.closest?.(".mention-chip");
         if (target instanceof HTMLElement) {

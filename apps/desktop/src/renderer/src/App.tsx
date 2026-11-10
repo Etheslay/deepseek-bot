@@ -3229,6 +3229,7 @@ function MessageBubble({
   canEditResend,
   onEditResend,
   onOpenAttachment,
+  onNotify,
   onSpeak,
   speaking,
   voiceStatus,
@@ -3252,6 +3253,7 @@ function MessageBubble({
   onEditResend?: (text: string) => void;
   /** Workspace path from the gateway import. Opens the artifact preview. */
   onOpenAttachment?: (relativePath: string) => void;
+  onNotify?: (message: string) => void;
   /** Voice: read this reply aloud through the Host's local speech engine. */
   onSpeak?: (msgId: number, text: string) => void;
   speaking?: boolean;
@@ -3394,6 +3396,7 @@ function MessageBubble({
                 text={documentReply.summary}
                 mentions={mentions}
                 onMentionClick={onMentionClick}
+                onNotify={onNotify}
               />
             </>
           ) : (
@@ -3401,6 +3404,7 @@ function MessageBubble({
               text={msg.text}
               mentions={mentions}
               onMentionClick={onMentionClick}
+              onNotify={onNotify}
             />
           )}
           {msg.choices && (
@@ -3960,6 +3964,7 @@ function BotsPlaceholder({
                             setDetailOther(null);
                             onOpenBot(botKey);
                           }}
+                          onNotify={onNotify}
                         />
                       </div>
                       <div className="pair-actions">
@@ -4565,6 +4570,7 @@ function BotsPlaceholder({
                   canEditResend={m.id === lastUserMsgId}
                   onEditResend={editResend}
                   onOpenAttachment={onOpenAttachment}
+                  onNotify={onNotify}
                   onSpeak={speakMessage}
                   speaking={speakingId === m.id}
                   voiceStatus={voiceStatus}

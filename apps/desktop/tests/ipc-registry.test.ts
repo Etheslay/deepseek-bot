@@ -18,6 +18,7 @@ import type { IpcMainInvokeEvent } from "electron";
 describe("IPC allowlist", () => {
   it("accepts only registered channels", () => {
     expect(ALLOWED_CHANNELS.has(IPC_CHANNELS.APP_GET_INFO)).toBe(true);
+    expect(ALLOWED_CHANNELS.has(IPC_CHANNELS.SHELL_OPEN_LINK)).toBe(true);
     expect(ALLOWED_CHANNELS.has(IPC_CHANNELS.WINDOW_SET_TITLEBAR_OVERLAY)).toBe(true);
     expect(() => assertAllowedChannel(IPC_CHANNELS.APP_GET_INFO)).not.toThrow();
   });
