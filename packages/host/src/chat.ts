@@ -87,6 +87,11 @@ interface ChatSession {
   active: HarnessAttempt | null;
   controller: AbortController | null;
   settled: Promise<void> | null;
+  /**
+   * The next send waits on this, then replaces it with its own gate.
+   * Starts resolved so the first message does not wait.
+   */
+  gate: Promise<void>;
   /** Live progress of the running turn; null while idle. */
   progress: TurnProgress | null;
 }
@@ -210,16 +215,34 @@ export class ChatManager {
         active: null,
         controller: null,
         settled: null,
+        gate: Promise.resolve(),
         progress: null,
       };
       this.sessions.set(bot.id, session);
     }
+    // A follow-up is allowed. The composer cancels the live turn and sends
+    // the new line at once; rejecting here raced that cancel and showed
+    // "already answering". Take a place in line, then run once the previous
+    // turn has released the bot.
+    let releaseGate!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      releaseGate = resolve;
+    });
+    const earlier = session.gate;
+    session.gate = gate;
+    try {
+    // Stay synchronous until the controller is installed when nobody else
+    // owns the bot. Awaiting an already-resolved gate would yield, and a
+    // cancel arriving in that gap would find no turn to abort.
     if (session.busy) {
-      throw new EngineError({
-        code: "RATE_LIMITED",
-        message: "this bot is already answering; wait for the current turn to finish",
-        retryable: true,
-      });
+      await earlier;
+      if (this.closed) {
+        throw new EngineError({
+          code: "RUNTIME_UNAVAILABLE",
+          message: "chat runtime is closed",
+          retryable: false,
+        });
+      }
     }
     session.busy = true;
     session.progress = { stage: "preparing", startedAt: new Date().toISOString() };
@@ -404,6 +427,9 @@ export class ChatManager {
       session.progress = null;
       finish();
       session.settled = null;
+    }
+    } finally {
+      releaseGate();
     }
   }
 
