@@ -3,6 +3,13 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
     include: ["src/**/*.test.ts"],
+    /**
+     * Engine cases open a real SQLite file and wait on approval timers. On a
+     * loaded Windows runner the 5 s default expired while the process was
+     * stalled (quality run 42791906294, the red check on merged PR 243).
+     * 20 s matches the storage suite: a hang still fails, I/O jitter does not.
+     */
+    testTimeout: 20_000,
     coverage: {
       provider: "v8",
       reporter: ["text", "text-summary"],
