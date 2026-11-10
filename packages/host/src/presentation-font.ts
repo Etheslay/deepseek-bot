@@ -5,7 +5,8 @@
  * Microsoft YaHei is used when this computer has it. Otherwise a free CJK
  * face that is actually installed is subset to the deck's characters, and
  * DejaVu Sans covers Latin when it is present. The typeface string written
- * into the slides is the embedded file's family name.
+ * into the slides is the embedded file's family name. Han, kana, or hangul
+ * with no embedded CJK face is refused instead of naming Microsoft YaHei.
  */
 import fs from "node:fs";
 import { createRequire } from "node:module";
@@ -22,13 +23,32 @@ export interface EmbeddedFace {
   readonly bold?: Uint8Array;
 }
 
-const CJK_FILES = [
+/** Paths this host already searches. A missing face is a failure, not Microsoft YaHei. */
+export const CJK_FONT_CANDIDATES = [
   "C:\\Windows\\Fonts\\msyh.ttf",
   "C:\\Windows\\Fonts\\msyh.ttc",
   "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
   "/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf",
   "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
-];
+] as const;
+
+/** Han, hiragana, katakana, or hangul. Punctuation alone does not count. */
+const CJK_LETTER = /[\u1100-\u11ff\u3040-\u30ff\u31f0-\u31ff\u3400-\u9fff\uac00-\ud7af\uf900-\ufaff\uff66-\uff9d]/;
+
+/**
+ * A deck that draws Han, kana, or hangul needs a face that was actually
+ * subset and embedded. Returns a message the caller can show, or null when
+ * the deck may be written. English stays allowed when this computer has no
+ * CJK font.
+ */
+export function cjkEmbeddingRefusal(text: string, cjkEmbedded: boolean): string | null {
+  if (cjkEmbedded || !CJK_LETTER.test(text)) return null;
+  return (
+    "文稿里有汉字、假名或韩文，但这台电脑没有嵌入成功的中文字体，所以没有写出文件。" +
+    `已查找：${CJK_FONT_CANDIDATES.join("、")}。` +
+    "没有把东亚字体写成微软雅黑。"
+  );
+}
 
 const LATIN_REGULAR = [
   "C:\\Windows\\Fonts\\calibri.ttf",
@@ -106,7 +126,7 @@ export async function embeddedFaces(text: string): Promise<{
   const sample = `${text}\n• Aa0123456789%.,:;-`;
   const latinFile = firstFile(LATIN_REGULAR);
   const latinBold = firstFile(LATIN_BOLD);
-  const cjkFile = firstFile(CJK_FILES);
+  const cjkFile = firstFile(CJK_FONT_CANDIDATES);
   const [latinRegular, latinBoldBytes, cjkRegular] = await Promise.all([
     latinFile === undefined ? Promise.resolve(undefined) : subsetFace(latinFile, sample),
     latinBold === undefined ? Promise.resolve(undefined) : subsetFace(latinBold, sample),
