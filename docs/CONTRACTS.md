@@ -6,7 +6,7 @@ v0.5（D19 MCP HTTP 契约片）新增连接器类型、MCP 工具发现与逐�
 
 v0.6（D21 指定窗口截图与本地 OCR 契约片）新增 `screen.*` 受信桌面方法与结果元数据。v0.7 起 `protocolVersion` 接受管理编排；v0.8 增加 `mcp-stdio` 与 `connector.setCommand`。Windows 采集、离线 OCR 与 Host 网关已在 develop；桌面设置页调用这些方法做本机预览。这不代表真实窗口、打包 Electron 或发布验收已经完成。实现依据见 [D21 设计](superpowers/specs/2026-10-27-local-screen-sensing-design.md)。
 
-D26 附件理解闭环在当前协议上追加仅受信桌面的 `attachment.begin` / `attachment.append` / `attachment.commit`，不另升 `protocolVersion`；模型侧新增工具 `read_workspace_file`（能力映射 `fs.read`，走 D16 网关检查点）、`write_document`（能力映射 `fs.write`，把全文写成工作区内的 `.docx` 或 `.pdf`）、`edit_document`（查走 `fs.read`，新建、追加、替换、删文字、删文件、docx 转 PDF 走 Harness LibreOffice 引擎，PDF 转 docx 走正文，都映射 `fs.write`）和 `write_presentation`（能力映射 `fs.write`，按版式写成工作区内的 `.pptx`，可含图片、图标、淡入，并嵌入本机可用的字体子集）。聊天可以把 PDF、Word（`.docx`）和 PPT（`.pptx`）拖进当前 bot 的输入框；Host 抽出正文后随 `chat.send` 注入。单文件上限 20 MiB。网关导入仍走 `chat.attach` 与模型工具 `read`。
+D26 附件理解闭环在当前协议上追加仅受信桌面的 `attachment.begin` / `attachment.append` / `attachment.commit`，不另升 `protocolVersion`；模型侧新增工具 `read_workspace_file`（能力映射 `fs.read`，走 D16 网关检查点）、`write_document`（能力映射 `fs.write`，把全文写成工作区内的 `.docx` 或 `.pdf`）、`edit_document`（查走 `fs.read`，新建、追加、替换、删文字、删文件、docx 转 PDF 走 Harness LibreOffice 引擎，PDF 转 docx 走正文，都映射 `fs.write`）和 `write_presentation`（能力映射 `fs.write`，按版式和一套配色写成工作区内的 `.pptx`，可含目录、卡片、步骤、图片、图标、淡入，并嵌入本机可用的字体子集）。聊天可以把 PDF、Word（`.docx`）和 PPT（`.pptx`）拖进当前 bot 的输入框；Host 抽出正文后随 `chat.send` 注入。单文件上限 20 MiB。网关导入仍走 `chat.attach` 与模型工具 `read`。
 
 v0.9（D27 本地语音后端切片）新增 `voice.status` / `voice.transcribe` / `voice.speak` 三个受信桌面方法：whisper.cpp 本地转写与 Windows SAPI 本地播报，全本地、无网络、不产生模型工具。桌面按住说话把一段剪辑交给 `voice.transcribe` 并填入输入框（不自动发送）；逐条播放已接线。自动断句仍未做。
 

@@ -11,8 +11,11 @@ export const MAX_PRESENTATION_SLIDES = 16;
 export const MAX_SLIDE_TITLE = 80;
 export const MAX_SLIDE_BULLETS = 6;
 export const MAX_BULLET_CHARS = 180;
-export const PRESENTATION_LAYOUTS = ["cover", "section", "bullets", "split", "quote", "metrics", "table", "chart"] as const;
+export const PRESENTATION_LAYOUTS = [
+  "cover", "section", "agenda", "bullets", "cards", "steps", "split", "quote", "metrics", "table", "chart", "summary",
+] as const;
 export const PRESENTATION_ICONS = ["arrow", "check", "star", "alert", "spark", "target"] as const;
+export const PRESENTATION_PALETTES = ["ink", "harbor", "grove", "clay", "dusk", "tide"] as const;
 
 const MetricSchema = z
   .object({
@@ -25,6 +28,13 @@ const ChartSeriesSchema = z
   .object({
     name: z.string().trim().min(1).max(40),
     values: z.array(z.number().finite()).min(1).max(6),
+  })
+  .strict();
+
+const CardSchema = z
+  .object({
+    title: z.string().trim().min(1).max(40),
+    text: z.string().trim().min(1).max(80).optional(),
   })
   .strict();
 
@@ -54,6 +64,7 @@ const SlideSchema = z
     notes: z.string().trim().min(1).max(400).optional(),
     icon: z.enum(PRESENTATION_ICONS).optional(),
     image: z.string().trim().min(1).max(240).optional(),
+    cards: z.array(CardSchema).min(2).max(4).optional(),
   })
   .strict();
 
@@ -61,6 +72,7 @@ export const WritePresentationInputSchema = z
   .object({
     path: WorkspaceFilePathSchema,
     pdfPath: WorkspaceFilePathSchema.optional(),
+    palette: z.enum(PRESENTATION_PALETTES).optional(),
     slides: z.array(SlideSchema).min(1).max(MAX_PRESENTATION_SLIDES),
   })
   .strict()
@@ -73,6 +85,24 @@ export const WritePresentationInputSchema = z
     }
     value.slides.forEach((slide, index) => {
       const layout = slide.layout ?? "bullets";
+      if (layout === "agenda") {
+        const items = slide.bullets ?? [];
+        if (items.length < 2 || items.some((item) => item.length > 40)) {
+          ctx.addIssue({ code: "custom", message: `slide ${index + 1} agenda needs 2 to 6 short items` });
+        }
+      }
+      if (layout === "steps") {
+        const items = slide.bullets ?? [];
+        if (items.length < 3 || items.length > 4 || items.some((item) => item.length > 16)) {
+          ctx.addIssue({ code: "custom", message: `slide ${index + 1} steps needs 3 or 4 short labels` });
+        }
+      }
+      if (layout === "cards" && slide.cards === undefined) {
+        ctx.addIssue({ code: "custom", message: `slide ${index + 1} cards layout needs cards` });
+      }
+      if (layout === "summary" && (slide.bullets?.length ?? 0) < 1) {
+        ctx.addIssue({ code: "custom", message: `slide ${index + 1} summary needs bullets` });
+      }
       if (layout === "quote" && slide.quote === undefined) {
         ctx.addIssue({ code: "custom", message: `slide ${index + 1} quote layout needs quote` });
       }
@@ -121,6 +151,7 @@ export interface PresentationWriter {
     relativePath: string,
     slides: readonly PresentationSlideInput[],
     pdfPath?: string,
+    palette?: (typeof PRESENTATION_PALETTES)[number],
   ): Promise<WrittenPresentation> | WrittenPresentation;
 }
 
@@ -143,22 +174,25 @@ export function bindWritePresentationTool(
     description:
       "Create a designed 16:9 PowerPoint in the bot workspace. When the user asks for a PPT, " +
       "slides, or a deck, call this and build it instead of refusing. If they named no topic, " +
-      "make a 4-slide sample in their language: cover, two content slides, and a closing quote. " +
-      "path ends in .pptx, for example attachments/deck.pptx. Vary layouts: cover (opening, with " +
-      "subtitle), section (a short divider), bullets (at most 6 short lines), split (left and right " +
-      "columns), quote (one sentence in quote plus attribution), metrics (2 to 4 big figures), " +
-      "table (headers plus rows), chart (categories plus one or two numeric series, drawn as columns). " +
-      "notes is speaker text and stays off the slide. icon is one of arrow, check, star, alert, " +
-      "spark, target. image is a workspace png or jpeg drawn on that slide. Shapes fade in when " +
-      "the deck is presented. The deck embeds the CJK font it draws with. Do not make every slide " +
-      "the same bullet list. " +
+      "make a 4-slide sample in their language: dark cover, agenda, one content slide, dark summary. " +
+      "path ends in .pptx, for example attachments/deck.pptx. palette is one of ink, harbor, grove, " +
+      "clay, dusk, tide; pick the one that fits the topic and use it for the whole deck. " +
+      "Open and close on dark slides (cover, section, summary). Keep middle slides light. " +
+      "Vary layouts and do not repeat a bullet list: agenda (2 to 6 short items), cards (2 to 4 " +
+      "titled cards), steps (3 or 4 labels of at most 16 characters), split (two columns), " +
+      "metrics (2 to 4 big figures), table, chart (column chart, categories plus one or two series), " +
+      "quote, bullets (at most 6, only when a list is the point). " +
+      "Give a content slide an icon, an image, a chart, cards, or steps so it is not text alone. " +
+      "icon is arrow, check, star, alert, spark, or target. image is a workspace png or jpeg. " +
+      "notes is speaker text and stays off the slide. Shapes fade in during the show. " +
+      "The deck embeds the CJK and Latin faces it draws with. Keep titles short. " +
       "pdfPath, when present, also writes a PDF of the finished deck and must end in " +
       ".pdf. A written PDF report that is not slides goes to write_document with a .pdf path. " +
       "After it returns, tell the user the file path.",
     inputSchema: WritePresentationInputSchema,
     handler: async (params, context) => {
       const botId = requireBot(context);
-      return writer.write(botId, params.path, params.slides, params.pdfPath);
+      return writer.write(botId, params.path, params.slides, params.pdfPath, params.palette);
     },
   };
 }

@@ -44,6 +44,23 @@ describe("write_presentation bytes", () => {
     const slide = new TextDecoder().decode(unzipSync(pptx)["ppt/slides/slide1.xml"]);
     expect(slide).toContain("1C1917");
     expect(slide).toContain("C2410C");
+    expect(slide).not.toContain('cx="150000"');
+  });
+
+  it("draws an agenda, cards, steps, and a dark summary in one palette", async () => {
+    const pptx = await buildPptx([
+      { layout: "agenda", title: "目录", bullets: ["开场", "正文"] },
+      { layout: "cards", title: "三块", cards: [{ title: "甲", text: "说明" }, { title: "乙", text: "另一" }] },
+      { layout: "steps", title: "过程", bullets: ["收集", "整理", "交付"] },
+      { layout: "summary", title: "记住", bullets: ["一件事"] },
+    ], undefined, "harbor");
+    expect(extractPptxBody(pptx).text).toBe(
+      "目录\n1\n开场\n2\n正文\n\n三块\n甲\n说明\n乙\n另一\n\n过程\n1\n收集\n2\n整理\n3\n交付\n\n记住\n一件事",
+    );
+    const summary = new TextDecoder().decode(unzipSync(pptx)["ppt/slides/slide4.xml"]);
+    expect(summary).toContain("0E3A4D");
+    expect(summary).not.toContain("1C1917");
+    await expect(buildPptx([{ layout: "steps", title: "短", bullets: ["只有", "两步"] }])).rejects.toThrow(/steps/);
   });
 
   it("draws metrics, a table, a column chart, and speaker notes", async () => {
