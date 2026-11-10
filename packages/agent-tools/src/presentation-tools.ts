@@ -145,6 +145,7 @@ export function bindWritePresentationTool(
       "spoken line, at most 120 characters. path ends in .pptx. pdfPath, when present, ends in " +
       ".pdf. This tool is available in the current chat. It writes the file on this machine. " +
       "Do not claim it is offline, blocked by Python, PowerPoint, or a temp-directory permission. " +
+      "Do not hand the user a .bat, a python-pptx install, or a browser download button. " +
       "A text outline does not replace the file. After it returns, tell the user the file path.",
     inputSchema: WritePresentationInputSchema,
     handler: async (params, context) => {
