@@ -21,6 +21,7 @@ import { EventRuleSettings } from "./features/event-rules/event-rule-settings.js
 import { PermissionsPanel } from "./features/permissions/permissions-panel.js";
 import { ScreenSettings } from "./features/screen/screen-settings.js";
 import { UsagePanel } from "./features/usage/usage-panel.js";
+import { ConnectionTestNote } from "./features/settings/connection-test-note.js";
 import { SettingsNav, type SettingsSectionKey } from "./features/settings/settings-nav.js";
 import { VoiceLanguageSettings } from "./features/settings/voice-language-settings.js";
 import { VoiceSettingsPanel } from "./features/settings/voice-settings.js";
@@ -937,6 +938,7 @@ export function App(): JSX.Element {
     { result: "success" | "failure" | "unverified"; ok: boolean; errorCode?: string } | null
   >(null);
   const [testing, setTesting] = useState(false);
+  const dismissConnectionTest = useCallback(() => setTestResult(null), []);
   const [nameDraft, setNameDraft] = useState("");
 
   useEffect(() => {
@@ -2883,14 +2885,7 @@ const logout = (): void => {
                   <div className="settings-row">
                     <span>{t("shell.testConnection")}</span>
                     <span className="key-input-wrap">
-                      {testResult &&
-                        (testResult.result === "unverified" ? (
-                          <span className="settings-soon">{t("shell.connectionUnverified")}</span>
-                        ) : (
-                          <span className={testResult.ok ? "settings-ok" : "form-error"}>
-                            {testResult.ok ? t("shell.connectionSuccess") : testResult.errorCode}
-                          </span>
-                        ))}
+                      <ConnectionTestNote result={testResult} onDismiss={dismissConnectionTest} />
                       <button
                         type="button"
                         className="pill-btn"
