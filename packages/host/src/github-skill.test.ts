@@ -72,14 +72,32 @@ describe("find_github_skill", () => {
     }
   });
 
-  it("refuses a hand-written slide list and accepts a script", () => {
-    expect(WritePresentationInputSchema.safeParse({
-      path: "attachments/deck.pptx",
-      slides: [{ title: "手写" }],
-    }).success).toBe(false);
+  it("refuses a coordinate script and accepts a brief", () => {
     expect(WritePresentationInputSchema.safeParse({
       path: "attachments/deck.pptx",
       script: "const slide = pres.addSlide(); slide.addText('封面', { x: 0.6, y: 2, w: 12, h: 1 });",
+    }).success).toBe(false);
+    expect(WritePresentationInputSchema.safeParse({
+      path: "attachments/deck.pptx",
+      ir: {
+        brief: {
+          topic: "生涯发展",
+          audience: "评委",
+          goal: "记住差异",
+          slide_budget: 2,
+          lang: "zh-CN",
+          must_keep: ["差异"],
+        },
+        slides: [
+          { id: "s01", layout: "cover", title: "把规划写成清单", subtitle: "四年路线" },
+          {
+            id: "s02",
+            layout: "end",
+            title: "差异来自场景和工程",
+            blocks: [{ type: "bullets", items: ["农业场景", "后端工程", "差异写进清单"] }],
+          },
+        ],
+      },
     }).success).toBe(true);
   });
 });

@@ -107,6 +107,13 @@ export {
 } from "./document-edit-tools.js";
 export { bindFindGithubSkillTool, FindGithubSkillInputSchema } from "./github-skill-tool.js";
 export {
+  compilePresentationIr,
+  PRESENTATION_IR_LAYOUTS,
+  PresentationIrSchema,
+  presentationIrIssues,
+  type PresentationIr,
+} from "./presentation-ir.js";
+export {
   bindWritePresentationTool,
   PRESENTATION_PALETTES,
   MAX_BULLET_CHARS,
