@@ -208,6 +208,9 @@ importers:
 
   packages/host:
     dependencies:
+      '@deepseek-ai/libreoffice-kit':
+        specifier: 0.1.5
+        version: 0.1.5
       '@deepseek-bot/agent-tools':
         specifier: workspace:*
         version: link:../agent-tools

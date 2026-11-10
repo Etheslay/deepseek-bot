@@ -32,6 +32,15 @@ describe("write_document bytes", () => {
     expect(body.text).toContain("你好");
   }, 30_000);
 
+  it("writes a PDF through the Harness LibreOffice engine", async () => {
+    const root = mkdtempSync(join(tmpdir(), "doc-write-"));
+    roots.push(root);
+    const written = await writeDocumentAt(root, "attachments/说明.pdf", "你好，说明");
+    expect(written.format).toBe("pdf");
+    const body = await extractPdfBody(readFileSync(join(root, "attachments", "说明.pdf")), { aborted: false });
+    expect(body.text).toContain("你好");
+  }, 60_000);
+
   it("writes inside the workspace and refuses a path that escapes", async () => {
     const root = mkdtempSync(join(tmpdir(), "doc-write-"));
     roots.push(root);

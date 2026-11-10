@@ -2,12 +2,13 @@
  * Rewrite a workspace .docx or .pdf from plain text.
  *
  * Word is a minimal OOXML package (UTF-8, so Chinese round-trips through the
- * existing docx reader). PDF is a real text PDF: a system CJK font is subset
- * and embedded when the machine has one, so the text layer stays readable.
+ * existing docx reader). A .pdf path is that package rendered by the Harness
+ * LibreOffice engine, so the PDF keeps the layout and Chinese text.
  * The written file replaces the path and the parse cache is refreshed.
  */
 import { createHash, randomBytes } from "node:crypto";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { strToU8, zipSync } from "fflate";
 import fontkit from "@pdf-lib/fontkit";
@@ -17,6 +18,7 @@ import { getBot, getWorkspace, type OpenedDatabase } from "@deepseek-bot/storage
 import type { WrittenDocument } from "@deepseek-bot/agent-tools";
 import { resolveInsideWorkspace } from "./artifacts.js";
 import { parseAndStoreAttachment } from "./attachment-parse.js";
+import { convertOfficeToPdf } from "./office-pdf.js";
 
 export const MAX_DOCUMENT_TEXT_CHARS = 100_000;
 const MAX_DOCUMENT_BYTES = 2 * 1024 * 1024;
@@ -200,7 +202,19 @@ export async function writeDocumentAt(
     throw invalid("document path must stay inside the bot workspace");
   }
   const located = resolveInsideWorkspace(root, relativePath);
-  const bytes = format === "docx" ? buildDocx(text) : await buildPdf(text);
+  if (format === "pdf") {
+    const scratch = path.join(os.tmpdir(), `dsb-docx-${randomBytes(4).toString("hex")}.docx`);
+    fs.writeFileSync(scratch, buildDocx(text));
+    try {
+      fs.mkdirSync(path.dirname(located.absolute), { recursive: true });
+      const bytes = await convertOfficeToPdf(scratch, located.absolute);
+      const stored = path.relative(root, located.absolute).split(path.sep).join("/");
+      return { path: stored, bytes, format: "pdf" };
+    } finally {
+      fs.rmSync(scratch, { force: true });
+    }
+  }
+  const bytes = buildDocx(text);
   if (bytes.byteLength > MAX_DOCUMENT_BYTES) {
     throw invalid("written document exceeds 2 MB");
   }

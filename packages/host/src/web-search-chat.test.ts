@@ -98,7 +98,7 @@ describe("chat web_search", () => {
     const { endpoint, requests } = await searchEndpoint();
     const { host, request, bot, sessionId } = await setup();
     const catalog = (await (await request("/app-tools")).json()) as { tools: Array<{ name: string }> };
-    expect(catalog.tools).toHaveLength(19); // schedules, skills, read_workspace_file, write_document, write_presentation
+    expect(catalog.tools).toHaveLength(20); // schedules, skills, read_workspace_file, write_document, edit_document, write_presentation
     expect(catalog.tools.map((tool) => tool.name)).not.toContain("web_search");
     expect(
       await (

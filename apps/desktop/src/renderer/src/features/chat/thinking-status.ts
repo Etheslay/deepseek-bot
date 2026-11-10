@@ -33,6 +33,10 @@ export type ThinkingStatusInput = {
   hasText: boolean;
   /** This turn is waiting on a Word/PDF body the Host is extracting. */
   readingFile?: boolean;
+  /** The user asked for a Word file, or edit_document is the turn's tool. */
+  makingDocument?: boolean;
+  /** The user asked to turn a file into a PDF. */
+  convertingToPdf?: boolean;
   /** The user asked for a deck, or write_presentation is the turn's tool. */
   makingPresentation?: boolean;
 };
@@ -54,21 +58,28 @@ export function thinkingStatus(input: ThinkingStatusInput): ThinkingStatus | nul
   }
   const hint =
     input.elapsedMs >= ELAPSED_HINT_AFTER_MS ? formatElapsed(input.elapsedMs) : null;
+  const editingDocument =
+    input.makingDocument === true || input.toolName === "edit_document";
   const presentation =
     input.makingPresentation === true || input.toolName === "write_presentation";
   const namedTool =
     input.stage === "tool" &&
     input.toolName !== undefined &&
     input.toolName.length > 0 &&
+    input.toolName !== "edit_document" &&
     input.toolName !== "write_presentation";
   const text = namedTool
     ? t("chat.thinkTool", [input.toolName ?? ""])
-    : presentation
-      ? t("chat.thinkMakingPresentation")
-      : input.readingFile
-        ? t("chat.thinkReadingFile")
-        : input.stage === "preparing"
-          ? t("chat.thinkPreparing")
-          : t("chat.thinkReasoning");
+    : input.convertingToPdf
+      ? t("chat.thinkConvertingPdf")
+      : editingDocument
+        ? t("chat.thinkMakingDocument")
+        : presentation
+          ? t("chat.thinkMakingPresentation")
+          : input.readingFile
+            ? t("chat.thinkReadingFile")
+            : input.stage === "preparing"
+              ? t("chat.thinkPreparing")
+              : t("chat.thinkReasoning");
   return { text, hint };
 }

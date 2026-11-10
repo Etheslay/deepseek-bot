@@ -52,7 +52,7 @@ src/renderer/src/services/
 两条路径都在。聊天发送走理解闭环；网关导入仍是独立的 `chat.attach` 入口。
 
 - **理解闭环**：＋ 菜单/拖拽选中的非空文件（≤ 20 MiB）在发送前经 `attachment.begin/append/commit` 进入当前 bot 工作区 `attachments/`。重名加后缀，不覆盖。暂存与失败清理见 [CONTRACTS](CONTRACTS.md) attachment 行。上传失败中止发送并保留草稿。文件不进数据库，产物面板与画布把它当普通工作区文件列出。
-- **bot 如何看到闭环附件**：消息同时带工作区路径。文本 ≤ 16 KiB 以内联围栏注入（fence 安全、4000 字截断，并受 `chat.send` 的 4000 字上限裁剪）；更大的文本不内联，并提示 `read_workspace_file`。PDF、Word（`.docx`）和 PPT（`.pptx`）由 Host 抽出正文再注入；用户没另写文字时，回复先是「收到文件，我先打开看看内容。」再转述总结。改写走 `write_document`，覆盖为新的 `.docx` 或 `.pdf`。新的演示文稿走 `write_presentation`，写成 `.pptx`。用户要求做 PPT 时，等待文案是「制作演示文稿」。图片与二进制只给路径和说明。能放下时另附一句，让模型用 `read` 读取同一路径。文件卡片显示文件名和大小，点击打开产物侧车。图片缩略图留在卡片上。
+- **bot 如何看到闭环附件**：消息同时带工作区路径。文本 ≤ 16 KiB 以内联围栏注入（fence 安全、4000 字截断，并受 `chat.send` 的 4000 字上限裁剪）；更大的文本不内联，并提示 `read_workspace_file`。PDF、Word（`.docx`）和 PPT（`.pptx`）由 Host 抽出正文再注入；用户没另写文字时，回复先是「收到文件，我先打开看看内容。」再转述总结。整篇覆盖走 `write_document`。新建、读取、追加、替换、删除文字、删除文件，以及 docx 与 pdf 互转，走 `edit_document`。转成 PDF 走 Harness 自带的 LibreOffice 引擎，在工作区写出排版后的 PDF，源文件还在。新的演示文稿走 `write_presentation`，写成 `.pptx`。用户要求做 Word 时，等待文案是「制作文档」；要求转成 PDF 时是「转换成 PDF」；要求做 PPT 时是「制作演示文稿」。图片与二进制只给路径和说明。能放下时另附一句，让模型用 `read` 读取同一路径。文件卡片显示文件名和大小，点击打开产物侧车。图片缩略图留在卡片上。
 - **工具网关**：`service.chat.importAttachment` 仍分块调用 `chat.attach`。真实 Host 在 `fs.write` 为 ask 时等待审批，通过后才写入工作区 `attachments/`。夹具服务写入内存工作区，不模拟审批。审批预览不含正文。模型工具 `read`（能力 `fs.read`）读取该路径：文本可截断，图片和其它二进制只返回类型与体积。
 - **安全边界**：模型不选择上传路径。`read_workspace_file` 夹紧在工作区内，拒绝 `../`、隐藏项、目录、二进制和超过 768 KiB 的文件，不截断。默认 bot 共用一个工作区目录，读授权通过后可以看到该目录里的附件。
 

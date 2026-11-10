@@ -26,6 +26,7 @@ export const APPLICATION_TOOL_NAMES = [
   // back through this tool (keep in lockstep with the Host list).
   "read_workspace_file",
   "write_document",
+  "edit_document",
   "write_presentation",
 ] as const;
 

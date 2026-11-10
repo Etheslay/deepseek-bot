@@ -27,6 +27,27 @@ describe("thinkingStatus", () => {
     ).toBe("正在读取文件");
   });
 
+  it("says it is writing a document or converting to PDF", () => {
+    expect(
+      thinkingStatus({
+        stage: "preparing",
+        elapsedMs: 0,
+        hasText: false,
+        makingDocument: true,
+      })?.text,
+    ).toBe("制作文档");
+    expect(at("tool", 0, "edit_document")?.text).toBe("制作文档");
+    expect(
+      thinkingStatus({
+        stage: "tool",
+        toolName: "edit_document",
+        elapsedMs: 0,
+        hasText: false,
+        convertingToPdf: true,
+      })?.text,
+    ).toBe("转换成 PDF");
+  });
+
   it("says it is making a presentation for that turn or that tool", () => {
     expect(
       thinkingStatus({

@@ -97,6 +97,7 @@ describe("authenticated chat application tool channel", () => {
       "create_bots_batch",
       "create_group",
       "dispatch_task",
+      "edit_document",
       "get_run",
       "get_run_events",
       "learn_skill",
