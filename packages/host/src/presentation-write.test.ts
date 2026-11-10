@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { unzipSync } from "fflate";
 import { afterEach, describe, expect, it } from "vitest";
+import { compilePresentationIr } from "@deepseek-bot/agent-tools";
 import { extractPdfBody, extractPptxBody } from "./attachment-parse.js";
 import { buildPptx, writePresentationAt } from "./presentation-write.js";
 
@@ -203,6 +204,41 @@ describe("write_presentation bytes", () => {
     const body = await extractPdfBody(readFileSync(join(root, written.pdfPath ?? "")), { aborted: false });
     expect(body.text).toContain("你好封面");
   }, 60_000);
+
+  it("writes a fractions deck even when the brief forgot the cover and the ledger", async () => {
+    const root = mkdtempSync(join(tmpdir(), "ppt-fractions-"));
+    roots.push(root);
+    const compiled = compilePresentationIr({
+      brief: {
+        topic: "三年级数学认识分数",
+        audience: "小学三年级学生和家长",
+        goal: "讲清什么是分数、怎么比较大小",
+        slide_budget: 8,
+        lang: "zh-CN",
+        must_keep: ["1/2 大于 1/4"],
+      },
+      slides: [
+        {
+          id: "1",
+          layout: "statement",
+          title: "一半大于四分之一",
+          blocks: [{ type: "bullets", items: ["平均分成 4 份", "1/2 大于 1/4"] }],
+        },
+        {
+          id: "2",
+          layout: "statement",
+          title: "分母相同看分子",
+          blocks: [{ type: "callout", text: "分母相同看分子" }],
+        },
+      ],
+    });
+    const written = await writePresentationAt(root, "认识分数.pptx", compiled.slides, undefined, compiled.palette);
+    expect(written).toMatchObject({ path: "认识分数.pptx", format: "pptx" });
+    expect(written.slides).toBeGreaterThanOrEqual(2);
+    const body = extractPptxBody(readFileSync(join(root, "认识分数.pptx")));
+    expect(body.text).toContain("1/2 大于 1/4");
+    expect(body.text).toContain("分母相同看分子");
+  });
 
   it("writes inside the workspace and refuses a path that escapes", async () => {
     const root = mkdtempSync(join(tmpdir(), "ppt-write-"));

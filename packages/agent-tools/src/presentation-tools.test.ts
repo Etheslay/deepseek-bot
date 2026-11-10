@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bindWritePresentationTool, WritePresentationInputSchema } from "./presentation-tools.js";
+import { bindWritePresentationTool, WritePresentationInputSchema, type WrittenPresentation } from "./presentation-tools.js";
 import { ToolRejectionError } from "./types.js";
 import type { PresentationIr } from "./presentation-ir.js";
 
@@ -74,12 +74,14 @@ describe("write_presentation input", () => {
       { path: "attachments/deck.pptx", ir: ir() },
       { caller: { id: "chat:s" } },
     )).rejects.toBeInstanceOf(ToolRejectionError);
-    await expect(tool.handler(
+    const clumsy = await tool.handler(
       {
-        path: "attachments/deck.pptx",
+        path: "认识分数.pptx",
         ir: { ...ir(), slides: [ir().slides[1]!, ir().slides[1]!] },
       },
       { caller: { id: "chat:s", botId: BOT } },
-    )).rejects.toMatchObject({ code: "INVALID_INPUT" });
+    ) as WrittenPresentation;
+    expect(clumsy).toMatchObject({ path: "认识分数.pptx", format: "pptx" });
+    expect(clumsy.slides).toBeGreaterThanOrEqual(2);
   });
 });

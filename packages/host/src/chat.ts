@@ -141,8 +141,15 @@ function deckDeliveryRule(text: string): string {
   if (!/pptx|幻灯片|演示文稿|课件|(?:^|[^a-z])ppt(?:[^a-z]|$)/i.test(text)) return "";
   return [
     "【必须交付演示文稿】",
-    "用户要的是本机上的一个 .pptx 文件。这一轮调用 write_presentation，把内容写进这个文件。",
-    "这个工具已经接在这一轮。它在本机写文件，不启动 Python，不打开 PowerPoint，也不需要浏览器。",
+    "用户要的是本机上的一个 .pptx 文件。这一轮只调用一次 write_presentation，把内容写进这个文件。",
+    "这个工具已经接在这一轮。工作区写入允许时，它直接创建 .pptx，不启动 Python，不打开 PowerPoint，也不需要浏览器。",
+    "【演示文稿技能】",
+    "path 用工作区相对路径，以 .pptx 结尾，例如 认识分数.pptx。",
+    "ir.brief 写 topic、audience、goal、slide_budget、lang。lang 用 zh-CN。slide_budget 等于你交的页数。用户点名要留在文稿里的句子放进 must_keep。",
+    "slides 第一页 layout 是 cover，最后一页是 end。满 8 页时，封面后加一页 section。标题写成结论：封面不超过 18 字，章节不超过 12 字，其余不超过 24 字。",
+    "每一页的 blocks 只用 bullets、callout、kv、table、chart。要点放进 bullets.items。页上的数字照用户的原话写。",
+    "最小形状：{\"path\":\"认识分数.pptx\",\"ir\":{\"brief\":{\"topic\":\"认识分数\",\"audience\":\"三年级学生和家长\",\"goal\":\"讲清比较大小\",\"slide_budget\":2,\"lang\":\"zh-CN\",\"must_keep\":[\"1/2 大于 1/4\"]},\"slides\":[{\"id\":\"s01\",\"layout\":\"cover\",\"title\":\"一半大于四分之一\"},{\"id\":\"s02\",\"layout\":\"end\",\"title\":\"分母相同看分子\",\"blocks\":[{\"type\":\"bullets\",\"items\":[\"1/2 大于 1/4\"]}]}]}}",
+    "Host 会补上缺的封面、收束、章节、标题长度和数字台账，然后把文件写进工作区。不要先交文字大纲，也不要因为页数或数字先放弃。",
     "前面如果说过工具通道断了、让用户点「下载可编辑」、双击 bat、或自己装 python-pptx，那些话作废。不要再重复。",
     "不要写 .bat，不要写安装脚本，不要说备用方案，不要用文字稿、互动页或导出按钮代替这个文件。",
     "工具返回后，把文件路径告诉用户。",

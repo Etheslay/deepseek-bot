@@ -4,7 +4,7 @@
  * shape of the request. Authorization maps to `fs.write`.
  */
 import { z } from "zod";
-import { compilePresentationIr, PresentationIrSchema, presentationIrIssues } from "./presentation-ir.js";
+import { compilePresentationIr, PresentationIrSchema } from "./presentation-ir.js";
 import { ToolRejectionError, type ToolCapability, type ToolContext } from "./types.js";
 import { WorkspaceFilePathSchema } from "./workspace-file.js";
 
@@ -84,9 +84,6 @@ export const WritePresentationInputSchema = z
     if (value.pdfPath !== undefined && !/\.pdf$/i.test(value.pdfPath)) {
       ctx.addIssue({ code: "custom", message: "pdfPath must end with .pdf" });
     }
-    for (const message of presentationIrIssues(value.ir)) {
-      ctx.addIssue({ code: "custom", message });
-    }
   });
 
 export type PresentationSlideInput = z.infer<typeof SlideSchema>;
@@ -128,25 +125,18 @@ export function bindWritePresentationTool(
   return {
     name: "write_presentation",
     description:
-      "Build a 16:9 PowerPoint from a semantic brief. Do not send coordinates, colors, font " +
-      "sizes, or a script. The host places every box. ir.brief requires topic, audience, goal, " +
-      "slide_budget from 2 to 16, and lang. evidence lists every number you will print, with id, " +
-      "claim, value, and source. must_keep phrases must appear in the deck. must_avoid phrases " +
-      "must not. slides start with layout cover and end with layout end. A title is a conclusion " +
-      "sentence, not a label: at most 24 characters, cover at most 18, section at most 12. " +
-      "blocks are only bullets, table, chart, image, callout, or kv, and a slide has at most 5. " +
-      "Choose the layout from the content: a chart uses chart_plus_note, a table wider than 3 " +
-      "columns uses table_full, a single callout uses statement, an image with bullets uses " +
-      "bullets_left_image_right, a sequence uses timeline, a comparison uses two_col_compare, " +
-      "and three points use statement_plus_3cols. Layouts are cover, section, statement, " +
-      "statement_plus_3cols, bullets_left_image_right, two_col_compare, table_full, " +
-      "chart_plus_note, timeline, quote, and end. Every number except a year must appear in an " +
-      "evidence value cited by that slide. If a number has no source, leave it out. notes is the " +
-      "spoken line, at most 120 characters. path ends in .pptx. pdfPath, when present, ends in " +
-      ".pdf. This tool is available in the current chat. It writes the file on this machine. " +
-      "Do not claim it is offline, blocked by Python, PowerPoint, or a temp-directory permission. " +
-      "Do not hand the user a .bat, a python-pptx install, or a browser download button. " +
-      "A text outline does not replace the file. After it returns, tell the user the file path.",
+      "Create a 16:9 .pptx in the bot workspace. Call it once, with the lesson itself. " +
+      "path is a workspace-relative path ending in .pptx, such as 认识分数.pptx. " +
+      "ir.brief needs topic, audience, goal, slide_budget (how many slides you are sending, 2 to 16), and lang zh-CN. " +
+      "Put a sentence the user insisted on into must_keep. " +
+      "slides: the first layout is cover, the last is end, and a deck of 8 or more has one section after the cover. " +
+      "A title is a conclusion: cover at most 18 characters, section at most 12, other slides at most 24. " +
+      "blocks are bullets, callout, kv, table, chart, or image. Write numbers the way the user said them. " +
+      "The host fills a missing cover, ending, section, title length, and the number ledger, then writes the file. " +
+      "Do not send coordinates, colors, font sizes, or a script. Do not send an outline first. " +
+      "This tool is available now and writes the file on this machine when workspace writing is allowed. " +
+      "Do not claim it is offline or blocked. Do not hand the user a .bat, python-pptx, or a download button. " +
+      "After it returns, tell the user the file path.",
     inputSchema: WritePresentationInputSchema,
     handler: async (params, context) => {
       const botId = requireBot(context);
