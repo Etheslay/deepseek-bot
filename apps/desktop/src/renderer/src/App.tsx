@@ -67,6 +67,7 @@ import {
   avatarColor,
   bubbleInk,
   toContractAvatar,
+  userBubbleInk,
   type Avatar as AvatarKind,
 } from "./features/avatars/avatar-meta.js";
 import { ChoiceCard, type ChoiceOption } from "./features/questions/choice-card.js";
@@ -4298,6 +4299,9 @@ function BotsPlaceholder({
   return (
     <div
       className="chat-page"
+      /* Coloured bots keep the theme's type. The mono body matches that type
+         (white on dark, black on light), so its bubble flips. */
+      data-bubble-ink={userBubbleInk(me.avatar)}
       /* SPRINTS §6 #8: the user bubble follows the current bot's colour, and so
          does the composer's send button. The pair is scoped to the page rather
          than to the message list, because the composer is its sibling — a
