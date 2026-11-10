@@ -60,23 +60,28 @@ export function thinkingStatus(input: ThinkingStatusInput): ThinkingStatus | nul
     input.elapsedMs >= ELAPSED_HINT_AFTER_MS ? formatElapsed(input.elapsedMs) : null;
   const editingDocument =
     input.makingDocument === true || input.toolName === "edit_document";
-  const presentation =
-    input.makingPresentation === true || input.toolName === "write_presentation";
+  const writingDeck = input.toolName === "write_presentation";
+  const findingSkill =
+    input.toolName === "find_github_skill" ||
+    (input.makingPresentation === true && !writingDeck && input.toolName !== "edit_document");
   const namedTool =
     input.stage === "tool" &&
     input.toolName !== undefined &&
     input.toolName.length > 0 &&
     input.toolName !== "edit_document" &&
-    input.toolName !== "write_presentation";
+    input.toolName !== "write_presentation" &&
+    input.toolName !== "find_github_skill";
   const text = namedTool
     ? t("chat.thinkTool", [input.toolName ?? ""])
     : input.convertingToPdf
       ? t("chat.thinkConvertingPdf")
       : editingDocument
         ? t("chat.thinkMakingDocument")
-        : presentation
+        : writingDeck
           ? t("chat.thinkMakingPresentation")
-          : input.readingFile
+          : findingSkill
+            ? t("chat.thinkFindingSkill")
+            : input.readingFile
             ? t("chat.thinkReadingFile")
             : input.stage === "preparing"
               ? t("chat.thinkPreparing")

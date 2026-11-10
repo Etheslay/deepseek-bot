@@ -48,7 +48,7 @@ describe("thinkingStatus", () => {
     ).toBe("转换成 PDF");
   });
 
-  it("says it is making a presentation for that turn or that tool", () => {
+  it("looks up a skill before it makes a presentation", () => {
     expect(
       thinkingStatus({
         stage: "preparing",
@@ -56,7 +56,8 @@ describe("thinkingStatus", () => {
         hasText: false,
         makingPresentation: true,
       })?.text,
-    ).toBe("制作演示文稿");
+    ).toBe("正在查找技能");
+    expect(at("tool", 0, "find_github_skill")?.text).toBe("正在查找技能");
     expect(at("thinking", 0, "write_presentation")?.text).toBe("制作演示文稿");
     expect(at("tool", 0, "write_presentation")?.text).toBe("制作演示文稿");
   });

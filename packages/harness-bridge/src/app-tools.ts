@@ -27,6 +27,7 @@ export const APPLICATION_TOOL_NAMES = [
   "read_workspace_file",
   "write_document",
   "edit_document",
+  "find_github_skill",
   "write_presentation",
 ] as const;
 

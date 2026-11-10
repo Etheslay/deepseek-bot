@@ -105,6 +105,7 @@ export {
   type DocumentEditResult,
   type DocumentEditor,
 } from "./document-edit-tools.js";
+export { bindFindGithubSkillTool, FindGithubSkillInputSchema } from "./github-skill-tool.js";
 export {
   bindWritePresentationTool,
   PRESENTATION_PALETTES,

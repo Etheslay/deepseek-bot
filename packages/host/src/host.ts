@@ -49,6 +49,7 @@ import { DEFAULT_CONTEXT_WINDOW_TOKENS } from "./context-window.js";
 import { createAttachmentStore, readWorkspaceFileText } from "./attachments.js";
 import { writeBotDocument } from "./document-write.js";
 import { editBotDocument } from "./document-edit.js";
+import { findGithubPptSkill, readSavedPptSkill, savePptSkill } from "./github-skill.js";
 import { writeBotPresentation } from "./presentation-write.js";
 import { createWorkspaceArtifacts } from "./artifacts.js";
 import {
@@ -107,6 +108,7 @@ import {
   bindWorkspaceFileTool,
   bindWriteDocumentTool,
   bindEditDocumentTool,
+  bindFindGithubSkillTool,
   bindWritePresentationTool,
   type UserQuestionControls,
 } from "@deepseek-bot/agent-tools";
@@ -918,9 +920,18 @@ export async function createHost(options: HostOptions): Promise<DeepSeekBotHost>
     bindEditDocumentTool({
       edit: (botId, input) => editBotDocument(db, botId, input),
     }),
+    bindFindGithubSkillTool({
+      find: (query, signal) =>
+        findGithubPptSkill({
+          ...(query !== undefined ? { query } : {}),
+          ...(signal !== undefined ? { signal } : {}),
+          load: () => readSavedPptSkill(db),
+          save: (skill) => savePptSkill(db, skill),
+        }),
+    }),
     bindWritePresentationTool({
-      write: (botId, relativePath, slides, pdfPath, palette) =>
-        writeBotPresentation(db, botId, relativePath, slides, pdfPath, palette),
+      write: (botId, relativePath, slides, pdfPath, palette, script) =>
+        writeBotPresentation(db, botId, relativePath, slides, pdfPath, palette, script),
     }),
     bindDeviceInputTool(deviceInput),
     // v0.5 manager orchestration (T4/T3): coordinator workflow saving and

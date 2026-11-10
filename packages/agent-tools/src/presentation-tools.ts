@@ -73,7 +73,8 @@ export const WritePresentationInputSchema = z
     path: WorkspaceFilePathSchema,
     pdfPath: WorkspaceFilePathSchema.optional(),
     palette: z.enum(PRESENTATION_PALETTES).optional(),
-    slides: z.array(SlideSchema).min(1).max(MAX_PRESENTATION_SLIDES),
+    script: z.string().trim().max(24_000).optional(),
+    slides: z.array(SlideSchema).min(1).max(MAX_PRESENTATION_SLIDES).optional(),
   })
   .strict()
   .superRefine((value, ctx) => {
@@ -83,7 +84,13 @@ export const WritePresentationInputSchema = z
     if (value.pdfPath !== undefined && !/\.pdf$/i.test(value.pdfPath)) {
       ctx.addIssue({ code: "custom", message: "pdfPath must end with .pdf" });
     }
-    value.slides.forEach((slide, index) => {
+    if ((value.script?.length ?? 0) < 40) {
+      ctx.addIssue({
+        code: "custom",
+        message: "call find_github_skill first, then pass a pptxgenjs script. Do not hand-write slide layouts.",
+      });
+    }
+    (value.slides ?? []).forEach((slide, index) => {
       const layout = slide.layout ?? "bullets";
       if (layout === "agenda") {
         const items = slide.bullets ?? [];
@@ -152,6 +159,7 @@ export interface PresentationWriter {
     slides: readonly PresentationSlideInput[],
     pdfPath?: string,
     palette?: (typeof PRESENTATION_PALETTES)[number],
+    script?: string,
   ): Promise<WrittenPresentation> | WrittenPresentation;
 }
 
@@ -172,27 +180,24 @@ export function bindWritePresentationTool(
   return {
     name: "write_presentation",
     description:
-      "Create a designed 16:9 PowerPoint in the bot workspace. When the user asks for a PPT, " +
-      "slides, or a deck, call this and build it instead of refusing. If they named no topic, " +
-      "make a 4-slide sample in their language: dark cover, agenda, one content slide, dark summary. " +
-      "path ends in .pptx, for example attachments/deck.pptx. palette is one of ink, harbor, grove, " +
-      "clay, dusk, tide; pick the one that fits the topic and use it for the whole deck. " +
-      "Open and close on dark slides (cover, section, summary). Keep middle slides light. " +
-      "Vary layouts and do not repeat a bullet list: agenda (2 to 6 short items), cards (2 to 4 " +
-      "titled cards), steps (3 or 4 labels of at most 16 characters), split (two columns), " +
-      "metrics (2 to 4 big figures), table, chart (column chart, categories plus one or two series), " +
-      "quote, bullets (at most 6, only when a list is the point). " +
-      "Give a content slide an icon, an image, a chart, cards, or steps so it is not text alone. " +
-      "icon is arrow, check, star, alert, spark, or target. image is a workspace png or jpeg. " +
-      "notes is speaker text and stays off the slide. Shapes fade in during the show. " +
-      "The deck embeds the CJK and Latin faces it draws with. Keep titles short. " +
-      "pdfPath, when present, also writes a PDF of the finished deck and must end in " +
-      ".pdf. A written PDF report that is not slides goes to write_document with a .pdf path. " +
-      "After it returns, tell the user the file path.",
+      "Save a PowerPoint after find_github_skill has returned a skill. Do not call this first, " +
+      "and do not hand-write slides with layout fields. script is JavaScript that uses the " +
+      "provided pres from pptxgenjs and follows the skill. pres.layout is already LAYOUT_WIDE " +
+      "(13.3 by 7.5 inches). Add the slides the skill describes. Do not import, require, fetch, " +
+      "or write the file. path ends in .pptx, for example attachments/deck.pptx. " +
+      "pdfPath, when present, also writes a PDF and must end in .pdf. A written report that is " +
+      "not slides goes to write_document. After it returns, tell the user the file path.",
     inputSchema: WritePresentationInputSchema,
     handler: async (params, context) => {
       const botId = requireBot(context);
-      return writer.write(botId, params.path, params.slides, params.pdfPath, params.palette);
+      return writer.write(
+        botId,
+        params.path,
+        params.slides ?? [],
+        params.pdfPath,
+        params.palette,
+        params.script,
+      );
     },
   };
 }

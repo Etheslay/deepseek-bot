@@ -27,6 +27,7 @@ import { getBot, getWorkspace, type OpenedDatabase } from "@deepseek-bot/storage
 import { resolveInsideWorkspace } from "./artifacts.js";
 import { parseAndStoreAttachment } from "./attachment-parse.js";
 import { embeddedFaces, type EmbeddedFace } from "./presentation-font.js";
+import { renderPptxScript } from "./presentation-script.js";
 import { convertOfficeToPdf } from "./office-pdf.js";
 
 const MAX_PRESENTATION_BYTES = 8 * 1024 * 1024;
@@ -913,18 +914,28 @@ export async function writePresentationAt(
   slides: readonly PresentationSlideInput[],
   pdfPath?: string,
   palette?: (typeof PRESENTATION_PALETTES)[number],
+  script?: string,
 ): Promise<WrittenPresentation> {
   const absolute = workspaceFile(root, relativePath, "pptx");
   const pdfAbsolute = pdfPath === undefined ? undefined : workspaceFile(root, pdfPath, "pdf");
   if (pdfAbsolute !== undefined && pdfAbsolute === absolute) {
     throw invalid("pdf path must be a different file");
   }
+  const skillScript = script?.trim();
   const images = new Map<number, SlideImage>();
-  for (const [index, slide] of slides.entries()) {
-    if (slide.image === undefined) continue;
-    images.set(index, readSlideImage(root, slide.image));
+  let bytes: Uint8Array;
+  let slideCount: number;
+  if (skillScript !== undefined && skillScript.length >= 40) {
+    bytes = await renderPptxScript(skillScript);
+    slideCount = Math.max(1, (skillScript.match(/\.addSlide\s*\(/g) ?? []).length);
+  } else {
+    for (const [index, slide] of slides.entries()) {
+      if (slide.image === undefined) continue;
+      images.set(index, readSlideImage(root, slide.image));
+    }
+    bytes = await buildPptx(slides, images, palette);
+    slideCount = slides.length;
   }
-  const bytes = await buildPptx(slides, images, palette);
   if (bytes.byteLength > MAX_PRESENTATION_BYTES) {
     throw invalid("written presentation exceeds 8 MB");
   }
@@ -934,7 +945,7 @@ export async function writePresentationAt(
   fs.renameSync(temporary, absolute);
   const stored = path.relative(root, absolute).split(path.sep).join("/");
   if (pdfAbsolute === undefined) {
-    return { path: stored, bytes: bytes.byteLength, format: "pptx", slides: slides.length };
+    return { path: stored, bytes: bytes.byteLength, format: "pptx", slides: slideCount };
   }
   const pdfBytes = await convertOfficeToPdf(absolute, pdfAbsolute);
   const storedPdf = path.relative(root, pdfAbsolute).split(path.sep).join("/");
@@ -942,7 +953,7 @@ export async function writePresentationAt(
     path: stored,
     bytes: bytes.byteLength,
     format: "pptx",
-    slides: slides.length,
+    slides: slideCount,
     pdfPath: storedPdf,
     pdfBytes,
   };
@@ -955,13 +966,21 @@ export async function writeBotPresentation(
   slides: readonly PresentationSlideInput[],
   pdfPath?: string,
   palette?: (typeof PRESENTATION_PALETTES)[number],
+  script?: string,
 ): Promise<WrittenPresentation> {
   const bot = getBot(db, botId);
   if (bot === undefined) throw invalid(`bot '${botId}' was not found`);
   if (bot.archivedAt !== null) throw invalid("archived bots have no workspace");
   const workspace = getWorkspace(db, bot.workspaceId);
   if (workspace === undefined) throw invalid(`workspace '${bot.workspaceId}' was not found`);
-  const written = await writePresentationAt(workspace.canonicalPath, relativePath, slides, pdfPath, palette);
+  const written = await writePresentationAt(
+    workspace.canonicalPath,
+    relativePath,
+    slides,
+    pdfPath,
+    palette,
+    script,
+  );
   const checksum = createHash("sha256").update(fs.readFileSync(
     path.resolve(workspace.canonicalPath, ...written.path.split("/")),
   )).digest("hex");
