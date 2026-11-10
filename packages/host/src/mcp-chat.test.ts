@@ -177,13 +177,18 @@ async function fixture(modelEndpoint?: string) {
 }
 
 async function pending(host: DeepSeekBotHost): Promise<AppApproval> {
-  return await vi.waitFor(async () => {
-    const list = (await host.handleMethod("permission.approval.list", { status: "pending" })) as {
-      approvals: AppApproval[];
-    };
-    expect(list.approvals).toHaveLength(1);
-    return list.approvals[0]!;
-  });
+  return await vi.waitFor(
+    async () => {
+      const list = (await host.handleMethod("permission.approval.list", { status: "pending" })) as {
+        approvals: AppApproval[];
+      };
+      expect(list.approvals).toHaveLength(1);
+      return list.approvals[0]!;
+    },
+    // Approvals and tool discovery surface after async work; the 1s default
+    // poll budget starves while LibreOffice conversions share the workers.
+    { timeout: 20_000, interval: 100 },
+  );
 }
 const decide = (
   host: DeepSeekBotHost,
@@ -225,7 +230,10 @@ describe("custom MCP chat", () => {
       f.holdLists();
       const call = turn.call({ text: "must not execute after revocation" });
       await decide(f.host, await pending(f.host));
-      await vi.waitFor(() => expect(f.listObserved()).toBe(true));
+      await vi.waitFor(() => expect(f.listObserved()).toBe(true), {
+        timeout: 20_000,
+        interval: 100,
+      });
       const bot = getBot(f.host.db, f.bot.id)!;
       if (change === "bot-policy")
         await f.host.handleMethod("bot.update", {

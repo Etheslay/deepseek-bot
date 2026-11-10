@@ -4,6 +4,9 @@ export default defineConfig({
   test: {
     include: ["src/**/*.test.ts"],
     testTimeout: 30_000,
+    // LibreOffice conversions share the two workers with host teardown.
+    // The 10s hook default trips while those hosts shut down.
+    hookTimeout: 60_000,
     // Nine test files each spawn a fake-harness child process; at full
     // worker parallelism the CPU saturates and the "wait for the task
     // status to become done" polls starve before their deadline. Two
