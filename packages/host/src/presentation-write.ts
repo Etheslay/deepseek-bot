@@ -1,10 +1,10 @@
 /**
  * Create a workspace .pptx from titled slides.
  *
- * The package is a real OOXML presentation (16:9, title plus bullets) so
- * PowerPoint and the existing pptx reader both see the same text. Chinese
- * stays in the XML; the deck names Microsoft YaHei for East Asian runs and
- * does not embed a font.
+ * The package is a designed 16:9 deck (cover, section, bullets, split, quote).
+ * PowerPoint and the pptx reader see the same text. Chinese stays in the XML
+ * and names Microsoft YaHei. An optional PDF is the same deck rendered by the
+ * Harness LibreOffice engine.
  */
 import { createHash, randomBytes } from "node:crypto";
 import fs from "node:fs";
@@ -22,6 +22,7 @@ import {
 import { getBot, getWorkspace, type OpenedDatabase } from "@deepseek-bot/storage";
 import { resolveInsideWorkspace } from "./artifacts.js";
 import { parseAndStoreAttachment } from "./attachment-parse.js";
+import { convertOfficeToPdf } from "./office-pdf.js";
 
 const MAX_PRESENTATION_BYTES = 2 * 1024 * 1024;
 
@@ -36,51 +37,150 @@ function xmlEscape(value: string): string {
     .replaceAll(">", "&gt;");
 }
 
-function run(text: string, size: number, bold: boolean): string {
+const INK = "1C1917";
+const PAPER = "F7F3EC";
+const EMBER = "C2410C";
+const CREAM = "FFFBF5";
+const MUTED = "6F675E";
+const CARD = "FFFBF7";
+
+function run(text: string, size: number, bold: boolean, color: string): string {
   return (
     `<a:r><a:rPr lang="zh-CN" sz="${size}"${bold ? ` b="1"` : ""} dirty="0">` +
-    `<a:solidFill><a:srgbClr val="1B1B1F"/></a:solidFill>` +
+    `<a:solidFill><a:srgbClr val="${color}"/></a:solidFill>` +
     `<a:latin typeface="Calibri"/><a:ea typeface="Microsoft YaHei"/>` +
     `</a:rPr><a:t>${xmlEscape(text)}</a:t></a:r>`
   );
 }
 
-function titleParagraph(text: string): string {
-  return `<a:p><a:pPr algn="l"/>${run(text, 3200, true)}<a:endParaRPr lang="zh-CN" sz="3200"/></a:p>`;
-}
-
-function bulletParagraph(text: string): string {
+function paragraph(
+  text: string,
+  size: number,
+  bold: boolean,
+  color: string,
+  options?: { readonly bullet?: boolean; readonly align?: "l" | "ctr"; readonly before?: number },
+): string {
+  const before = options?.before ?? 0;
+  const bullet = options?.bullet === true
+    ? `<a:buFont typeface="Arial"/><a:buClr><a:srgbClr val="${EMBER}"/></a:buClr><a:buChar char="•"/>`
+    : `<a:buNone/>`;
+  const margin = options?.bullet === true ? ` marL="285750" indent="-171450"` : "";
   return (
-    `<a:p><a:pPr marL="342900" indent="-171450">` +
-    `<a:buFont typeface="Arial"/><a:buChar char="•"/>` +
-    `</a:pPr>${run(text, 2000, false)}<a:endParaRPr lang="zh-CN" sz="2000"/></a:p>`
+    `<a:p><a:pPr algn="${options?.align ?? "l"}"${margin}>` +
+    `<a:lnSpc><a:spcPct val="115000"/></a:lnSpc>` +
+    `<a:spcBef><a:spcPts val="${before}"/></a:spcBef>${bullet}</a:pPr>` +
+    `${run(text, size, bold, color)}<a:endParaRPr lang="zh-CN" sz="${size}"/></a:p>`
   );
 }
 
-function textBox(id: number, name: string, x: number, y: number, cx: number, cy: number, body: string): string {
+function textBox(
+  id: number,
+  name: string,
+  x: number,
+  y: number,
+  cx: number,
+  cy: number,
+  body: string,
+  anchor: "t" | "ctr" = "t",
+): string {
   return (
     `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${name}"/>` +
     `<p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr><p:spPr>` +
     `<a:xfrm><a:off x="${x}" y="${y}"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm>` +
-    `<a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/></p:spPr>` +
-    `<p:txBody><a:bodyPr wrap="square" rtlCol="0"/><a:lstStyle/>${body}</p:txBody></p:sp>`
+    `<a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/><a:ln><a:noFill/></a:ln></p:spPr>` +
+    `<p:txBody><a:bodyPr wrap="square" rtlCol="0" anchor="${anchor}"/>` +
+    `<a:lstStyle/>${body}</p:txBody></p:sp>`
   );
 }
 
+function panel(id: number, x: number, y: number, cx: number, cy: number, color: string): string {
+  return (
+    `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="Panel ${id}"/>` +
+    `<p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr>` +
+    `<a:xfrm><a:off x="${x}" y="${y}"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm>` +
+    `<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>` +
+    `<a:solidFill><a:srgbClr val="${color}"/></a:solidFill><a:ln><a:noFill/></a:ln></p:spPr>` +
+    `<p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:endParaRPr lang="zh-CN"/></a:p></p:txBody></p:sp>`
+  );
+}
+
+function backdrop(color: string): string {
+  return `<p:bg><p:bgPr><a:solidFill><a:srgbClr val="${color}"/></a:solidFill><a:effectLst/></p:bgPr></p:bg>`;
+}
+
 function slideXml(slide: PresentationSlideInput): string {
-  const bullets = (slide.bullets ?? []).map((line) => bulletParagraph(line)).join("");
-  const body = bullets.length > 0 ? bullets : `<a:p><a:endParaRPr lang="zh-CN" sz="2000"/></a:p>`;
+  const layout = slide.layout ?? "bullets";
+  const parts: string[] = [];
+  let nextId = 2;
+  const add = (shape: string): void => {
+    parts.push(shape);
+  };
+  if (layout === "cover") {
+    add(panel(nextId++, 0, 0, 150000, 6858000, EMBER));
+    const lines = [
+      slide.kicker === undefined ? "" : paragraph(slide.kicker, 1400, true, EMBER, { before: 0 }),
+      paragraph(slide.title, 4400, true, CREAM),
+      slide.subtitle === undefined ? "" : paragraph(slide.subtitle, 1800, false, "D6D0C6", { before: 800 }),
+    ].join("");
+    add(textBox(nextId++, "Title", 720000, 1860000, 10600000, 2800000, lines, "ctr"));
+  } else if (layout === "section") {
+    add(panel(nextId++, 0, 0, 420000, 6858000, EMBER));
+    const lines = [
+      slide.kicker === undefined ? "" : paragraph(slide.kicker, 1400, true, EMBER),
+      paragraph(slide.title, 4000, true, INK),
+      slide.subtitle === undefined ? "" : paragraph(slide.subtitle, 1800, false, MUTED, { before: 600 }),
+    ].join("");
+    add(textBox(nextId++, "Title", 1100000, 2200000, 9800000, 2400000, lines, "ctr"));
+  } else if (layout === "quote") {
+    const hero = slide.quote ?? slide.title;
+    const lines = [
+      hero === slide.title ? "" : paragraph(slide.title, 1400, true, EMBER),
+      paragraph(hero, 3200, false, INK, { before: hero === slide.title ? 0 : 800 }),
+      slide.attribution === undefined ? "" : paragraph(slide.attribution, 1400, false, MUTED, { before: 1000 }),
+    ].join("");
+    add(textBox(nextId++, "Quote", 1100000, 1800000, 10000000, 3200000, lines, "ctr"));
+  } else if (layout === "split") {
+    add(panel(nextId++, 0, 0, 12192000, 90000, EMBER));
+    add(panel(nextId++, 640000, 2100000, 5300000, 4000000, CARD));
+    add(panel(nextId++, 6240000, 2100000, 5300000, 4000000, CARD));
+    add(textBox(nextId++, "Title", 640000, 280000, 10800000, 900000, paragraph(slide.title, 2800, true, INK)));
+    const column = (side: PresentationSlideInput["left"]): string => {
+      const heading = side?.title === undefined ? "" : paragraph(side.title, 1800, true, INK);
+      const bullets = (side?.bullets ?? []).map((line) => paragraph(line, 1600, false, INK, { bullet: true, before: 400 })).join("");
+      return `${heading}${bullets}`;
+    };
+    add(textBox(nextId++, "Left", 820000, 2280000, 4940000, 3600000, column(slide.left)));
+    add(textBox(nextId++, "Right", 6420000, 2280000, 4940000, 3600000, column(slide.right)));
+  } else {
+    add(panel(nextId++, 0, 0, 12192000, 90000, EMBER));
+    const heading = [
+      slide.kicker === undefined ? "" : paragraph(slide.kicker, 1200, true, EMBER),
+      paragraph(slide.title, 3000, true, INK),
+      slide.subtitle === undefined ? "" : paragraph(slide.subtitle, 1600, false, MUTED, { before: 200 }),
+    ].join("");
+    add(textBox(nextId++, "Title", 640000, 280000, 10800000, 1400000, heading));
+    const bullets = (slide.bullets ?? []).map((line) => paragraph(line, 1800, false, INK, { bullet: true, before: 500 })).join("");
+    add(textBox(
+      nextId++,
+      "Body",
+      640000,
+      1760000,
+      10800000,
+      4500000,
+      bullets.length > 0 ? bullets : `<a:p><a:endParaRPr lang="zh-CN" sz="1800"/></a:p>`,
+    ));
+  }
+  const background = layout === "cover" ? INK : PAPER;
   return (
     `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
     `<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" ` +
     `xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" ` +
     `xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
-    `<p:cSld><p:spTree>` +
+    `<p:cSld>${backdrop(background)}<p:spTree>` +
     `<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>` +
     `<p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/>` +
     `<a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>` +
-    textBox(2, "Title", 838200, 365125, 10515600, 1325563, titleParagraph(slide.title)) +
-    textBox(3, "Body", 838200, 1825625, 10515600, 4351338, body) +
+    parts.join("") +
     `</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>`
   );
 }
@@ -151,6 +251,7 @@ function normalizeSlides(slides: readonly PresentationSlideInput[]): Presentatio
     if (title.length < 1 || title.length > MAX_SLIDE_TITLE) {
       throw invalid(`slide title must be 1 to ${MAX_SLIDE_TITLE} characters`);
     }
+    const layout = slide.layout ?? "bullets";
     const bullets = (slide.bullets ?? []).map((line) => line.trim()).filter((line) => line.length > 0);
     if (bullets.length > MAX_SLIDE_BULLETS) {
       throw invalid(`a slide can have at most ${MAX_SLIDE_BULLETS} bullets`);
@@ -158,7 +259,38 @@ function normalizeSlides(slides: readonly PresentationSlideInput[]): Presentatio
     if (bullets.some((line) => line.length > MAX_BULLET_CHARS)) {
       throw invalid(`a bullet can be at most ${MAX_BULLET_CHARS} characters`);
     }
-    return bullets.length > 0 ? { title, bullets } : { title };
+    const column = (side: PresentationSlideInput["left"]): PresentationSlideInput["left"] => {
+      if (side === undefined) return undefined;
+      const columnBullets = (side.bullets ?? []).map((line) => line.trim()).filter((line) => line.length > 0);
+      if (columnBullets.length > MAX_SLIDE_BULLETS) {
+        throw invalid(`a slide can have at most ${MAX_SLIDE_BULLETS} bullets`);
+      }
+      return {
+        ...(side.title !== undefined && side.title.trim().length > 0 ? { title: side.title.trim() } : {}),
+        ...(columnBullets.length > 0 ? { bullets: columnBullets } : {}),
+      };
+    };
+    if (layout === "quote" && (slide.quote === undefined || slide.quote.trim().length === 0)) {
+      throw invalid("quote layout needs quote");
+    }
+    const left = column(slide.left);
+    const right = column(slide.right);
+    if (layout === "split" && (left?.bullets?.length ?? 0) + (right?.bullets?.length ?? 0) < 1) {
+      throw invalid("split layout needs a column");
+    }
+    return {
+      layout,
+      title,
+      ...(slide.kicker !== undefined && slide.kicker.trim().length > 0 ? { kicker: slide.kicker.trim() } : {}),
+      ...(slide.subtitle !== undefined && slide.subtitle.trim().length > 0 ? { subtitle: slide.subtitle.trim() } : {}),
+      ...(bullets.length > 0 ? { bullets } : {}),
+      ...(left !== undefined ? { left } : {}),
+      ...(right !== undefined ? { right } : {}),
+      ...(slide.quote !== undefined && slide.quote.trim().length > 0 ? { quote: slide.quote.trim() } : {}),
+      ...(slide.attribution !== undefined && slide.attribution.trim().length > 0
+        ? { attribution: slide.attribution.trim() }
+        : {}),
+    };
   });
 }
 
@@ -257,13 +389,9 @@ export function buildPptx(slides: readonly PresentationSlideInput[]): Uint8Array
   return zipSync(files);
 }
 
-export async function writePresentationAt(
-  root: string,
-  relativePath: string,
-  slides: readonly PresentationSlideInput[],
-): Promise<WrittenPresentation> {
-  if (!/\.pptx$/i.test(relativePath)) {
-    throw invalid("path must end with .pptx");
+function workspaceFile(root: string, relativePath: string, extension: "pptx" | "pdf"): string {
+  if (!new RegExp(`\\.${extension}$`, "i").test(relativePath)) {
+    throw invalid(`path must end with .${extension}`);
   }
   const segments = relativePath.split(/[\\/]/);
   if (
@@ -272,17 +400,42 @@ export async function writePresentationAt(
   ) {
     throw invalid("presentation path must stay inside the bot workspace");
   }
-  const located = resolveInsideWorkspace(root, relativePath);
+  return resolveInsideWorkspace(root, relativePath).absolute;
+}
+
+export async function writePresentationAt(
+  root: string,
+  relativePath: string,
+  slides: readonly PresentationSlideInput[],
+  pdfPath?: string,
+): Promise<WrittenPresentation> {
+  const absolute = workspaceFile(root, relativePath, "pptx");
+  const pdfAbsolute = pdfPath === undefined ? undefined : workspaceFile(root, pdfPath, "pdf");
+  if (pdfAbsolute !== undefined && pdfAbsolute === absolute) {
+    throw invalid("pdf path must be a different file");
+  }
   const bytes = buildPptx(slides);
   if (bytes.byteLength > MAX_PRESENTATION_BYTES) {
     throw invalid("written presentation exceeds 2 MB");
   }
-  fs.mkdirSync(path.dirname(located.absolute), { recursive: true });
-  const temporary = `${located.absolute}.tmp-${randomBytes(4).toString("hex")}`;
+  fs.mkdirSync(path.dirname(absolute), { recursive: true });
+  const temporary = `${absolute}.tmp-${randomBytes(4).toString("hex")}`;
   fs.writeFileSync(temporary, bytes);
-  fs.renameSync(temporary, located.absolute);
-  const stored = path.relative(root, located.absolute).split(path.sep).join("/");
-  return { path: stored, bytes: bytes.byteLength, format: "pptx", slides: slides.length };
+  fs.renameSync(temporary, absolute);
+  const stored = path.relative(root, absolute).split(path.sep).join("/");
+  if (pdfAbsolute === undefined) {
+    return { path: stored, bytes: bytes.byteLength, format: "pptx", slides: slides.length };
+  }
+  const pdfBytes = await convertOfficeToPdf(absolute, pdfAbsolute);
+  const storedPdf = path.relative(root, pdfAbsolute).split(path.sep).join("/");
+  return {
+    path: stored,
+    bytes: bytes.byteLength,
+    format: "pptx",
+    slides: slides.length,
+    pdfPath: storedPdf,
+    pdfBytes,
+  };
 }
 
 export async function writeBotPresentation(
@@ -290,16 +443,23 @@ export async function writeBotPresentation(
   botId: string,
   relativePath: string,
   slides: readonly PresentationSlideInput[],
+  pdfPath?: string,
 ): Promise<WrittenPresentation> {
   const bot = getBot(db, botId);
   if (bot === undefined) throw invalid(`bot '${botId}' was not found`);
   if (bot.archivedAt !== null) throw invalid("archived bots have no workspace");
   const workspace = getWorkspace(db, bot.workspaceId);
   if (workspace === undefined) throw invalid(`workspace '${bot.workspaceId}' was not found`);
-  const written = await writePresentationAt(workspace.canonicalPath, relativePath, slides);
+  const written = await writePresentationAt(workspace.canonicalPath, relativePath, slides, pdfPath);
   const checksum = createHash("sha256").update(fs.readFileSync(
     path.resolve(workspace.canonicalPath, ...written.path.split("/")),
   )).digest("hex");
   await parseAndStoreAttachment(db, botId, written.path, checksum);
+  if (written.pdfPath !== undefined) {
+    const pdfChecksum = createHash("sha256").update(fs.readFileSync(
+      path.resolve(workspace.canonicalPath, ...written.pdfPath.split("/")),
+    )).digest("hex");
+    await parseAndStoreAttachment(db, botId, written.pdfPath, pdfChecksum);
+  }
   return written;
 }
