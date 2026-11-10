@@ -7,12 +7,18 @@ import {
   bytesToBase64,
   classifyAttachment,
   composeAttachmentBlocks,
+  DOCUMENT_ACK,
+  documentOnlyReplyInstruction,
+  formatFileCardSize,
+  isAcceptedChatFile,
+  splitDocumentAck,
   composeAttachmentPrompt,
   encodeBase64,
   formatAttachmentSize,
   MAX_TEXT_INLINE_BYTES,
   splitAttachmentChunks,
 } from "../../src/renderer/src/features/chat/attachments.js";
+import { fileCardTone } from "../../src/renderer/src/features/chat/file-card.js";
 
 describe("chat attachments", () => {
   it("classifies by mime and extension", () => {
@@ -20,6 +26,14 @@ describe("chat attachments", () => {
     expect(classifyAttachment("text/plain", "notes.txt")).toBe("text");
     expect(classifyAttachment("application/octet-stream", "data.bin")).toBe("binary");
     expect(classifyAttachment("", "script.ts")).toBe("text");
+    expect(classifyAttachment("", "报告.pdf")).toBe("document");
+    expect(classifyAttachment("", "笔记.docx")).toBe("document");
+    expect(classifyAttachment("", "答辩.pptx")).toBe("document");
+    expect(classifyAttachment("", "旧档.doc")).toBe("binary");
+    expect(classifyAttachment("", "旧档.ppt")).toBe("binary");
+    expect(isAcceptedChatFile("", "报告.pdf")).toBe(true);
+    expect(isAcceptedChatFile("", "答辩.pptx")).toBe(true);
+    expect(isAcceptedChatFile("", "旧档.doc")).toBe(false);
   });
 
   it("formats sizes in human units", () => {
@@ -76,10 +90,33 @@ describe("chat attachments", () => {
     expect(attachmentMediaType("", "blob.bin")).toBe("application/octet-stream");
   });
 
-  it("accept list covers text and images", () => {
+  it("accept list covers text, images, pdf and docx", () => {
     const accept = attachmentAccept();
     expect(accept).toContain(".md");
     expect(accept).toContain("image/*");
+    expect(accept).toContain(".pdf");
+    expect(accept).toContain(".docx");
+    expect(accept).toContain(".pptx");
+  });
+
+  it("formats the file card size like 30 kB or 5.9 MB", () => {
+    expect(formatFileCardSize(30 * 1024)).toBe("30 kB");
+    expect(formatFileCardSize(Math.round(5.9 * 1024 * 1024))).toBe("5.9 MB");
+  });
+
+  it("colors Word blue, PowerPoint orange and PDF red", () => {
+    expect(fileCardTone("笔记.docx")).toBe("word");
+    expect(fileCardTone("答辩.pptx")).toBe("ppt");
+    expect(fileCardTone("报告.pdf")).toBe("pdf");
+  });
+
+  it("tells a document-only turn to acknowledge, then summarize", () => {
+    expect(documentOnlyReplyInstruction()).toContain(DOCUMENT_ACK);
+    expect(splitDocumentAck(`${DOCUMENT_ACK}\n\n这是一份实验报告。`)).toEqual({
+      ack: DOCUMENT_ACK,
+      summary: "这是一份实验报告。",
+    });
+    expect(splitDocumentAck("普通回复")).toBeNull();
   });
 
   it("composes an inline block with the workspace path for small text", () => {

@@ -98,6 +98,7 @@ import { CanvasSidecar } from "./features/canvas/canvas-sidecar.js";
 import { ChatMarkdown } from "./features/chat/chat-markdown.js";
 import { setMermaidTheme } from "./features/chat/mermaid.js";
 import { ThinkingLine } from "./features/chat/thinking-line.js";
+import { FileCard } from "./features/chat/file-card.js";
 import {
   messageSlotOrder,
   streamSlotOrder,
@@ -107,11 +108,13 @@ import { exportConversation } from "./features/chat/export-conversation.js";
 import type { MentionTable } from "./features/chat/mentions.js";
 import {
   attachmentAccept,
+  isAcceptedChatFile,
   buildAttachmentContext,
   classifyAttachment,
   composeAttachmentBlocks,
   composeAttachmentPrompt,
-  formatAttachmentSize,
+  documentOnlyReplyInstruction,
+  splitDocumentAck,
   MAX_ATTACHMENT_BYTES,
   type AttachmentDraft,
   type VisionNoteMode,
@@ -229,7 +232,7 @@ type Msg = {
     | {
         name: string;
         size: number;
-        kind: "text" | "image" | "binary";
+        kind: "text" | "image" | "binary" | "document";
         dataUrl?: string;
         /** Workspace path from attachment.commit. */
         path?: string;
@@ -3303,6 +3306,12 @@ function MessageBubble({
   }, [pickerOpen]);
 
   const replayCard = msg.history === true && msg.choices !== undefined;
+  const fileOnly =
+    isUser &&
+    msg.text.trim().length === 0 &&
+    (msg.attachments?.length ?? 0) > 0 &&
+    !msg.attachments?.some((file) => file.kind === "image" && file.dataUrl);
+  const documentReply = !isUser ? splitDocumentAck(msg.text) : null;
   return (
     <div
       className={"msg-row" + (isUser ? " user" : " bot") + (msg.history === true ? " replay" : "")}
@@ -3311,8 +3320,8 @@ function MessageBubble({
     >
       <div className="hover-wrap">
         <div
-          className={"msg-bubble" + (isUser ? " user" : "")}
-          style={isUser ? { background: accent, color: "#ffffff" } : undefined}
+          className={"msg-bubble" + (isUser ? " user" : "") + (fileOnly ? " file-only" : "")}
+          style={isUser && !fileOnly ? { background: accent, color: "#ffffff" } : undefined}
         >
           {msg.meta !== undefined && (
             <span className="msg-meta">
@@ -3332,21 +3341,7 @@ function MessageBubble({
                   previewPath !== undefined
                     ? () => onOpenAttachment?.(previewPath)
                     : undefined;
-                const stored =
-                  file.path !== undefined ? (
-                    <span className="msg-attachment-path">
-                      {t("shell.attachmentStoredPath", [file.path])}
-                    </span>
-                  ) : null;
-                const fileBody = (
-                  <>
-                    <span className="msg-attachment-name">{file.name}</span>
-                    <span className="msg-attachment-size">
-                      {formatAttachmentSize(file.size)}
-                    </span>
-                    {stored}
-                  </>
-                );
+                const fileBody = <FileCard name={file.name} size={file.size} />;
                 if (file.kind === "image" && file.dataUrl) {
                   const image = (
                     <>
@@ -3381,14 +3376,15 @@ function MessageBubble({
                   <button
                     key={previewPath ?? file.name}
                     type="button"
-                    className="msg-attachment-file"
+                    className="file-card-open"
                     aria-label={t("shell.openAttachmentPreview", [file.name])}
+                    title={file.path}
                     onClick={preview}
                   >
                     {fileBody}
                   </button>
                 ) : (
-                  <span className="msg-attachment-file" key={file.name}>
+                  <span className="file-card-open" key={file.name}>
                     {fileBody}
                   </span>
                 );
@@ -3397,6 +3393,15 @@ function MessageBubble({
           )}
           {replayCard ? null : isUser ? (
             msg.text
+          ) : documentReply ? (
+            <>
+              <p className="file-ack-line">{documentReply.ack}</p>
+              <ChatMarkdown
+                text={documentReply.summary}
+                mentions={mentions}
+                onMentionClick={onMentionClick}
+              />
+            </>
           ) : (
             <ChatMarkdown
               text={msg.text}
@@ -3710,6 +3715,8 @@ function BotsPlaceholder({
   const [speakingId, setSpeakingId] = useState<number | null>(null);
   const [memoryOpen, setMemoryOpen] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<AttachmentDraft[]>([]);
+  const [fileDropActive, setFileDropActive] = useState(false);
+  const [readingFile, setReadingFile] = useState(false);
   const [skills, setSkills] = useState<Skill[]>(() => listSkills(window.localStorage));
   const [skillMenuOpen, setSkillMenuOpen] = useState(false);
   /** G6: a pending 编辑重发 labels the next sent user bubble. */
@@ -3717,6 +3724,8 @@ function BotsPlaceholder({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const fileDragDepth = useRef(0);
+  const readPickedFilesRef = useRef<(files: FileList | null) => Promise<void>>(async () => {});
   const me = bots.find((b) => b.key === selectedBot);
 
   /**
@@ -4031,6 +4040,10 @@ function BotsPlaceholder({
     }
     const drafts: AttachmentDraft[] = [];
     for (const file of [...files]) {
+      if (!isAcceptedChatFile(file.type, file.name)) {
+        onNotify(t("shell.attachmentTypeUnsupported", [file.name]));
+        continue;
+      }
       if (file.size > MAX_ATTACHMENT_BYTES) {
         onNotify(t("shell.attachmentTooLarge", [file.name]));
         continue;
@@ -4064,6 +4077,50 @@ function BotsPlaceholder({
       setPendingFiles((prev) => [...prev, ...drafts]);
     }
   };
+
+  readPickedFilesRef.current = readPickedFiles;
+  useEffect(() => {
+    const hasFiles = (event: DragEvent): boolean =>
+      Array.from(event.dataTransfer?.types ?? []).includes("Files");
+    const onEnter = (event: DragEvent): void => {
+      if (!hasFiles(event)) return;
+      event.preventDefault();
+      fileDragDepth.current += 1;
+      setFileDropActive(true);
+    };
+    const onOver = (event: DragEvent): void => {
+      if (!hasFiles(event)) return;
+      event.preventDefault();
+      if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
+    };
+    const onLeave = (event: DragEvent): void => {
+      if (!hasFiles(event)) return;
+      fileDragDepth.current = Math.max(0, fileDragDepth.current - 1);
+      if (fileDragDepth.current === 0) setFileDropActive(false);
+    };
+    const onDrop = (event: DragEvent): void => {
+      if (!hasFiles(event)) return;
+      event.preventDefault();
+      fileDragDepth.current = 0;
+      setFileDropActive(false);
+      const dropped = event.dataTransfer?.files;
+      if (dropped && dropped.length > 0) {
+        void readPickedFilesRef.current(dropped);
+        inputRef.current?.focus();
+      }
+    };
+    window.addEventListener("dragenter", onEnter);
+    window.addEventListener("dragover", onOver);
+    window.addEventListener("dragleave", onLeave);
+    window.addEventListener("drop", onDrop);
+    return () => {
+      window.removeEventListener("dragenter", onEnter);
+      window.removeEventListener("dragover", onOver);
+      window.removeEventListener("dragleave", onLeave);
+      window.removeEventListener("drop", onDrop);
+      fileDragDepth.current = 0;
+    };
+  }, []);
 
   /**
    * The one stream starter for the composer, the failure retry and the choice
@@ -4116,6 +4173,7 @@ function BotsPlaceholder({
       onSettled: (result) => {
         const settled = result.cancelled || result.failure !== null;
         onBotStatus(me.bot.id, "idle");
+        setReadingFile(false);
         if (!settled) {
           onReplyCompleted(me.bot.id, me.bot.name);
         }
@@ -4274,6 +4332,7 @@ function BotsPlaceholder({
             name: file.name,
             size: file.size,
             relativePath: uploaded.path,
+            kind,
           }),
         );
       } catch (error) {
@@ -4283,11 +4342,18 @@ function BotsPlaceholder({
         return;
       }
     }
+    const documentOnly =
+      text.trim().length === 0 &&
+      files.some((file) => classifyAttachment(file.mime, file.name) === "document");
+    if (documentOnly) {
+      pointers.push(documentOnlyReplyInstruction());
+    }
     sendAndFollow(text, outgoing.length > 0 ? outgoing : undefined, meta);
     setPendingMeta(null);
     setPendingFiles([]);
     setFailedText(text);
     setDraft("");
+    setReadingFile(files.some((file) => classifyAttachment(file.mime, file.name) === "document"));
     startChatStream(composeAttachmentPrompt(text, pointers), imageBlocks);
   };
 
@@ -4349,6 +4415,7 @@ function BotsPlaceholder({
   // G6: only the newest user question may regenerate and only the newest user
   // message may be edited-resent — older ones stay historical record.
   const lastBotMsgId = [...msgs].reverse().find((m) => m.from === "bot" && !m.system)?.id;
+  const liveAck = stream?.text ? splitDocumentAck(stream.text) : null;
   const lastUserMsgId = [...msgs].reverse().find((m) => m.from === "user" && !m.system)?.id;
 
   return (
@@ -4369,6 +4436,11 @@ function BotsPlaceholder({
         } as CSSProperties
       }
     >
+      {fileDropActive && (
+        <div className="chat-file-drop" role="status">
+          {t("shell.dropAttachment", [me.bot.name])}
+        </div>
+      )}
       <ChatAutomationNotice botId={me.bot.id} onOpenAutomation={onOpenAutomation} />
       <div className="chat-stage">
       <div
@@ -4510,8 +4582,9 @@ function BotsPlaceholder({
               <div className="msg-row bot streaming" style={{ order: streamSlotOrder(msgs.length) }}>
                 {stream.text ? (
                   <div className="hover-wrap">
+                    {liveAck ? <p className="file-ack-line">{liveAck.ack}</p> : null}
                     <div className="msg-bubble">
-                      {stream.text}
+                      {liveAck ? liveAck.summary : stream.text}
                       {!stream.failure && !stream.cancelled && (
                         <button
                           type="button"
@@ -4526,7 +4599,7 @@ function BotsPlaceholder({
                   </div>
                 ) : (
                   <div className="stream-pending">
-                    <ThinkingLine botId={me.bot.id} avatar={me.avatar} />
+                    <ThinkingLine botId={me.bot.id} avatar={me.avatar} readingFile={readingFile} />
                     <button
                       type="button"
                       className="stream-cancel"
@@ -4608,29 +4681,6 @@ function BotsPlaceholder({
         </button>
       )}
       </div>
-      {pendingFiles.length > 0 && (
-        <div className="attach-chips" aria-label={t("shell.pendingAttachments")}>
-          {pendingFiles.map((file, index) => (
-            <span className="attach-chip" key={`${file.name}-${index}`}>
-              <span className="attach-chip-name">{file.name}</span>
-              <span className="attach-chip-size">{formatAttachmentSize(file.size)}</span>
-              {classifyAttachment(file.mime, file.name) === "image" && (
-                <span className="attach-chip-flag">{t("shell.attachmentNotModelReadable")}</span>
-              )}
-              <button
-                type="button"
-                className="attach-chip-remove"
-                aria-label={t("shell.removeAttachment", [file.name])}
-                onClick={() =>
-                  setPendingFiles((prev) => prev.filter((_, i) => i !== index))
-                }
-              >
-                ×
-              </button>
-            </span>
-          ))}
-        </div>
-      )}
       {quoteDraft && (
         <div className="quote-chip">
           <span>
@@ -4666,7 +4716,24 @@ function BotsPlaceholder({
           event.target.value = "";
         }}
       />
-      <div className="composer">
+      <div className={"composer" + (pendingFiles.length > 0 ? " has-files" : "")}>
+        {pendingFiles.length > 0 && (
+          <div className="composer-files" aria-label={t("shell.pendingAttachments")}>
+            {pendingFiles.map((file, index) => (
+              <FileCard
+                key={`${file.name}-${index}`}
+                name={file.name}
+                size={file.size}
+                {...(classifyAttachment(file.mime, file.name) === "image"
+                  ? { flag: t("shell.attachmentNotModelReadable") }
+                  : {})}
+                removeLabel={t("shell.removeAttachment", [file.name])}
+                onRemove={() => setPendingFiles((prev) => prev.filter((_, i) => i !== index))}
+              />
+            ))}
+          </div>
+        )}
+        <div className="composer-row">
         <div className="composer-menu-wrap">
           {skillMenuOpen && (
             <>
@@ -4860,6 +4927,7 @@ function BotsPlaceholder({
         <button type="button" className="send-btn" aria-label={t("shell.send")} disabled={!draft.trim() && pendingFiles.length === 0} onClick={send}>
           ↑
         </button>
+        </div>
       </div>
       {memoryOpen && (
         <MemoryPanel botId={me.bot.id} onClose={() => setMemoryOpen(false)} />

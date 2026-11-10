@@ -172,6 +172,52 @@ export function extractDocxBody(bytes: Uint8Array): ExtractedBody {
   return { text, pages: null, paragraphs, truncated: false };
 }
 
+/** Slide text from `ppt/slides/slideN.xml` `<a:t>` runs, in slide order. */
+export function extractPptxBody(bytes: Uint8Array): ExtractedBody {
+  const entries = unzipSync(bytes, {
+    filter: (file) =>
+      /^ppt\/slides\/slide\d+\.xml$/i.test(file.name) &&
+      file.originalSize <= DOCX_DECOMPRESSED_MAX,
+  });
+  const names = Object.keys(entries).sort((left, right) => slideNumber(left) - slideNumber(right));
+  if (names.length === 0) {
+    throw new Error("pptx 里没有可读的幻灯片");
+  }
+  const slides = names
+    .map((name) => slideText(new TextDecoder("utf-8", { fatal: false }).decode(entries[name])))
+    .filter((slide) => slide.length > 0);
+  return {
+    text: slides.join("\n\n").trim(),
+    pages: names.length,
+    paragraphs: null,
+    truncated: false,
+  };
+}
+
+function slideNumber(name: string): number {
+  const match = /slide(\d+)\.xml$/i.exec(name);
+  return match?.[1] === undefined ? 0 : Number(match[1]);
+}
+
+function slideText(xml: string): string {
+  const lines: string[] = [];
+  let current = "";
+  const token = /<a:t(?:\s[^>]*)?>([\s\S]*?)<\/a:t>|<\/a:p>/g;
+  let match: RegExpExecArray | null;
+  while ((match = token.exec(xml)) !== null) {
+    if (match[1] !== undefined) {
+      current += decodeXmlEntities(match[1]);
+    } else {
+      const line = current.trim();
+      if (line.length > 0) lines.push(line);
+      current = "";
+    }
+  }
+  const tail = current.trim();
+  if (tail.length > 0) lines.push(tail);
+  return lines.join("\n");
+}
+
 function decodeXmlEntities(input: string): string {
   return input
     .replace(/&#x([0-9a-fA-F]+);/g, (_, hex: string) => safeCodePoint(parseInt(hex, 16)))
@@ -199,16 +245,19 @@ function workspaceRootOf(db: OpenedDatabase, botId: string): string {
   return workspace.canonicalPath;
 }
 
-export function attachmentParseKind(path: string): "pdf" | "docx" | null {
+export function attachmentParseKind(path: string): "pdf" | "docx" | "pptx" | null {
   if (/\.pdf$/i.test(path)) return "pdf";
   if (/\.docx$/i.test(path)) return "docx";
+  if (/\.pptx$/i.test(path)) return "pptx";
   return null;
 }
 
-export function attachmentParseMediaType(kind: "pdf" | "docx"): string {
-  return kind === "pdf"
-    ? "application/pdf"
-    : "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+export function attachmentParseMediaType(kind: "pdf" | "docx" | "pptx"): string {
+  if (kind === "pdf") return "application/pdf";
+  if (kind === "pptx") {
+    return "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+  }
+  return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 }
 
 /**
@@ -253,7 +302,7 @@ export async function parseAndStoreAttachment(
       text: "",
       truncated: false,
       originalChars: 0,
-      errorReason: "不支持的附件类型，只有 PDF 与 Word 文档可以提取正文",
+      errorReason: "不支持的附件类型，只有 PDF、Word 与 PPT 可以提取正文",
     });
   }
   try {
@@ -290,7 +339,8 @@ export async function parseAndStoreAttachment(
             truncated: pdf.numPages > MAX_PARSE_PAGES,
           };
         }
-        return extractDocxBody(bytes);
+        if (kind === "docx") return extractDocxBody(bytes);
+        return extractPptxBody(bytes);
       },
       () => {
         // Deadline hit: destroy the pdf.js document so its worker stops
@@ -345,7 +395,9 @@ export async function parseAndStoreAttachment(
  */
 export function collectAttachmentParsePaths(promptText: string): string[] {
   const paths: string[] = [];
-  const pattern = /attachments\/[A-Za-z0-9._-]+\.(?:pdf|docx)\b/gi;
+  // Filenames keep the user's spelling, including spaces and non-ASCII.
+  // The renderer always closes the path with 】, a space, or the end of the line.
+  const pattern = /attachments\/([^/\\【】\n]+?\.(?:pdf|docx|pptx))(?=】|\s|$)/gi;
   let match: RegExpExecArray | null;
   while ((match = pattern.exec(promptText)) !== null) {
     paths.push(match[0]);

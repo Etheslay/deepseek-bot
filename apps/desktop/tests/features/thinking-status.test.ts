@@ -21,6 +21,12 @@ describe("thinkingStatus", () => {
     expect(at("thinking")?.text).toBe("正在深度思考");
   });
 
+  it("says it is reading a file while a document turn has not started talking", () => {
+    expect(
+      thinkingStatus({ stage: "thinking", elapsedMs: 0, hasText: false, readingFile: true })?.text,
+    ).toBe("正在读取文件");
+  });
+
   it("names the tool while a real tool/call is in flight", () => {
     expect(at("tool", 0, "write")?.text).toBe("正在调用 write");
   });
