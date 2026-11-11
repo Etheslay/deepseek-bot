@@ -272,10 +272,16 @@ function registerShellIpc(win: BrowserWindow): void {
             error: { code: "INVALID_INPUT", message: "unknown host method", retryable: false },
           };
         }
-        if (!isQuitting && (hostClient === null || hostClient.status === "exited")) {
+        if (
+          !isQuitting &&
+          !restoreInProgress &&
+          (hostClient === null || hostClient.status === "exited")
+        ) {
           // A child that already exited stays dead forever unless we replace
           // it. bot.create and the settings reads then all fail with
           // "host process has exited" even though a new process can serve them.
+          // A restore already replaces the child; starting another one here
+          // leaves two hosts on the same database.
           startHost();
         }
         if (hostClient === null || hostClient.status === "exited") {
@@ -294,8 +300,13 @@ function registerShellIpc(win: BrowserWindow): void {
             // Host is dead afterwards (handlers.ts). Replace the child before
             // the renderer sees the result, so follow-up calls hit the fresh
             // process instead of failing with "host process has exited".
-            await hostClient.call(method, payload);
-            await restartHost();
+            restoreInProgress = true;
+            try {
+              await hostClient.call(method, payload);
+              await restartHost();
+            } finally {
+              restoreInProgress = false;
+            }
             return { ok: true as const, result: { restored: true, hostRestarted: true } satisfies RestoreOutcome };
           }
           return { ok: true as const, result: await hostClient.call(method, payload) };
@@ -397,7 +408,10 @@ function denyAllPermissions(): void {
  * handle is replaced on disk), so the main process shuts it down and calls
  * this again over the restored data.
  */
+let restoreInProgress = false;
+
 function startHost(): void {
+  if (hostClient !== null && hostClient.status !== "exited") return;
   // The Host owns the database, engine, scheduler and the pinned Harness
   // adapter (D12). It starts with the shell and dies with it; renderer
   // contract calls forward through the HOST_CALL channel. The entry ships
