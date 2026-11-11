@@ -3608,7 +3608,7 @@ function JumpChevron(): JSX.Element {
   );
 }
 
-function BotsPlaceholder({
+export function BotsPlaceholder({
   bots,
   groups,
   selectedBot,
@@ -3907,6 +3907,52 @@ function BotsPlaceholder({
       .catch(() => setVoiceStatus(null));
   }, [voiceConfigVersion]);
 
+  // File drops stay registered while the pair record is open. This listener
+  // has to sit with the hooks above: the status-line bot returns the pair
+  // view early, and a hook under that return blanks the window.
+  useEffect(() => {
+    const hasFiles = (event: DragEvent): boolean =>
+      Array.from(event.dataTransfer?.types ?? []).includes("Files");
+    const onEnter = (event: DragEvent): void => {
+      if (!hasFiles(event)) return;
+      event.preventDefault();
+      fileDragDepth.current += 1;
+      setFileDropActive(true);
+    };
+    const onOver = (event: DragEvent): void => {
+      if (!hasFiles(event)) return;
+      event.preventDefault();
+      if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
+    };
+    const onLeave = (event: DragEvent): void => {
+      if (!hasFiles(event)) return;
+      fileDragDepth.current = Math.max(0, fileDragDepth.current - 1);
+      if (fileDragDepth.current === 0) setFileDropActive(false);
+    };
+    const onDrop = (event: DragEvent): void => {
+      if (!hasFiles(event)) return;
+      event.preventDefault();
+      fileDragDepth.current = 0;
+      setFileDropActive(false);
+      const dropped = event.dataTransfer?.files;
+      if (dropped && dropped.length > 0) {
+        void readPickedFilesRef.current(dropped);
+        inputRef.current?.focus();
+      }
+    };
+    window.addEventListener("dragenter", onEnter);
+    window.addEventListener("dragover", onOver);
+    window.addEventListener("dragleave", onLeave);
+    window.addEventListener("drop", onDrop);
+    return () => {
+      window.removeEventListener("dragenter", onEnter);
+      window.removeEventListener("dragover", onOver);
+      window.removeEventListener("dragleave", onLeave);
+      window.removeEventListener("drop", onDrop);
+      fileDragDepth.current = 0;
+    };
+  }, []);
+
   if (!me) {
     return (
       <div className="bubble">
@@ -4081,48 +4127,6 @@ function BotsPlaceholder({
   };
 
   readPickedFilesRef.current = readPickedFiles;
-  useEffect(() => {
-    const hasFiles = (event: DragEvent): boolean =>
-      Array.from(event.dataTransfer?.types ?? []).includes("Files");
-    const onEnter = (event: DragEvent): void => {
-      if (!hasFiles(event)) return;
-      event.preventDefault();
-      fileDragDepth.current += 1;
-      setFileDropActive(true);
-    };
-    const onOver = (event: DragEvent): void => {
-      if (!hasFiles(event)) return;
-      event.preventDefault();
-      if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
-    };
-    const onLeave = (event: DragEvent): void => {
-      if (!hasFiles(event)) return;
-      fileDragDepth.current = Math.max(0, fileDragDepth.current - 1);
-      if (fileDragDepth.current === 0) setFileDropActive(false);
-    };
-    const onDrop = (event: DragEvent): void => {
-      if (!hasFiles(event)) return;
-      event.preventDefault();
-      fileDragDepth.current = 0;
-      setFileDropActive(false);
-      const dropped = event.dataTransfer?.files;
-      if (dropped && dropped.length > 0) {
-        void readPickedFilesRef.current(dropped);
-        inputRef.current?.focus();
-      }
-    };
-    window.addEventListener("dragenter", onEnter);
-    window.addEventListener("dragover", onOver);
-    window.addEventListener("dragleave", onLeave);
-    window.addEventListener("drop", onDrop);
-    return () => {
-      window.removeEventListener("dragenter", onEnter);
-      window.removeEventListener("dragover", onOver);
-      window.removeEventListener("dragleave", onLeave);
-      window.removeEventListener("drop", onDrop);
-      fileDragDepth.current = 0;
-    };
-  }, []);
 
   /**
    * The one stream starter for the composer, the failure retry and the choice
