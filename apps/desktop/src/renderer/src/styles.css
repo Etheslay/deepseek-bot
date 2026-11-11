@@ -9818,7 +9818,8 @@ button.automation-notice-jump .automation-notice-main {
 .top-actions {
   position: absolute;
   top: 12px;
-  right: 16px;
+  /* Clear the hidden-titlebar overlay (minimize, maximize, close). */
+  right: 150px;
   z-index: 2;
   display: flex;
   gap: 8px;
