@@ -146,6 +146,30 @@ describe("ChatNativeGate", () => {
     await expect(pending).rejects.toMatchObject({ code: "CANCELLED" });
   });
 
+  it("treats always-allow as a yes for the ask that is waiting and the next command", async () => {
+    const { host, botId } = await setup();
+    const controller = new AbortController();
+    const pending = gateFor(host, botId, controller.signal).authorize({
+      kind: "shell.exec",
+      callId: "call-allow",
+      toolName: "pwsh",
+      command: "Get-ChildItem",
+      arguments: {},
+    });
+    await pendingApproval(host);
+    await host.handleMethod("permission.policy.set", { capability: "exec.shell", mode: "allow" });
+    await expect(pending).resolves.toMatchObject({ approvalId: null });
+    expect(await host.handleMethod("permission.approval.list", {})).toEqual({ approvals: [] });
+    const next = await gateFor(host, botId, new AbortController().signal).authorize({
+      kind: "shell.exec",
+      callId: "call-allow-2",
+      toolName: "pwsh",
+      command: "Get-Location",
+      arguments: {},
+    });
+    expect(next.approvalId).toBeNull();
+  });
+
   it("cancels a pending approval when the turn aborts", async () => {
     const { host, botId } = await setup();
     const controller = new AbortController();

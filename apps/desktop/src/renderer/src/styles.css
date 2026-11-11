@@ -2633,10 +2633,28 @@ select option {
   gap: 1px;
 }
 
+/* The open list sits in its own layer above the settings dialog (z-index
+   100) and below search (260). The dismiss layer is the first child, so a
+   press on a row hits the row instead of closing the menu. */
+.custom-select-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+}
+
+.custom-select-layer > .menu-overlay {
+  z-index: 0;
+}
+
+.custom-select-layer > .custom-select-menu {
+  z-index: 1;
+}
+
 .custom-select-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  width: 100%;
   gap: 0.5rem;
   font: inherit;
   font-size: 12.5px;
