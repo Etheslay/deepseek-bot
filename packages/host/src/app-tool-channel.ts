@@ -59,6 +59,7 @@ interface TurnState {
   controller: AbortController;
   ready: Promise<void>;
   markReady(): void;
+  failReady(error: ToolRejectionError): void;
   calls: Map<string, CallRecord>;
   /** Successful ask_user dispatches this turn; replays of a counted call do not re-count. */
   askUserCalls: number;
@@ -238,7 +239,12 @@ export async function startApplicationToolServer(
         parsed.tools.length !== APPLICATION_TOOLS.length ||
         [...parsed.tools].sort().join("\n") !== [...APPLICATION_TOOLS].sort().join("\n")
       ) {
-        send(response, 400, failure("INVALID_INPUT", "application tools did not load completely"));
+        const error = new ToolRejectionError(
+          "RUNTIME_UNAVAILABLE",
+          "application tools did not load completely",
+        );
+        turn.failReady(error);
+        send(response, 400, failure("INVALID_INPUT", error.message));
         return;
       }
       turn.markReady();
@@ -391,15 +397,19 @@ export async function startApplicationToolServer(
       const abort = () => controller.abort();
       options.signal.addEventListener("abort", abort, { once: true });
       let markReady!: () => void;
-      const ready = new Promise<void>((resolve) => {
+      let failReady!: (error: ToolRejectionError) => void;
+      const ready = new Promise<void>((resolve, reject) => {
         markReady = resolve;
+        failReady = reject;
       });
+      void ready.catch(() => undefined);
       const state: TurnState = {
         sessionId: options.sessionId,
         caller: Object.freeze({ ...options.caller }),
         controller,
         ready,
         markReady,
+        failReady,
         calls: new Map(),
         askUserCalls: 0,
         ...(options.skillCapabilities !== undefined
@@ -420,9 +430,12 @@ export async function startApplicationToolServer(
         async prepare(): Promise<void> {
           await mcpCatalog(state);
         },
-        waitReady(timeoutMs = 15_000): Promise<void> {
+        waitReady(timeoutMs = 60_000): Promise<void> {
           return new Promise<void>((resolve, reject) => {
+            let settled = false;
             const finish = (error?: ToolRejectionError) => {
+              if (settled) return;
+              settled = true;
               clearTimeout(timer);
               controller.signal.removeEventListener("abort", cancel);
               if (error) reject(error);
@@ -441,7 +454,18 @@ export async function startApplicationToolServer(
               timeoutMs,
             );
             controller.signal.addEventListener("abort", cancel, { once: true });
-            void ready.then(() => finish());
+            void ready.then(
+              () => finish(),
+              (error: unknown) =>
+                finish(
+                  error instanceof ToolRejectionError
+                    ? error
+                    : new ToolRejectionError(
+                        "RUNTIME_UNAVAILABLE",
+                        "application tools plugin did not become ready",
+                      ),
+                ),
+            );
             if (controller.signal.aborted) cancel();
           });
         },

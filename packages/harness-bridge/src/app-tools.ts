@@ -510,8 +510,15 @@ export async function applyApplicationTools(ctx: ApplicationToolContext): Promis
       },
     );
     if (!object(ready) || ready.ok !== true) throw new Error("readiness rejected");
-  } catch {
+  } catch (error) {
     for (const dispose of unregister.reverse()) dispose();
-    throw new Error("application tool bridge is unavailable");
+    const reason = error instanceof Error && error.message.length > 0
+      ? error.message
+      : "application tool bridge is unavailable";
+    throw new Error(
+      reason.startsWith("application tool bridge is unavailable")
+        ? reason
+        : `application tool bridge is unavailable: ${reason}`,
+    );
   }
 }

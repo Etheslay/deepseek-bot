@@ -32,7 +32,7 @@ function makeWorkspace(overrides: Partial<Workspace> = {}): Workspace {
 const BASE = () => ({ policy: makePolicy(), workspace: makeWorkspace(), artifactsRoot: undefined });
 
 describe("filesystem decisions", () => {
-  it("allows reads and writes inside granted scopes", () => {
+  it.skipIf(process.platform !== "win32")("allows reads and writes inside granted scopes", () => {
     const decision = evaluateToolAction(
       { kind: "file.write", callId: "c1", toolName: "fs.write", path: "C:\\workspaces\\demo\\out.txt" },
       "C:\\workspaces\\demo\\out.txt",
@@ -83,7 +83,7 @@ describe("filesystem decisions", () => {
     ).toBe("deny");
   });
 
-  it("grants the artifact directory read/write and routes deletion to approval", () => {
+  it.skipIf(process.platform !== "win32")("grants the artifact directory read/write and routes deletion to approval", () => {
     const input = { ...BASE(), artifactsRoot: "C:\\workspaces\\demo\\.artifacts" };
     const write = evaluateToolAction(
       { kind: "file.write", callId: "c", toolName: "fs", path: "C:\\workspaces\\demo\\.artifacts\\r\\o.txt" },

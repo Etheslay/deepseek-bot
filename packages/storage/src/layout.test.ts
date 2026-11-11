@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import {
   DATA_ROOT_ENV_VAR,
@@ -32,11 +33,18 @@ describe("resolveDataRoot", () => {
     }
   });
 
-  it("appends the product directory on Windows APPDATA", () => {
+  it("appends the product directory on the platform app-data dir", () => {
     const previous = process.env[DATA_ROOT_ENV_VAR];
     delete process.env[DATA_ROOT_ENV_VAR];
     try {
-      const appData = process.env["APPDATA"] ?? "C:\\Users\\x\\AppData\\Roaming";
+      const appData =
+        process.platform === "win32"
+          ? (process.env["APPDATA"] ?? "C:\\Users\\x\\AppData\\Roaming")
+          : process.platform === "darwin"
+            ? path.join(os.homedir(), "Library", "Application Support")
+            : process.env["XDG_DATA_HOME"] && process.env["XDG_DATA_HOME"] !== ""
+              ? process.env["XDG_DATA_HOME"]
+              : path.join(os.homedir(), ".local", "share");
       expect(resolveDataRoot()).toBe(path.resolve(appData, "DeepSeekBot"));
     } finally {
       if (previous !== undefined) {
@@ -46,7 +54,8 @@ describe("resolveDataRoot", () => {
   });
 
   it("refuses a filesystem root as the data root", () => {
-    expect(() => resolveDataRoot({ appDataDir: "C:\\" })).toThrow(StorageError);
+    const root = process.platform === "win32" ? "C:\\" : "/";
+    expect(() => resolveDataRoot({ appDataDir: root })).toThrow(StorageError);
   });
 });
 

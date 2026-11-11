@@ -345,7 +345,10 @@ describe("authenticated chat application tool channel", () => {
   it("fails readiness when the plugin is missing or reports an incomplete catalog", async () => {
     const { turn, request } = await setup();
     expect((await request("/app-tools/ready", { tools: ["list_bots"] })).status).toBe(400);
-    await expect(turn.waitReady(5)).rejects.toMatchObject({ code: "RUNTIME_UNAVAILABLE" });
+    await expect(turn.waitReady(5)).rejects.toMatchObject({
+      code: "RUNTIME_UNAVAILABLE",
+      message: "application tools did not load completely",
+    });
     await turn.close();
   });
   it("returns approval expiry over the original HTTP call without writing", async () => {
