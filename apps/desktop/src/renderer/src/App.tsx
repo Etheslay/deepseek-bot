@@ -1816,6 +1816,7 @@ const logout = (): void => {
           )}
           {selectedBotName}
         </span>
+        <div className="top-actions">
         <button
           type="button"
           className={"top-icon-btn" + (monitorOpen ? " active" : "")}
@@ -1913,6 +1914,7 @@ const logout = (): void => {
             />
           </svg>
         </button>
+        </div>
         {historyOpen && (
           <>
             <div className="menu-overlay" onClick={() => setHistoryOpen(false)} />
