@@ -64,6 +64,8 @@ interface TurnState {
   askUserCalls: number;
   /** Present only when injected skills declared at least one capability. */
   skillCapabilities?: readonly CapabilityId[];
+  /** False when this user message did not ask to hand work to another bot. */
+  allowDispatch: boolean;
   mcpCatalog?: Promise<{ tools: McpCatalogTool[]; warnings: string[] }>;
   detach(): void;
 }
@@ -81,6 +83,11 @@ export interface ApplicationToolServer {
     caller: ToolCaller;
     signal: AbortSignal;
     skillCapabilities?: readonly CapabilityId[];
+    /**
+     * When false, dispatch_task is refused before authorization. Omitted
+     * means the turn may dispatch (non-chat callers and explicit handoffs).
+     */
+    allowDispatch?: boolean;
   }): ApplicationToolTurn;
   close(): Promise<void>;
 }
@@ -280,6 +287,19 @@ export async function startApplicationToolServer(
       send(response, 400, failure("INVALID_INPUT", "tool is not available in chat"));
       return;
     }
+    // A deck or any other single-bot request must not raise "派发任务给其他
+    // bot". Refuse before the gateway so no approval card is minted.
+    if (parsed.tool === "dispatch_task" && !turn.allowDispatch) {
+      send(
+        response,
+        200,
+        failure(
+          "INVALID_INPUT",
+          "用户没有让你把这件事交给其他 bot。不要派发，也不要索要这个权限，用你自己的工具做完。",
+        ),
+      );
+      return;
+    }
     const digest = createHash("sha256")
       .update(stableStringify({ tool: parsed.tool, params: parsed.params }))
       .digest("hex");
@@ -385,6 +405,7 @@ export async function startApplicationToolServer(
         ...(options.skillCapabilities !== undefined
           ? { skillCapabilities: Object.freeze([...options.skillCapabilities]) }
           : {}),
+        allowDispatch: options.allowDispatch !== false,
         detach: () => options.signal.removeEventListener("abort", abort),
       };
       const releaseMcp = () => {

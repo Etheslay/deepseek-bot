@@ -281,4 +281,49 @@ describe("chat permission cards", () => {
       expect(container.textContent).toContain("已拒绝 小助手");
     });
   });
+
+  it("does not ask about other bots when the approval is only dispatch", async () => {
+    const calls = installHost([
+      {
+        ...APPROVAL,
+        id: "66666666-6666-4666-8666-666666666666",
+        tool: "dispatch_task",
+        capabilities: ["app.dispatch_task"],
+        params: { task: "帮我做 ppt" },
+      },
+    ]);
+    const container = await renderCards();
+    await vi.waitFor(() => {
+      expect(calls.some((call) => call.method === "permission.approval.list")).toBe(true);
+    });
+    expect(container.textContent).not.toContain("派发任务给其他 bot");
+    expect(container.querySelector(".approval-card")).toBeNull();
+  });
+
+  it("leaves other-bot messaging off the card and off the status line", async () => {
+    installHost([
+      {
+        ...APPROVAL,
+        id: "77777777-7777-4777-8777-777777777777",
+        tool: "write_presentation",
+        capabilities: ["fs.write", "app.dispatch_task"],
+        params: { path: "分数.pptx" },
+      },
+    ]);
+    const container = await renderCards();
+    await vi.waitFor(() => {
+      expect(container.textContent).toContain("写入工作目录文件");
+    });
+    expect(container.textContent).not.toContain("派发任务给其他 bot");
+    const button = [...container.querySelectorAll("button")].find(
+      (item) => item.textContent === "始终允许",
+    );
+    await act(async () => {
+      button?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await vi.waitFor(() => {
+      expect(container.textContent).toContain("已始终允许 小助手 写入工作目录文件");
+    });
+    expect(container.textContent).not.toContain("派发任务给其他 bot");
+  });
 });

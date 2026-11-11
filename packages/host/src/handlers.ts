@@ -740,13 +740,16 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
         ),
       };
     },
-    "permission.approval.list": (payload) => ({
-      approvals: listPermissionApprovals(db, {
-        ...(payload.botId !== undefined ? { botId: payload.botId } : {}),
-        status: payload.status,
-        limit: payload.limit,
-      }),
-    }),
+    "permission.approval.list": (payload) => {
+      context.permissions.releaseUnaskedDispatch();
+      return {
+        approvals: listPermissionApprovals(db, {
+          ...(payload.botId !== undefined ? { botId: payload.botId } : {}),
+          status: payload.status,
+          limit: payload.limit,
+        }),
+      };
+    },
     "permission.approval.decide": (payload) => context.permissions.decide(payload),
     "permission.audit.list": (payload) => ({
       records: listPermissionAudit(db, {
