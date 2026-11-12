@@ -11,6 +11,8 @@ import {
 import { stableStringify } from "@deepseek-bot/runtime";
 import type { McpService, McpCatalogTool } from "./mcp.js";
 import { capToolResultValue } from "./tool-result-cap.js";
+import { deliveredFilesFromTool } from "./delivered-files.js";
+import type { DeliveredFile } from "@deepseek-bot/contracts";
 import { listenOnPrivateHttpPort } from "@deepseek-bot/harness-adapter";
 
 const APPLICATION_TOOLS = [
@@ -63,6 +65,8 @@ interface TurnState {
   calls: Map<string, CallRecord>;
   /** Successful ask_user dispatches this turn; replays of a counted call do not re-count. */
   askUserCalls: number;
+  /** Office files this turn wrote. Replays of the same call do not record twice. */
+  deliveries: DeliveredFile[];
   /** Present only when injected skills declared at least one capability. */
   skillCapabilities?: readonly CapabilityId[];
   /** False when this user message did not ask to hand work to another bot. */
@@ -76,6 +80,8 @@ export interface ApplicationToolTurn {
   prepare?(): Promise<void>;
   waitReady(timeoutMs?: number): Promise<void>;
   close(): Promise<void>;
+  /** Office files written by this turn, in call order. */
+  deliveries(): DeliveredFile[];
 }
 export interface ApplicationToolServer {
   readonly url: string;
@@ -344,7 +350,15 @@ export async function startApplicationToolServer(
               : {}),
           },
         )
-        .then((value): Result => ({ ok: true, result: value }))
+        .then((value): Result => {
+          const toolName = typeof parsed.tool === "string" ? parsed.tool : "";
+          for (const file of deliveredFilesFromTool(toolName, value)) {
+            if (turn.deliveries.some((have) => have.path === file.path)) continue;
+            if (turn.deliveries.length >= 4) break;
+            turn.deliveries.push(file);
+          }
+          return { ok: true, result: value };
+        })
         .catch(
           (error: unknown): Result =>
             failure(
@@ -412,6 +426,7 @@ export async function startApplicationToolServer(
         failReady,
         calls: new Map(),
         askUserCalls: 0,
+        deliveries: [],
         ...(options.skillCapabilities !== undefined
           ? { skillCapabilities: Object.freeze([...options.skillCapabilities]) }
           : {}),
@@ -468,6 +483,9 @@ export async function startApplicationToolServer(
             );
             if (controller.signal.aborted) cancel();
           });
+        },
+        deliveries(): DeliveredFile[] {
+          return [...state.deliveries];
         },
         async close(): Promise<void> {
           controller.abort();

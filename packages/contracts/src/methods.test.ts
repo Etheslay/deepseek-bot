@@ -34,7 +34,8 @@ describe("method whitelist", () => {
     // interface-state methods (ui.state.get/set); v0.14 adds group.archive,
     // vision.status (B3'' 视觉输入 — chat.send.images is a field, not a
     // method) and the four chat.session.* methods (G12 多会话), plus chat.aside, for 134.
-    expect(METHODS).toHaveLength(134);
+    // workspace.export hands one slice of a delivered office file back to the chat card.
+    expect(METHODS).toHaveLength(135);
   });
 
   it("covers every method group from CONTRACTS §3", () => {
@@ -72,6 +73,7 @@ describe("method whitelist", () => {
       "vision",
       "voice",
       "workflow",
+      "workspace",
     ]);
   });
 });

@@ -28,6 +28,7 @@ import fs from "node:fs";
 import path from "node:path";
 import {
   MAX_ARTIFACT_CONTENT_BYTES,
+  WORKSPACE_EXPORT_MAX_BYTES,
   artifactMediaTypeForPath,
   isTextEditableMediaType,
   type ArtifactVersion,
@@ -81,6 +82,13 @@ export interface WorkspaceArtifacts {
     relativePath: string,
     versionId: string,
   ): { artifact: BotArtifact; version: ArtifactVersion };
+  /** One slice of a delivered pptx, pdf, or docx. `data` is base64. */
+  exportSlice(
+    botId: string,
+    relativePath: string,
+    offset: number,
+    limit: number,
+  ): { size: number; mediaType: string; data: string };
 }
 
 interface HostArtifactsDeps {
@@ -231,6 +239,43 @@ function listFilesRecursive(root: string, current: string, depth: number, out: s
     } else if (entry.isFile()) {
       out.push(child);
     }
+  }
+}
+
+/** One base64 slice of a pptx, pdf, or docx that stays inside `root`. */
+export function exportOfficeSlice(
+  root: string,
+  relativePath: string,
+  offset: number,
+  limit: number,
+): { size: number; mediaType: string; data: string } {
+  if (!/\.(pptx|pdf|docx)$/i.test(relativePath)) {
+    throw invalid("only a delivered office file can be opened");
+  }
+  const { absolute } = resolveInsideWorkspace(root, relativePath);
+  let stat: fs.Stats;
+  try {
+    stat = fs.statSync(absolute);
+  } catch {
+    throw invalid("file does not exist", { path: relativePath });
+  }
+  if (!stat.isFile()) throw invalid("file does not exist", { path: relativePath });
+  if (stat.size > WORKSPACE_EXPORT_MAX_BYTES) {
+    throw invalid("file is too large to hand off", { path: relativePath });
+  }
+  if (offset > stat.size) throw invalid("offset is outside the file", { path: relativePath });
+  const take = Math.min(limit, stat.size - offset);
+  const handle = fs.openSync(absolute, "r");
+  try {
+    const bytes = Buffer.alloc(take);
+    fs.readSync(handle, bytes, 0, take, offset);
+    return {
+      size: stat.size,
+      mediaType: artifactMediaTypeForPath(relativePath),
+      data: bytes.toString("base64"),
+    };
+  } finally {
+    fs.closeSync(handle);
   }
 }
 
@@ -496,6 +541,11 @@ export function createWorkspaceArtifacts(deps: HostArtifactsDeps): WorkspaceArti
       const artifact = artifactFromBytes(workspacePath, absolute, fs.statSync(absolute), artifactBytes);
       const revertVersion = recordVersion(botId, artifact, artifactBytes, "user");
       return { artifact, version: revertVersion };
+    },
+
+    exportSlice(botId, relativePath, offset, limit) {
+      const workspacePath = requireBotWorkspace(botId);
+      return exportOfficeSlice(workspacePath, relativePath, offset, limit);
     },
   };
 

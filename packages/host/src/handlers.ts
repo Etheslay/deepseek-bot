@@ -1236,11 +1236,13 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
         });
         throw error;
       }
+      const files = outcome.files ?? [];
       const assistant = appendChatMessage(db, {
         botId: bot.id,
         sessionId,
         role: "assistant",
         text: outcome.finalResponse,
+        ...(files.length > 0 ? { meta: { kind: "files" as const, files } } : {}),
       });
       touchChatSession(db, bot.id, sessionId);
       // Context meter: fold older history in the background at ≥80% — the
@@ -1251,6 +1253,7 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
         messageId: assistant.id,
         text: outcome.finalResponse,
         at: assistant.createdAt,
+        ...(files.length > 0 ? { files } : {}),
       };
     },
 
@@ -2008,6 +2011,8 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
     "artifacts.list": (payload) => context.artifacts.list(payload.botId),
 
     "artifacts.read": (payload) => context.artifacts.read(payload.botId, payload.path),
+    "workspace.export": (payload) =>
+      context.artifacts.exportSlice(payload.botId, payload.path, payload.offset, payload.limit),
 
     "artifacts.save": (payload) =>
       context.artifacts.save(

@@ -147,6 +147,14 @@ export type DesktopBridge = {
     onNotificationClick: (listener: (event: NotificationClickEvent) => void) => () => void;
     onWindowFocus: (listener: (event: WindowFocusEvent) => void) => () => void;
   };
+  /**
+   * A finished office file handed back in chat. The renderer already fetched
+   * the bytes; main only opens them or writes the save dialog.
+   */
+  files: {
+    open: (input: { name: string; data: string }) => Promise<{ ok: true }>;
+    save: (input: { name: string; data: string }) => Promise<{ ok: true; cancelled?: boolean }>;
+  };
 };
 
 const api: DesktopBridge = {
@@ -248,6 +256,10 @@ const api: DesktopBridge = {
     onNotificationClick: (listener) =>
       subscribe<NotificationClickEvent>(SYSTEM_EVENT_NOTIFICATION_CLICK, listener),
     onWindowFocus: (listener) => subscribe<WindowFocusEvent>(SYSTEM_EVENT_WINDOW_FOCUS, listener),
+  },
+  files: {
+    open: (input) => ipcRenderer.invoke(IPC_CHANNELS.FILE_OPEN, input),
+    save: (input) => ipcRenderer.invoke(IPC_CHANNELS.FILE_SAVE, input),
   },
 };
 

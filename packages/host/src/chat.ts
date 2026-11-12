@@ -21,6 +21,7 @@ import type {
   Bot,
   CapabilityId,
   ChatSkillInjection,
+  DeliveredFile,
 } from "@deepseek-bot/contracts";
 // B6: the notice shape is pinned by the contracts package (events.ts) — one
 // source of truth for the host emitter and the desktop consumer.
@@ -244,7 +245,7 @@ export class ChatManager {
         mimeType: "image/png" | "image/jpeg" | "image/webp" | "image/gif";
       }>;
     } = {},
-  ): Promise<TurnOutcome & { sessionId: string }> {
+  ): Promise<TurnOutcome & { sessionId: string; files?: DeliveredFile[] }> {
     if (this.closed)
       throw new EngineError({
         code: "RUNTIME_UNAVAILABLE",
@@ -467,7 +468,8 @@ export class ChatManager {
       } catch {
         /* usage accounting is best-effort */
       }
-      return { ...outcome, sessionId };
+      const files = turn?.deliveries() ?? [];
+      return { ...outcome, sessionId, ...(files.length > 0 ? { files } : {}) };
     } finally {
       if (registered) this.tools.bridgeRegistration?.unregister(sessionId);
       controller.abort();
