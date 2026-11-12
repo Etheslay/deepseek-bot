@@ -19,6 +19,7 @@ import {
   type UiState,
 } from "@deepseek-bot/contracts";
 import { bytesToBase64 } from "../features/chat/attachments.js";
+import { deliveredFilesFromResponse } from "./delivered-bytes.js";
 import {
   ServiceError,
   type AttachmentUploadResult,
@@ -424,6 +425,7 @@ export function createHostService(bridge: HostBridge): DesktopService {
             // The turn settled: no later notification belongs to this stream.
             unsubscribe?.();
             const reply = (response as { text: string }).text;
+            const files = deliveredFilesFromResponse((response as { files?: unknown }).files);
             if (cancelled) {
               return { cancelled: true, failure: null, text: reply } satisfies StreamResult;
             }
@@ -443,7 +445,12 @@ export function createHostService(bridge: HostBridge): DesktopService {
             if (reply.startsWith(shown) && reply.length > shown.length) {
               await emitWhole(reply.slice(shown.length));
             }
-            return { cancelled, failure: null, text: reply } satisfies StreamResult;
+            return {
+              cancelled,
+              failure: null,
+              text: reply,
+              ...(files.length > 0 ? { files } : {}),
+            } satisfies StreamResult;
           })
           .catch((error: unknown) => {
             unsubscribe?.();

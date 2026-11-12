@@ -82,6 +82,10 @@ type DesktopBridge = {
     onNotificationClick: (listener: (event: { botId: string | null }) => void) => () => void;
     onWindowFocus: (listener: (event: { focused: boolean }) => void) => () => void;
   };
+  files: {
+    open: (input: { name: string; data: string }) => Promise<{ ok: true }>;
+    save: (input: { name: string; data: string }) => Promise<{ ok: true; cancelled?: boolean }>;
+  };
 };
 
 declare global {

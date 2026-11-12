@@ -12,6 +12,7 @@
  * card (`meta.kind === "choice"`) is the question row itself: it comes back
  * as a collapsed card and is marked `history: true` with every other replay.
  */
+import type { DeliveredFile } from "@deepseek-bot/contracts";
 import type { ChatHistoryRow } from "../../services/desktop-service.js";
 
 /** Contract maximum for chat.history. The host returns oldest-first up to this. */
@@ -50,6 +51,8 @@ export type HistoryThreadMessage = ThreadTurn & {
   storedId: string;
   speakerKey?: number;
   choices?: RestoredChoice;
+  /** Office file the turn handed back. Restored so the card survives a reload. */
+  files?: DeliveredFile[];
 };
 
 function restoredChoice(row: ChatHistoryRow): RestoredChoice | undefined {
@@ -87,10 +90,11 @@ export function historyThreadMessages(
   const used = new Set<number>();
   const messages: HistoryThreadMessage[] = [];
   for (const row of rows) {
-    if (row.meta !== undefined && row.meta.kind !== "choice") {
+    if (row.meta !== undefined && row.meta.kind !== "choice" && row.meta.kind !== "files") {
       continue;
     }
     const choices = restoredChoice(row);
+    const files = row.meta?.kind === "files" ? row.meta.files : undefined;
     const parsed = Date.parse(row.at);
     const message: HistoryThreadMessage = {
       id: historyMessageId(row.id, used),
@@ -101,6 +105,7 @@ export function historyThreadMessages(
       origin: "history",
       history: true,
       ...(choices !== undefined ? { choices } : {}),
+      ...(files !== undefined ? { files } : {}),
     };
     if (row.role === "assistant") {
       message.speakerKey = botKey;

@@ -3,6 +3,7 @@ import { delimiter, join } from "node:path";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { createPrimaryWindowSenderGuard } from "./ipc/guards.js";
+import { openDeliveredFile, saveDeliveredFile } from "./delivered-file.js";
 import { registerIpcHandlers, unregisterIpcHandlers } from "./ipc/registry.js";
 import {
   spawnHostProcess,
@@ -368,6 +369,8 @@ function registerShellIpc(win: BrowserWindow): void {
       chromeState: () => readChromeImport(resolveDataRoot()),
       chromeClear: () => clearChromeImport(resolveDataRoot()),
       chromeExport: () => exportChromeImportToMarkdown(resolveDataRoot()),
+      openDeliveredFile: (input) => openDeliveredFile(input),
+      saveDeliveredFile: (input) => saveDeliveredFile(win, input),
     },
     createPrimaryWindowSenderGuard(() => mainWindow),
   );

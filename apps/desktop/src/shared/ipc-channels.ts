@@ -48,6 +48,10 @@ export const IPC_CHANNELS = {
   CHROME_STATE: "chrome:state",
   CHROME_CLEAR: "chrome:clear",
   CHROME_EXPORT: "chrome:export",
+  /** Open a delivered office file with the system handler. Bytes, not a path. */
+  FILE_OPEN: "file:open",
+  /** Save a delivered office file through the system save dialog. */
+  FILE_SAVE: "file:save",
 } as const;
 
 /** Main → renderer event channel for scheduler skip-and-notify notices (FR-08). */

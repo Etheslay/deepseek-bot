@@ -489,6 +489,24 @@ const CHOICE_OPTION_IDS = ["A", "B", "C", "D"] as const;
  * the question row already stored for the model, plus the answer so a
  * reload can render the card collapsed and refuse another answer.
  */
+/** An office file the bot wrote during a chat turn and hands back in the thread. */
+export const DELIVERED_FILE_FORMATS = ["pptx", "pdf", "docx"] as const;
+
+export const DeliveredFileSchema = z
+  .object({
+    path: RelativeArtifactPathSchema,
+    name: z.string().min(1).max(200),
+    bytes: z.int().nonnegative().max(8 * 1024 * 1024),
+    format: z.enum(DELIVERED_FILE_FORMATS),
+  })
+  .strict();
+
+export type DeliveredFile = z.infer<typeof DeliveredFileSchema>;
+
+/** One `workspace.export` slice. 512 KiB of raw bytes stays under the 1 MiB envelope once base64-encoded. */
+export const WORKSPACE_EXPORT_CHUNK_BYTES = 512 * 1024;
+export const WORKSPACE_EXPORT_MAX_BYTES = 8 * 1024 * 1024;
+
 export const ChatMessageMetaSchema = z.discriminatedUnion("kind", [
   z
     .object({
@@ -540,6 +558,12 @@ export const ChatMessageMetaSchema = z.discriminatedUnion("kind", [
       other: z.boolean().optional(),
       /** The answer text persisted with the card. Restored cards are always answered. */
       answered: z.string().min(1).max(4_000),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("files"),
+      files: z.array(DeliveredFileSchema).min(1).max(4),
     })
     .strict(),
 ]);

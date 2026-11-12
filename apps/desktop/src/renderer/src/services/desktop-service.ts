@@ -14,6 +14,7 @@ import type {
   BotGroup,
   ChatMessageMeta,
   ChatSkillInjection,
+  DeliveredFile,
   ErrorCode,
   EventEnvelope,
   SkillLibrary,
@@ -128,6 +129,11 @@ export type StreamResult = {
    * segments of a tool turn may include narration the reply does not carry.
    */
   text?: string;
+  /**
+   * Office files this turn wrote. Present only when `chat.send` named at
+   * least one. The bytes are fetched later with `workspace.export`.
+   */
+  files?: DeliveredFile[];
 };
 
 export type StreamOptions = {

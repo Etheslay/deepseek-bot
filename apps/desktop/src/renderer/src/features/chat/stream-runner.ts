@@ -55,7 +55,7 @@ export function runChatStream(deps: {
   images?: StreamOptions["images"];
   forKey: number;
   update: StreamUpdater;
-  onAssistant: (text: string) => void;
+  onAssistant: (text: string, files?: StreamResult["files"]) => void;
   /**
    * Whether this stream is still the caller's active one. The caller owns that
    * answer (it knows which handle is current); the runner must not infer it from
@@ -138,7 +138,12 @@ export function runChatStream(deps: {
     // live segments of a tool turn can include narration the reply does not
     // carry, so the accumulated deltas are not always the message. Paths
     // without `text` (fixture, degraded bridge) keep the accumulation.
-    onAssistant(result.text ?? acc);
+    const files = result.files;
+    if (files !== undefined && files.length > 0) {
+      onAssistant(result.text ?? acc, files);
+    } else {
+      onAssistant(result.text ?? acc);
+    }
     update((prev) => (prev && prev.forKey === forKey ? null : prev));
     onSettled?.(result);
   });

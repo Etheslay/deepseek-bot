@@ -74,6 +74,10 @@ export type IpcHandlers = {
   chromeState: () => ChromeStateResult;
   chromeClear: () => ChromeClearResult;
   chromeExport: () => ChromeExportResult;
+  /** Open a delivered office file. The payload is a name plus base64 bytes. */
+  openDeliveredFile: (input: unknown) => Promise<{ ok: true }>;
+  /** Save a delivered office file. The payload is a name plus base64 bytes. */
+  saveDeliveredFile: (input: unknown) => Promise<{ ok: true; cancelled?: boolean }>;
 };
 
 /**
@@ -249,6 +253,16 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC_CHANNELS.CHROME_STATE, wrap(IPC_CHANNELS.CHROME_STATE, () => handlers.chromeState()));
   ipcMain.handle(IPC_CHANNELS.CHROME_CLEAR, wrap(IPC_CHANNELS.CHROME_CLEAR, () => handlers.chromeClear()));
   ipcMain.handle(IPC_CHANNELS.CHROME_EXPORT, wrap(IPC_CHANNELS.CHROME_EXPORT, () => handlers.chromeExport()));
+  ipcMain.handle(IPC_CHANNELS.FILE_OPEN, (event: IpcMainInvokeEvent, input: unknown) => {
+    assertAllowedChannel(IPC_CHANNELS.FILE_OPEN);
+    assertAuthorizedSender(event, isAuthorized);
+    return handlers.openDeliveredFile(input);
+  });
+  ipcMain.handle(IPC_CHANNELS.FILE_SAVE, (event: IpcMainInvokeEvent, input: unknown) => {
+    assertAllowedChannel(IPC_CHANNELS.FILE_SAVE);
+    assertAuthorizedSender(event, isAuthorized);
+    return handlers.saveDeliveredFile(input);
+  });
 }
 
 export function unregisterIpcHandlers(): void {

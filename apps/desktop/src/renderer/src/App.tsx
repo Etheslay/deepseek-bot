@@ -34,7 +34,12 @@ import type {
   ContextUsageView,
 } from "./services/desktop-service.js";
 import { useService } from "./services/service-context.jsx";
-import { METHOD_CONTRACTS, type VoiceStatus, type VoiceTranscriptionLanguage } from "@deepseek-bot/contracts";
+import {
+  METHOD_CONTRACTS,
+  type DeliveredFile,
+  type VoiceStatus,
+  type VoiceTranscriptionLanguage,
+} from "@deepseek-bot/contracts";
 import {
   emptyStream,
   failureMessage,
@@ -100,6 +105,7 @@ import { ChatMarkdown } from "./features/chat/chat-markdown.js";
 import { setMermaidTheme } from "./features/chat/mermaid.js";
 import { ThinkingLine } from "./features/chat/thinking-line.js";
 import { FileCard } from "./features/chat/file-card.js";
+import { DeliveredFileCard } from "./features/chat/delivered-file.js";
 import {
   messageSlotOrder,
   streamSlotOrder,
@@ -116,6 +122,7 @@ import {
   composeAttachmentPrompt,
   documentOnlyReplyInstruction,
   splitDocumentAck,
+  bytesToBase64,
   MAX_ATTACHMENT_BYTES,
   type AttachmentDraft,
   type VisionNoteMode,
@@ -123,6 +130,7 @@ import {
 import { prepareVisionImage } from "./features/chat/image-vision.js";
 import { asksToConvertToPdf, asksToMakeDocument } from "./features/chat/document-intent.js";
 import { asksToMakePresentation } from "./features/chat/presentation-intent.js";
+import { fetchDeliveredBytes } from "./services/delivered-bytes.js";
 import type { StreamOptions } from "./services/desktop-service.js";
 import { GlobalSearch } from "./features/search/global-search.js";
 import { ContextRing } from "./features/chat/context-ring.js";
@@ -243,6 +251,8 @@ type Msg = {
         relativePath?: string;
       }[]
     | undefined;
+  /** Office file the turn handed back. View opens it; download saves a copy. */
+  files?: DeliveredFile[];
   /** Choice card the bot put to the user (D14 interaction slice). */
   choices?: {
     question: string;
@@ -1517,6 +1527,7 @@ export function App(): JSX.Element {
       storedId: message.storedId,
       ...(message.speakerKey !== undefined ? { speakerKey: message.speakerKey } : {}),
       ...(message.choices !== undefined ? { choices: message.choices } : {}),
+      ...(message.files !== undefined ? { files: message.files } : {}),
     }));
 
   /**
@@ -2331,7 +2342,7 @@ const logout = (): void => {
                     raiseNotice({ kind: "approval", botId, botName });
                   }
                 }}
-                onAssistant={(assistantText) =>
+                onAssistant={(assistantText, files) =>
                 setChats((prev) => {
                   const list = prev[selectedBot] ?? [];
                   const now = Date.now();
@@ -2357,6 +2368,7 @@ const logout = (): void => {
                         system: false,
                         speakerKey: selectedBot,
                         origin: "live",
+                        ...(files !== undefined && files.length > 0 ? { files } : {}),
                       },
                     ],
                   };
@@ -3231,6 +3243,7 @@ function MessageBubble({
   canEditResend,
   onEditResend,
   onOpenAttachment,
+  onDeliveredFile,
   onNotify,
   onSpeak,
   speaking,
@@ -3255,6 +3268,8 @@ function MessageBubble({
   onEditResend?: (text: string) => void;
   /** Workspace path from the gateway import. Opens the artifact preview. */
   onOpenAttachment?: (relativePath: string) => void;
+  /** Open or save an office file the turn handed back. */
+  onDeliveredFile?: (file: DeliveredFile, action: "view" | "download") => void;
   onNotify?: (message: string) => void;
   /** Voice: read this reply aloud through the Host's local speech engine. */
   onSpeak?: (msgId: number, text: string) => void;
@@ -3408,6 +3423,18 @@ function MessageBubble({
               onMentionClick={onMentionClick}
               onNotify={onNotify}
             />
+          )}
+          {!isUser && msg.files !== undefined && msg.files.length > 0 && (
+            <div className="delivered-files">
+              {msg.files.map((file) => (
+                <DeliveredFileCard
+                  key={file.path}
+                  file={file}
+                  onView={() => onDeliveredFile?.(file, "view")}
+                  onDownload={() => onDeliveredFile?.(file, "download")}
+                />
+              ))}
+            </div>
           )}
           {msg.choices && (
             <ChoiceCard
@@ -3667,7 +3694,7 @@ export function BotsPlaceholder({
   onReact: (msgId: number, emoji: Emoji) => void;
   onTalkTo: (otherKey: number) => void;
   onCopy: (text: string) => void;
-  onAssistant: (text: string) => void;
+  onAssistant: (text: string, files?: DeliveredFile[]) => void;
   onOpenBot: (botKey: number) => void;
   /** Settings → Voice. Passed through to whisper-cli as `-l`. */
   voiceLanguage: VoiceTranscriptionLanguage;
@@ -3730,6 +3757,28 @@ export function BotsPlaceholder({
   const fileDragDepth = useRef(0);
   const readPickedFilesRef = useRef<(files: FileList | null) => Promise<void>>(async () => {});
   const me = bots.find((b) => b.key === selectedBot);
+
+  const handoffFile = (file: DeliveredFile, action: "view" | "download"): void => {
+    if (me === undefined) return;
+    const botId = me.bot.id;
+    void (async () => {
+      try {
+        const bytes = await fetchDeliveredBytes(
+          (method, payload) => window.deepseekBot.host.call(method, payload),
+          botId,
+          file,
+        );
+        const data = bytesToBase64(bytes);
+        if (action === "view") {
+          await window.deepseekBot.files.open({ name: file.name, data });
+        } else {
+          await window.deepseekBot.files.save({ name: file.name, data });
+        }
+      } catch {
+        onNotify(t(action === "view" ? "shell.viewFileFailed" : "shell.downloadFileFailed"));
+      }
+    })();
+  };
 
   /**
    * 配对视图的真实往来记录（点击消息往来上的对方 bot 进入）：只用这次交接的
@@ -4571,6 +4620,7 @@ export function BotsPlaceholder({
                   onReact={onReact}
                   onQuote={onQuote}
                   onCopy={onCopy}
+                  onDeliveredFile={handoffFile}
                   canRegenerate={m.id === lastBotMsgId}
                   onRegenerate={regenerate}
                   canEditResend={m.id === lastUserMsgId}

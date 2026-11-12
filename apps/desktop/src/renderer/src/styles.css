@@ -8913,6 +8913,71 @@ button.file-card-open,
   cursor: pointer;
 }
 
+.delivered-files {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.delivered-file {
+  display: flex;
+  align-items: center;
+  max-width: 420px;
+  border-radius: 16px;
+  background: #2c2c31;
+  padding-right: 4px;
+}
+
+.delivered-file .file-card {
+  background: transparent;
+  flex: 1;
+  min-width: 0;
+}
+
+.delivered-view {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+}
+
+.delivered-download {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: #c8c8d0;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+
+.delivered-download:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+}
+
+.delivered-download-icon {
+  width: 18px;
+  height: 18px;
+}
+
+[data-theme="light"] .delivered-file {
+  background: #f2f2f5;
+}
+
+[data-theme="light"] .delivered-download {
+  color: #5c5c66;
+}
+
+[data-theme="light"] .delivered-download:hover {
+  background: rgba(0, 0, 0, 0.06);
+  color: #1b1b1f;
+}
+
 .msg-row.user .msg-bubble.file-only {
   background: transparent !important;
   border: none;
