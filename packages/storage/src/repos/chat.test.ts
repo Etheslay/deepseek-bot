@@ -5,7 +5,12 @@ import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { openDatabase, type OpenedDatabase } from "../database.js";
 import { createBot } from "./bots.js";
-import { appendChatMessage, listChatMessages } from "./chat.js";
+import {
+  appendChatMessage,
+  listChatMessages,
+  listChatMessagesAfter,
+  listRecentChatMessages,
+} from "./chat.js";
 
 function tempDb(): { db: OpenedDatabase; cleanup: () => void } {
   const root = mkdtempSync(join(tmpdir(), "dsb-chat-"));
@@ -92,7 +97,62 @@ describe("chat message repository", () => {
       }
       appendChatMessage(db, { botId: b, sessionId: `chat:${b}`, role: "user", text: "b0" });
       expect(listChatMessages(db, a, 3)).toHaveLength(3);
+      expect(listChatMessages(db, a, 3).map((row) => row.text)).toEqual(["a0", "a1", "a2"]);
       expect(listChatMessages(db, b).map((row) => row.text)).toEqual(["b0"]);
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("reads the newest rows and the rows after a watermark", () => {
+    const { db, cleanup } = tempDb();
+    try {
+      const botId = seedBot(db);
+      const sessionId = `chat:${botId}`;
+      const ids: string[] = [];
+      for (let i = 0; i < 5; i += 1) {
+        ids.push(appendChatMessage(db, { botId, sessionId, role: "user", text: `m${i}` }).id);
+      }
+      expect(listRecentChatMessages(db, botId, 2, sessionId).map((row) => row.text)).toEqual([
+        "m3",
+        "m4",
+      ]);
+      expect(listChatMessagesAfter(db, botId, sessionId, ids[1]!, 10)?.map((row) => row.text)).toEqual([
+        "m2",
+        "m3",
+        "m4",
+      ]);
+      expect(listChatMessagesAfter(db, botId, sessionId, ids[1]!, 1)?.map((row) => row.text)).toEqual([
+        "m4",
+      ]);
+      expect(listChatMessagesAfter(db, botId, sessionId, "missing", 10)).toBeUndefined();
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("lists one session and returns message meta", () => {
+    const { db, cleanup } = tempDb();
+    try {
+      const botId = seedBot(db);
+      const sessionId = `chat:${botId}`;
+      const taskId = randomUUID();
+      appendChatMessage(db, {
+        botId,
+        sessionId,
+        role: "assistant",
+        text: "交给你了",
+        meta: { kind: "dispatch", taskId, fromBotId: botId },
+      });
+      appendChatMessage(db, {
+        botId,
+        sessionId: `cs:${randomUUID()}`,
+        role: "user",
+        text: "另一会话",
+      });
+      const rows = listChatMessages(db, botId, 10, sessionId);
+      expect(rows.map((row) => row.text)).toEqual(["交给你了"]);
+      expect(rows[0]?.meta).toEqual({ kind: "dispatch", taskId, fromBotId: botId });
     } finally {
       cleanup();
     }
