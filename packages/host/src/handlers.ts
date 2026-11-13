@@ -66,6 +66,8 @@ import {
   getSettingRaw,
   appendChatMessage,
   listChatMessages,
+  listChatMessagesAfter,
+  listRecentChatMessages,
   deleteMemory,
   listMemories,
   writeMemory,
@@ -156,6 +158,12 @@ import {
 } from "./attachment-parse.js";
 import { reportContextOverflow, resolveContextWindowTokens } from "./context-window.js";
 import { estimateTokens } from "./usage-capture.js";
+import {
+  compressionShrinksReplay,
+  REPLAY_ROW_SCAN,
+  trimReplayToBudget,
+  type ReplayRow,
+} from "./replay-budget.js";
 import type { AttachmentIngress } from "./workspace-attachments.js";
 import { KNOWN_CAPABILITIES, policyKey, readPolicy, type PolicyLevel } from "./permissions.js";
 import { buildUsageSummary } from "./usage-summary.js";
@@ -223,12 +231,13 @@ function contextMeterState(
   /** G12: meter belongs to one session; omitted means the default session. */
   sessionId: string = chatSessionIdFor(botId),
 ): { percent: number; usedTokens: number; estimated: boolean } {
-  const summary = getChatSummary(db, botId, sessionId);
-  if (summary !== undefined) {
-    const rows = rowsAfterWatermark(db, botId, summary.coversMessageId, sessionId);
+  const replay = promptReplay(db, botId, sessionId);
+  if (replay.summary !== undefined) {
     const bot = getBot(db, botId);
     const folded =
-      (bot?.instructions ?? "") + summary.summary + rows.map((row) => row.text).join("\n");
+      (bot?.instructions ?? "") +
+      replay.summary +
+      replay.rows.map((row) => row.text).join("\n");
     const usedTokens = estimateTokens(folded) + CONTEXT_METER_HEADROOM_TOKENS;
     return {
       percent: Math.min(100, Math.round((usedTokens / windowTokens) * 100)),
@@ -245,18 +254,6 @@ function contextMeterState(
     usedTokens: latest.inputTokens,
     estimated: latest.source === "estimated",
   };
-}
-
-function rowsAfterWatermark(
-  db: OpenedDatabase,
-  botId: string,
-  coversMessageId: string,
-  sessionId: string,
-): Array<{ id: string; role: "user" | "assistant"; text: string }> {
-  const rows = listChatMessages(db, botId, 20, sessionId);
-  const watermark = rows.findIndex((row) => row.id === coversMessageId);
-  const kept = watermark < 0 ? rows : rows.slice(watermark + 1);
-  return kept.map((row) => ({ id: row.id, role: row.role, text: row.text }));
 }
 
 function buildCompressionPrompt(
@@ -308,6 +305,40 @@ function isPrivateHandoff(meta: ChatMessageMeta | undefined): boolean {
   );
 }
 
+/**
+ * What the next prompt will replay: the newest rows after the summary
+ * watermark, trimmed to the token budget. A missing watermark drops the
+ * digest instead of stacking it on an unrelated window.
+ */
+function promptReplay(
+  db: OpenedDatabase,
+  botId: string,
+  sessionId: string,
+): { rows: ReplayRow[]; summary?: string } {
+  const summary = getChatSummary(db, botId, sessionId);
+  const visible = (
+    rows: ReadonlyArray<{ id: string; role: "user" | "assistant"; text: string; meta?: ChatMessageMeta }>,
+  ): ReplayRow[] =>
+    trimReplayToBudget(
+      rows
+        .filter((row) => !isPrivateHandoff(row.meta))
+        .map((row) => ({ id: row.id, role: row.role, text: row.text })),
+    );
+  if (summary !== undefined) {
+    const after = listChatMessagesAfter(
+      db,
+      botId,
+      sessionId,
+      summary.coversMessageId,
+      REPLAY_ROW_SCAN,
+    );
+    if (after !== undefined) {
+      return { rows: visible(after), summary: summary.summary };
+    }
+  }
+  return { rows: visible(listRecentChatMessages(db, botId, REPLAY_ROW_SCAN, sessionId)) };
+}
+
 async function maybeCompressChat(
   context: HostContext,
   botId: string,
@@ -341,6 +372,10 @@ async function maybeCompressChat(
   }
   const watermark = toCompress[toCompress.length - 1]!.id;
   if (summary !== undefined && summary.coversMessageId === watermark) {
+    return;
+  }
+  const replayIds = new Set(promptReplay(db, botId, sessionId).rows.map((row) => row.id));
+  if (!compressionShrinksReplay(toCompress.map((row) => row.id), replayIds)) {
     return;
   }
   compressingChats.add(botId);
@@ -1174,20 +1209,16 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
       // 原始人模式 composes a one-step prompt: rows are still persisted (and
       // still replay for later normal turns), so the replay read is skipped.
       const primitive = payload.primitive === true;
-      const summaryRow = primitive ? undefined : getChatSummary(db, bot.id, sessionId);
-      const allRows = primitive ? [] : listChatMessages(db, bot.id, 20, sessionId);
       // Context meter: with an active summary only the post-watermark rows
-      // replay verbatim; everything earlier rides in the digest block.
-      const replayRows =
-        summaryRow === undefined
-          ? allRows
-          : allRows.slice(allRows.findIndex((row) => row.id === summaryRow.coversMessageId) + 1);
-      const history = replayRows
-        .filter((row) => !isPrivateHandoff(row.meta))
-        .map((row) => ({
-          role: row.role,
-          text: row.text,
-        }));
+      // replay verbatim, and only as many newest turns as the token budget
+      // holds. Everything earlier rides in the digest block.
+      const replay = primitive
+        ? { rows: [] as ReplayRow[] }
+        : promptReplay(db, bot.id, sessionId);
+      const history = replay.rows.map((row) => ({
+        role: row.role,
+        text: row.text,
+      }));
       // B4' 附件正文: paths the renderer already named in the prompt
       // (`attachments/…`, deterministic block format) get their extracted
       // bodies appended as text attachment blocks — ≤16 KiB inline with a
@@ -1215,7 +1246,7 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
       try {
         outcome = await chat.send(bot, turnText, history, mergeTurnSkills(db, bot.id, payload.skills ?? []), {
           primitive,
-          ...(summaryRow !== undefined ? { summary: summaryRow.summary } : {}),
+          ...(replay.summary !== undefined ? { summary: replay.summary } : {}),
           // B3'' 视觉输入: named raster attachments ride the turn as image
           // blocks; the upstream LLM layer gates per model (text-only routes
           // get the deterministic text projection — pixels are never silently

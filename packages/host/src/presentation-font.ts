@@ -17,6 +17,25 @@ const subsetFont = createRequire(import.meta.url)("subset-font") as (
   options?: { readonly targetFormat?: "truetype" | "woff2" },
 ) => Promise<Uint8Array>;
 
+/** One entry per face file and glyph set. A deck reuses the previous cut. */
+const FONT_SUBSET_CACHE_LIMIT = 8;
+const subsetCache = new Map<string, Uint8Array>();
+let subsetComputations = 0;
+
+/** How many times a face was actually subset. Cache hits do not increment. */
+export function fontSubsetComputations(): number {
+  return subsetComputations;
+}
+
+export function clearFontSubsetCache(): void {
+  subsetCache.clear();
+  subsetComputations = 0;
+}
+
+function glyphKey(text: string): string {
+  return [...new Set(text)].sort().join("");
+}
+
 export interface EmbeddedFace {
   readonly family: string;
   readonly regular: Uint8Array;
@@ -106,13 +125,35 @@ export function extractFirstTrueType(data: Uint8Array): Uint8Array {
 }
 
 async function subsetFace(file: string, text: string): Promise<Uint8Array | undefined> {
+  let stamp = "";
   try {
+    const stat = fs.statSync(file);
+    stamp = `${stat.mtimeMs}:${stat.size}`;
+  } catch {
+    return undefined;
+  }
+  const key = `${file}\0${stamp}\0${glyphKey(text)}`;
+  const cached = subsetCache.get(key);
+  if (cached !== undefined) {
+    subsetCache.delete(key);
+    subsetCache.set(key, cached);
+    return cached;
+  }
+  try {
+    subsetComputations += 1;
     const face = Buffer.from(extractFirstTrueType(fs.readFileSync(file)));
     const bytes = await subsetFont(face, text, { targetFormat: "truetype" });
     if (bytes.byteLength < 12 || bytes.byteLength > 1_500_000) return undefined;
     const signature = Buffer.from(bytes.subarray(0, 4)).toString("hex");
     if (signature !== "00010000" && signature !== "74727565") return undefined;
-    return new Uint8Array(bytes);
+    const stored = new Uint8Array(bytes);
+    subsetCache.set(key, stored);
+    while (subsetCache.size > FONT_SUBSET_CACHE_LIMIT) {
+      const oldest = subsetCache.keys().next().value;
+      if (oldest === undefined) break;
+      subsetCache.delete(oldest);
+    }
+    return stored;
   } catch {
     return undefined;
   }
