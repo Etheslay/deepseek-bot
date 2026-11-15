@@ -15,7 +15,7 @@
 import type { DeliveredFile } from "@deepseek-bot/contracts";
 import type { ChatHistoryRow } from "../../services/desktop-service.js";
 
-/** Contract maximum for chat.history. The host returns oldest-first up to this. */
+/** Contract maximum for chat.history. The host returns the newest rows, oldest-first, up to this. */
 export const CHAT_THREAD_HISTORY_LIMIT = 200;
 
 /**

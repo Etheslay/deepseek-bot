@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { afterAll, describe, expect, it, vi } from "vitest";
 import type { AppApproval } from "@deepseek-bot/contracts";
-import { createBot } from "@deepseek-bot/storage";
+import { appendChatMessage, createBot } from "@deepseek-bot/storage";
 import { createHost, type DeepSeekBotHost } from "./host.js";
 
 // 1×1 red PNG, base64 — the smallest valid raster.
@@ -330,6 +330,19 @@ describe("chat runtime", () => {
     };
     expect(history.messages.map((m) => m.role)).toEqual(["user", "assistant"]);
     expect(history.messages[1]?.text).toBe("fake final response");
+  });
+
+  it("keeps the newest rows when chat.history is asked for fewer than exist", async () => {
+    const { host, botId } = await hostWithBot();
+    const sessionId = `chat:${botId}`;
+    for (let index = 0; index < 4; index += 1) {
+      appendChatMessage(host.db, { botId, sessionId, role: "user", text: `旧${index}` });
+    }
+    appendChatMessage(host.db, { botId, sessionId, role: "assistant", text: "最新一句" });
+    const history = (await host.handleMethod("chat.history", { botId, limit: 2 })) as {
+      messages: Array<{ text: string }>;
+    };
+    expect(history.messages.map((message) => message.text)).toEqual(["旧3", "最新一句"]);
   });
 
   it("humanizes credential failures instead of leaking raw system errors", async () => {
