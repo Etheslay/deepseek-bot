@@ -1291,10 +1291,11 @@ export function buildHandlers(context: HostContext): { [M in Method]: Handler<M>
     "chat.history": (payload) => {
       // G12: omitted sessionId reads the default session — for any caller
       // that has not opted into extra sessions this is the same single
-      // thread chat.history has always returned.
+      // thread chat.history has always returned. The limit keeps the newest
+      // rows (still oldest-first), so reopening a long thread shows its end.
       const sessionId = payload.sessionId ?? chatSessionIdFor(payload.botId);
       return {
-        messages: listChatMessages(db, payload.botId, payload.limit, sessionId).map((row) => ({
+        messages: listRecentChatMessages(db, payload.botId, payload.limit, sessionId).map((row) => ({
           id: row.id,
           botId: row.botId,
           sessionId: row.sessionId,
