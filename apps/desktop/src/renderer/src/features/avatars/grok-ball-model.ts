@@ -778,23 +778,24 @@ export function mixColor(a: string, b: string, t: number): string {
  * theme-aware mono ball, whose swatch renders black on the light theme and
  * white on the dark one.
  *
- * `light` is what the contract stores. `dark` is the colour painted on the
- * dark theme: still brighter than `light`, so it stays readable on the dark
- * panel, but a step deeper than the previous pastel. `legacy` keeps the old
- * swatches mapped to the same tone, so an already-saved bot picks up the
- * deeper paint without a rewrite.
+ * `light` is what the contract stores and what the light theme paints.
+ * `dark` is what the dark theme paints. Both rows are the Grok avatar
+ * swatches: saturated red, orange, amber, green, teal, blue, purple and
+ * pink, with gray held as a neutral. `legacy` keeps every earlier swatch on
+ * the same tone, so a bot saved under an older hex picks up this paint
+ * without a rewrite.
  */
 export const GROK_BALL_TONES = [
-  { key: "brown", light: "#A27952", dark: "#BD9365", legacy: ["#C49A6A", "#855C36", "#8b5e3c"] },
-  { key: "red", light: "#FF3E51", dark: "#FF5566", legacy: ["#FF5C6C", "#E02135", "#e8483f"] },
-  { key: "orange", light: "#FF781C", dark: "#FF8D38", legacy: ["#FF9340", "#FF6700", "#f08a24"] },
-  { key: "yellow", light: "#FFAF38", dark: "#FFBB48", legacy: ["#FFBE4D", "#FF9800", "#f0b429"] },
-  { key: "green", light: "#00C972", dark: "#1BDB89", legacy: ["#22E090", "#009957", "#3ecf8e"] },
-  { key: "cyan", light: "#1CC3B0", dark: "#30D4C3", legacy: ["#36D9C8", "#00A592", "#2fbfa0"] },
-  { key: "blue", light: "#2A92FE", dark: "#4BA8FF", legacy: ["#54AEFF", "#0E74E0", "#3b93f0"] },
-  { key: "violet", light: "#A97EFE", dark: "#BB95FF", legacy: ["#C09BFF", "#804EE0", "#8b5cf6"] },
-  { key: "magenta", light: "#FF5EB1", dark: "#FF77C0", legacy: ["#FF7EC4", "#E02A88", "#e152b0"] },
-  { key: "gray", light: "#959595", dark: "#AAAAAA", legacy: ["#B0B0B0", "#777777", "#a3a3a3"] },
+  { key: "brown", light: "#A06B39", dark: "#A16B39", legacy: ["#A27952", "#BD9365", "#C49A6A", "#855C36", "#8b5e3c"] },
+  { key: "red", light: "#FB2B3E", dark: "#FC2C3E", legacy: ["#FF3E51", "#FF5566", "#FF5C6C", "#E02135", "#e8483f"] },
+  { key: "orange", light: "#FD690F", dark: "#F9670E", legacy: ["#FF781C", "#FF8D38", "#FF9340", "#FF6700", "#f08a24"] },
+  { key: "yellow", light: "#F59312", dark: "#F69412", legacy: ["#FFAF38", "#FFBB48", "#FFBE4D", "#FF9800", "#f0b429"] },
+  { key: "green", light: "#14C16F", dark: "#14C370", legacy: ["#00C972", "#1BDB89", "#22E090", "#009957", "#3ecf8e"] },
+  { key: "cyan", light: "#13B7A2", dark: "#13B8A3", legacy: ["#1CC3B0", "#30D4C3", "#36D9C8", "#00A592", "#2fbfa0"] },
+  { key: "blue", light: "#1E86FC", dark: "#1884FC", legacy: ["#2A92FE", "#4BA8FF", "#54AEFF", "#0E74E0", "#3b93f0"] },
+  { key: "violet", light: "#8F59F9", dark: "#905AFB", legacy: ["#A97EFE", "#BB95FF", "#C09BFF", "#804EE0", "#8b5cf6"] },
+  { key: "magenta", light: "#F93498", dark: "#FB3499", legacy: ["#FF5EB1", "#FF77C0", "#FF7EC4", "#E02A88", "#e152b0"] },
+  { key: "gray", light: "#959595", dark: "#777777", legacy: ["#AAAAAA", "#B0B0B0", "#a3a3a3"] },
 ] as const;
 
 export type GrokBallToneKey = (typeof GROK_BALL_TONES)[number]["key"];

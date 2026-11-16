@@ -66,6 +66,20 @@ export const AVATAR_SHAPE_IDS_RETIRED = [
 ] as const;
 
 export const AVATAR_COLORS = [
+  "#A06B39",
+  "#FB2B3E",
+  "#FD690F",
+  "#F59312",
+  "#14C16F",
+  "#13B7A2",
+  "#1E86FC",
+  "#8F59F9",
+  "#F93498",
+  "#959595",
+] as const;
+
+/** Kept for compatibility: valid input, never assigned. */
+export const AVATAR_COLORS_RETIRED = [
   "#A27952",
   "#FF3E51",
   "#FF781C",
@@ -75,11 +89,6 @@ export const AVATAR_COLORS = [
   "#2A92FE",
   "#A97EFE",
   "#FF5EB1",
-  "#959595",
-] as const;
-
-/** Kept for compatibility: valid input, never assigned. */
-export const AVATAR_COLORS_RETIRED = [
   "#8b5e3c",
   "#e8483f",
   "#f08a24",
