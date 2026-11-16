@@ -9880,31 +9880,6 @@ button.automation-notice-jump .automation-notice-main {
   background: transparent;
 }
 
-/* Header actions sit in one row. Earlier rules parked every icon on the
-   same `right` offset, so monitor, workflow, and history were under export. */
-.top-actions {
-  position: absolute;
-  top: 12px;
-  /* Clear the hidden-titlebar overlay (minimize, maximize, close). */
-  right: 150px;
-  z-index: 2;
-  display: flex;
-  gap: 8px;
-  pointer-events: auto;
-}
-
-.top-actions .top-icon-btn,
-.top-actions .top-icon-btn.artifacts-btn,
-[data-theme="light"] .top-actions .top-icon-btn,
-[data-theme="dark"] .top-actions .top-icon-btn,
-[data-theme="light"] .top-actions .top-icon-btn.artifacts-btn,
-[data-theme="dark"] .top-actions .top-icon-btn.artifacts-btn {
-  position: static;
-  top: auto;
-  right: auto;
-  transform: none;
-}
-
 .sidebar-resizer::after {
   content: "";
   position: absolute;
