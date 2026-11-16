@@ -59,6 +59,7 @@ describe("IPC allowlist", () => {
   it("registers the D24 backup and hardware-acceleration channels", () => {
     expect(ALLOWED_CHANNELS.has(IPC_CHANNELS.BACKUPS_LIST)).toBe(true);
     expect(ALLOWED_CHANNELS.has(IPC_CHANNELS.APP_HARDWARE_ACCELERATION)).toBe(true);
+    expect(ALLOWED_CHANNELS.has(IPC_CHANNELS.APP_MICROPHONE)).toBe(true);
     expect(() => assertAllowedChannel(IPC_CHANNELS.BACKUPS_LIST)).not.toThrow();
     expect(() => assertAllowedChannel(IPC_CHANNELS.APP_HARDWARE_ACCELERATION)).not.toThrow();
   });

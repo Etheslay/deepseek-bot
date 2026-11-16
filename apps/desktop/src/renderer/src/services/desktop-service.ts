@@ -410,4 +410,9 @@ export interface DesktopService {
     enabled: boolean;
     restartRequired: boolean;
   }>;
+  /**
+   * Composer microphone. Reads the current switch; passing a boolean persists
+   * it and the next recording follows that value.
+   */
+  microphone(enabled?: boolean): Promise<{ enabled: boolean }>;
 }

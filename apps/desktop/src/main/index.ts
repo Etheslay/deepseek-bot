@@ -29,6 +29,11 @@ import { DATA_ROOT_DIR_NAME, HOST_EVENT_CHAT_STREAM, HOST_EVENT_MISSED, SYSTEM_E
 import { pickKnowledgeFile } from "./knowledge-import.js";
 import { pickAccountAvatar } from "./account-avatar.js";
 import { rendererPermissionAllowed } from "./session-permissions.js";
+import {
+  configureMicrophonePreference,
+  readMicrophoneEnabled,
+  setMicrophoneEnabled,
+} from "./microphone-preference.js";
 import { pickVoiceFile } from "./voice-pick.js";
 import { openDesktopChatLink } from "./open-chat-link.js";
 import { assertValidVoicePickKind } from "../shared/voice-pick.js";
@@ -334,6 +339,15 @@ function registerShellIpc(win: BrowserWindow): void {
         }
         return Promise.resolve(setHardwareAcceleration(enabled));
       },
+      microphone: (enabled: unknown) => {
+        if (enabled === undefined) {
+          return Promise.resolve({ enabled: readMicrophoneEnabled() });
+        }
+        if (typeof enabled !== "boolean") {
+          return Promise.reject(new Error(tr("d24.microphoneNotBoolean")));
+        }
+        return Promise.resolve(setMicrophoneEnabled(enabled));
+      },
       showWindow: () => {
         win.show();
         win.focus();
@@ -392,16 +406,16 @@ function attachFocusEvents(win: BrowserWindow): void {
 
 function denyAllPermissions(): void {
   // Clipboard writes copy message text. Microphone audio (`media` + `audio`)
-  // is allowed so hold-to-talk can record. Camera, notifications, clipboard
-  // read, and every other permission stay denied.
+  // is allowed while the Settings switch is on, so hold-to-talk can record.
+  // Camera, notifications, clipboard read, and every other permission stay denied.
   session.defaultSession.setPermissionRequestHandler(
     (_webContents, permission, callback, details) => {
-      callback(rendererPermissionAllowed(permission, details));
+      callback(rendererPermissionAllowed(permission, details, readMicrophoneEnabled()));
     },
   );
   session.defaultSession.setPermissionCheckHandler(
     (_webContents, permission, _requestingOrigin, details) =>
-      rendererPermissionAllowed(permission, details),
+      rendererPermissionAllowed(permission, details, readMicrophoneEnabled()),
   );
 }
 
@@ -479,6 +493,7 @@ if (gotLock) {
       app.setAppUserModelId("com.deepseekbot.desktop");
     }
     // D22: main speaks the desktop locale until the renderer syncs its choice.
+    configureMicrophonePreference(app.getPath("userData"));
     initMainLocale(app.getLocale());
     // D24: version source for update checks; silent first check fails soft
     // (no releases yet) and only surfaces when the renderer asks.

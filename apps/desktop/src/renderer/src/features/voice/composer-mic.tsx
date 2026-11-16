@@ -31,6 +31,11 @@ import { clipProblem, encodeWavPcm16 } from "./wav.js";
 
 export type ComposerMicProps = {
   status: VoiceStatus | null;
+  /**
+   * Settings → Computer. Off keeps the button disabled and never opens a
+   * capture. Omitted means on, which is the stored default.
+   */
+  captureEnabled?: boolean;
   /** whisper.cpp `-l` value from Settings → Voice. Chinese when omitted. */
   language?: VoiceTranscriptionLanguage;
   /** One trimmed transcript. The caller appends it to the draft and does not send. */
@@ -50,6 +55,7 @@ function shownPhase(phase: HoldPhase): VoicePhase {
 
 export function ComposerMic({
   status,
+  captureEnabled = true,
   language = DEFAULT_VOICE_TRANSCRIPTION_LANGUAGE,
   onTranscript,
   onNotify,
@@ -66,9 +72,11 @@ export function ComposerMic({
   const onTranscriptRef = useRef(onTranscript);
   const onNotifyRef = useRef(onNotify);
   const languageRef = useRef(language);
+  const captureEnabledRef = useRef(captureEnabled);
   onTranscriptRef.current = onTranscript;
   onNotifyRef.current = onNotify;
   languageRef.current = language;
+  captureEnabledRef.current = captureEnabled;
 
   const clearTick = (): void => {
     if (tickRef.current !== null) {
@@ -201,11 +209,29 @@ export function ComposerMic({
     [],
   );
 
+  useEffect(() => {
+    if (captureEnabled) {
+      return;
+    }
+    const phase = holdRef.current.phase;
+    if (phase !== "arming" && phase !== "recording") {
+      return;
+    }
+    sourceRef.current = null;
+    generationRef.current += 1;
+    clearTick();
+    recorderRef.current?.cancel();
+    recorderRef.current = null;
+    secondsRef.current = 0;
+    setSeconds(0);
+    commit(HOLD_IDLE);
+  }, [captureEnabled]);
+
   const beginFrom = (source: "pointer" | "key"): void => {
     if (holdRef.current.phase !== "idle" || holdRef.current.held) {
       return;
     }
-    if (transcribeButton(status, "idle").disabled) {
+    if (transcribeButton(status, "idle", captureEnabledRef.current).disabled) {
       return;
     }
     sourceRef.current = source;
@@ -263,7 +289,7 @@ export function ComposerMic({
   };
 
   const phase = shownPhase(hold.phase);
-  const mic = transcribeButton(status, phase);
+  const mic = transcribeButton(status, phase, captureEnabled);
   const recording = phase === "recording";
   const title =
     mic.reasonKey !== null && !hold.held

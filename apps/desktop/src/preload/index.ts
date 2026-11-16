@@ -110,6 +110,7 @@ export type DesktopBridge = {
     hardwareAcceleration: (
       enabled?: boolean,
     ) => Promise<import("../shared/ipc-channels.js").HardwareAccelerationStatus>;
+    microphone: (enabled?: boolean) => Promise<import("../shared/ipc-channels.js").MicrophoneStatus>;
   };
   host: {
     call: (method: string, payload: unknown) => Promise<unknown>;
@@ -193,6 +194,7 @@ const api: DesktopBridge = {
   app: {
     hardwareAcceleration: (enabled?: boolean) =>
       ipcRenderer.invoke(IPC_CHANNELS.APP_HARDWARE_ACCELERATION, enabled),
+    microphone: (enabled?: boolean) => ipcRenderer.invoke(IPC_CHANNELS.APP_MICROPHONE, enabled),
   },
   host: {
     /**

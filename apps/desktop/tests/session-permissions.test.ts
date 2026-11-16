@@ -8,6 +8,12 @@ describe("rendererPermissionAllowed", () => {
     expect(rendererPermissionAllowed("media", { mediaTypes: ["audio"] })).toBe(true);
   });
 
+  it("denies microphone audio when the switch is off", () => {
+    expect(rendererPermissionAllowed("media", { mediaType: "audio" }, false)).toBe(false);
+    expect(rendererPermissionAllowed("media", { mediaTypes: ["audio"] }, false)).toBe(false);
+    expect(rendererPermissionAllowed("clipboard-sanitized-write", undefined, false)).toBe(true);
+  });
+
   it("denies camera, mixed capture, and every other permission", () => {
     expect(rendererPermissionAllowed("media", { mediaType: "video" })).toBe(false);
     expect(rendererPermissionAllowed("media", { mediaType: "unknown" })).toBe(false);

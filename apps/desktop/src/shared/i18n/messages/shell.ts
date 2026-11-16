@@ -8,7 +8,6 @@ export const shellMessages = {
   "shell.account": { zh: "账户", en: "Account" },
   "shell.accountName": { zh: "账户名称", en: "Account name" },
   "shell.addAttachment": { zh: "添加附件", en: "Add attachment" },
-  "shell.allDeniedByPolicy": { zh: "已全部拒绝（安全策略）", en: "All denied (security policy)" },
   "shell.alreadyInGroup": { zh: "已在该分组", en: "Already in this group" },
   "shell.and": { zh: "和", en: "and" },
   "shell.apiAccessSection": { zh: "接入", en: "Access" },
@@ -278,6 +277,10 @@ export const shellMessages = {
   },
   "voice.speakFailed": { zh: "朗读失败", en: "Speaking failed" },
   "voice.micDenied": { zh: "无法使用麦克风（权限被拒或没有设备）", en: "Microphone unavailable (permission denied or no device)" },
+  "voice.micOff": {
+    zh: "麦克风已关闭。到 设置 → 电脑 里打开。",
+    en: "The microphone is off. Turn it on in Settings → Computer.",
+  },
   "voice.emptyClip": { zh: "没有录到声音", en: "No audio was captured" },
   "voice.tooLong": { zh: "语音过长（上限 {0} 秒）", en: "Clip too long (limit {0}s)" },
   "voice.transcribedEmpty": { zh: "没听清，没有识别出文字", en: "Nothing was recognised" },

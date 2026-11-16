@@ -59,6 +59,7 @@ type HostBridge = {
     hardwareAcceleration: (
       enabled?: boolean,
     ) => Promise<{ enabled: boolean; restartRequired: boolean }>;
+    microphone?: (enabled?: boolean) => Promise<{ enabled: boolean }>;
   };
 };
 
@@ -579,6 +580,15 @@ export function createHostService(bridge: HostBridge): DesktopService {
         return Promise.resolve({ enabled: true, restartRequired: false });
       }
       return Promise.resolve({ enabled, restartRequired: true });
+    },
+    microphone: (enabled?: boolean) => {
+      if (bridge.app?.microphone !== undefined) {
+        return bridge.app.microphone(enabled);
+      }
+      if (enabled === undefined) {
+        return Promise.resolve({ enabled: true });
+      }
+      return Promise.resolve({ enabled });
     },
   };
 }
