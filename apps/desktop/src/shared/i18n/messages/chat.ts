@@ -29,6 +29,14 @@ export const chatMessages = {
   "chat.rateLimited": { zh: "请求过于频繁，请稍后重试。", en: "Too many requests, please try again later." },
   "chat.regeneratedMark": { zh: "重新生成", en: "Regenerated" },
   "chat.requestFailed": { zh: "请求失败，请检查模型配置。", en: "Request failed; please check the model configuration." },
+  "chat.alreadyAnswering": {
+    zh: "bot 正在回答，等这一轮结束再发送。",
+    en: "This bot is still answering. Wait for this turn to finish, then send again.",
+  },
+  "chat.waitForTurn": {
+    zh: "bot 正在回答。这一条留在输入框里，等这一轮结束再发送。",
+    en: "This bot is still answering. The line stays in the box; send it again when this turn finishes.",
+  },
   "chat.runCompleted": { zh: "任务已完成", en: "Run completed" },
   "chat.runCreated": { zh: "任务已创建", en: "Run created" },
   "chat.runFailed": { zh: "任务失败", en: "Run failed" },

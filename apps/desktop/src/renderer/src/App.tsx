@@ -35,6 +35,7 @@ import type {
 } from "./services/desktop-service.js";
 import { useService } from "./services/service-context.jsx";
 import {
+  MAX_CHAT_MESSAGE_CHARS,
   METHOD_CONTRACTS,
   type DeliveredFile,
   type VoiceStatus,
@@ -42,8 +43,9 @@ import {
 } from "@deepseek-bot/contracts";
 import {
   emptyStream,
-  failureMessage,
+  visibleFailureText,
 } from "./features/chat/chat-reducer.js";
+import { deliverToLiveTurn } from "./features/chat/live-turn-send.js";
 import {
   assemblePairRecords,
   type PairRecord,
@@ -4390,25 +4392,32 @@ export function BotsPlaceholder({
     if (documentOnly) {
       pointers.push(documentOnlyReplyInstruction());
     }
-    sendAndFollow(text, outgoing.length > 0 ? outgoing : undefined, meta);
-    setPendingMeta(null);
-    setPendingFiles([]);
-    setFailedText(text);
-    setDraft("");
-    setReadingFile(files.some((file) => classifyAttachment(file.mime, file.name) === "document"));
-    setMakingDocument(asksToMakeDocument(text) || makingDocument);
-    setConvertingToPdf(asksToConvertToPdf(text) || convertingToPdf);
-    setMakingPresentation(asksToMakePresentation(text) || makingPresentation);
     const prompt = composeAttachmentPrompt(text, pointers);
     const turnLive =
       stream !== null && stream.forKey === me.key && stream.failure === null && !stream.cancelled;
+    const commit = (): void => {
+      sendAndFollow(text, outgoing.length > 0 ? outgoing : undefined, meta);
+      setPendingMeta(null);
+      setPendingFiles([]);
+      setFailedText(text);
+      setDraft("");
+      setReadingFile(files.some((file) => classifyAttachment(file.mime, file.name) === "document"));
+      setMakingDocument(asksToMakeDocument(text) || makingDocument);
+      setConvertingToPdf(asksToConvertToPdf(text) || convertingToPdf);
+      setMakingPresentation(asksToMakePresentation(text) || makingPresentation);
+    };
     if (turnLive) {
-      try {
-        if (await service.chat.aside(me.bot.id, prompt)) return;
-      } catch {
-        // The live turn did not take the line. Send it as its own turn.
+      const delivery = await deliverToLiveTurn(() => service.chat.aside(me.bot.id, prompt));
+      if (delivery === "keep") {
+        onNotify(t("chat.waitForTurn"));
+        return;
+      }
+      if (delivery === "queued") {
+        commit();
+        return;
       }
     }
+    commit();
     startChatStream(prompt, imageBlocks);
   };
 
@@ -4688,10 +4697,11 @@ export function BotsPlaceholder({
                     </button>
                   )}
                 </div>
-                {/* The Host authors the human sentence (humanized errors); the
-                    catalogue line only backs codes that carry no message. */}
+                {/* The Host authors the human sentence. The old busy-turn
+                    sentence is replaced with the catalogue line; a code with
+                    no message uses the catalogue too. */}
                 <div className="failure-text">
-                  {stream.failure.message ? stream.failure.message : failureMessage(stream.failure.code)}
+                  {visibleFailureText(stream.failure)}
                 </div>
               </div>
             )}
@@ -4974,7 +4984,7 @@ export function BotsPlaceholder({
           className="composer-input"
           placeholder={clarifyActive ? t("questions.realIntentPlaceholder") : t("shell.messageBot", [me.bot.name])}
           value={draft}
-          maxLength={200}
+          maxLength={MAX_CHAT_MESSAGE_CHARS}
           aria-label={t("shell.messageBot", [me.bot.name])}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {

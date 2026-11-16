@@ -113,6 +113,8 @@ export function replayTimeline(events: EventEnvelope[]): ReplayItem[] {
   return items;
 }
 
+const ALREADY_ANSWERING = /already answering/i;
+
 /** Stable user-facing message for a chat failure code. */
 export function failureMessage(code: ErrorCode): string {
   switch (code) {
@@ -130,4 +132,16 @@ export function failureMessage(code: ErrorCode): string {
     default:
       return t("chat.requestFailed");
   }
+}
+
+/**
+ * The banner prefers the host sentence. The old busy-turn sentence is
+ * English and names an internal wait; show the catalogue line instead.
+ */
+export function visibleFailureText(failure: { code: ErrorCode; message: string }): string {
+  if (ALREADY_ANSWERING.test(failure.message)) {
+    return t("chat.alreadyAnswering");
+  }
+  const message = failure.message.trim();
+  return message.length > 0 ? failure.message : failureMessage(failure.code);
 }

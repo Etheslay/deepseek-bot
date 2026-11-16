@@ -4,7 +4,7 @@
  * because the two ask for different actions from the user.
  */
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { failureMessage } from "../../src/renderer/src/features/chat/chat-reducer.js";
+import { failureMessage, visibleFailureText } from "../../src/renderer/src/features/chat/chat-reducer.js";
 import { setLanguagePreference } from "../../src/renderer/src/i18n.js";
 
 beforeEach(() => {
@@ -37,5 +37,24 @@ describe("failureMessage", () => {
   it("follows the language switch", () => {
     setLanguagePreference("en");
     expect(failureMessage("BUDGET_EXCEEDED")).toContain("balance or quota is exhausted");
+  });
+});
+
+describe("visibleFailureText", () => {
+  it("replaces the busy-turn English sentence with the catalogue line", () => {
+    const text = visibleFailureText({
+      code: "RUNTIME_UNAVAILABLE",
+      message: "this bot is already answering; wait for the current turn to finish",
+    });
+    expect(text).toContain("正在回答");
+    expect(text).not.toContain("already answering");
+  });
+
+  it("keeps a host sentence that is already for the user", () => {
+    expect(visibleFailureText({ code: "MODEL_UNAVAILABLE", message: "模型暂不可用" })).toBe("模型暂不可用");
+  });
+
+  it("falls back to the catalogue when the host sent no sentence", () => {
+    expect(visibleFailureText({ code: "AUTH_FAILED", message: "  " })).toContain("认证失败");
   });
 });
