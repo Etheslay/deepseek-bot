@@ -24,6 +24,12 @@ describe("transcribeButton", () => {
     expect(button.reasonKey).toBe("voice.checking");
   });
 
+  it("stays disabled when the microphone switch is off", () => {
+    const button = transcribeButton(bothReady, "idle", false);
+    expect(button.disabled).toBe(true);
+    expect(button.reasonKey).toBe("voice.micOff");
+  });
+
   it("is enabled when whisper is configured", () => {
     expect(transcribeButton(bothReady, "idle")).toEqual({
       disabled: false,

@@ -3,16 +3,20 @@
  *
  * Clipboard write copies message text. Electron presents both microphone and
  * camera as `media`; device audio is `audio`, device video is `video`. Only
- * microphone audio is granted so hold-to-talk can call getUserMedia. Camera,
- * screen capture, notifications, clipboard read, and every other permission
- * stay denied.
+ * microphone audio is granted, and only while the Settings → Computer switch
+ * is on, so hold-to-talk can call getUserMedia. Camera, screen capture,
+ * notifications, clipboard read, and every other permission stay denied.
  */
 
-export function rendererPermissionAllowed(permission: string, details?: object): boolean {
+export function rendererPermissionAllowed(
+  permission: string,
+  details?: object,
+  microphoneEnabled = true,
+): boolean {
   if (permission === "clipboard-sanitized-write") {
     return true;
   }
-  if (permission !== "media" || details === undefined) {
+  if (!microphoneEnabled || permission !== "media" || details === undefined) {
     return false;
   }
   // Requests always set `mediaTypes` (audio, video, or both). Checks set

@@ -68,6 +68,7 @@ function deferredRecorder(samples: Float32Array): {
 async function renderMic(
   props: Partial<{
     status: VoiceStatus | null;
+    captureEnabled: boolean;
     language: "zh" | "en";
     onTranscript: (text: string) => void;
     onNotify: (message: string) => void;
@@ -81,6 +82,7 @@ async function renderMic(
     root.render(
       createElement(ComposerMic, {
         status: props.status === undefined ? ready : props.status,
+        ...(props.captureEnabled !== undefined ? { captureEnabled: props.captureEnabled } : {}),
         ...(props.language !== undefined ? { language: props.language } : {}),
         onTranscript: props.onTranscript ?? (() => undefined),
         onNotify: props.onNotify ?? (() => undefined),
@@ -105,6 +107,14 @@ function pointer(
 }
 
 describe("ComposerMic", () => {
+  it("stays disabled when Settings has the microphone off", async () => {
+    const off = await renderMic({ captureEnabled: false });
+    expect(off.button.disabled).toBe(true);
+    expect(off.button.getAttribute("aria-label")).toContain("麦克风已关闭");
+    pointer(off.button, "pointerdown");
+    expect(startClipRecorder).not.toHaveBeenCalled();
+  });
+
   it("stays disabled until voice.status says transcription is available", async () => {
     const blocked = await renderMic({ status: null });
     expect(blocked.button.disabled).toBe(true);

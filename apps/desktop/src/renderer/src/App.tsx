@@ -169,7 +169,7 @@ import {
   notificationRequest,
   notifyUser,
 } from "./features/system/notify.js";
-import { NotificationSettingsPanel } from "./features/system/notifications-panel.js";
+import { NotificationSettingsPanel, SettingsSwitch } from "./features/system/notifications-panel.js";
 import { ChromeImportPanel } from "./features/system/chrome-panel.js";
 import type { TrayBotStatus } from "../../shared/system-integration.js";
 import type { LanguagePreference } from "../../shared/i18n/types.js";
@@ -542,6 +542,8 @@ export function App(): JSX.Element {
     enabled: boolean;
     restartRequired: boolean;
   } | null>(null);
+  /** Settings → Computer. Null until the shell answers; the composer treats that as on. */
+  const [microphoneEnabled, setMicrophoneEnabled] = useState<boolean | null>(null);
   const [workflowOpen, setWorkflowOpen] = useState(false);
   const [monitorOpen, setMonitorOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -1024,6 +1026,25 @@ export function App(): JSX.Element {
     }
     void desktop.hardwareAcceleration().then(setHwAccel).catch(() => undefined);
   }, [settingsOpen, settingsSection, desktop, hwAccel]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void desktop
+      .microphone()
+      .then((status) => {
+        if (!cancelled) {
+          setMicrophoneEnabled(status.enabled);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setMicrophoneEnabled(true);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [desktop]);
 
   useEffect(() => {
     let cancelled = false;
@@ -2330,6 +2351,7 @@ const logout = (): void => {
               skillContext={(botId) => skillsForInjection(botId, skillLibrary)}
               voiceLanguage={voiceLanguage}
               voiceConfigVersion={voiceConfigVersion}
+              captureEnabled={microphoneEnabled !== false}
               onOpenBot={(botKey) => {
                 const target = bots.find((b) => b.key === botKey);
                 if (target) {
@@ -3081,10 +3103,32 @@ const logout = (): void => {
                 {settingsSection === "computer" && (
                   <>
                   <div className="settings-card">
-                    <div className="settings-row">
-                      <span>{t("shell.microphone")}</span>
-                      <span className="settings-soon">{t("shell.allDeniedByPolicy")}</span>
-                    </div>
+                    {microphoneEnabled === null ? (
+                      <div className="settings-row">
+                        <span>{t("shell.microphone")}</span>
+                        <span className="session-meta">…</span>
+                      </div>
+                    ) : (
+                      <SettingsSwitch
+                        checked={microphoneEnabled}
+                        label={t("shell.microphone")}
+                        onChange={(next) => {
+                          const previous = microphoneEnabled;
+                          setMicrophoneEnabled(next);
+                          void desktop
+                            .microphone(next)
+                            .then((status) => setMicrophoneEnabled(status.enabled))
+                            .catch((error: unknown) => {
+                              setMicrophoneEnabled(previous);
+                              setToast(
+                                t("d24.settingFailed", [
+                                  error instanceof Error ? error.message : String(error),
+                                ]),
+                              );
+                            });
+                        }}
+                      />
+                    )}
                     <div className="settings-row">
                       <span>{t("shell.hardwareAcceleration")}</span>
                       <span className="key-input-wrap">
@@ -3593,6 +3637,7 @@ export function BotsPlaceholder({
   onOpenBot,
   voiceLanguage,
   voiceConfigVersion,
+  captureEnabled = true,
   onNotify,
   onBotStatus,
   onReplyCompleted,
@@ -3635,6 +3680,8 @@ export function BotsPlaceholder({
   voiceLanguage: VoiceTranscriptionLanguage;
   /** Bumps when Settings saves whisper paths so this pane re-reads voice.status. */
   voiceConfigVersion: number;
+  /** Settings → Computer. Off disables hold-to-talk. */
+  captureEnabled?: boolean;
   onNotify: (message: string) => void;
   /** D22: live bot state for the tray (running / waiting-approval / idle). */
   onBotStatus: (botId: string, status: TrayBotStatus) => void;
@@ -4939,6 +4986,7 @@ export function BotsPlaceholder({
         <ContextRing usage={contextUsage} />
         <ComposerMic
           status={voiceStatus}
+          captureEnabled={captureEnabled}
           language={voiceLanguage}
           onNotify={onNotify}
           onTranscript={(text) => setDraft((prev) => appendTranscript(prev, text))}

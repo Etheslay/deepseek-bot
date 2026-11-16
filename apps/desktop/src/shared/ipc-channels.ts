@@ -35,6 +35,8 @@ export const IPC_CHANNELS = {
   BACKUPS_LIST: "backups:list",
   /** D24: query or toggle hardware acceleration (restart to apply). */
   APP_HARDWARE_ACCELERATION: "app:hardwareAcceleration",
+  /** Settings → Computer: allow or deny the composer microphone. Applies immediately. */
+  APP_MICROPHONE: "app:microphone",
   /** D22: mirror the persisted UI language into the main process. */
   I18N_SET_LANGUAGE: "i18n:setLanguage",
   /** D22: renderer pushes the per-bot tray state (bots, active bot, avatars). */
@@ -117,6 +119,12 @@ export type BackupSummary = {
   createdAt: string;
   schemaVersion: number;
   sizeBytes: number;
+};
+
+/** Settings → Computer microphone switch. */
+export type MicrophoneStatus = {
+  /** Hold-to-talk may open the microphone. */
+  enabled: boolean;
 };
 
 /** D24 leftover: hardware-acceleration shell preference (userData-scoped). */
