@@ -454,7 +454,6 @@ export function App(): JSX.Element {
    */
   const headerBot = bots.find((b) => b.key === selectedBot) ?? bots[0] ?? null;
   const [toast, setToast] = useState<string | null>(null);
-  const [historyOpen, setHistoryOpen] = useState(false);
   const [artifactsOpen, setArtifactsOpen] = useState(false);
   const [artifactList, setArtifactList] = useState<
     import("@deepseek-bot/contracts").BotArtifact[] | null
@@ -1827,67 +1826,12 @@ const logout = (): void => {
           )}
           {selectedBotName}
         </span>
-        <div className="top-actions">
-        <button
-          type="button"
-          className={"top-icon-btn" + (monitorOpen ? " active" : "")}
-          aria-label={t("shell.runMonitorApprovals")}
-          title={t("shell.runMonitorApprovals")}
-          onClick={() => {
-            setWorkflowOpen(false);
-            setMonitorOpen((v) => !v);
-          }}
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path
-              d="M3 13h3.5l2-6 3 12 2.5-8 2 4.5H21"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.6"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        </button>
-        <button
-          type="button"
-          className={"top-icon-btn" + (workflowOpen ? " active" : "")}
-          aria-label={t("shell.workflowEditor")}
-          title={t("shell.workflowEditor")}
-          onClick={() => {
-            setMonitorOpen(false);
-            setWorkflowOpen((v) => !v);
-          }}
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <rect x="3" y="4" width="7" height="6" rx="1.6" fill="none" stroke="currentColor" strokeWidth="1.6" />
-            <rect x="14" y="14" width="7" height="6" rx="1.6" fill="none" stroke="currentColor" strokeWidth="1.6" />
-            <path d="M6.5 10v4a2 2 0 0 0 2 2H14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-            <circle cx="6.5" cy="17" r="1.4" fill="currentColor" />
-          </svg>
-        </button>
-        <button
-          type="button"
-          className="top-icon-btn"
-          aria-label={t("shell.recentSessions")}
-          title={t("shell.recentSessions")}
-          onClick={() => {
-            setArtifactsOpen(false);
-            setHistoryOpen((v) => !v);
-          }}
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
-            <path d="M12 7.5V12l3 2" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-          </svg>
-        </button>
         <button
           type="button"
           className="top-icon-btn artifacts-btn"
           aria-label={t("shell.artifacts")}
           title={t("shell.artifacts")}
           onClick={() => {
-            setHistoryOpen(false);
             setArtifactsOpen((v) => !v);
           }}
         >
@@ -1925,15 +1869,6 @@ const logout = (): void => {
             />
           </svg>
         </button>
-        </div>
-        {historyOpen && (
-          <>
-            <div className="menu-overlay" onClick={() => setHistoryOpen(false)} />
-            <div className="top-popover" role="dialog" aria-label={t("shell.recentSessions")}>
-              <div className="popover-title">{t("shell.recentSessions")}</div>
-            </div>
-          </>
-        )}
         {artifactsOpen && (
           <>
             <div className="menu-overlay" onClick={() => setArtifactsOpen(false)} />
