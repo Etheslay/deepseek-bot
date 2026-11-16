@@ -5957,52 +5957,53 @@ select option {
 
 /* ---------- Grok Ball body tones: one colour per theme ----------
    The persisted avatar colour is the light-theme value. `data-tone` maps it
-   back to its pair. The dark theme paints a slightly deeper step than the
-   previous pastel, still brighter than the light-theme swatch. `--gb-ink-*` is the send-button arrow for
-   that fill. A hex outside the palette carries no tone and renders as itself
-   in both themes. `:root` is the dark theme; light overrides. */
+   back to its pair. Both themes use the Grok avatar swatches: saturated
+   red, orange, amber, green, teal, blue, purple and pink. `--gb-ink-*` is
+   the send-button arrow for that fill. A hex outside the palette carries no
+   tone and renders as itself in both themes. `:root` is the dark theme;
+   light overrides. */
 :root {
-  --gb-body-brown: #BD9365;
-  --gb-ink-brown: #15151a;
-  --gb-body-red: #FF5566;
+  --gb-body-brown: #A16B39;
+  --gb-ink-brown: #ffffff;
+  --gb-body-red: #FC2C3E;
   --gb-ink-red: #ffffff;
-  --gb-body-orange: #FF8D38;
+  --gb-body-orange: #F9670E;
   --gb-ink-orange: #15151a;
-  --gb-body-yellow: #FFBB48;
+  --gb-body-yellow: #F69412;
   --gb-ink-yellow: #15151a;
-  --gb-body-green: #1BDB89;
+  --gb-body-green: #14C370;
   --gb-ink-green: #15151a;
-  --gb-body-cyan: #30D4C3;
+  --gb-body-cyan: #13B8A3;
   --gb-ink-cyan: #15151a;
-  --gb-body-blue: #4BA8FF;
-  --gb-ink-blue: #15151a;
-  --gb-body-violet: #BB95FF;
-  --gb-ink-violet: #15151a;
-  --gb-body-magenta: #FF77C0;
-  --gb-ink-magenta: #15151a;
-  --gb-body-gray: #AAAAAA;
-  --gb-ink-gray: #15151a;
+  --gb-body-blue: #1884FC;
+  --gb-ink-blue: #ffffff;
+  --gb-body-violet: #905AFB;
+  --gb-ink-violet: #ffffff;
+  --gb-body-magenta: #FB3499;
+  --gb-ink-magenta: #ffffff;
+  --gb-body-gray: #777777;
+  --gb-ink-gray: #ffffff;
 }
 
 :root[data-theme="light"] {
-  --gb-body-brown: #A27952;
+  --gb-body-brown: #A06B39;
   --gb-ink-brown: #ffffff;
-  --gb-body-red: #FF3E51;
+  --gb-body-red: #FB2B3E;
   --gb-ink-red: #ffffff;
-  --gb-body-orange: #FF781C;
+  --gb-body-orange: #FD690F;
   --gb-ink-orange: #15151a;
-  --gb-body-yellow: #FFAF38;
+  --gb-body-yellow: #F59312;
   --gb-ink-yellow: #15151a;
-  --gb-body-green: #00C972;
+  --gb-body-green: #14C16F;
   --gb-ink-green: #15151a;
-  --gb-body-cyan: #1CC3B0;
+  --gb-body-cyan: #13B7A2;
   --gb-ink-cyan: #15151a;
-  --gb-body-blue: #2A92FE;
-  --gb-ink-blue: #15151a;
-  --gb-body-violet: #A97EFE;
-  --gb-ink-violet: #15151a;
-  --gb-body-magenta: #FF5EB1;
-  --gb-ink-magenta: #15151a;
+  --gb-body-blue: #1E86FC;
+  --gb-ink-blue: #ffffff;
+  --gb-body-violet: #8F59F9;
+  --gb-ink-violet: #ffffff;
+  --gb-body-magenta: #F93498;
+  --gb-ink-magenta: #ffffff;
   --gb-body-gray: #959595;
   --gb-ink-gray: #15151a;
 }
