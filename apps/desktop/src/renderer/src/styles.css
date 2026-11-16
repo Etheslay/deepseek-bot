@@ -5957,30 +5957,30 @@ select option {
 
 /* ---------- Grok Ball body tones: one colour per theme ----------
    The persisted avatar colour is the light-theme value. `data-tone` maps it
-   back to its pair. The dark theme paints the brighter step: the old deep
-   tones sank into the dark panel. `--gb-ink-*` is the send-button arrow for
+   back to its pair. The dark theme paints a slightly deeper step than the
+   previous pastel, still brighter than the light-theme swatch. `--gb-ink-*` is the send-button arrow for
    that fill. A hex outside the palette carries no tone and renders as itself
    in both themes. `:root` is the dark theme; light overrides. */
 :root {
-  --gb-body-brown: #C49A6A;
+  --gb-body-brown: #BD9365;
   --gb-ink-brown: #15151a;
-  --gb-body-red: #FF5C6C;
-  --gb-ink-red: #15151a;
-  --gb-body-orange: #FF9340;
+  --gb-body-red: #FF5566;
+  --gb-ink-red: #ffffff;
+  --gb-body-orange: #FF8D38;
   --gb-ink-orange: #15151a;
-  --gb-body-yellow: #FFBE4D;
+  --gb-body-yellow: #FFBB48;
   --gb-ink-yellow: #15151a;
-  --gb-body-green: #22E090;
+  --gb-body-green: #1BDB89;
   --gb-ink-green: #15151a;
-  --gb-body-cyan: #36D9C8;
+  --gb-body-cyan: #30D4C3;
   --gb-ink-cyan: #15151a;
-  --gb-body-blue: #54AEFF;
+  --gb-body-blue: #4BA8FF;
   --gb-ink-blue: #15151a;
-  --gb-body-violet: #C09BFF;
+  --gb-body-violet: #BB95FF;
   --gb-ink-violet: #15151a;
-  --gb-body-magenta: #FF7EC4;
+  --gb-body-magenta: #FF77C0;
   --gb-ink-magenta: #15151a;
-  --gb-body-gray: #B0B0B0;
+  --gb-body-gray: #AAAAAA;
   --gb-ink-gray: #15151a;
 }
 
