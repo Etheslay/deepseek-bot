@@ -8879,6 +8879,10 @@ select:focus-visible {
   fill: #e5484d;
 }
 
+.file-card[data-tone="sheet"] .file-card-bar {
+  fill: #217346;
+}
+
 .file-card-copy {
   display: flex;
   flex-direction: column;

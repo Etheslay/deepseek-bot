@@ -1,11 +1,12 @@
 import type { JSX } from "react";
 import { formatFileCardSize } from "./attachments.js";
 
-/** Word is blue, PowerPoint orange, PDF red. Other files stay blue. */
-export function fileCardTone(name: string): "word" | "ppt" | "pdf" | "file" {
+/** Word is blue, PowerPoint orange, PDF red, Excel green. Other files stay blue. */
+export function fileCardTone(name: string): "word" | "ppt" | "pdf" | "sheet" | "file" {
   if (/\.pdf$/i.test(name)) return "pdf";
   if (/\.pptx?$/i.test(name)) return "ppt";
   if (/\.docx?$/i.test(name)) return "word";
+  if (/\.xlsx$/i.test(name)) return "sheet";
   return "file";
 }
 

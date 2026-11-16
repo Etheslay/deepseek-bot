@@ -82,7 +82,7 @@ export interface WorkspaceArtifacts {
     relativePath: string,
     versionId: string,
   ): { artifact: BotArtifact; version: ArtifactVersion };
-  /** One slice of a delivered pptx, pdf, or docx. `data` is base64. */
+  /** One slice of a delivered pptx, pdf, docx, xlsx, or html file. `data` is base64. */
   exportSlice(
     botId: string,
     relativePath: string,
@@ -242,14 +242,14 @@ function listFilesRecursive(root: string, current: string, depth: number, out: s
   }
 }
 
-/** One base64 slice of a pptx, pdf, or docx that stays inside `root`. */
+/** One base64 slice of a pptx, pdf, docx, xlsx, or html file that stays inside `root`. */
 export function exportOfficeSlice(
   root: string,
   relativePath: string,
   offset: number,
   limit: number,
 ): { size: number; mediaType: string; data: string } {
-  if (!/\.(pptx|pdf|docx)$/i.test(relativePath)) {
+  if (!/\.(pptx|pdf|docx|xlsx|html|htm)$/i.test(relativePath)) {
     throw invalid("only a delivered office file can be opened");
   }
   const { absolute } = resolveInsideWorkspace(root, relativePath);

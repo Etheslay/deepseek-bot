@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -305,6 +305,8 @@ describe("chat runtime", () => {
     expect(log).toContain("python-pptx");
     expect(log).toContain("【演示文稿技能】");
     expect(log).toContain("认识分数.pptx");
+    expect(log).toContain("文件就在这条消息里");
+    expect(log).not.toContain("把文件路径告诉用户");
     await host.handleMethod("chat.send", { botId, text: "ppt呢" });
     const again = readFileSync(join(records, "fake-harness.jsonl"), "utf8");
     expect(again.lastIndexOf("【必须交付演示文稿】")).toBeGreaterThan(again.lastIndexOf("【最近对话】"));
@@ -315,7 +317,79 @@ describe("chat runtime", () => {
       FAKE_RECORD_DIR: plain,
     });
     await second.host.handleMethod("chat.send", { botId: second.botId, text: "你好" });
-    expect(readFileSync(join(plain, "fake-harness.jsonl"), "utf8")).not.toContain("必须交付演示文稿");
+    const plainLog = readFileSync(join(plain, "fake-harness.jsonl"), "utf8");
+    expect(plainLog).not.toContain("必须交付演示文稿");
+    expect(plainLog).not.toContain("文件在这条聊天里");
+    const wordRecords = mkdtempSync(join(tmpdir(), "dsb-word-rule-"));
+    roots.push(wordRecords);
+    const word = await hostWithBot("ok", async () => "sk-test-only", {
+      FAKE_RECORD_DIR: wordRecords,
+    });
+    await word.host.handleMethod("chat.send", { botId: word.botId, text: "写一份 Word" });
+    const wordLog = readFileSync(join(wordRecords, "fake-harness.jsonl"), "utf8");
+    expect(wordLog).toContain("【文件在这条聊天里】");
+    expect(wordLog).not.toContain("必须交付演示文稿");
+  });
+
+  it("puts a file written this turn on the reply", async () => {
+    const { host, botId } = await hostWithBot("ok", async () => "sk-test-only", {
+      FAKE_DROP_FILE: "career-deck/plan.pptx",
+    });
+    const sent = (await host.handleMethod("chat.send", { botId, text: "做好了" })) as {
+      files?: { path: string; name: string; format: string; bytes: number }[];
+    };
+    expect(sent.files).toEqual([
+      {
+        path: "career-deck/plan.pptx",
+        name: "plan.pptx",
+        bytes: Buffer.from("PK-office").length,
+        format: "pptx",
+      },
+    ]);
+    const history = (await host.handleMethod("chat.history", { botId, limit: 10 })) as {
+      messages: { role: string; meta?: { kind: string; files: { path: string }[] } }[];
+    };
+    const assistant = history.messages.find((message) => message.role === "assistant");
+    expect(assistant?.meta).toMatchObject({
+      kind: "files",
+      files: [{ path: "career-deck/plan.pptx" }],
+    });
+  });
+
+  it("attaches an html page when a deck was asked for and no office file was written", async () => {
+    const { host, botId } = await hostWithBot("ok", async () => "sk-test-only", {
+      FAKE_DROP_FILE: "career-deck/index.html",
+    });
+    const sent = (await host.handleMethod("chat.send", {
+      botId,
+      text: "做一份职业生涯 PPT",
+    })) as { files?: { path: string; format: string }[] };
+    expect(sent.files).toEqual([
+      expect.objectContaining({ path: "career-deck/index.html", format: "html" }),
+    ]);
+  });
+
+  it("leaves an older file and an upload out of the reply", async () => {
+    const { host, botId } = await hostWithBot();
+    const row = host.db.raw.prepare("SELECT canonical_path FROM workspaces LIMIT 1").get() as {
+      canonical_path: string;
+    };
+    writeFileSync(join(row.canonical_path, "old.pptx"), Buffer.from("PK-old"));
+    const past = new Date(Date.now() - 60_000);
+    utimesSync(join(row.canonical_path, "old.pptx"), past, past);
+    const quiet = (await host.handleMethod("chat.send", { botId, text: "你好" })) as {
+      files?: unknown;
+    };
+    expect(quiet.files).toBeUndefined();
+
+    const uploaded = await hostWithBot("ok", async () => "sk-test-only", {
+      FAKE_DROP_FILE: "attachments/mine.pdf",
+    });
+    const echoed = (await uploaded.host.handleMethod("chat.send", {
+      botId: uploaded.botId,
+      text: "做好了",
+    })) as { files?: unknown };
+    expect(echoed.files).toBeUndefined();
   });
   it("sends a turn through the harness and persists both sides", async () => {
     const { host, botId } = await hostWithBot();

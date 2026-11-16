@@ -498,8 +498,12 @@ const CHOICE_OPTION_IDS = ["A", "B", "C", "D"] as const;
  * the question row already stored for the model, plus the answer so a
  * reload can render the card collapsed and refuse another answer.
  */
-/** An office file the bot wrote during a chat turn and hands back in the thread. */
-export const DELIVERED_FILE_FORMATS = ["pptx", "pdf", "docx"] as const;
+/**
+ * An office file the bot wrote during a chat turn and hands back in the thread.
+ * `html` is only the fallback when a document was asked for and no office file
+ * was written (a page the turn saved instead of a pptx, docx, pdf, or xlsx).
+ */
+export const DELIVERED_FILE_FORMATS = ["pptx", "pdf", "docx", "xlsx", "html"] as const;
 
 export const DeliveredFileSchema = z
   .object({

@@ -136,7 +136,8 @@ export function bindWritePresentationTool(
       "Do not send coordinates, colors, font sizes, or a script. Do not send an outline first. " +
       "This tool is available now and writes the file on this machine when workspace writing is allowed. " +
       "Do not claim it is offline or blocked. Do not hand the user a .bat, python-pptx, or a download button. " +
-      "After it returns, tell the user the file path.",
+      "After it returns, the chat attaches the file under the reply. Tell the user the file is in this chat. " +
+      "Do not paste a disk path, a folder, or a download link.",
     inputSchema: WritePresentationInputSchema,
     handler: async (params, context) => {
       const botId = requireBot(context);

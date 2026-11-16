@@ -9,6 +9,9 @@ describe("decodeDeliveredHandoff", () => {
     });
     expect(decoded.name).toBe("xiaoxue-chengfa.pptx");
     expect(decoded.bytes.toString()).toBe("PK-deck");
+    expect(decodeDeliveredHandoff({ name: "成绩.xlsx", data: Buffer.from("PK").toString("base64") }).name).toBe(
+      "成绩.xlsx",
+    );
   });
 
   it("rejects a path, a text file, and empty bytes", () => {
