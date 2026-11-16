@@ -1849,7 +1849,7 @@ body {
   width: fit-content;
   max-width: 100%;
   padding: 0.7rem 1rem;
-  font-size: 0.93rem;
+  font-size: 0.84rem;
 }
 
 .pair-foot {
@@ -6098,7 +6098,7 @@ select option {
   border: none;
   box-shadow: none;
   padding: 2px 0 2px 24px;
-  font-size: 0.95rem;
+  font-size: 0.84rem;
   line-height: 1.65;
 }
 
@@ -6119,7 +6119,7 @@ select option {
   color: #ffffff !important;
   border-radius: 22px;
   padding: 10px 16px;
-  font-size: 0.95rem;
+  font-size: 0.84rem;
   line-height: 1.6;
 }
 
@@ -6362,7 +6362,7 @@ select option {
 
 .chat-md pre code.hljs {
   font-family: Consolas, "Cascadia Mono", monospace;
-  font-size: 0.84rem;
+  font-size: 0.92em;
   line-height: 1.55;
   background: transparent;
   padding: 0;
@@ -8305,6 +8305,7 @@ select:focus-visible {
   align-items: center;
   gap: 10px;
   color: var(--muted);
+  font-size: 0.84rem;
 }
 
 /* Screen-reader-only: the stable task-aware sentence that aria-live announces
