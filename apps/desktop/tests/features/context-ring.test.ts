@@ -48,8 +48,10 @@ describe("context ring (TASK_CONTEXT_METER.md)", () => {
     const container = renderRing(gauge(76));
     const ring = container.querySelector("[data-testid='context-ring']");
     if (ring === null) throw new Error("missing context ring");
-    expect(ring.getAttribute("title")).toBe("上下文已用 76%");
+    expect(ring.getAttribute("title")).toBeNull();
     expect(ring.getAttribute("aria-label")).toBe("上下文已用 76%");
+    expect(ring.querySelector(".context-ring-value")).toBeNull();
+    expect(ring.querySelector(".context-ring-tip")?.textContent).toBe("上下文已用 76%");
     expect(ring.classList.contains("warn")).toBe(false);
     const fill = ring.querySelector(".context-ring-fill");
     if (fill === null) throw new Error("missing ring fill");
@@ -67,7 +69,8 @@ describe("context ring (TASK_CONTEXT_METER.md)", () => {
   it("shows an empty quiet ring when no gauge is known yet", () => {
     const container = renderRing(null);
     const ring = container.querySelector("[data-testid='context-ring']");
-    expect(ring?.getAttribute("title")).toBe("上下文已用 0%");
+    expect(ring?.getAttribute("title")).toBeNull();
     expect(ring?.querySelector(".context-ring-value")).toBeNull();
+    expect(ring?.querySelector(".context-ring-tip")?.textContent).toBe("上下文已用 0%");
   });
 });

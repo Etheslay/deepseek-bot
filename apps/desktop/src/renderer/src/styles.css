@@ -7709,7 +7709,7 @@ select:focus-visible {
 
 
 /* ---------- 上下文圆圈（TASK_CONTEXT_METER.md） ----------
-   用量展示专用：不承载任何开关，悬停读百分比。 */
+   平时只有圆环。悬停或键盘选中才弹出「上下文已用 N%」。 */
 .context-ring {
   position: relative;
   display: inline-flex;
@@ -7719,6 +7719,7 @@ select:focus-visible {
   height: 22px;
   flex: none;
   cursor: default;
+  border-radius: 50%;
 }
 
 .context-ring svg {
@@ -7744,12 +7745,32 @@ select:focus-visible {
   stroke: var(--runs, #ec4899);
 }
 
-.context-ring-value {
+.context-ring-tip {
   position: absolute;
-  font-size: 0.42rem;
-  font-weight: 700;
-  color: var(--muted);
+  z-index: 6;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  transform: translateX(-50%);
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: var(--raised);
+  color: var(--text);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-3);
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
   pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+}
+
+.context-ring:hover .context-ring-tip,
+.context-ring:focus .context-ring-tip,
+.context-ring:focus-visible .context-ring-tip {
+  opacity: 1;
+  visibility: visible;
 }
 
 .context-ring:focus-visible {
