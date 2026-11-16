@@ -8691,11 +8691,12 @@ select:focus-visible {
   padding: 11px 15px;
 }
 
-/* Dark chat copy is full white. --text (#ececf1) read as gray on these bubbles. */
+/* Dark chat copy sits just under pure white. #ffffff was harsh on these
+   bubbles; #ececf1 read as gray. */
 :root:not([data-theme="light"]) .chat > .msg-row.bot .msg-bubble,
 :root:not([data-theme="light"]) .exchange-bubble,
 :root:not([data-theme="light"]) .pair-turn .msg-bubble {
-  color: #ffffff;
+  color: #f2f2f4;
 }
 
 .chat-page {
