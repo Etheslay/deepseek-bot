@@ -779,22 +779,22 @@ export function mixColor(a: string, b: string, t: number): string {
  * white on the dark one.
  *
  * `light` is what the contract stores. `dark` is the colour painted on the
- * dark theme: a brighter, more saturated step, because the old deep tones
- * disappeared into the dark panel. `legacy` keeps those deep hexes, and the
- * retired contract swatches, mapped to the same tone so an already-saved bot
- * picks up the brighter paint without a rewrite.
+ * dark theme: still brighter than `light`, so it stays readable on the dark
+ * panel, but a step deeper than the previous pastel. `legacy` keeps the old
+ * swatches mapped to the same tone, so an already-saved bot picks up the
+ * deeper paint without a rewrite.
  */
 export const GROK_BALL_TONES = [
-  { key: "brown", light: "#A27952", dark: "#C49A6A", legacy: ["#855C36", "#8b5e3c"] },
-  { key: "red", light: "#FF3E51", dark: "#FF5C6C", legacy: ["#E02135", "#e8483f"] },
-  { key: "orange", light: "#FF781C", dark: "#FF9340", legacy: ["#FF6700", "#f08a24"] },
-  { key: "yellow", light: "#FFAF38", dark: "#FFBE4D", legacy: ["#FF9800", "#f0b429"] },
-  { key: "green", light: "#00C972", dark: "#22E090", legacy: ["#009957", "#3ecf8e"] },
-  { key: "cyan", light: "#1CC3B0", dark: "#36D9C8", legacy: ["#00A592", "#2fbfa0"] },
-  { key: "blue", light: "#2A92FE", dark: "#54AEFF", legacy: ["#0E74E0", "#3b93f0"] },
-  { key: "violet", light: "#A97EFE", dark: "#C09BFF", legacy: ["#804EE0", "#8b5cf6"] },
-  { key: "magenta", light: "#FF5EB1", dark: "#FF7EC4", legacy: ["#E02A88", "#e152b0"] },
-  { key: "gray", light: "#959595", dark: "#B0B0B0", legacy: ["#777777", "#a3a3a3"] },
+  { key: "brown", light: "#A27952", dark: "#BD9365", legacy: ["#C49A6A", "#855C36", "#8b5e3c"] },
+  { key: "red", light: "#FF3E51", dark: "#FF5566", legacy: ["#FF5C6C", "#E02135", "#e8483f"] },
+  { key: "orange", light: "#FF781C", dark: "#FF8D38", legacy: ["#FF9340", "#FF6700", "#f08a24"] },
+  { key: "yellow", light: "#FFAF38", dark: "#FFBB48", legacy: ["#FFBE4D", "#FF9800", "#f0b429"] },
+  { key: "green", light: "#00C972", dark: "#1BDB89", legacy: ["#22E090", "#009957", "#3ecf8e"] },
+  { key: "cyan", light: "#1CC3B0", dark: "#30D4C3", legacy: ["#36D9C8", "#00A592", "#2fbfa0"] },
+  { key: "blue", light: "#2A92FE", dark: "#4BA8FF", legacy: ["#54AEFF", "#0E74E0", "#3b93f0"] },
+  { key: "violet", light: "#A97EFE", dark: "#BB95FF", legacy: ["#C09BFF", "#804EE0", "#8b5cf6"] },
+  { key: "magenta", light: "#FF5EB1", dark: "#FF77C0", legacy: ["#FF7EC4", "#E02A88", "#e152b0"] },
+  { key: "gray", light: "#959595", dark: "#AAAAAA", legacy: ["#B0B0B0", "#777777", "#a3a3a3"] },
 ] as const;
 
 export type GrokBallToneKey = (typeof GROK_BALL_TONES)[number]["key"];
