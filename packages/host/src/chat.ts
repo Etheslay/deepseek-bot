@@ -42,6 +42,7 @@ import {
 } from "@deepseek-bot/harness-adapter";
 import type { ToolCaller } from "@deepseek-bot/agent-tools";
 import type { ApplicationToolTurn } from "./app-tool-channel.js";
+import { officeFilesWrittenSince } from "./delivered-files.js";
 import { userAskedAnotherBot } from "./dispatch-relevance.js";
 import type { UiLocale } from "./host.js";
 import { composeSkillBlock, skillCapabilityAllowlist } from "./skill-injection.js";
@@ -161,8 +162,27 @@ function deckDeliveryRule(text: string): string {
     "不要写 .bat，不要写安装脚本，不要说备用方案，不要用文字稿、互动页或导出按钮代替这个文件。",
     "不要调用 dispatch_task，不要把这件事交给其他 bot，也不要向用户索要派发权限。",
     "不要执行本地命令来生成这个文件。write_presentation 会自己把它写成 .pptx。",
-    "工具返回后，把文件路径告诉用户。",
+    "工具返回后，这条聊天会附上那个 .pptx。告诉用户文件就在这条消息里。不要粘贴磁盘路径、文件夹或下载链接。",
   ].join("\n");
+}
+
+/** Word, PDF, and Excel also land as a card. A path alone is not the delivery. */
+function officeChatRule(text: string): string {
+  if (deckDeliveryRule(text).length > 0) return "";
+  if (!/docx|\bword\b|\bpdf\b|xlsx|excel|表格|电子表/i.test(text)) return "";
+  return [
+    "【文件在这条聊天里】",
+    "做完的 Word、PDF 或 Excel 会作为文件出现在这条消息下面。",
+    "Word 和 PDF 用 write_document 或 edit_document 写进工作区。Excel 写成工作区内的一个 .xlsx。",
+    "不要只报一个磁盘路径。告诉用户打开这条消息里的文件。",
+  ].join("\n");
+}
+
+/** The current message is asking for a document, so an HTML stand-in can be attached. */
+function userWantsDocument(text: string): boolean {
+  return /pptx|幻灯片|演示文稿|课件|(?:^|[^a-z])ppt(?:[^a-z]|$)|docx|\bword\b|\bpdf\b|xlsx|excel|表格|电子表/i.test(
+    text,
+  );
 }
 
 /** Concatenated text blocks of one assistant message (harness-attempt shape). */
@@ -444,6 +464,7 @@ export class ChatManager {
           mimeType: image.mimeType,
         })),
       ];
+      const turnStartedAt = Date.now();
       let outcome = await attempt.runTurn(sessionId, contentBlocks, controller.signal, observeEvent);
       // An aside arrived while this turn was running. Read it on the same
       // session before the reply is committed, so a change of intent or a
@@ -468,7 +489,25 @@ export class ChatManager {
       } catch {
         /* usage accounting is best-effort */
       }
-      const files = turn?.deliveries() ?? [];
+      const recorded = turn?.deliveries() ?? [];
+      let spotted: DeliveredFile[] = [];
+      try {
+        spotted = officeFilesWrittenSince(
+          inputs.workspacePath,
+          turnStartedAt,
+          recorded,
+          userWantsDocument(text),
+        );
+      } catch {
+        spotted = [];
+      }
+      const files = [...recorded];
+      const seen = new Set(recorded.map((file) => file.path));
+      for (const file of spotted) {
+        if (files.length >= 4 || seen.has(file.path)) continue;
+        seen.add(file.path);
+        files.push(file);
+      }
       return { ...outcome, sessionId, ...(files.length > 0 ? { files } : {}) };
     } finally {
       if (registered) this.tools.bridgeRegistration?.unregister(sessionId);
@@ -653,8 +692,11 @@ export class ChatManager {
     parts.push(`[用户消息]\n${text}`);
     // After the history on purpose. Earlier replies that invented a broken
     // channel would otherwise outrank a rule placed above them.
-    const deckRule = deckDeliveryRule([text, ...history.map((entry) => entry.text)].join("\n"));
+    const spoken = [text, ...history.map((entry) => entry.text)].join("\n");
+    const deckRule = deckDeliveryRule(spoken);
     if (deckRule.length > 0) parts.push(deckRule);
+    const officeRule = officeChatRule(spoken);
+    if (officeRule.length > 0) parts.push(officeRule);
     return parts.join("\n\n");
   }
 

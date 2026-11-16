@@ -3,7 +3,7 @@
  * them to a temp file or a save dialog. The name is a single file name, never
  * a path.
  */
-const NAME = /^[^\\/:*?"<>|\r\n]{1,180}\.(pptx|pdf|docx)$/i;
+const NAME = /^[^\\/:*?"<>|\r\n]{1,180}\.(pptx|pdf|docx|xlsx|html|htm)$/i;
 const MAX_DATA_CHARS = 12_000_000;
 
 export function decodeDeliveredHandoff(input: unknown): { name: string; bytes: Buffer } {

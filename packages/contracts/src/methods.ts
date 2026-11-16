@@ -743,9 +743,10 @@ export const METHOD_CONTRACTS = {
       text: z.string(),
       at: IsoDateTimeUtcSchema,
       /**
-       * Office files this turn wrote (pptx, pdf, docx). Omitted when the turn
-       * produced none. The bytes stay in the workspace; the desktop fetches
-       * them with `workspace.export` to view or download.
+       * Office files this turn wrote (pptx, pdf, docx, xlsx, or an html
+       * fallback). Omitted when the turn produced none. The bytes stay in
+       * the workspace; the desktop fetches them with `workspace.export` to
+       * view or download.
        */
       files: z.array(DeliveredFileSchema).min(1).max(4).optional(),
     }),
@@ -1433,7 +1434,7 @@ export const METHOD_CONTRACTS = {
     response: z.object({ artifact: BotArtifactSchema, version: ArtifactVersionSchema }),
   },
   /**
-   * Bytes of one delivered office file (pptx, pdf, docx) inside a bot workspace.
+   * Bytes of one delivered office file (pptx, pdf, docx, xlsx, or html) inside a bot workspace.
    * Trusted desktop only: the chat card uses it to open the file or save a copy.
    * One call returns at most one slice so the envelope stays under 1 MiB.
    */

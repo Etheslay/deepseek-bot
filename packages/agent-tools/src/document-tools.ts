@@ -55,7 +55,9 @@ export function bindWriteDocumentTool(
       "not a patch. A .pdf path is rendered by the Harness LibreOffice engine into a real PDF, " +
       "including Chinese; call it whenever the user wants a PDF document. " +
       "A slide deck is write_presentation, not this tool. " +
-      "Use this to rewrite a chat attachment such as attachments/report.docx.",
+      "Use this to rewrite a chat attachment such as attachments/report.docx. " +
+      "After it returns, the chat attaches the file under the reply. Tell the user the file is in this chat. " +
+      "Do not paste a disk path, a folder, or a download link.",
     inputSchema: WriteDocumentInputSchema,
     handler: async (params, context) => {
       const botId = requireBot(context);

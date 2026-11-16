@@ -27,6 +27,10 @@ describe("exportOfficeSlice", () => {
     expect(Buffer.from(first.data, "base64").toString()).toBe("PK-h");
     expect(first.size).toBe(13);
     expect(first.mediaType).toBe("application/octet-stream");
+    writeFileSync(join(root, "成绩.xlsx"), Buffer.from("PK-xlsx"));
+    expect(exportOfficeSlice(root, "成绩.xlsx", 0, 2).size).toBe(7);
+    writeFileSync(join(root, "index.html"), Buffer.from("<p>deck</p>"));
+    expect(exportOfficeSlice(root, "index.html", 0, 3).mediaType).toBe("text/html");
     const rest = exportOfficeSlice(root, "lesson.pptx", 4, 20);
     expect(Buffer.from(rest.data, "base64").toString()).toBe("ello-pptx");
   });
