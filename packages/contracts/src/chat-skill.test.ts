@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MAX_CHAT_SKILLS, METHOD_CONTRACTS, PROTOCOL_VERSION } from "./index.js";
+import { MAX_CHAT_MESSAGE_CHARS, MAX_CHAT_SKILLS, METHOD_CONTRACTS, PROTOCOL_VERSION } from "./index.js";
 
 const botId = "11111111-1111-4111-8111-111111111111";
 
@@ -12,6 +12,17 @@ describe("chat.send skill injection", () => {
     // the vision.status flag) — a plain turn still parses exactly as before.
     expect(PROTOCOL_VERSION).toBe("0.14");
     expect(request.safeParse({ botId, text: "你好" }).success).toBe(true);
+  });
+
+  it("accepts a message at the composer cap and rejects one past it", () => {
+    expect(request.safeParse({ botId, text: "字".repeat(MAX_CHAT_MESSAGE_CHARS) }).success).toBe(true);
+    expect(request.safeParse({ botId, text: "字".repeat(MAX_CHAT_MESSAGE_CHARS + 1) }).success).toBe(false);
+    expect(
+      METHOD_CONTRACTS["chat.aside"].request.safeParse({
+        botId,
+        text: "字".repeat(MAX_CHAT_MESSAGE_CHARS + 1),
+      }).success,
+    ).toBe(false);
   });
 
   it("accepts admitted raster attachments and rejects others (B3'' 视觉输入)", () => {

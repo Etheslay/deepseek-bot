@@ -96,6 +96,8 @@ export const MAX_ATTACHMENT_CHUNK_BYTES = 512 * 1024;
 export const MAX_CHAT_SKILLS = 30;
 export const MAX_CHAT_SKILL_INSTRUCTIONS = 4_000;
 export const MAX_CHAT_SKILL_CAPABILITIES = 16;
+/** One `chat.send` / `chat.aside` line. The composer uses the same cap. */
+export const MAX_CHAT_MESSAGE_CHARS = 4_000;
 
 export const ChatSkillInjectionSchema = z
   .object({
@@ -706,7 +708,7 @@ export const METHOD_CONTRACTS = {
   "chat.send": {
     request: z.object({
       botId: UuidSchema,
-      text: z.string().min(1).max(4000),
+      text: z.string().min(1).max(MAX_CHAT_MESSAGE_CHARS),
       /**
        * G12: storage session the turn belongs to. Omitted means the bot's
        * default session (`chat:<botId>`) — byte-for-byte the pre-sessions
@@ -760,7 +762,7 @@ export const METHOD_CONTRACTS = {
   "chat.aside": {
     request: z.object({
       botId: UuidSchema,
-      text: z.string().min(1).max(4000),
+      text: z.string().min(1).max(MAX_CHAT_MESSAGE_CHARS),
     }),
     response: z.object({
       queued: z.boolean(),
