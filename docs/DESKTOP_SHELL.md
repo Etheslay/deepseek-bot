@@ -24,7 +24,8 @@ apps/desktop/
   src/shared/system-integration.ts 托盘/通知/Chrome 跨边界 payload 与校验
   src/renderer/                React 导航壳（Bots/Workflows/Runs/Settings 占位页）
   tests/ipc-registry.test.ts   白名单与 sender 校验单元测试
-  assets/tray.png              托盘图标（自有素材）
+  assets/icon.ico              应用图标（窗口、任务栏、安装器、快捷方式；多尺寸 ICO）
+  assets/tray.png              托盘回落图标（与 icon.ico 同源，32×32）
 ```
 
 ## 命令
@@ -153,7 +154,7 @@ preload 暴露面：`deepseekBot.{getAppInfo, window.*, settings.saveKey, update
 - 「退出登录」「复制对话 ID」为占位（未接入账号系统）；真实账号体系见待办。
 - 不接 Harness、不调用 DeepSeek API、无数据库；真实机器人 CRUD、会话、工作流、运行属于 D03–D09。
 - CI 不构建 GUI；桌面打包证据来自本地运行（见 D02 报告）。
-- 安装包未签名（`signAndEditExecutable: false`），安装器/应用 exe 资源为默认 Electron 元数据，SmartScreen 会提示。应用内更新通道已接入（D24，见下文「应用内更新」）；首个 GitHub Release 发布前，每次检查都软着陆为失败原因，不误报成功。
+- 安装包未签名。`signAndEditExecutable: true` 只让 rcedit 写入 `assets/icon.ico` 和版本元数据，没有证书时不会签名，SmartScreen 仍会提示。应用内更新通道已接入（D24，见下文「应用内更新」）；首个 GitHub Release 发布前，每次检查都软着陆为失败原因，不误报成功。
 - 安装版应用 UI 状态仍是会话内存；卸载保留的 `%APPDATA%\DeepSeekBot` 数据根在 D12 接线 storage 前尚无 UI 数据写入。
 
 ## 打包（D11）
