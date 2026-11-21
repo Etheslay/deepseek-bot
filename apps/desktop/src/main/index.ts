@@ -119,11 +119,11 @@ function resolvePreloadPath(): string {
   return join(__dirname, "../preload/index.cjs");
 }
 
-function resolveTrayIcon(): Electron.NativeImage {
+function loadAssetImage(fileName: string): Electron.NativeImage | null {
   const candidates = [
-    join(process.resourcesPath, "assets", "tray.png"),
-    join(app.getAppPath(), "assets", "tray.png"),
-    join(__dirname, "../../assets/tray.png"),
+    join(process.resourcesPath, "assets", fileName),
+    join(app.getAppPath(), "assets", fileName),
+    join(__dirname, "../../assets", fileName),
   ];
   for (const candidate of candidates) {
     const img = nativeImage.createFromPath(candidate);
@@ -131,8 +131,15 @@ function resolveTrayIcon(): Electron.NativeImage {
       return img;
     }
   }
-  return nativeImage.createFromDataURL(
-    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAOUlEQVR4nGNgoAXwzf73HxsmWyNRBhGrGachFBlAqmYMQ6hqACFAewMGJgwGPh1QJSkTYxBBjeQAAMGI0HQM57YaAAAAAElFTkSuQmCC",
+  return null;
+}
+
+function resolveTrayIcon(): Electron.NativeImage {
+  return (
+    loadAssetImage("tray.png") ??
+    nativeImage.createFromDataURL(
+      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAOUlEQVR4nGNgoAXwzf73HxsmWyNRBhGrGachFBlAqmYMQ6hqACFAewMGJgwGPh1QJSkTYxBBjeQAAMGI0HQM57YaAAAAAElFTkSuQmCC",
+    )
   );
 }
 
@@ -162,6 +169,7 @@ function attachNavigationGuards(win: BrowserWindow): void {
 }
 
 function createMainWindow(): BrowserWindow {
+  const windowIcon = loadAssetImage("icon.ico");
   const win = new BrowserWindow({
     width: 1100,
     height: 720,
@@ -170,6 +178,7 @@ function createMainWindow(): BrowserWindow {
     show: false,
     autoHideMenuBar: true,
     backgroundColor: "#0f0f10",
+    ...(windowIcon !== null ? { icon: windowIcon } : {}),
     titleBarStyle: "hidden",
     titleBarOverlay: {
       color: "#0f0f10",

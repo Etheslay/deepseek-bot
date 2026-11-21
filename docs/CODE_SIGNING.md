@@ -1,6 +1,6 @@
 # 代码签名：选型、接线与发布门槛
 
-状态：决策文档 + 接线手册。证书采购与路线拍板归发布负责人；本文不引入证书、不改打包行为。当前事实：`apps/desktop/electron-builder.yml` 的 `win.signAndEditExecutable: false`，安装包未签名——Windows SmartScreen 显示"未知发布者"，安装被拦需"仍要运行"。
+状态：决策文档 + 接线手册。证书采购与路线拍板归发布负责人；本文不引入证书。当前事实：`apps/desktop/electron-builder.yml` 的 `win.signAndEditExecutable: true`，使 rcedit 把 `assets/icon.ico` 和版本元数据写入 exe；未配置证书，签名步骤为空操作，安装包仍未签名——Windows SmartScreen 显示"未知发布者"，安装被拦需"仍要运行"。
 
 ## 1. 路线对比（2026-10 现实）
 
@@ -22,7 +22,7 @@ electron-builder 读标准环境变量，无需改 yml 结构：
 - `CSC_LINK`：PFX 路径（`file://` 或 base64 data URL）；
 - `CSC_KEY_PASSWORD`：PFX 口令。
 
-启用签名还必须把 `win.signAndEditExecutable` 置 `true`（当前为 `false`，该开关同时控制 rcedit 元数据编辑——启用属签名时的一次性行为变更，记入发布检查单）。产物验证：`Get-AuthenticodeSignature <installer>.exe` 应为 Valid；`signtool verify /pa /v <installer>.exe`。
+`win.signAndEditExecutable` 已经是 `true`（图标与版本元数据）。启用签名不需要再翻这个开关，只需要证书和环境变量。产物验证：`Get-AuthenticodeSignature <installer>.exe` 应为 Valid；`signtool verify /pa /v <installer>.exe`。
 
 ### 2.2 Azure Trusted Signing（electron-builder 原生）
 
@@ -54,4 +54,4 @@ signtool sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 `
 
 - [ ] 路线：Azure Trusted Signing / OV / EV / 暂维持未签名（如实标注）；
 - [ ] 采购与身份验证（个人 or 组织）；
-- [ ] 启用 PR：`signAndEditExecutable` 置 true + 路线对应配置 + CI secrets 接线 + 干净机验证 SmartScreen 表现并截图归档。
+- [ ] 启用 PR：路线对应配置 + CI secrets 接线 + 干净机验证 SmartScreen 表现并截图归档（`signAndEditExecutable` 已为 true，用于写入图标，不代表已签名）。
