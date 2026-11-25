@@ -105,11 +105,8 @@ export function PermissionsPanel() {
       .call("permission.policy.set", { capability, mode })
       .then(async (response) => {
         PERMISSION_METHODS["permission.policy.set"].response.parse(response);
-        setNoticeError(false);
-        setNotice(
-          () => () =>
-            t("permissions.policySaved", [capabilityLabel(capability), t(MODE_LABEL_KEYS[mode])]),
-        );
+        // No success line: the control already shows the stored mode (2026-11).
+        setNotice(null);
         try {
           await reload();
         } catch {
