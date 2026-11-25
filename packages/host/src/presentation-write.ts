@@ -870,7 +870,29 @@ export async function buildPptx(
       `<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/>` +
       `</Relationships>`,
   );
-  return zipSync(files);
+  /**
+   * OPC packaging order matters in practice: `[Content_Types].xml` must be the
+   * first part in the archive and the package relationships follow it. Building
+   * the archive from this object's keys put both at the very end, and PowerPoint
+   * refuses to open such a .pptx ("这个文件打不开", 2026-11). Insert order is by
+   * key, so re-emit them first.
+   */
+  const ordered: Record<string, Uint8Array> = {};
+  const contentTypes = files["[Content_Types].xml"];
+  const packageRels = files["_rels/.rels"];
+  if (contentTypes !== undefined) {
+    ordered["[Content_Types].xml"] = contentTypes;
+  }
+  if (packageRels !== undefined) {
+    ordered["_rels/.rels"] = packageRels;
+  }
+  for (const [name, bytes] of Object.entries(files)) {
+    if (name === "[Content_Types].xml" || name === "_rels/.rels") {
+      continue;
+    }
+    ordered[name] = bytes;
+  }
+  return zipSync(ordered);
 }
 
 function readSlideImage(root: string, relativePath: string): SlideImage {
