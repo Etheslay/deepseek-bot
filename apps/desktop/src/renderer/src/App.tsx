@@ -1849,6 +1849,7 @@ const logout = (): void => {
           )}
           {selectedBotName}
         </span>
+        <div className="top-actions">
         <button
           type="button"
           className="top-icon-btn artifacts-btn"
@@ -1892,6 +1893,7 @@ const logout = (): void => {
             />
           </svg>
         </button>
+        </div>
         {artifactsOpen && (
           <>
             <div className="menu-overlay" onClick={() => setArtifactsOpen(false)} />
