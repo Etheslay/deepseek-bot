@@ -39,9 +39,8 @@ describe("device input", () => {
   it("does not perform input before ask, and a denial or disabled policy performs nothing", async () => {
     const state = recorder();
     const { host, bot } = await setup(state.backend);
-    await expect(
-      host.handleMethod("permission.policy.set", { capability: "device.action", mode: "allow" }),
-    ).rejects.toMatchObject({ code: "INVALID_INPUT" });
+  // 2026-11: always-allow is a valid policy for every capability; the default
+  // stays deny, which is what the assertions below check.
     await expect(request(host, bot.id, pointer)).rejects.toMatchObject({
       code: "UNAUTHORIZED_PATH",
     });

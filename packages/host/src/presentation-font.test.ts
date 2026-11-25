@@ -1,6 +1,12 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { cjkEmbeddingRefusal, extractFirstTrueType } from "./presentation-font.js";
+import {
+  cjkEmbeddingRefusal,
+  clearFontSubsetCache,
+  embeddedFaces,
+  extractFirstTrueType,
+  fontSubsetComputations,
+} from "./presentation-font.js";
 
 function faceWithTable(payload: Buffer): Buffer {
   const header = 12 + 16;
@@ -87,5 +93,20 @@ describe("extractFirstTrueType", () => {
       targetFormat: "truetype",
     });
     expect(Buffer.from(subsetBytes.subarray(0, 4)).toString("hex")).toBe("00010000");
+  });
+});
+
+describe("embeddedFaces subset cache", () => {
+  it("reuses a cut when the same face and characters come up again", async () => {
+    clearFontSubsetCache();
+    const first = await embeddedFaces("封面Aa");
+    const computed = fontSubsetComputations();
+    if (computed === 0) return;
+    const second = await embeddedFaces("Aa封面");
+    expect(fontSubsetComputations()).toBe(computed);
+    expect(second.latin?.regular).toEqual(first.latin?.regular);
+    expect(second.cjk?.regular).toEqual(first.cjk?.regular);
+    await embeddedFaces("封面Ab新");
+    expect(fontSubsetComputations()).toBeGreaterThan(computed);
   });
 });

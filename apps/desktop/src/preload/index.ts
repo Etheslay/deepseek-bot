@@ -110,6 +110,7 @@ export type DesktopBridge = {
     hardwareAcceleration: (
       enabled?: boolean,
     ) => Promise<import("../shared/ipc-channels.js").HardwareAccelerationStatus>;
+    microphone: (enabled?: boolean) => Promise<import("../shared/ipc-channels.js").MicrophoneStatus>;
   };
   host: {
     call: (method: string, payload: unknown) => Promise<unknown>;
@@ -146,6 +147,14 @@ export type DesktopBridge = {
     onTrayAction: (listener: (event: TrayActionEvent) => void) => () => void;
     onNotificationClick: (listener: (event: NotificationClickEvent) => void) => () => void;
     onWindowFocus: (listener: (event: WindowFocusEvent) => void) => () => void;
+  };
+  /**
+   * A finished office file handed back in chat. The renderer already fetched
+   * the bytes; main only opens them or writes the save dialog.
+   */
+  files: {
+    open: (input: { name: string; data: string }) => Promise<{ ok: true }>;
+    save: (input: { name: string; data: string }) => Promise<{ ok: true; cancelled?: boolean }>;
   };
 };
 
@@ -185,6 +194,7 @@ const api: DesktopBridge = {
   app: {
     hardwareAcceleration: (enabled?: boolean) =>
       ipcRenderer.invoke(IPC_CHANNELS.APP_HARDWARE_ACCELERATION, enabled),
+    microphone: (enabled?: boolean) => ipcRenderer.invoke(IPC_CHANNELS.APP_MICROPHONE, enabled),
   },
   host: {
     /**
@@ -248,6 +258,10 @@ const api: DesktopBridge = {
     onNotificationClick: (listener) =>
       subscribe<NotificationClickEvent>(SYSTEM_EVENT_NOTIFICATION_CLICK, listener),
     onWindowFocus: (listener) => subscribe<WindowFocusEvent>(SYSTEM_EVENT_WINDOW_FOCUS, listener),
+  },
+  files: {
+    open: (input) => ipcRenderer.invoke(IPC_CHANNELS.FILE_OPEN, input),
+    save: (input) => ipcRenderer.invoke(IPC_CHANNELS.FILE_SAVE, input),
   },
 };
 

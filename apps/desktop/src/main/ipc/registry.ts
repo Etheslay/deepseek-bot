@@ -7,6 +7,7 @@ import {
   assertValidTitleBarOverlayColors,
   type AppInfo,
   type HardwareAccelerationStatus,
+  type MicrophoneStatus,
   type UpdateStatus,
 } from "../../shared/ipc-channels.js";
 import { parseChatLinkHref, type ChatLinkOpenResult } from "../../shared/chat-link.js";
@@ -61,6 +62,8 @@ export type IpcHandlers = {
   listBackups: () => import("../../shared/ipc-channels.js").BackupSummary[];
   /** D24: read or toggle the hardware-acceleration preference. */
   hardwareAcceleration: (enabled: unknown) => Promise<HardwareAccelerationStatus>;
+  /** Read or toggle the composer microphone. A boolean persists; omission reads. */
+  microphone: (enabled: unknown) => Promise<MicrophoneStatus>;
   /** D22: mirror the UI language preference so tray/notifications match. */
   setLanguage: (preference: LanguagePreference) => void;
   /** D22: replace the per-bot tray state (validated + normalized in main). */
@@ -74,6 +77,10 @@ export type IpcHandlers = {
   chromeState: () => ChromeStateResult;
   chromeClear: () => ChromeClearResult;
   chromeExport: () => ChromeExportResult;
+  /** Open a delivered office file. The payload is a name plus base64 bytes. */
+  openDeliveredFile: (input: unknown) => Promise<{ ok: true }>;
+  /** Save a delivered office file. The payload is a name plus base64 bytes. */
+  saveDeliveredFile: (input: unknown) => Promise<{ ok: true; cancelled?: boolean }>;
 };
 
 /**
@@ -197,6 +204,11 @@ export function registerIpcHandlers(
       return handlers.hardwareAcceleration(enabled);
     },
   );
+  ipcMain.handle(IPC_CHANNELS.APP_MICROPHONE, (event: IpcMainInvokeEvent, enabled: unknown) => {
+    assertAllowedChannel(IPC_CHANNELS.APP_MICROPHONE);
+    assertAuthorizedSender(event, isAuthorized);
+    return handlers.microphone(enabled);
+  });
   ipcMain.handle(
     IPC_CHANNELS.I18N_SET_LANGUAGE,
     (event: IpcMainInvokeEvent, preference: unknown) => {
@@ -249,6 +261,16 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC_CHANNELS.CHROME_STATE, wrap(IPC_CHANNELS.CHROME_STATE, () => handlers.chromeState()));
   ipcMain.handle(IPC_CHANNELS.CHROME_CLEAR, wrap(IPC_CHANNELS.CHROME_CLEAR, () => handlers.chromeClear()));
   ipcMain.handle(IPC_CHANNELS.CHROME_EXPORT, wrap(IPC_CHANNELS.CHROME_EXPORT, () => handlers.chromeExport()));
+  ipcMain.handle(IPC_CHANNELS.FILE_OPEN, (event: IpcMainInvokeEvent, input: unknown) => {
+    assertAllowedChannel(IPC_CHANNELS.FILE_OPEN);
+    assertAuthorizedSender(event, isAuthorized);
+    return handlers.openDeliveredFile(input);
+  });
+  ipcMain.handle(IPC_CHANNELS.FILE_SAVE, (event: IpcMainInvokeEvent, input: unknown) => {
+    assertAllowedChannel(IPC_CHANNELS.FILE_SAVE);
+    assertAuthorizedSender(event, isAuthorized);
+    return handlers.saveDeliveredFile(input);
+  });
 }
 
 export function unregisterIpcHandlers(): void {

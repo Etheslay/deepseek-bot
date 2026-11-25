@@ -28,6 +28,10 @@ export const d24Messages = {
     zh: "硬件加速开关必须是布尔值",
     en: "The hardware-acceleration flag must be a boolean",
   },
+  "d24.microphoneNotBoolean": {
+    zh: "麦克风开关必须是布尔值",
+    en: "The microphone flag must be a boolean",
+  },
   "d24.hwAccelOffRestart": {
     zh: "已关闭，重启应用后生效",
     en: "Off — restart the app to apply",

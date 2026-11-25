@@ -22,7 +22,11 @@ export type VoiceButton = {
 export function transcribeButton(
   status: VoiceStatus | null,
   phase: VoicePhase,
+  captureEnabled = true,
 ): VoiceButton {
+  if (!captureEnabled && phase === "idle") {
+    return { disabled: true, labelKey: "voice.record", reasonKey: "voice.micOff" };
+  }
   if (phase === "transcribing") {
     return { disabled: true, labelKey: "voice.transcribing", reasonKey: null };
   }

@@ -19,6 +19,7 @@ import {
   type UiState,
 } from "@deepseek-bot/contracts";
 import { bytesToBase64 } from "../features/chat/attachments.js";
+import { deliveredFilesFromResponse } from "./delivered-bytes.js";
 import {
   ServiceError,
   type AttachmentUploadResult,
@@ -58,6 +59,7 @@ type HostBridge = {
     hardwareAcceleration: (
       enabled?: boolean,
     ) => Promise<{ enabled: boolean; restartRequired: boolean }>;
+    microphone?: (enabled?: boolean) => Promise<{ enabled: boolean }>;
   };
 };
 
@@ -424,6 +426,7 @@ export function createHostService(bridge: HostBridge): DesktopService {
             // The turn settled: no later notification belongs to this stream.
             unsubscribe?.();
             const reply = (response as { text: string }).text;
+            const files = deliveredFilesFromResponse((response as { files?: unknown }).files);
             if (cancelled) {
               return { cancelled: true, failure: null, text: reply } satisfies StreamResult;
             }
@@ -443,7 +446,12 @@ export function createHostService(bridge: HostBridge): DesktopService {
             if (reply.startsWith(shown) && reply.length > shown.length) {
               await emitWhole(reply.slice(shown.length));
             }
-            return { cancelled, failure: null, text: reply } satisfies StreamResult;
+            return {
+              cancelled,
+              failure: null,
+              text: reply,
+              ...(files.length > 0 ? { files } : {}),
+            } satisfies StreamResult;
           })
           .catch((error: unknown) => {
             unsubscribe?.();
@@ -572,6 +580,15 @@ export function createHostService(bridge: HostBridge): DesktopService {
         return Promise.resolve({ enabled: true, restartRequired: false });
       }
       return Promise.resolve({ enabled, restartRequired: true });
+    },
+    microphone: (enabled?: boolean) => {
+      if (bridge.app?.microphone !== undefined) {
+        return bridge.app.microphone(enabled);
+      }
+      if (enabled === undefined) {
+        return Promise.resolve({ enabled: true });
+      }
+      return Promise.resolve({ enabled });
     },
   };
 }

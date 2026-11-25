@@ -34,11 +34,18 @@ import type {
   ContextUsageView,
 } from "./services/desktop-service.js";
 import { useService } from "./services/service-context.jsx";
-import { METHOD_CONTRACTS, type VoiceStatus, type VoiceTranscriptionLanguage } from "@deepseek-bot/contracts";
+import {
+  MAX_CHAT_MESSAGE_CHARS,
+  METHOD_CONTRACTS,
+  type DeliveredFile,
+  type VoiceStatus,
+  type VoiceTranscriptionLanguage,
+} from "@deepseek-bot/contracts";
 import {
   emptyStream,
-  failureMessage,
+  visibleFailureText,
 } from "./features/chat/chat-reducer.js";
+import { deliverToLiveTurn } from "./features/chat/live-turn-send.js";
 import {
   assemblePairRecords,
   type PairRecord,
@@ -100,6 +107,7 @@ import { ChatMarkdown } from "./features/chat/chat-markdown.js";
 import { setMermaidTheme } from "./features/chat/mermaid.js";
 import { ThinkingLine } from "./features/chat/thinking-line.js";
 import { FileCard } from "./features/chat/file-card.js";
+import { DeliveredFileCard } from "./features/chat/delivered-file.js";
 import {
   messageSlotOrder,
   streamSlotOrder,
@@ -116,6 +124,7 @@ import {
   composeAttachmentPrompt,
   documentOnlyReplyInstruction,
   splitDocumentAck,
+  bytesToBase64,
   MAX_ATTACHMENT_BYTES,
   type AttachmentDraft,
   type VisionNoteMode,
@@ -123,6 +132,7 @@ import {
 import { prepareVisionImage } from "./features/chat/image-vision.js";
 import { asksToConvertToPdf, asksToMakeDocument } from "./features/chat/document-intent.js";
 import { asksToMakePresentation } from "./features/chat/presentation-intent.js";
+import { fetchDeliveredBytes } from "./services/delivered-bytes.js";
 import type { StreamOptions } from "./services/desktop-service.js";
 import { GlobalSearch } from "./features/search/global-search.js";
 import { ContextRing } from "./features/chat/context-ring.js";
@@ -161,7 +171,7 @@ import {
   notificationRequest,
   notifyUser,
 } from "./features/system/notify.js";
-import { NotificationSettingsPanel } from "./features/system/notifications-panel.js";
+import { NotificationSettingsPanel, SettingsSwitch } from "./features/system/notifications-panel.js";
 import { ChromeImportPanel } from "./features/system/chrome-panel.js";
 import type { TrayBotStatus } from "../../shared/system-integration.js";
 import type { LanguagePreference } from "../../shared/i18n/types.js";
@@ -243,6 +253,8 @@ type Msg = {
         relativePath?: string;
       }[]
     | undefined;
+  /** Office file the turn handed back. View opens it; download saves a copy. */
+  files?: DeliveredFile[];
   /** Choice card the bot put to the user (D14 interaction slice). */
   choices?: {
     question: string;
@@ -444,7 +456,6 @@ export function App(): JSX.Element {
    */
   const headerBot = bots.find((b) => b.key === selectedBot) ?? bots[0] ?? null;
   const [toast, setToast] = useState<string | null>(null);
-  const [historyOpen, setHistoryOpen] = useState(false);
   const [artifactsOpen, setArtifactsOpen] = useState(false);
   const [artifactList, setArtifactList] = useState<
     import("@deepseek-bot/contracts").BotArtifact[] | null
@@ -533,6 +544,8 @@ export function App(): JSX.Element {
     enabled: boolean;
     restartRequired: boolean;
   } | null>(null);
+  /** Settings → Computer. Null until the shell answers; the composer treats that as on. */
+  const [microphoneEnabled, setMicrophoneEnabled] = useState<boolean | null>(null);
   const [workflowOpen, setWorkflowOpen] = useState(false);
   const [monitorOpen, setMonitorOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -1015,6 +1028,25 @@ export function App(): JSX.Element {
     }
     void desktop.hardwareAcceleration().then(setHwAccel).catch(() => undefined);
   }, [settingsOpen, settingsSection, desktop, hwAccel]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void desktop
+      .microphone()
+      .then((status) => {
+        if (!cancelled) {
+          setMicrophoneEnabled(status.enabled);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setMicrophoneEnabled(true);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [desktop]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1517,6 +1549,7 @@ export function App(): JSX.Element {
       storedId: message.storedId,
       ...(message.speakerKey !== undefined ? { speakerKey: message.speakerKey } : {}),
       ...(message.choices !== undefined ? { choices: message.choices } : {}),
+      ...(message.files !== undefined ? { files: message.files } : {}),
     }));
 
   /**
@@ -1819,64 +1852,10 @@ const logout = (): void => {
         <div className="top-actions">
         <button
           type="button"
-          className={"top-icon-btn" + (monitorOpen ? " active" : "")}
-          aria-label={t("shell.runMonitorApprovals")}
-          title={t("shell.runMonitorApprovals")}
-          onClick={() => {
-            setWorkflowOpen(false);
-            setMonitorOpen((v) => !v);
-          }}
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path
-              d="M3 13h3.5l2-6 3 12 2.5-8 2 4.5H21"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.6"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        </button>
-        <button
-          type="button"
-          className={"top-icon-btn" + (workflowOpen ? " active" : "")}
-          aria-label={t("shell.workflowEditor")}
-          title={t("shell.workflowEditor")}
-          onClick={() => {
-            setMonitorOpen(false);
-            setWorkflowOpen((v) => !v);
-          }}
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <rect x="3" y="4" width="7" height="6" rx="1.6" fill="none" stroke="currentColor" strokeWidth="1.6" />
-            <rect x="14" y="14" width="7" height="6" rx="1.6" fill="none" stroke="currentColor" strokeWidth="1.6" />
-            <path d="M6.5 10v4a2 2 0 0 0 2 2H14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-            <circle cx="6.5" cy="17" r="1.4" fill="currentColor" />
-          </svg>
-        </button>
-        <button
-          type="button"
-          className="top-icon-btn"
-          aria-label={t("shell.recentSessions")}
-          title={t("shell.recentSessions")}
-          onClick={() => {
-            setArtifactsOpen(false);
-            setHistoryOpen((v) => !v);
-          }}
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
-            <path d="M12 7.5V12l3 2" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-          </svg>
-        </button>
-        <button
-          type="button"
           className="top-icon-btn artifacts-btn"
           aria-label={t("shell.artifacts")}
           title={t("shell.artifacts")}
           onClick={() => {
-            setHistoryOpen(false);
             setArtifactsOpen((v) => !v);
           }}
         >
@@ -1915,14 +1894,6 @@ const logout = (): void => {
           </svg>
         </button>
         </div>
-        {historyOpen && (
-          <>
-            <div className="menu-overlay" onClick={() => setHistoryOpen(false)} />
-            <div className="top-popover" role="dialog" aria-label={t("shell.recentSessions")}>
-              <div className="popover-title">{t("shell.recentSessions")}</div>
-            </div>
-          </>
-        )}
         {artifactsOpen && (
           <>
             <div className="menu-overlay" onClick={() => setArtifactsOpen(false)} />
@@ -2331,7 +2302,7 @@ const logout = (): void => {
                     raiseNotice({ kind: "approval", botId, botName });
                   }
                 }}
-                onAssistant={(assistantText) =>
+                onAssistant={(assistantText, files) =>
                 setChats((prev) => {
                   const list = prev[selectedBot] ?? [];
                   const now = Date.now();
@@ -2357,6 +2328,7 @@ const logout = (): void => {
                         system: false,
                         speakerKey: selectedBot,
                         origin: "live",
+                        ...(files !== undefined && files.length > 0 ? { files } : {}),
                       },
                     ],
                   };
@@ -2383,6 +2355,7 @@ const logout = (): void => {
               skillContext={(botId) => skillsForInjection(botId, skillLibrary)}
               voiceLanguage={voiceLanguage}
               voiceConfigVersion={voiceConfigVersion}
+              captureEnabled={microphoneEnabled !== false}
               onOpenBot={(botKey) => {
                 const target = bots.find((b) => b.key === botKey);
                 if (target) {
@@ -3134,10 +3107,32 @@ const logout = (): void => {
                 {settingsSection === "computer" && (
                   <>
                   <div className="settings-card">
-                    <div className="settings-row">
-                      <span>{t("shell.microphone")}</span>
-                      <span className="settings-soon">{t("shell.allDeniedByPolicy")}</span>
-                    </div>
+                    {microphoneEnabled === null ? (
+                      <div className="settings-row">
+                        <span>{t("shell.microphone")}</span>
+                        <span className="session-meta">…</span>
+                      </div>
+                    ) : (
+                      <SettingsSwitch
+                        checked={microphoneEnabled}
+                        label={t("shell.microphone")}
+                        onChange={(next) => {
+                          const previous = microphoneEnabled;
+                          setMicrophoneEnabled(next);
+                          void desktop
+                            .microphone(next)
+                            .then((status) => setMicrophoneEnabled(status.enabled))
+                            .catch((error: unknown) => {
+                              setMicrophoneEnabled(previous);
+                              setToast(
+                                t("d24.settingFailed", [
+                                  error instanceof Error ? error.message : String(error),
+                                ]),
+                              );
+                            });
+                        }}
+                      />
+                    )}
                     <div className="settings-row">
                       <span>{t("shell.hardwareAcceleration")}</span>
                       <span className="key-input-wrap">
@@ -3231,6 +3226,7 @@ function MessageBubble({
   canEditResend,
   onEditResend,
   onOpenAttachment,
+  onDeliveredFile,
   onNotify,
   onSpeak,
   speaking,
@@ -3255,6 +3251,8 @@ function MessageBubble({
   onEditResend?: (text: string) => void;
   /** Workspace path from the gateway import. Opens the artifact preview. */
   onOpenAttachment?: (relativePath: string) => void;
+  /** Open or save an office file the turn handed back. */
+  onDeliveredFile?: (file: DeliveredFile, action: "view" | "download") => void;
   onNotify?: (message: string) => void;
   /** Voice: read this reply aloud through the Host's local speech engine. */
   onSpeak?: (msgId: number, text: string) => void;
@@ -3408,6 +3406,18 @@ function MessageBubble({
               onMentionClick={onMentionClick}
               onNotify={onNotify}
             />
+          )}
+          {!isUser && msg.files !== undefined && msg.files.length > 0 && (
+            <div className="delivered-files">
+              {msg.files.map((file) => (
+                <DeliveredFileCard
+                  key={file.path}
+                  file={file}
+                  onView={() => onDeliveredFile?.(file, "view")}
+                  onDownload={() => onDeliveredFile?.(file, "download")}
+                />
+              ))}
+            </div>
           )}
           {msg.choices && (
             <ChoiceCard
@@ -3631,6 +3641,7 @@ export function BotsPlaceholder({
   onOpenBot,
   voiceLanguage,
   voiceConfigVersion,
+  captureEnabled = true,
   onNotify,
   onBotStatus,
   onReplyCompleted,
@@ -3667,12 +3678,14 @@ export function BotsPlaceholder({
   onReact: (msgId: number, emoji: Emoji) => void;
   onTalkTo: (otherKey: number) => void;
   onCopy: (text: string) => void;
-  onAssistant: (text: string) => void;
+  onAssistant: (text: string, files?: DeliveredFile[]) => void;
   onOpenBot: (botKey: number) => void;
   /** Settings → Voice. Passed through to whisper-cli as `-l`. */
   voiceLanguage: VoiceTranscriptionLanguage;
   /** Bumps when Settings saves whisper paths so this pane re-reads voice.status. */
   voiceConfigVersion: number;
+  /** Settings → Computer. Off disables hold-to-talk. */
+  captureEnabled?: boolean;
   onNotify: (message: string) => void;
   /** D22: live bot state for the tray (running / waiting-approval / idle). */
   onBotStatus: (botId: string, status: TrayBotStatus) => void;
@@ -3730,6 +3743,28 @@ export function BotsPlaceholder({
   const fileDragDepth = useRef(0);
   const readPickedFilesRef = useRef<(files: FileList | null) => Promise<void>>(async () => {});
   const me = bots.find((b) => b.key === selectedBot);
+
+  const handoffFile = (file: DeliveredFile, action: "view" | "download"): void => {
+    if (me === undefined) return;
+    const botId = me.bot.id;
+    void (async () => {
+      try {
+        const bytes = await fetchDeliveredBytes(
+          (method, payload) => window.deepseekBot.host.call(method, payload),
+          botId,
+          file,
+        );
+        const data = bytesToBase64(bytes);
+        if (action === "view") {
+          await window.deepseekBot.files.open({ name: file.name, data });
+        } else {
+          await window.deepseekBot.files.save({ name: file.name, data });
+        }
+      } catch {
+        onNotify(t(action === "view" ? "shell.viewFileFailed" : "shell.downloadFileFailed"));
+      }
+    })();
+  };
 
   /**
    * 配对视图的真实往来记录（点击消息往来上的对方 bot 进入）：只用这次交接的
@@ -4359,25 +4394,32 @@ export function BotsPlaceholder({
     if (documentOnly) {
       pointers.push(documentOnlyReplyInstruction());
     }
-    sendAndFollow(text, outgoing.length > 0 ? outgoing : undefined, meta);
-    setPendingMeta(null);
-    setPendingFiles([]);
-    setFailedText(text);
-    setDraft("");
-    setReadingFile(files.some((file) => classifyAttachment(file.mime, file.name) === "document"));
-    setMakingDocument(asksToMakeDocument(text) || makingDocument);
-    setConvertingToPdf(asksToConvertToPdf(text) || convertingToPdf);
-    setMakingPresentation(asksToMakePresentation(text) || makingPresentation);
     const prompt = composeAttachmentPrompt(text, pointers);
     const turnLive =
       stream !== null && stream.forKey === me.key && stream.failure === null && !stream.cancelled;
+    const commit = (): void => {
+      sendAndFollow(text, outgoing.length > 0 ? outgoing : undefined, meta);
+      setPendingMeta(null);
+      setPendingFiles([]);
+      setFailedText(text);
+      setDraft("");
+      setReadingFile(files.some((file) => classifyAttachment(file.mime, file.name) === "document"));
+      setMakingDocument(asksToMakeDocument(text) || makingDocument);
+      setConvertingToPdf(asksToConvertToPdf(text) || convertingToPdf);
+      setMakingPresentation(asksToMakePresentation(text) || makingPresentation);
+    };
     if (turnLive) {
-      try {
-        if (await service.chat.aside(me.bot.id, prompt)) return;
-      } catch {
-        // The live turn did not take the line. Send it as its own turn.
+      const delivery = await deliverToLiveTurn(() => service.chat.aside(me.bot.id, prompt));
+      if (delivery === "keep") {
+        onNotify(t("chat.waitForTurn"));
+        return;
+      }
+      if (delivery === "queued") {
+        commit();
+        return;
       }
     }
+    commit();
     startChatStream(prompt, imageBlocks);
   };
 
@@ -4571,6 +4613,7 @@ export function BotsPlaceholder({
                   onReact={onReact}
                   onQuote={onQuote}
                   onCopy={onCopy}
+                  onDeliveredFile={handoffFile}
                   canRegenerate={m.id === lastBotMsgId}
                   onRegenerate={regenerate}
                   canEditResend={m.id === lastUserMsgId}
@@ -4656,10 +4699,11 @@ export function BotsPlaceholder({
                     </button>
                   )}
                 </div>
-                {/* The Host authors the human sentence (humanized errors); the
-                    catalogue line only backs codes that carry no message. */}
+                {/* The Host authors the human sentence. The old busy-turn
+                    sentence is replaced with the catalogue line; a code with
+                    no message uses the catalogue too. */}
                 <div className="failure-text">
-                  {stream.failure.message ? stream.failure.message : failureMessage(stream.failure.code)}
+                  {visibleFailureText(stream.failure)}
                 </div>
               </div>
             )}
@@ -4942,7 +4986,7 @@ export function BotsPlaceholder({
           className="composer-input"
           placeholder={clarifyActive ? t("questions.realIntentPlaceholder") : t("shell.messageBot", [me.bot.name])}
           value={draft}
-          maxLength={200}
+          maxLength={MAX_CHAT_MESSAGE_CHARS}
           aria-label={t("shell.messageBot", [me.bot.name])}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
@@ -4954,6 +4998,7 @@ export function BotsPlaceholder({
         <ContextRing usage={contextUsage} />
         <ComposerMic
           status={voiceStatus}
+          captureEnabled={captureEnabled}
           language={voiceLanguage}
           onNotify={onNotify}
           onTranscript={(text) => setDraft((prev) => appendTranscript(prev, text))}

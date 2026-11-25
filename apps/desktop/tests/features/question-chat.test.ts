@@ -151,7 +151,7 @@ describe("ask_user chat cards", () => {
     expect(calls.some((call) => call.method === "chat.send")).toBe(false);
   });
 
-  it("collapses the answered card to the bare text without 已选择 (U2)", async () => {
+  it("keeps the answered card visible with the picked row marked (U2)", async () => {
     const { container } = await renderCards({
       questions: [QUESTION],
       answered: { [REQUEST]: ANSWERED },
@@ -159,9 +159,12 @@ describe("ask_user chat cards", () => {
     await vi.waitFor(() => {
       expect(container.textContent).toContain("Which first?");
     });
+    // 2026-11: the card no longer collapses; it dims and marks the picked row.
     expect(container.textContent).not.toContain("已选择");
     expect(container.textContent).toContain("Alpha");
-    expect(container.querySelectorAll("button")).toHaveLength(0);
+    expect(container.querySelector(".choice-card")?.classList.contains("is-answered")).toBe(true);
+    expect(container.querySelector(".choice-option.is-chosen")).not.toBeNull();
+    expect(container.querySelector(".choice-answered")).toBeNull();
   });
 
   it("forces the D label and routes a D click to the composer instead of answering (U4)", async () => {
@@ -312,12 +315,13 @@ describe("ask_user chat cards", () => {
     expect(calls.some((call) => call.method === "question.answer")).toBe(false);
   });
 
-  it("keeps an expired-but-answered request collapsed instead of showing the expiry note", async () => {
+  it("keeps an expired-but-answered request dimmed instead of showing the expiry note", async () => {
     const { container } = await renderCards({
       questions: [],
       answered: { [REQUEST]: ANSWERED },
     });
     expect(container.textContent).toContain("Alpha");
     expect(container.textContent).not.toContain("该问题已过期");
+    expect(container.querySelector(".choice-card")?.classList.contains("is-answered")).toBe(true);
   });
 });

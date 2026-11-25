@@ -87,9 +87,18 @@ export function requiresPerActionApproval(capability: CapabilityId): boolean {
   );
 }
 
+/**
+ * Every capability accepts all three policy modes (allow / ask / deny). The
+ * settings page exposes the same three choices everywhere: a stored `allow`
+ * policy is honoured by the authorize path (`mode === "allow"` short-circuits
+ * the per-call grant requirement), so screen capture and device actions can be
+ * pre-authorized instead of being pinned to ask. `requiresPerActionApproval`
+ * still describes which capabilities cannot be covered by a *session/permanent
+ * grant* — that is a separate, narrower rule.
+ */
 export function isPermissionModeAllowed(capability: CapabilityId, mode: PermissionMode): boolean {
-  if (capability === "screen.capture" || capability === "device.action") return mode !== "allow";
-  return true;
+  void capability;
+  return mode === "allow" || mode === "ask" || mode === "deny";
 }
 
 export const CapabilityPolicySchema = z

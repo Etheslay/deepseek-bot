@@ -232,7 +232,8 @@ function ScreenBotPanel(props: { botId: string }): JSX.Element {
       .then((response) => {
         if (!alive.current || refreshSeq.current !== seq) return;
         setWindows(METHOD_CONTRACTS["screen.windows.list"].response.parse(response).windows);
-        setBanner({ notice: { key: "screen.windowsRefreshed" }, error: false });
+        // No success banner: the refreshed list is the feedback (2026-11).
+        setBanner(null);
       })
       .catch((error: unknown) => {
         if (!alive.current || refreshSeq.current !== seq) return;

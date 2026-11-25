@@ -11,7 +11,7 @@ import { randomUUID } from "node:crypto";
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import type { ContextUsageResult } from "./handlers.js";
 import { createHost, type DeepSeekBotHost } from "./host.js";
-import { createBot, listChatMessages, upsertChatSummary } from "@deepseek-bot/storage";
+import { appendChatMessage, createBot, listChatMessages, upsertChatSummary } from "@deepseek-bot/storage";
 import { CONTEXT_WINDOW_ENV_VAR } from "./context-window.js";
 
 const fakeHarness = fileURLToPath(
@@ -224,6 +224,58 @@ describe("context meter (TASK_CONTEXT_METER.md)", () => {
     const replay = next.text.split("【最近对话】")[1] ?? "";
     expect(replay.trimStart().startsWith("用户：第2条")).toBe(true);
     expect(next.text.includes("[用户消息]\n压缩后的一问")).toBe(true);
+  });
+
+  it("replays the newest turns that fit and leaves an oversized older turn out", async () => {
+    const { host, botId } = await meterHost("echo-model");
+    const sessionId = `chat:${botId}`;
+    appendChatMessage(host.db, {
+      botId,
+      sessionId,
+      role: "user",
+      text: `旧开头${"旧".repeat(8_000)}`,
+    });
+    appendChatMessage(host.db, { botId, sessionId, role: "assistant", text: "旧回复" });
+    appendChatMessage(host.db, { botId, sessionId, role: "user", text: "新结尾标记" });
+    appendChatMessage(host.db, { botId, sessionId, role: "assistant", text: "新回复" });
+    const next = (await host.handleMethod("chat.send", { botId, text: "现在问" })) as { text: string };
+    expect(next.text).toContain("新结尾标记");
+    expect(next.text).not.toContain("旧开头");
+  });
+
+  it("drops rows a summary already covers when the watermark is outside the oldest window", async () => {
+    const { host, botId } = await meterHost("echo-model");
+    const sessionId = `chat:${botId}`;
+    const covered = appendChatMessage(host.db, {
+      botId,
+      sessionId,
+      role: "user",
+      text: "不应出现的旧句",
+    });
+    for (let index = 1; index <= 30; index += 1) {
+      appendChatMessage(host.db, {
+        botId,
+        sessionId,
+        role: index % 2 === 0 ? "assistant" : "user",
+        text: `填充${index}`,
+      });
+    }
+    const newest = appendChatMessage(host.db, {
+      botId,
+      sessionId,
+      role: "user",
+      text: "应当出现的新句",
+    });
+    upsertChatSummary(host.db, {
+      botId,
+      sessionId,
+      summary: "摘要锚点乙",
+      coversMessageId: covered.id,
+    });
+    const next = (await host.handleMethod("chat.send", { botId, text: "现在问" })) as { text: string };
+    expect(next.text).toContain("摘要锚点乙");
+    expect(next.text).toContain(newest.text);
+    expect(next.text).not.toContain("不应出现的旧句");
   });
 
   it("leaves sessions below the threshold untouched", async () => {

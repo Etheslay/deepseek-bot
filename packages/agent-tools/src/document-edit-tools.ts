@@ -100,7 +100,9 @@ export function bindEditDocumentTool(
       "delete_text removes every occurrence of find. delete_file removes the .docx or .pdf. " +
       "convert writes the other format at to and keeps the source. A .docx becomes a PDF through the " +
       "Harness LibreOffice engine, so the PDF keeps the Word layout. A PDF becomes a .docx from its text. " +
-      "When the user asks for a new Word file, an edit, or a PDF conversion, call this tool instead of refusing.",
+      "When the user asks for a new Word file, an edit, or a PDF conversion, call this tool instead of refusing. " +
+      "When this call writes or converts a file, the chat attaches it. Tell the user the file is in this chat. " +
+      "Do not paste a disk path, a folder, or a download link.",
     inputSchema: EditDocumentInputSchema,
     handler: async (params, context) => {
       const botId = requireBot(context);

@@ -18,6 +18,9 @@ import {
   BotRoleSchema,
   BotSchema,
     ChatMessageMetaSchema,
+    DeliveredFileSchema,
+    WORKSPACE_EXPORT_CHUNK_BYTES,
+    WORKSPACE_EXPORT_MAX_BYTES,
     ConnectorKindSchema,
     McpAllowedToolsSchema,
     McpServerGrantSchema,
@@ -93,6 +96,8 @@ export const MAX_ATTACHMENT_CHUNK_BYTES = 512 * 1024;
 export const MAX_CHAT_SKILLS = 30;
 export const MAX_CHAT_SKILL_INSTRUCTIONS = 4_000;
 export const MAX_CHAT_SKILL_CAPABILITIES = 16;
+/** One `chat.send` / `chat.aside` line. The composer uses the same cap. */
+export const MAX_CHAT_MESSAGE_CHARS = 4_000;
 
 export const ChatSkillInjectionSchema = z
   .object({
@@ -217,6 +222,7 @@ export const METHODS = [
   "artifacts.versions",
   "artifacts.versionContent",
   "artifacts.revert",
+  "workspace.export",
   "trigger.list",
   "trigger.save",
   "trigger.enable",
@@ -702,7 +708,7 @@ export const METHOD_CONTRACTS = {
   "chat.send": {
     request: z.object({
       botId: UuidSchema,
-      text: z.string().min(1).max(4000),
+      text: z.string().min(1).max(MAX_CHAT_MESSAGE_CHARS),
       /**
        * G12: storage session the turn belongs to. Omitted means the bot's
        * default session (`chat:<botId>`) — byte-for-byte the pre-sessions
@@ -738,6 +744,13 @@ export const METHOD_CONTRACTS = {
       messageId: UuidSchema,
       text: z.string(),
       at: IsoDateTimeUtcSchema,
+      /**
+       * Office files this turn wrote (pptx, pdf, docx, xlsx, or an html
+       * fallback). Omitted when the turn produced none. The bytes stay in
+       * the workspace; the desktop fetches them with `workspace.export` to
+       * view or download.
+       */
+      files: z.array(DeliveredFileSchema).min(1).max(4).optional(),
     }),
   },
   /**
@@ -749,7 +762,7 @@ export const METHOD_CONTRACTS = {
   "chat.aside": {
     request: z.object({
       botId: UuidSchema,
-      text: z.string().min(1).max(4000),
+      text: z.string().min(1).max(MAX_CHAT_MESSAGE_CHARS),
     }),
     response: z.object({
       queued: z.boolean(),
@@ -1421,6 +1434,26 @@ export const METHOD_CONTRACTS = {
       .object({ botId: UuidSchema, path: RelativeArtifactPathSchema, versionId: UuidSchema })
       .strict(),
     response: z.object({ artifact: BotArtifactSchema, version: ArtifactVersionSchema }),
+  },
+  /**
+   * Bytes of one delivered office file (pptx, pdf, docx, xlsx, or html) inside a bot workspace.
+   * Trusted desktop only: the chat card uses it to open the file or save a copy.
+   * One call returns at most one slice so the envelope stays under 1 MiB.
+   */
+  "workspace.export": {
+    request: z
+      .object({
+        botId: UuidSchema,
+        path: RelativeArtifactPathSchema,
+        offset: z.int().nonnegative().max(WORKSPACE_EXPORT_MAX_BYTES),
+        limit: z.int().min(1).max(WORKSPACE_EXPORT_CHUNK_BYTES),
+      })
+      .strict(),
+    response: z.object({
+      size: z.int().nonnegative().max(WORKSPACE_EXPORT_MAX_BYTES),
+      mediaType: MediaTypeSchema,
+      data: z.string().max(WORKSPACE_EXPORT_CHUNK_BYTES * 2),
+    }),
   },
   /**
    * D20 event automation (FR-17). A rule watches the persisted event stream

@@ -3,6 +3,7 @@ import { delimiter, join } from "node:path";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { createPrimaryWindowSenderGuard } from "./ipc/guards.js";
+import { openDeliveredFile, saveDeliveredFile } from "./delivered-file.js";
 import { registerIpcHandlers, unregisterIpcHandlers } from "./ipc/registry.js";
 import {
   spawnHostProcess,
@@ -28,6 +29,11 @@ import { DATA_ROOT_DIR_NAME, HOST_EVENT_CHAT_STREAM, HOST_EVENT_MISSED, SYSTEM_E
 import { pickKnowledgeFile } from "./knowledge-import.js";
 import { pickAccountAvatar } from "./account-avatar.js";
 import { rendererPermissionAllowed } from "./session-permissions.js";
+import {
+  configureMicrophonePreference,
+  readMicrophoneEnabled,
+  setMicrophoneEnabled,
+} from "./microphone-preference.js";
 import { pickVoiceFile } from "./voice-pick.js";
 import { openDesktopChatLink } from "./open-chat-link.js";
 import { assertValidVoicePickKind } from "../shared/voice-pick.js";
@@ -113,11 +119,11 @@ function resolvePreloadPath(): string {
   return join(__dirname, "../preload/index.cjs");
 }
 
-function resolveTrayIcon(): Electron.NativeImage {
+function loadAssetImage(fileName: string): Electron.NativeImage | null {
   const candidates = [
-    join(process.resourcesPath, "assets", "tray.png"),
-    join(app.getAppPath(), "assets", "tray.png"),
-    join(__dirname, "../../assets/tray.png"),
+    join(process.resourcesPath, "assets", fileName),
+    join(app.getAppPath(), "assets", fileName),
+    join(__dirname, "../../assets", fileName),
   ];
   for (const candidate of candidates) {
     const img = nativeImage.createFromPath(candidate);
@@ -125,8 +131,15 @@ function resolveTrayIcon(): Electron.NativeImage {
       return img;
     }
   }
-  return nativeImage.createFromDataURL(
-    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAOUlEQVR4nGNgoAXwzf73HxsmWyNRBhGrGachFBlAqmYMQ6hqACFAewMGJgwGPh1QJSkTYxBBjeQAAMGI0HQM57YaAAAAAElFTkSuQmCC",
+  return null;
+}
+
+function resolveTrayIcon(): Electron.NativeImage {
+  return (
+    loadAssetImage("tray.png") ??
+    nativeImage.createFromDataURL(
+      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAOUlEQVR4nGNgoAXwzf73HxsmWyNRBhGrGachFBlAqmYMQ6hqACFAewMGJgwGPh1QJSkTYxBBjeQAAMGI0HQM57YaAAAAAElFTkSuQmCC",
+    )
   );
 }
 
@@ -156,6 +169,7 @@ function attachNavigationGuards(win: BrowserWindow): void {
 }
 
 function createMainWindow(): BrowserWindow {
+  const windowIcon = loadAssetImage("icon.ico");
   const win = new BrowserWindow({
     width: 1100,
     height: 720,
@@ -164,6 +178,7 @@ function createMainWindow(): BrowserWindow {
     show: false,
     autoHideMenuBar: true,
     backgroundColor: "#0f0f10",
+    ...(windowIcon !== null ? { icon: windowIcon } : {}),
     titleBarStyle: "hidden",
     titleBarOverlay: {
       color: "#0f0f10",
@@ -272,10 +287,16 @@ function registerShellIpc(win: BrowserWindow): void {
             error: { code: "INVALID_INPUT", message: "unknown host method", retryable: false },
           };
         }
-        if (!isQuitting && (hostClient === null || hostClient.status === "exited")) {
+        if (
+          !isQuitting &&
+          !restoreInProgress &&
+          (hostClient === null || hostClient.status === "exited")
+        ) {
           // A child that already exited stays dead forever unless we replace
           // it. bot.create and the settings reads then all fail with
           // "host process has exited" even though a new process can serve them.
+          // A restore already replaces the child; starting another one here
+          // leaves two hosts on the same database.
           startHost();
         }
         if (hostClient === null || hostClient.status === "exited") {
@@ -294,8 +315,13 @@ function registerShellIpc(win: BrowserWindow): void {
             // Host is dead afterwards (handlers.ts). Replace the child before
             // the renderer sees the result, so follow-up calls hit the fresh
             // process instead of failing with "host process has exited".
-            await hostClient.call(method, payload);
-            await restartHost();
+            restoreInProgress = true;
+            try {
+              await hostClient.call(method, payload);
+              await restartHost();
+            } finally {
+              restoreInProgress = false;
+            }
             return { ok: true as const, result: { restored: true, hostRestarted: true } satisfies RestoreOutcome };
           }
           return { ok: true as const, result: await hostClient.call(method, payload) };
@@ -321,6 +347,15 @@ function registerShellIpc(win: BrowserWindow): void {
           return Promise.reject(new Error(tr("d24.hardwareAccelNotBoolean")));
         }
         return Promise.resolve(setHardwareAcceleration(enabled));
+      },
+      microphone: (enabled: unknown) => {
+        if (enabled === undefined) {
+          return Promise.resolve({ enabled: readMicrophoneEnabled() });
+        }
+        if (typeof enabled !== "boolean") {
+          return Promise.reject(new Error(tr("d24.microphoneNotBoolean")));
+        }
+        return Promise.resolve(setMicrophoneEnabled(enabled));
       },
       showWindow: () => {
         win.show();
@@ -357,6 +392,8 @@ function registerShellIpc(win: BrowserWindow): void {
       chromeState: () => readChromeImport(resolveDataRoot()),
       chromeClear: () => clearChromeImport(resolveDataRoot()),
       chromeExport: () => exportChromeImportToMarkdown(resolveDataRoot()),
+      openDeliveredFile: (input) => openDeliveredFile(input),
+      saveDeliveredFile: (input) => saveDeliveredFile(win, input),
     },
     createPrimaryWindowSenderGuard(() => mainWindow),
   );
@@ -378,16 +415,16 @@ function attachFocusEvents(win: BrowserWindow): void {
 
 function denyAllPermissions(): void {
   // Clipboard writes copy message text. Microphone audio (`media` + `audio`)
-  // is allowed so hold-to-talk can record. Camera, notifications, clipboard
-  // read, and every other permission stay denied.
+  // is allowed while the Settings switch is on, so hold-to-talk can record.
+  // Camera, notifications, clipboard read, and every other permission stay denied.
   session.defaultSession.setPermissionRequestHandler(
     (_webContents, permission, callback, details) => {
-      callback(rendererPermissionAllowed(permission, details));
+      callback(rendererPermissionAllowed(permission, details, readMicrophoneEnabled()));
     },
   );
   session.defaultSession.setPermissionCheckHandler(
     (_webContents, permission, _requestingOrigin, details) =>
-      rendererPermissionAllowed(permission, details),
+      rendererPermissionAllowed(permission, details, readMicrophoneEnabled()),
   );
 }
 
@@ -397,7 +434,10 @@ function denyAllPermissions(): void {
  * handle is replaced on disk), so the main process shuts it down and calls
  * this again over the restored data.
  */
+let restoreInProgress = false;
+
 function startHost(): void {
+  if (hostClient !== null && hostClient.status !== "exited") return;
   // The Host owns the database, engine, scheduler and the pinned Harness
   // adapter (D12). It starts with the shell and dies with it; renderer
   // contract calls forward through the HOST_CALL channel. The entry ships
@@ -462,6 +502,7 @@ if (gotLock) {
       app.setAppUserModelId("com.deepseekbot.desktop");
     }
     // D22: main speaks the desktop locale until the renderer syncs its choice.
+    configureMicrophonePreference(app.getPath("userData"));
     initMainLocale(app.getLocale());
     // D24: version source for update checks; silent first check fails soft
     // (no releases yet) and only surfaces when the renderer asks.

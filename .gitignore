@@ -44,3 +44,11 @@ apps/desktop/resources/whisper/cache/
 .baoyu-skills/
 handoff/
 
+
+# local dev harness artifacts (see docs/DEVELOPMENT_PLAN.md dev run)
+.dev-user-data*/
+.dev-data*/
+dev-run.cmd
+dev-run.l
+vite.renderer.dev.config.mts
+

@@ -219,6 +219,7 @@ export function createFixtureService(): DesktopService {
   // D17': the fixture skill library is session memory too — the boot
   // migration fills it from localStorage once; nothing persists a refresh.
   let fixtureSkillLibrary: SkillLibrary = { skills: [], bindings: {} };
+  let fixtureMicrophoneEnabled = true;
 
   const requireBot = (botId: string): Bot => {
     const bot = bots.find((b) => b.id === botId);
@@ -857,6 +858,14 @@ export function createFixtureService(): DesktopService {
         return Promise.resolve({ enabled: true, restartRequired: false });
       }
       return Promise.resolve({ enabled, restartRequired: true });
+    },
+
+    microphone(enabled?: boolean) {
+      if (enabled === undefined) {
+        return Promise.resolve({ enabled: fixtureMicrophoneEnabled });
+      }
+      fixtureMicrophoneEnabled = enabled;
+      return Promise.resolve({ enabled });
     },
 
     workflows: createFixtureWorkflowService(),

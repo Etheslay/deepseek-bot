@@ -15,6 +15,7 @@
  * Records every request and the child environment to FAKE_RECORD_DIR (JSONL)
  * so tests can assert what the adapter actually sent.
  */
+import { Buffer } from "node:buffer";
 import { createInterface } from "node:readline";
 import { appendFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -60,7 +61,17 @@ function status(value) {
   notify("session.status", { sessionId, status: value });
 }
 
+function dropRequestedFile() {
+  const rel = process.env.FAKE_DROP_FILE;
+  if (typeof rel !== "string" || rel.length === 0) return;
+  if (rel.includes("..") || rel.startsWith("/") || rel.startsWith("\\") || /^[A-Za-z]:/.test(rel)) return;
+  const target = join(process.cwd(), rel);
+  mkdirSync(join(target, ".."), { recursive: true });
+  writeFileSync(target, Buffer.from("PK-office"));
+}
+
 function emitTurnCompletion(messageId, text) {
+  dropRequestedFile();
   sessionEvent({
     type: "agent/inbox/spliced",
     data: { target: "next-turn", inserted: [{ id: messageId }] },

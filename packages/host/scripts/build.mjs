@@ -10,6 +10,7 @@ import { build } from "esbuild";
 import { createRequire } from "node:module";
 import process from "node:process";
 import { URL, fileURLToPath, pathToFileURL } from "node:url";
+import { existsSync, readFileSync } from "node:fs";
 import { cp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { buildOcrResources } from "../../exec-daemon/scripts/build-resources.mjs";
@@ -17,10 +18,30 @@ import { buildOcrResources } from "../../exec-daemon/scripts/build-resources.mjs
 const hostRequire = createRequire(new URL("../package.json", import.meta.url));
 
 /** The bundled Host loads subset-font with require, so the copy must ship it. */
+function packageManifest(fromRequire, name) {
+  try {
+    return fromRequire.resolve(`${name}/package.json`);
+  } catch {
+    // Some packages do not export ./package.json. Walk up from the entry.
+    let dir = dirname(fromRequire.resolve(name));
+    while (true) {
+      const candidate = join(dir, "package.json");
+      if (existsSync(candidate)) {
+        const parsed = JSON.parse(readFileSync(candidate, "utf8"));
+        if (parsed.name === name) return candidate;
+      }
+      const parent = dirname(dir);
+      if (parent === dir) break;
+      dir = parent;
+    }
+    throw new Error(`cannot locate package ${name}`);
+  }
+}
+
 async function copyRuntimeClosure(name, destRoot, fromRequire = hostRequire, seen = new Set()) {
   if (seen.has(name)) return;
   seen.add(name);
-  const manifestPath = fromRequire.resolve(`${name}/package.json`);
+  const manifestPath = packageManifest(fromRequire, name);
   const source = dirname(manifestPath);
   const dest = join(destRoot, name);
   await mkdir(dirname(dest), { recursive: true });
@@ -95,9 +116,13 @@ await build({
   sourcemap: false,
   logLevel: "info",
   // Native/binary dependencies stay external; everything else is inlined.
-  external: ["@deepseek-ai/dsh", "node-pty", "better-sqlite3"],
+  // libreoffice-kit loads sibling workers through import.meta.url. Bundling it
+  // makes those workers resolve next to dist/main.js, where they do not exist,
+  // and every PDF conversion fails inside the desktop host.
+  external: ["@deepseek-ai/dsh", "node-pty", "better-sqlite3", "@deepseek-ai/libreoffice-kit"],
   banner: {
     js: 'import { createRequire as __dsbCreateRequire } from "node:module"; const require = __dsbCreateRequire(import.meta.url);',
   },
 });
 await copyRuntimeClosure("subset-font", join(distribution, "node_modules"));
+await copyRuntimeClosure("@deepseek-ai/libreoffice-kit", join(distribution, "node_modules"));

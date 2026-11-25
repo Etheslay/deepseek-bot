@@ -66,6 +66,20 @@ export const AVATAR_SHAPE_IDS_RETIRED = [
 ] as const;
 
 export const AVATAR_COLORS = [
+  "#A06B39",
+  "#FB2B3E",
+  "#FD690F",
+  "#F59312",
+  "#14C16F",
+  "#13B7A2",
+  "#1E86FC",
+  "#8F59F9",
+  "#F93498",
+  "#959595",
+] as const;
+
+/** Kept for compatibility: valid input, never assigned. */
+export const AVATAR_COLORS_RETIRED = [
   "#A27952",
   "#FF3E51",
   "#FF781C",
@@ -75,11 +89,6 @@ export const AVATAR_COLORS = [
   "#2A92FE",
   "#A97EFE",
   "#FF5EB1",
-  "#959595",
-] as const;
-
-/** Kept for compatibility: valid input, never assigned. */
-export const AVATAR_COLORS_RETIRED = [
   "#8b5e3c",
   "#e8483f",
   "#f08a24",
@@ -489,6 +498,28 @@ const CHOICE_OPTION_IDS = ["A", "B", "C", "D"] as const;
  * the question row already stored for the model, plus the answer so a
  * reload can render the card collapsed and refuse another answer.
  */
+/**
+ * An office file the bot wrote during a chat turn and hands back in the thread.
+ * `html` is only the fallback when a document was asked for and no office file
+ * was written (a page the turn saved instead of a pptx, docx, pdf, or xlsx).
+ */
+export const DELIVERED_FILE_FORMATS = ["pptx", "pdf", "docx", "xlsx", "html"] as const;
+
+export const DeliveredFileSchema = z
+  .object({
+    path: RelativeArtifactPathSchema,
+    name: z.string().min(1).max(200),
+    bytes: z.int().nonnegative().max(8 * 1024 * 1024),
+    format: z.enum(DELIVERED_FILE_FORMATS),
+  })
+  .strict();
+
+export type DeliveredFile = z.infer<typeof DeliveredFileSchema>;
+
+/** One `workspace.export` slice. 512 KiB of raw bytes stays under the 1 MiB envelope once base64-encoded. */
+export const WORKSPACE_EXPORT_CHUNK_BYTES = 512 * 1024;
+export const WORKSPACE_EXPORT_MAX_BYTES = 8 * 1024 * 1024;
+
 export const ChatMessageMetaSchema = z.discriminatedUnion("kind", [
   z
     .object({
@@ -540,6 +571,12 @@ export const ChatMessageMetaSchema = z.discriminatedUnion("kind", [
       other: z.boolean().optional(),
       /** The answer text persisted with the card. Restored cards are always answered. */
       answered: z.string().min(1).max(4_000),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("files"),
+      files: z.array(DeliveredFileSchema).min(1).max(4),
     })
     .strict(),
 ]);

@@ -104,10 +104,11 @@ describe("chat attachments", () => {
     expect(formatFileCardSize(Math.round(5.9 * 1024 * 1024))).toBe("5.9 MB");
   });
 
-  it("colors Word blue, PowerPoint orange and PDF red", () => {
+  it("colors Word blue, PowerPoint orange, PDF red and Excel green", () => {
     expect(fileCardTone("笔记.docx")).toBe("word");
     expect(fileCardTone("答辩.pptx")).toBe("ppt");
     expect(fileCardTone("报告.pdf")).toBe("pdf");
+    expect(fileCardTone("成绩.xlsx")).toBe("sheet");
   });
 
   it("tells a document-only turn to acknowledge, then summarize", () => {

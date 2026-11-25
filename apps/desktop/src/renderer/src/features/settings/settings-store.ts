@@ -13,7 +13,7 @@ import type { VoiceTranscriptionLanguage } from "@deepseek-bot/contracts";
 import { isLanguagePreference } from "../../../../shared/i18n/locale.js";
 import type { LanguagePreference } from "../../../../shared/i18n/types.js";
 import type { Avatar } from "../avatars/avatar-meta.js";
-import { GROK_BALL_COLORS, GROK_BALL_SHAPE_IDS, type GrokBallShapeId } from "../avatars/grok-ball-model.js";
+import { GROK_BALL_SHAPE_IDS, toneKeyFor, type GrokBallShapeId } from "../avatars/grok-ball-model.js";
 import { isAccountAvatarDataUrl } from "../../../../shared/account-avatar.js";
 
 export type NotificationPrefs = {
@@ -29,11 +29,10 @@ export type NotificationPrefs = {
 export const DEFAULT_ACCOUNT_AVATAR: Avatar = {
   kind: "grok",
   shape: "blob",
-  color: "#2A92FE",
+  color: "#1E86FC",
 };
 
 const ACCOUNT_SHAPES = new Set<string>(GROK_BALL_SHAPE_IDS);
-const ACCOUNT_COLORS = new Set<string>(GROK_BALL_COLORS);
 
 export function normalizeAccountAvatar(value: unknown): Avatar {
   if (typeof value !== "object" || value === null) {
@@ -51,7 +50,7 @@ export function normalizeAccountAvatar(value: unknown): Avatar {
     typeof source.shape === "string" &&
     ACCOUNT_SHAPES.has(source.shape) &&
     typeof source.color === "string" &&
-    ACCOUNT_COLORS.has(source.color)
+    toneKeyFor(source.color) !== null
   ) {
     return { kind: "grok", shape: source.shape as GrokBallShapeId, color: source.color };
   }

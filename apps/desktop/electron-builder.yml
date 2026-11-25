@@ -22,11 +22,18 @@ extraResources:
 # service. User data lives under %APPDATA%\DeepSeekBot (packages/storage
 # layout.ts) and is kept on uninstall by default — documented in RELEASE notes.
 win:
+  # assets/icon.ico (buildResources). electron-builder uses this file as-is
+  # for the NSIS installer icon and, when the exe is resource-edited, for the
+  # taskbar and shortcuts.
+  icon: icon.ico
   target:
     - target: nsis
       arch:
         - x64
-  signAndEditExecutable: false
+  # rcedit writes icon.ico plus version strings into the exe. That is the
+  # Windows taskbar and shortcut icon. No certificate is configured, so the
+  # following sign step does not sign; the package stays unsigned.
+  signAndEditExecutable: true
 nsis:
   oneClick: false
   perMachine: false

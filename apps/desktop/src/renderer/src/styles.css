@@ -1441,7 +1441,9 @@ body {
 }
 
 .chat-page .sys-line {
+  width: 100%;
   margin: 0;
+  text-align: center;
 }
 
 .chat-page .composer {
@@ -1849,7 +1851,7 @@ body {
   width: fit-content;
   max-width: 100%;
   padding: 0.7rem 1rem;
-  font-size: 0.93rem;
+  font-size: 0.84rem;
 }
 
 .pair-foot {
@@ -5957,52 +5959,53 @@ select option {
 
 /* ---------- Grok Ball body tones: one colour per theme ----------
    The persisted avatar colour is the light-theme value. `data-tone` maps it
-   back to its pair. The dark theme paints the brighter step: the old deep
-   tones sank into the dark panel. `--gb-ink-*` is the send-button arrow for
-   that fill. A hex outside the palette carries no tone and renders as itself
-   in both themes. `:root` is the dark theme; light overrides. */
+   back to its pair. Both themes use the Grok avatar swatches: saturated
+   red, orange, amber, green, teal, blue, purple and pink. `--gb-ink-*` is
+   the send-button arrow for that fill. A hex outside the palette carries no
+   tone and renders as itself in both themes. `:root` is the dark theme;
+   light overrides. */
 :root {
-  --gb-body-brown: #C49A6A;
-  --gb-ink-brown: #15151a;
-  --gb-body-red: #FF5C6C;
-  --gb-ink-red: #15151a;
-  --gb-body-orange: #FF9340;
+  --gb-body-brown: #A16B39;
+  --gb-ink-brown: #ffffff;
+  --gb-body-red: #FC2C3E;
+  --gb-ink-red: #ffffff;
+  --gb-body-orange: #F9670E;
   --gb-ink-orange: #15151a;
-  --gb-body-yellow: #FFBE4D;
+  --gb-body-yellow: #F69412;
   --gb-ink-yellow: #15151a;
-  --gb-body-green: #22E090;
+  --gb-body-green: #14C370;
   --gb-ink-green: #15151a;
-  --gb-body-cyan: #36D9C8;
+  --gb-body-cyan: #13B8A3;
   --gb-ink-cyan: #15151a;
-  --gb-body-blue: #54AEFF;
-  --gb-ink-blue: #15151a;
-  --gb-body-violet: #C09BFF;
-  --gb-ink-violet: #15151a;
-  --gb-body-magenta: #FF7EC4;
-  --gb-ink-magenta: #15151a;
-  --gb-body-gray: #B0B0B0;
-  --gb-ink-gray: #15151a;
+  --gb-body-blue: #1884FC;
+  --gb-ink-blue: #ffffff;
+  --gb-body-violet: #905AFB;
+  --gb-ink-violet: #ffffff;
+  --gb-body-magenta: #FB3499;
+  --gb-ink-magenta: #ffffff;
+  --gb-body-gray: #777777;
+  --gb-ink-gray: #ffffff;
 }
 
 :root[data-theme="light"] {
-  --gb-body-brown: #A27952;
+  --gb-body-brown: #A06B39;
   --gb-ink-brown: #ffffff;
-  --gb-body-red: #FF3E51;
+  --gb-body-red: #FB2B3E;
   --gb-ink-red: #ffffff;
-  --gb-body-orange: #FF781C;
+  --gb-body-orange: #FD690F;
   --gb-ink-orange: #15151a;
-  --gb-body-yellow: #FFAF38;
+  --gb-body-yellow: #F59312;
   --gb-ink-yellow: #15151a;
-  --gb-body-green: #00C972;
+  --gb-body-green: #14C16F;
   --gb-ink-green: #15151a;
-  --gb-body-cyan: #1CC3B0;
+  --gb-body-cyan: #13B7A2;
   --gb-ink-cyan: #15151a;
-  --gb-body-blue: #2A92FE;
-  --gb-ink-blue: #15151a;
-  --gb-body-violet: #A97EFE;
-  --gb-ink-violet: #15151a;
-  --gb-body-magenta: #FF5EB1;
-  --gb-ink-magenta: #15151a;
+  --gb-body-blue: #1E86FC;
+  --gb-ink-blue: #ffffff;
+  --gb-body-violet: #8F59F9;
+  --gb-ink-violet: #ffffff;
+  --gb-body-magenta: #F93498;
+  --gb-ink-magenta: #ffffff;
   --gb-body-gray: #959595;
   --gb-ink-gray: #15151a;
 }
@@ -6098,7 +6101,7 @@ select option {
   border: none;
   box-shadow: none;
   padding: 2px 0 2px 24px;
-  font-size: 0.95rem;
+  font-size: 0.84rem;
   line-height: 1.65;
 }
 
@@ -6119,7 +6122,7 @@ select option {
   color: #ffffff !important;
   border-radius: 22px;
   padding: 10px 16px;
-  font-size: 0.95rem;
+  font-size: 0.84rem;
   line-height: 1.6;
 }
 
@@ -6362,7 +6365,7 @@ select option {
 
 .chat-md pre code.hljs {
   font-family: Consolas, "Cascadia Mono", monospace;
-  font-size: 0.84rem;
+  font-size: 0.92em;
   line-height: 1.55;
   background: transparent;
   padding: 0;
@@ -6628,10 +6631,49 @@ select option {
   background: rgba(15, 23, 42, 0.05);
 }
 
+.choice-answered.is-free::before { content: none; }
+.choice-answered.is-free { opacity: 0.75; }
+
 .choice-answered::before {
   content: "✓";
   color: #22c55e;
   font-weight: 700;
+}
+
+/* An answered card keeps its rows and dims instead of collapsing (2026-11).
+   The picked row stays legible and carries the ✓; a free-text answer leaves
+   every row unmarked, so the card only dims. */
+.choice-card.is-answered {
+  opacity: 0.55;
+}
+
+.choice-card.is-answered .choice-option {
+  cursor: default;
+}
+
+.choice-card.is-answered .choice-option.is-chosen {
+  opacity: 1;
+  border-color: rgba(34, 197, 94, 0.45);
+  background: rgba(34, 197, 94, 0.1);
+}
+
+.choice-option.is-chosen .choice-key {
+  color: #22c55e;
+  font-size: 0;
+}
+
+.choice-option.is-chosen .choice-key::before {
+  content: "✓";
+  font-size: 0.74rem;
+}
+
+/* Long option labels stay on one line and clip: wrapping kept pushing the
+   rows apart instead of running on (2026-11). */
+.choice-label {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* --- delivery notice (avatar stack) --- */
@@ -7709,7 +7751,7 @@ select:focus-visible {
 
 
 /* ---------- 上下文圆圈（TASK_CONTEXT_METER.md） ----------
-   用量展示专用：不承载任何开关，悬停读百分比。 */
+   平时只有圆环。悬停或键盘选中才弹出「上下文已用 N%」。 */
 .context-ring {
   position: relative;
   display: inline-flex;
@@ -7719,6 +7761,7 @@ select:focus-visible {
   height: 22px;
   flex: none;
   cursor: default;
+  border-radius: 50%;
 }
 
 .context-ring svg {
@@ -7744,12 +7787,32 @@ select:focus-visible {
   stroke: var(--runs, #ec4899);
 }
 
-.context-ring-value {
+.context-ring-tip {
   position: absolute;
-  font-size: 0.42rem;
-  font-weight: 700;
-  color: var(--muted);
+  z-index: 6;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  transform: translateX(-50%);
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: var(--raised);
+  color: var(--text);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-3);
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
   pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+}
+
+.context-ring:hover .context-ring-tip,
+.context-ring:focus .context-ring-tip,
+.context-ring:focus-visible .context-ring-tip {
+  opacity: 1;
+  visibility: visible;
 }
 
 .context-ring:focus-visible {
@@ -8305,6 +8368,7 @@ select:focus-visible {
   align-items: center;
   gap: 10px;
   color: var(--muted);
+  font-size: 0.84rem;
 }
 
 /* Screen-reader-only: the stable task-aware sentence that aria-live announces
@@ -8690,11 +8754,12 @@ select:focus-visible {
   padding: 11px 15px;
 }
 
-/* Dark chat copy is full white. --text (#ececf1) read as gray on these bubbles. */
+/* Dark chat copy sits just under pure white. #ffffff was harsh on these
+   bubbles; #ececf1 read as gray. */
 :root:not([data-theme="light"]) .chat > .msg-row.bot .msg-bubble,
 :root:not([data-theme="light"]) .exchange-bubble,
 :root:not([data-theme="light"]) .pair-turn .msg-bubble {
-  color: #ffffff;
+  color: #f2f2f4;
 }
 
 .chat-page {
@@ -8855,6 +8920,10 @@ select:focus-visible {
   fill: #e5484d;
 }
 
+.file-card[data-tone="sheet"] .file-card-bar {
+  fill: #217346;
+}
+
 .file-card-copy {
   display: flex;
   flex-direction: column;
@@ -8911,6 +8980,71 @@ button.file-card-open,
   color: inherit;
   font: inherit;
   cursor: pointer;
+}
+
+.delivered-files {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.delivered-file {
+  display: flex;
+  align-items: center;
+  max-width: 420px;
+  border-radius: 16px;
+  background: #2c2c31;
+  padding-right: 4px;
+}
+
+.delivered-file .file-card {
+  background: transparent;
+  flex: 1;
+  min-width: 0;
+}
+
+.delivered-view {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+}
+
+.delivered-download {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: #c8c8d0;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+
+.delivered-download:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+}
+
+.delivered-download-icon {
+  width: 18px;
+  height: 18px;
+}
+
+[data-theme="light"] .delivered-file {
+  background: #f2f2f5;
+}
+
+[data-theme="light"] .delivered-download {
+  color: #5c5c66;
+}
+
+[data-theme="light"] .delivered-download:hover {
+  background: rgba(0, 0, 0, 0.06);
+  color: #1b1b1f;
 }
 
 .msg-row.user .msg-bubble.file-only {

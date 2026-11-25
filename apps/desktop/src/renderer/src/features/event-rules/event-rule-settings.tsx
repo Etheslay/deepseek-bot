@@ -200,10 +200,8 @@ function EventRuleBotPanel(props: { botId: string }): JSX.Element {
       if (!alive.current || ticket.current !== token) return;
       METHOD_CONTRACTS[method].response.parse(response);
       setReviews((current) => (current ?? []).filter((item) => item.id !== reviewId));
-      setBanner({
-        notice: { key: decision === "approve" ? "eventrule.approved" : "eventrule.denied" },
-        error: false,
-      });
+      // No success banner: the row disappearing is the feedback (2026-11).
+      setBanner(null);
       await load(token);
     } catch {
       if (!alive.current || ticket.current !== token) return;
