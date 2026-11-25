@@ -14,7 +14,32 @@ afterEach(() => {
   }
 });
 
+/** Entry names in archive order, read straight from the local file headers. */
+function zipEntryOrder(bytes: Uint8Array): string[] {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const decoder = new TextDecoder();
+  const names: string[] = [];
+  let offset = 0;
+  while (offset + 30 <= bytes.length && view.getUint32(offset, true) === 0x04034b50) {
+    const nameLength = view.getUint16(offset + 26, true);
+    const extraLength = view.getUint16(offset + 28, true);
+    const compressed = view.getUint32(offset + 18, true);
+    names.push(decoder.decode(bytes.subarray(offset + 30, offset + 30 + nameLength)));
+    offset += 30 + nameLength + extraLength + compressed;
+  }
+  return names;
+}
+
 describe("write_presentation bytes", () => {
+  it("puts [Content_Types].xml first so PowerPoint opens the package", async () => {
+    const pptx = await buildPptx([{ title: "封面", bullets: ["要点"] }]);
+    const order = zipEntryOrder(pptx);
+    // OPC: the content-types part leads the archive; PowerPoint refuses a .pptx
+    // where it trails the slides (2026-11 regression).
+    expect(order[0]).toBe("[Content_Types].xml");
+    expect(order[1]).toBe("_rels/.rels");
+  });
+
   it("round-trips Chinese slide text in slide order", async () => {
     const pptx = await buildPptx([
       { title: "封面&标题", bullets: ["第一点"] },
