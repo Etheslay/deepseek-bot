@@ -53,16 +53,34 @@ describe("choice card", () => {
     expect(onChoose).toHaveBeenCalledWith(OPTIONS[0]);
   });
 
-  it("collapses to the answered text with the stylesheet check, no 已选择 prefix (U2)", async () => {
+  it("keeps its rows after answering: the picked row is marked, the card dims (U2)", async () => {
     const container = await renderCard({
       answered: "深度思考一个复杂问题",
       onChoose: vi.fn(),
     });
-    expect(container.querySelectorAll("button")).toHaveLength(0);
-    expect(container.textContent).not.toContain("已选择");
-    expect(container.textContent).toContain("深度思考一个复杂问题");
-    const row = container.querySelector(".choice-answered");
-    expect(row?.getAttribute("title")).toBe("深度思考一个复杂问题");
+    // 2026-11: no collapse into a single ✓ line — the card keeps its state.
+    expect(container.querySelector(".choice-card")?.classList.contains("is-answered")).toBe(true);
+    const rows = buttons(container);
+    expect(rows).toHaveLength(2);
+    for (const row of rows) {
+      expect(row.disabled).toBe(true);
+    }
+    const chosen = container.querySelector(".choice-option.is-chosen");
+    expect(chosen?.textContent).toContain("深度思考一个复杂问题");
+    expect(chosen?.getAttribute("aria-current")).toBe("true");
+    expect(container.querySelector(".choice-answered")).toBeNull();
+  });
+
+  it("does not mark any row when the answer came from the composer (U2b)", async () => {
+    const container = await renderCard({
+      answered: "git@gitee.com:someone/repo.git",
+      onChoose: vi.fn(),
+    });
+    // A free-text answer is not an option the card offered, so no row may look
+    // like the person picked it.
+    expect(container.querySelector(".choice-option.is-chosen")).toBeNull();
+    expect(container.textContent).not.toContain("git@gitee.com");
+    expect(container.querySelector(".choice-card")?.classList.contains("is-answered")).toBe(true);
   });
 
   it("locks every row while disabled so a card can only be answered once (U3)", async () => {
