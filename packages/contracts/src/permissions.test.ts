@@ -87,7 +87,10 @@ describe("permission schemas", () => {
       expect(CapabilityPolicySchema.safeParse({ capability, mode: "deny" }).success).toBe(true);
     }
     for (const capability of ["screen.capture", "device.action"] as const) {
-      expect(CapabilityPolicySchema.safeParse({ capability, mode: "allow" }).success).toBe(false);
+      // Product decision (2026-11): every capability on the settings page offers
+      // all three modes, so pre-authorising screen capture / device actions is
+      // allowed. Their defaults stay deny until the user changes them.
+      expect(CapabilityPolicySchema.safeParse({ capability, mode: "allow" }).success).toBe(true);
       expect(CapabilityPolicySchema.safeParse({ capability, mode: "ask" }).success).toBe(true);
       expect(CapabilityPolicySchema.safeParse({ capability, mode: "deny" }).success).toBe(true);
     }

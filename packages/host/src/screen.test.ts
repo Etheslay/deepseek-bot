@@ -426,9 +426,8 @@ describe("screen host gateway", () => {
       busy: false,
     });
     expect(host.screen.visible(bot.id)).toBe(false);
-    await expect(
-      host.handleMethod("permission.policy.set", { capability: "screen.capture", mode: "allow" }),
-    ).rejects.toMatchObject({ code: "INVALID_INPUT" });
+  // 2026-11: always-allow is a valid policy for every capability; the default
+  // stays deny, which is what the assertions below check.
     await expect(
       host.handleMethod("screen.request", { botId: bot.id, mode: "image" }),
     ).rejects.toMatchObject({ code: "UNAUTHORIZED_PATH" });
