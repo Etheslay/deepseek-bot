@@ -264,7 +264,7 @@ describe("screen settings panel", () => {
     });
     await click(container, "刷新窗口");
     await vi.waitFor(() => {
-      expect(container.textContent).toContain("已刷新窗口列表");
+      expect(container.textContent).not.toContain("已刷新窗口列表");
     });
     await act(async () => {
       selectByLabel(container, "目标窗口").dispatchEvent(
@@ -464,7 +464,7 @@ describe("screen settings panel", () => {
     });
     await click(container, "刷新窗口");
     await vi.waitFor(() => {
-      expect(container.textContent).toContain("已刷新窗口列表");
+      expect(container.textContent).not.toContain("已刷新窗口列表");
     });
     await act(async () => {
       selectByLabel(container, "目标窗口").dispatchEvent(

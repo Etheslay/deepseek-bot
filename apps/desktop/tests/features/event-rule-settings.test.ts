@@ -302,7 +302,8 @@ describe("event rule settings", () => {
     if (!(first instanceof HTMLElement)) throw new Error("missing first review");
     await click(rowButton(first, "批准"));
     await vi.waitFor(() => {
-      expect(container.textContent).toContain("已批准，并启动一次运行");
+      // 2026-11: no success banner - the reviewed row disappears instead.
+      expect(container.textContent).not.toContain("已批准，并启动一次运行");
     });
     expect(calls).toContainEqual({
       method: "eventRule.review.approve",
@@ -316,7 +317,7 @@ describe("event rule settings", () => {
     if (!(second instanceof HTMLElement)) throw new Error("missing second review");
     await click(rowButton(second, "拒绝"));
     await vi.waitFor(() => {
-      expect(container.textContent).toContain("已拒绝，并记下一次跳过");
+      expect(container.textContent).not.toContain("已拒绝，并记下一次跳过");
     });
     expect(calls).toContainEqual({
       method: "eventRule.review.deny",

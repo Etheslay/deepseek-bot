@@ -15,6 +15,7 @@
  * Records every request and the child environment to FAKE_RECORD_DIR (JSONL)
  * so tests can assert what the adapter actually sent.
  */
+import { Buffer } from "node:buffer";
 import { createInterface } from "node:readline";
 import { appendFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";

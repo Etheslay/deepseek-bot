@@ -214,15 +214,30 @@ function BotQuestionCards({
           />
         );
       })}
-      {answeredEntries.map(([requestId, entry]) => (
+      {answeredEntries.map(([requestId, entry]) => {
+        // 2026-11: keep the card's original rows when the question is still
+        // known, so an answered card dims with its picked row marked instead of
+        // collapsing into a single ✓ line. When the rows are gone (after a
+        // reload) only the neutral answer text can be shown.
+        const knownQuestion = known.current.get(requestId);
+        const rows: ChoiceOption[] = (knownQuestion?.options ?? [])
+          .filter((option) => option.id !== OTHER_OPTION_ID)
+          .map((option) => ({ id: option.id, label: option.label }));
+        const hasFallback =
+          knownQuestion !== undefined &&
+          (knownQuestion.options.some((option) => option.id === OTHER_OPTION_ID) ||
+            knownQuestion.allowOther);
+        return (
           <ChoiceCard
             key={requestId}
             order={slot(requestId)}
             question={entry.question}
-          options={[]}
-          answered={entry.text}
-        />
-      ))}
+            options={rows}
+            fallback={hasFallback ? { id: OTHER_OPTION_ID, label: OTHER_OPTION_LABEL } : null}
+            answered={entry.text}
+          />
+        );
+      })}
       {notice !== null ? (
         <p className="sys-line" style={{ order: slot("notice") }}>
           {noticeText(notice)}

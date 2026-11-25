@@ -14,7 +14,6 @@ import {
   SETTINGS_SURFACE_CAPABILITIES,
   isPermissionModeAllowed,
   type CapabilityId,
-  type PermissionGrant,
   type PermissionMode,
 } from "@deepseek-bot/contracts";
 import { t, useLanguage, type MessageKey } from "../../i18n.js";
@@ -28,25 +27,14 @@ const MODE_LABEL_KEYS: Record<PermissionMode, MessageKey> = {
   deny: "permissions.modeDeny",
 };
 
-const SCOPE_LABEL_KEYS = {
-  once: "permissions.scopeOnce",
-  session: "shell.scopeSession",
-  permanent: "permissions.scopePermanent",
-} as const satisfies Record<string, MessageKey>;
-
 const MODES = ["allow", "ask", "deny"] as const satisfies readonly PermissionMode[];
-
-type IssuedGrant = PermissionGrant & { scope: keyof typeof SCOPE_LABEL_KEYS };
-
-function isIssuedGrant(grant: PermissionGrant): grant is IssuedGrant {
-  return grant.scope === "once" || grant.scope === "session" || grant.scope === "permanent";
-}
 
 const SURFACE = new Set<CapabilityId>(SETTINGS_SURFACE_CAPABILITIES);
 
 /**
- * Device input and screen capture stay ask or off; the policy schema rejects
- * allow for those two. Every other row on this page offers allow, ask, and off.
+ * Every row on this page offers all three modes (allow / ask / deny); the
+ * contract accepts allow for every capability, including screen capture and
+ * device actions.
  */
 function surfaceModes(capability: CapabilityId): PermissionMode[] {
   return MODES.filter((mode) => isPermissionModeAllowed(capability, mode));
@@ -60,24 +48,11 @@ type HostCall = (method: string, payload: unknown) => Promise<unknown>;
 
 async function loadPermissionSettings(call: HostCall): Promise<{
   policies: { capability: CapabilityId; mode: PermissionMode }[];
-  grants: IssuedGrant[];
 }> {
-  const [policyResponse, grantResponse] = await Promise.all([
-    call("permission.policy.list", {}),
-    call("permission.grant.list", {}),
-  ]);
+  const policyResponse = await call("permission.policy.list", {});
   return {
     policies: PERMISSION_METHODS["permission.policy.list"].response.parse(policyResponse).policies,
-    grants: PERMISSION_METHODS["permission.grant.list"].response
-      .parse(grantResponse)
-      .grants.filter(isIssuedGrant),
   };
-}
-
-function grantUsage(grant: IssuedGrant): string {
-  if (grant.revokedAt !== null) return t("permissions.revoked");
-  const limit = grant.maxUses === null ? t("permissions.noLimit") : String(grant.maxUses);
-  return t("permissions.grantUsage", [grant.uses, limit]);
 }
 
 export function PermissionsPanel() {
@@ -87,7 +62,6 @@ export function PermissionsPanel() {
   const [policies, setPolicies] = useState<
     { capability: CapabilityId; mode: PermissionMode }[] | null
   >(null);
-  const [grants, setGrants] = useState<IssuedGrant[]>([]);
   /**
    * The notice is stored as a factory, not a rendered string: a translated string
    * kept in state would still show the previous language after a switch (D22).
@@ -100,7 +74,6 @@ export function PermissionsPanel() {
       window.deepseekBot.host.call(method, payload),
     );
     setPolicies(snapshot.policies);
-    setGrants(snapshot.grants);
   }, []);
 
   useEffect(() => {
@@ -132,11 +105,8 @@ export function PermissionsPanel() {
       .call("permission.policy.set", { capability, mode })
       .then(async (response) => {
         PERMISSION_METHODS["permission.policy.set"].response.parse(response);
-        setNoticeError(false);
-        setNotice(
-          () => () =>
-            t("permissions.policySaved", [capabilityLabel(capability), t(MODE_LABEL_KEYS[mode])]),
-        );
+        // No success line: the control already shows the stored mode (2026-11).
+        setNotice(null);
         try {
           await reload();
         } catch {
@@ -176,44 +146,6 @@ export function PermissionsPanel() {
             </div>
           );
         })}
-      <div className="settings-row">
-        <span>{t("permissions.issuedGrants")}</span>
-        <span className="settings-soon">
-          {grants.length === 0
-            ? t("permissions.none")
-            : t("permissions.grantCount", [grants.length])}
-        </span>
-      </div>
-      {grants.map((grant) => (
-        <div className="settings-row" key={grant.id}>
-          <span>
-            {capabilityLabel(grant.capability)} · {t(SCOPE_LABEL_KEYS[grant.scope])} ·{" "}
-            {grantUsage(grant)}
-          </span>
-          {grant.revokedAt === null ? (
-            <button
-              type="button"
-              className="pill-btn"
-              onClick={() => {
-                void window.deepseekBot.host
-                  .call("permission.grant.revoke", { grantId: grant.id })
-                  .then((response) => {
-                    PERMISSION_METHODS["permission.grant.revoke"].response.parse(response);
-                    setNoticeError(false);
-                    setNotice(() => () => t("permissions.grantRevoked"));
-                    return reload();
-                  })
-                  .catch(() => {
-                    setNoticeError(true);
-                    setNotice(() => () => t("permissions.revokeFailed"));
-                  });
-              }}
-            >
-              {t("permissions.revoke")}
-            </button>
-          ) : null}
-        </div>
-      ))}
       {notice !== null ? (
         <p className={noticeError ? "form-error" : "settings-ok"}>{notice()}</p>
       ) : null}

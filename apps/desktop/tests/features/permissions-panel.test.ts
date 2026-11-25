@@ -181,18 +181,14 @@ async function optionIds(container: ParentNode, capability: string): Promise<str
 }
 
 describe("permissions settings panel", () => {
-  it("loads policies and issued grants through permission.*", async () => {
+  it("loads policies through permission.policy.list", async () => {
     const calls = installHost();
     const container = await renderPanel();
     await vi.waitFor(() => {
       expect(shownMode(controlByLabel(container, "exec.shell"))).toBe("ask");
     });
-    expect(calls.map((call) => call.method)).toEqual([
-      "permission.policy.list",
-      "permission.grant.list",
-    ]);
+    expect(calls.map((call) => call.method)).toEqual(["permission.policy.list"]);
     expect(calls[0]?.payload).toEqual({});
-    expect(calls[1]?.payload).toEqual({});
     expect(container.textContent).not.toContain("机器人之间发消息不在这里");
     expect(() => controlByLabel(container, "app.dispatch_task")).toThrow(/missing policy control/);
     expect(shownMode(controlByLabel(container, "exec.shell"))).toBe("ask");
@@ -201,17 +197,14 @@ describe("permissions settings panel", () => {
     expect(() => controlByLabel(container, "app.create_group")).toThrow(/missing policy control/);
     expect(() => controlByLabel(container, "app.start_run")).toThrow(/missing policy control/);
     expect(() => controlByLabel(container, "fs.read")).toThrow(/missing policy control/);
-    expect(container.textContent).toContain("本会话");
-    expect(container.textContent).toContain("1/5");
     expect(container.textContent).not.toContain("app.read");
-    // One issued grant, so exactly one revoke action — the dropdown triggers are
-    // buttons too now, so count by what they do rather than by tag.
+    // The issued-grants section is gone: no revoke action remains.
     expect(
       [...container.querySelectorAll("button")].filter((b) => b.textContent?.includes("撤销")),
-    ).toHaveLength(1);
+    ).toHaveLength(0);
   });
 
-  it("keeps device and screen on ask or off and lets local commands be always-allow", async () => {
+  it("offers allow, ask and deny on every settings row", async () => {
     const calls = installHost();
     const container = await renderPanel();
     await vi.waitFor(() => {
@@ -219,10 +212,11 @@ describe("permissions settings panel", () => {
     });
     expect(() => controlByLabel(container, "app.dispatch_task")).toThrow(/missing policy control/);
     expect(await optionIds(container, "exec.shell")).toEqual(["allow", "ask", "deny"]);
-    expect(await optionIds(container, "screen.capture")).toEqual(["ask", "deny"]);
-    expect(await optionIds(container, "device.action")).toEqual(["ask", "deny"]);
+    expect(await optionIds(container, "screen.capture")).toEqual(["allow", "ask", "deny"]);
+    expect(await optionIds(container, "device.action")).toEqual(["allow", "ask", "deny"]);
 
     await choose(container, "exec.shell", "allow");
+    await choose(container, "screen.capture", "allow");
     await choose(container, "device.action", "ask");
     await vi.waitFor(() => {
       expect(calls).toContainEqual({
@@ -231,33 +225,15 @@ describe("permissions settings panel", () => {
       });
       expect(calls).toContainEqual({
         method: "permission.policy.set",
+        payload: { capability: "screen.capture", mode: "allow" },
+      });
+      expect(calls).toContainEqual({
+        method: "permission.policy.set",
         payload: { capability: "device.action", mode: "ask" },
       });
       expect(shownMode(controlByLabel(container, "exec.shell"))).toBe("allow");
     });
     expect(calls.some((call) => call.method === "policy.set")).toBe(false);
-  });
-
-  it("revokes an issued grant by grantId", async () => {
-    const calls = installHost();
-    const container = await renderPanel();
-    // The revoke button is no longer the first button in the panel: each policy
-    // row now renders a dropdown trigger, so find it by what it does.
-    const revokeButton = (): HTMLButtonElement | undefined =>
-      [...container.querySelectorAll("button")].find((b) => b.textContent?.includes("撤销"));
-    await vi.waitFor(() => {
-      expect(revokeButton()?.textContent).toBe("撤销");
-    });
-    await act(async () => {
-      revokeButton()?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-    await vi.waitFor(() => {
-      expect(calls).toContainEqual({
-        method: "permission.grant.revoke",
-        payload: { grantId: GRANT.id },
-      });
-    });
-    expect(calls.some((call) => call.method === "grant.revoke")).toBe(false);
   });
 
   it("shows a readable error when the permission backend cannot be read", async () => {
